@@ -1,0 +1,37 @@
+{
+  "name": "egirl",
+  "version": "0.1.0",
+  "description": "Local-first AI agent framework with smart escalation to cloud models",
+  "type": "module",
+  "main": "src/index.ts",
+  "bin": {
+    "egirl": "./src/index.ts"
+  },
+  "scripts": {
+    "dev": "bun run --watch src/index.ts",
+    "build": "bun build src/index.ts --outdir dist --target bun",
+    "start": "bun run src/index.ts",
+    "test": "bun test",
+    "egirl": "bun run src/index.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "@sinclair/typebox": "^0.34.0",
+    "openai": "^4.77.0",
+    "yaml": "^2.7.0"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.1.0",
+    "typescript": "^5.7.0"
+  },
+  "keywords": [
+    "ai",
+    "agent",
+    "llm",
+    "local-first",
+    "ollama",
+    "claude",
+    "openai"
+  ],
+  "license": "MIT"
+}

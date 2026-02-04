@@ -1,0 +1,126 @@
+import { Database } from 'bun:sqlite'
+import { log } from '../utils/logger'
+
+export interface IndexedMemory {
+  id: number
+  key: string
+  value: string
+  embedding?: Float32Array
+  createdAt: number
+  updatedAt: number
+}
+
+export class MemoryIndexer {
+  private db: Database
+
+  constructor(dbPath: string) {
+    this.db = new Database(dbPath)
+    this.initialize()
+  }
+
+  private initialize(): void {
+    this.db.run(`
+      CREATE TABLE IF NOT EXISTS memories (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        key TEXT UNIQUE NOT NULL,
+        value TEXT NOT NULL,
+        embedding BLOB,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      )
+    `)
+
+    this.db.run(`
+      CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(
+        key, value, content=memories, content_rowid=id
+      )
+    `)
+
+    // Triggers to keep FTS in sync
+    this.db.run(`
+      CREATE TRIGGER IF NOT EXISTS memories_ai AFTER INSERT ON memories BEGIN
+        INSERT INTO memories_fts(rowid, key, value) VALUES (new.id, new.key, new.value);
+      END
+    `)
+
+    this.db.run(`
+      CREATE TRIGGER IF NOT EXISTS memories_ad AFTER DELETE ON memories BEGIN
+        INSERT INTO memories_fts(memories_fts, rowid, key, value) VALUES ('delete', old.id, old.key, old.value);
+      END
+    `)
+
+    this.db.run(`
+      CREATE TRIGGER IF NOT EXISTS memories_au AFTER UPDATE ON memories BEGIN
+        INSERT INTO memories_fts(memories_fts, rowid, key, value) VALUES ('delete', old.id, old.key, old.value);
+        INSERT INTO memories_fts(rowid, key, value) VALUES (new.id, new.key, new.value);
+      END
+    `)
+
+    log.debug('memory', 'Memory indexer initialized')
+  }
+
+  set(key: string, value: string, embedding?: Float32Array): void {
+    const now = Date.now()
+
+    const stmt = this.db.prepare(`
+      INSERT INTO memories (key, value, embedding, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(key) DO UPDATE SET
+        value = excluded.value,
+        embedding = excluded.embedding,
+        updated_at = excluded.updated_at
+    `)
+
+    stmt.run(key, value, embedding ? Buffer.from(embedding.buffer) : null, now, now)
+  }
+
+  get(key: string): IndexedMemory | null {
+    const row = this.db.query(`
+      SELECT id, key, value, embedding, created_at, updated_at
+      FROM memories WHERE key = ?
+    `).get(key) as { id: number; key: string; value: string; embedding: Buffer | null; created_at: number; updated_at: number } | null
+
+    if (!row) return null
+
+    return {
+      id: row.id,
+      key: row.key,
+      value: row.value,
+      embedding: row.embedding ? new Float32Array(row.embedding.buffer) : undefined,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }
+  }
+
+  searchFTS(query: string, limit = 10): IndexedMemory[] {
+    const rows = this.db.query(`
+      SELECT m.id, m.key, m.value, m.created_at, m.updated_at
+      FROM memories m
+      JOIN memories_fts fts ON m.id = fts.rowid
+      WHERE memories_fts MATCH ?
+      ORDER BY rank
+      LIMIT ?
+    `).all(query, limit) as Array<{ id: number; key: string; value: string; created_at: number; updated_at: number }>
+
+    return rows.map(row => ({
+      id: row.id,
+      key: row.key,
+      value: row.value,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }))
+  }
+
+  delete(key: string): boolean {
+    const result = this.db.run(`DELETE FROM memories WHERE key = ?`, [key])
+    return result.changes > 0
+  }
+
+  close(): void {
+    this.db.close()
+  }
+}
+
+export function createMemoryIndexer(dbPath: string): MemoryIndexer {
+  return new MemoryIndexer(dbPath)
+}
