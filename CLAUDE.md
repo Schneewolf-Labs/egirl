@@ -1,18 +1,18 @@
-# egirl — Local-First AI Agent for Schneewolf Labs
+# egirl — Local-First AI Agent
 
 ## Project Overview
 
-egirl is a personal AI agent for a single power user running a fat GPU cluster (200GB+ VRAM). It talks via Discord and terminal, runs most things locally on llama.cpp, and escalates to Claude/GPT only when necessary.
+egirl is a personal AI agent designed for users with local GPU inference capability. It communicates via Discord and terminal, runs most tasks locally using llama.cpp, and escalates to Claude/GPT only when necessary.
 
-**This is NOT** a general-purpose framework. No auth, no multi-user, no deployment patterns.
+This is a single-user tool, not a general-purpose framework. No auth, no multi-user, no deployment patterns.
 
 ## Design Philosophy
 
-1. **One user, one cluster** — No auth, no pairing, no multi-user anything
-2. **Local by default** — Routing, memory, simple conversations run on YOUR hardware at zero API cost
-3. **Escalate, don't apologize** — Hand off to Claude seamlessly when local can't cut it
+1. **Single-user focus** — No auth, no pairing, no multi-user complexity
+2. **Local by default** — Routing, memory, and simple conversations run on local hardware at zero API cost
+3. **Escalate seamlessly** — Hand off to Claude when local models are insufficient
 4. **Flat and readable** — Minimal abstraction. If you can grep for it, don't wrap it
-5. **Steal good ideas** — OpenClaw's skill format: yes. Their 50-layer gateway abstraction: no
+5. **Adopt proven patterns** — Use OpenClaw's skill format, skip unnecessary abstraction layers
 
 ## Tech Stack
 
