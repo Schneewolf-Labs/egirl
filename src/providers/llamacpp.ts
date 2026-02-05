@@ -1,4 +1,5 @@
-import type { LLMProvider, ChatRequest, ChatResponse, ToolCall } from './types'
+import type { LLMProvider, ChatRequest, ChatResponse, ChatMessage } from './types'
+import { parseToolCalls, buildToolsSection, formatToolResponse } from '../tools/format'
 
 export class LlamaCppProvider implements LLMProvider {
   readonly name: string
@@ -10,17 +11,18 @@ export class LlamaCppProvider implements LLMProvider {
   }
 
   async chat(req: ChatRequest): Promise<ChatResponse> {
+    const messages = this.formatMessages(req.messages, req.tools ?? [])
+
     const response = await fetch(`${this.endpoint}/v1/chat/completions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        messages: req.messages.map(m => ({
-          role: m.role === 'tool' ? 'user' : m.role,
-          content: m.content,
-        })),
+        messages,
         temperature: req.temperature,
         max_tokens: req.max_tokens,
         stream: false,
+        // Stop at tool_call close tag to prevent runaway generation
+        stop: req.tools?.length ? ['</tool_call>'] : undefined,
       }),
     })
 
@@ -29,27 +31,25 @@ export class LlamaCppProvider implements LLMProvider {
       throw new Error(`llama.cpp error: ${response.status} - ${error}`)
     }
 
-    const data = await response.json() as {
+    const data = (await response.json()) as {
       choices: Array<{ message: { content: string } }>
       usage: { prompt_tokens: number; completion_tokens: number }
       model: string
     }
 
-    let tool_calls: ToolCall[] | undefined
     let content = data.choices[0]?.message?.content ?? ''
 
-    // Parse tool calls from response if tools were provided
-    if (req.tools && req.tools.length > 0) {
-      const parsed = this.parseToolCalls(content)
-      if (parsed.toolCalls.length > 0) {
-        tool_calls = parsed.toolCalls
-        content = parsed.content
-      }
+    // If we stopped at </tool_call>, add the closing tag back
+    if (req.tools?.length && content.includes('<tool_call>') && !content.includes('</tool_call>')) {
+      content += '</tool_call>'
     }
 
+    // Parse tool calls from response
+    const { content: cleanContent, toolCalls } = parseToolCalls(content)
+
     return {
-      content,
-      tool_calls,
+      content: cleanContent,
+      tool_calls: toolCalls.length > 0 ? toolCalls : undefined,
       usage: {
         input_tokens: data.usage?.prompt_tokens ?? 0,
         output_tokens: data.usage?.completion_tokens ?? 0,
@@ -58,31 +58,55 @@ export class LlamaCppProvider implements LLMProvider {
     }
   }
 
-  private parseToolCalls(content: string): { content: string; toolCalls: ToolCall[] } {
-    const toolCalls: ToolCall[] = []
+  /**
+   * Format messages for Qwen3 chat template:
+   * - Inject tools section into system prompt
+   * - Convert tool role messages to user role with <tool_response> tags
+   */
+  private formatMessages(
+    messages: ChatMessage[],
+    tools: ChatRequest['tools']
+  ): Array<{ role: string; content: string }> {
+    const formatted: Array<{ role: string; content: string }> = []
+    const toolsSection = tools?.length ? buildToolsSection(tools) : ''
 
-    // Look for JSON tool call format in code blocks
-    const toolCallRegex = /```(?:json)?\s*(\{[\s\S]*?"name"\s*:\s*"[^"]+[\s\S]*?\})\s*```/g
-    let match
-    let cleanContent = content
+    // Batch consecutive tool messages
+    let pendingToolResponses: string[] = []
 
-    while ((match = toolCallRegex.exec(content)) !== null) {
-      try {
-        const parsed = JSON.parse(match[1])
-        if (parsed.name && parsed.arguments) {
-          toolCalls.push({
-            id: `call_${toolCalls.length}`,
-            name: parsed.name,
-            arguments: parsed.arguments,
-          })
-          cleanContent = cleanContent.replace(match[0], '')
-        }
-      } catch {
-        // Not valid JSON, skip
+    const flushToolResponses = () => {
+      if (pendingToolResponses.length > 0) {
+        formatted.push({
+          role: 'user',
+          content: pendingToolResponses.join('\n'),
+        })
+        pendingToolResponses = []
       }
     }
 
-    return { content: cleanContent.trim(), toolCalls }
+    for (const msg of messages) {
+      if (msg.role === 'system') {
+        // Append tools section to system prompt
+        formatted.push({
+          role: 'system',
+          content: msg.content + toolsSection,
+        })
+      } else if (msg.role === 'tool') {
+        // Batch tool responses (Qwen3 uses user role with <tool_response> tags)
+        pendingToolResponses.push(formatToolResponse(msg.content))
+      } else {
+        // Flush any pending tool responses before non-tool message
+        flushToolResponses()
+        formatted.push({
+          role: msg.role,
+          content: msg.content,
+        })
+      }
+    }
+
+    // Flush remaining tool responses
+    flushToolResponses()
+
+    return formatted
   }
 }
 
