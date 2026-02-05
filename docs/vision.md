@@ -145,3 +145,49 @@ always_local_vl = ["screenshot", "describe_image", "visual_debug"]
 ```
 
 Or detect when the conversation includes images and switch to VL automatically.
+
+## Multimodal Memory
+
+With Qwen3-VL-Embedding, screenshots and images can be stored in memory with semantic embeddings:
+
+```typescript
+// Store a screenshot with context
+await memoryManager.setMultimodal(
+  'debug-session-2024-01-15',
+  'Error dialog showing TypeScript type mismatch',
+  screenshotBase64
+)
+
+// Search for images by text description
+const results = await memoryManager.searchSemantic('typescript error dialog')
+
+// Search for similar images
+const similar = await memoryManager.searchByImage(newScreenshotBase64)
+```
+
+## Starting the Services
+
+```bash
+# Terminal 1: Chat model (48GB GPU)
+CUDA_VISIBLE_DEVICES=0 llama-server \
+  -m qwen3-vl-32b-q8.gguf \
+  --mmproj mmproj-fp16.gguf \
+  -c 32768 --port 8080 -ngl 99
+
+# Terminal 2: Embedding service (16GB GPU)
+CUDA_VISIBLE_DEVICES=1 python scripts/embedding-server.py \
+  --model Qwen/Qwen3-VL-Embedding-2B \
+  --port 8082 \
+  --dtype float16
+
+# Terminal 3: egirl
+bun run dev
+```
+
+For the 8B embedding model:
+```bash
+python scripts/embedding-server.py \
+  --model Qwen/Qwen3-VL-Embedding-8B \
+  --port 8082 \
+  --dtype int8  # Quantize to fit in 16GB
+```

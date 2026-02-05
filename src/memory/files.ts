@@ -1,6 +1,6 @@
-import { readFile, writeFile, appendFile, mkdir } from 'fs/promises'
-import { join, dirname } from 'path'
-import { log } from '../utils/logger'
+import { readFile, writeFile, appendFile, mkdir, copyFile } from 'fs/promises'
+import { join, dirname, extname } from 'path'
+import { log } from '../util/logger'
 
 export interface MemoryEntry {
   id: string
@@ -14,11 +14,13 @@ export class MemoryFiles {
   private workspaceDir: string
   private memoryFile: string
   private dailyLogDir: string
+  private imagesDir: string
 
   constructor(workspaceDir: string) {
     this.workspaceDir = workspaceDir
     this.memoryFile = join(workspaceDir, 'MEMORY.md')
     this.dailyLogDir = join(workspaceDir, 'logs')
+    this.imagesDir = join(workspaceDir, 'images')
   }
 
   async readMemoryFile(): Promise<string> {
@@ -54,6 +56,58 @@ export class MemoryFiles {
     } catch {
       return ''
     }
+  }
+
+  /**
+   * Store an image and return the path
+   */
+  async storeImage(
+    imageData: string | Buffer,
+    key: string,
+    extension = '.png'
+  ): Promise<string> {
+    await mkdir(this.imagesDir, { recursive: true })
+
+    // Generate filename from key and timestamp
+    const safeKey = key.replace(/[^a-zA-Z0-9-_]/g, '_')
+    const timestamp = Date.now()
+    const filename = `${safeKey}-${timestamp}${extension}`
+    const imagePath = join(this.imagesDir, filename)
+
+    if (typeof imageData === 'string') {
+      // Handle base64 data URL
+      if (imageData.startsWith('data:')) {
+        const base64Data = imageData.split(',')[1]
+        if (!base64Data) throw new Error('Invalid data URL')
+        const buffer = Buffer.from(base64Data, 'base64')
+        await writeFile(imagePath, buffer)
+      } else {
+        // Assume it's a file path, copy it
+        await copyFile(imageData, imagePath)
+      }
+    } else {
+      await writeFile(imagePath, imageData)
+    }
+
+    log.debug('memory', `Stored image: ${imagePath}`)
+    return imagePath
+  }
+
+  /**
+   * Read an image as base64 data URL
+   */
+  async readImage(imagePath: string): Promise<string> {
+    const buffer = await readFile(imagePath)
+    const ext = extname(imagePath).slice(1) || 'png'
+    const mimeType = ext === 'jpg' ? 'jpeg' : ext
+    return `data:image/${mimeType};base64,${buffer.toString('base64')}`
+  }
+
+  /**
+   * Get the images directory path
+   */
+  getImagesDir(): string {
+    return this.imagesDir
   }
 }
 
