@@ -1,10 +1,10 @@
 # egirl
 
-A personal AI agent for Schneewolf Labs. Local-first, escalates to Claude/GPT only when needed.
+A local-first AI agent that runs on your own hardware and escalates to cloud providers only when needed.
 
 ## What This Is
 
-egirl is a personal AI agent built for a single power user running a fat GPU cluster (200GB+ VRAM). It talks to you on Discord and from the terminal, runs most things locally on llama.cpp, and escalates to Claude/GPT only when the task genuinely requires it.
+egirl is a personal AI agent designed for users with local GPU inference capability. It communicates via Discord and terminal, runs most tasks locally using llama.cpp, and intelligently escalates to Claude or GPT when the complexity demands it—keeping API costs low while maintaining quality where it matters.
 
 ## Quick Start
 
