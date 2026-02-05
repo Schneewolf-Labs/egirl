@@ -4,13 +4,55 @@ import { parseToolCalls, buildToolsSection, formatToolResponse } from '../tools/
 type FormattedContent = string | ContentPart[]
 type FormattedMessage = { role: string; content: FormattedContent }
 
+export interface LlamaCppCapabilities {
+  multimodal: boolean
+  toolUse: boolean
+}
+
 export class LlamaCppProvider implements LLMProvider {
   readonly name: string
   private endpoint: string
+  private capabilities: LlamaCppCapabilities | null = null
 
   constructor(endpoint: string, model: string) {
     this.endpoint = endpoint.replace(/\/$/, '')
     this.name = `llamacpp/${model}`
+  }
+
+  /**
+   * Check server capabilities (multimodal, tool use, etc.)
+   */
+  async getCapabilities(): Promise<LlamaCppCapabilities> {
+    if (this.capabilities) return this.capabilities
+
+    try {
+      const response = await fetch(`${this.endpoint}/v1/models`)
+      if (!response.ok) {
+        return { multimodal: false, toolUse: false }
+      }
+
+      const data = (await response.json()) as {
+        data: Array<{ multimodal?: boolean; tool_use?: boolean }>
+      }
+
+      const model = data.data[0]
+      this.capabilities = {
+        multimodal: model?.multimodal ?? false,
+        toolUse: model?.tool_use ?? false,
+      }
+
+      return this.capabilities
+    } catch {
+      return { multimodal: false, toolUse: false }
+    }
+  }
+
+  /**
+   * Check if server supports multimodal input
+   */
+  async supportsMultimodal(): Promise<boolean> {
+    const caps = await this.getCapabilities()
+    return caps.multimodal
   }
 
   async chat(req: ChatRequest): Promise<ChatResponse> {
