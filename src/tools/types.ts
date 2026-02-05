@@ -9,6 +9,7 @@ export interface ToolResult {
   output: string
   suggest_escalation?: boolean
   escalation_reason?: string
+  isImage?: boolean  // Output is a base64 data URL
 }
 
 export interface Tool {

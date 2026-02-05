@@ -1,5 +1,8 @@
-import type { LLMProvider, ChatRequest, ChatResponse, ChatMessage } from './types'
+import type { LLMProvider, ChatRequest, ChatResponse, ChatMessage, ContentPart } from './types'
 import { parseToolCalls, buildToolsSection, formatToolResponse } from '../tools/format'
+
+type FormattedContent = string | ContentPart[]
+type FormattedMessage = { role: string; content: FormattedContent }
 
 export class LlamaCppProvider implements LLMProvider {
   readonly name: string
@@ -62,22 +65,23 @@ export class LlamaCppProvider implements LLMProvider {
    * Format messages for Qwen3 chat template:
    * - Inject tools section into system prompt
    * - Convert tool role messages to user role with <tool_response> tags
+   * - Handle multimodal content (images)
    */
   private formatMessages(
     messages: ChatMessage[],
     tools: ChatRequest['tools']
-  ): Array<{ role: string; content: string }> {
-    const formatted: Array<{ role: string; content: string }> = []
+  ): FormattedMessage[] {
+    const formatted: FormattedMessage[] = []
     const toolsSection = tools?.length ? buildToolsSection(tools) : ''
 
     // Batch consecutive tool messages
-    let pendingToolResponses: string[] = []
+    let pendingToolResponses: ContentPart[] = []
 
     const flushToolResponses = () => {
       if (pendingToolResponses.length > 0) {
         formatted.push({
           role: 'user',
-          content: pendingToolResponses.join('\n'),
+          content: pendingToolResponses,
         })
         pendingToolResponses = []
       }
@@ -86,20 +90,47 @@ export class LlamaCppProvider implements LLMProvider {
     for (const msg of messages) {
       if (msg.role === 'system') {
         // Append tools section to system prompt
+        const systemContent = this.getTextContent(msg.content)
         formatted.push({
           role: 'system',
-          content: msg.content + toolsSection,
+          content: systemContent + toolsSection,
         })
       } else if (msg.role === 'tool') {
         // Batch tool responses (Qwen3 uses user role with <tool_response> tags)
-        pendingToolResponses.push(formatToolResponse(msg.content))
+        const textContent = this.getTextContent(msg.content)
+
+        // Check if this is an image result (base64 data URL)
+        if (textContent.startsWith('data:image/')) {
+          pendingToolResponses.push({
+            type: 'text',
+            text: formatToolResponse('Screenshot captured'),
+          })
+          pendingToolResponses.push({
+            type: 'image_url',
+            image_url: { url: textContent },
+          })
+        } else {
+          pendingToolResponses.push({
+            type: 'text',
+            text: formatToolResponse(textContent),
+          })
+        }
       } else {
         // Flush any pending tool responses before non-tool message
         flushToolResponses()
-        formatted.push({
-          role: msg.role,
-          content: msg.content,
-        })
+
+        // Handle multimodal user messages
+        if (Array.isArray(msg.content)) {
+          formatted.push({
+            role: msg.role,
+            content: msg.content,
+          })
+        } else {
+          formatted.push({
+            role: msg.role,
+            content: msg.content,
+          })
+        }
       }
     }
 
@@ -107,6 +138,20 @@ export class LlamaCppProvider implements LLMProvider {
     flushToolResponses()
 
     return formatted
+  }
+
+  /**
+   * Extract text content from string or ContentPart array
+   */
+  private getTextContent(content: string | ContentPart[]): string {
+    if (typeof content === 'string') {
+      return content
+    }
+
+    return content
+      .filter((part): part is { type: 'text'; text: string } => part.type === 'text')
+      .map((part) => part.text)
+      .join('\n')
   }
 }
 
