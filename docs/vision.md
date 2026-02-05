@@ -167,27 +167,41 @@ const similar = await memoryManager.searchByImage(newScreenshotBase64)
 
 ## Starting the Services
 
+All services run via llama.cpp - no Python needed.
+
 ```bash
 # Terminal 1: Chat model (48GB GPU)
 CUDA_VISIBLE_DEVICES=0 llama-server \
   -m qwen3-vl-32b-q8.gguf \
-  --mmproj mmproj-fp16.gguf \
+  --mmproj mmproj-qwen3-vl-32b-f16.gguf \
   -c 32768 --port 8080 -ngl 99
 
-# Terminal 2: Embedding service (16GB GPU)
-CUDA_VISIBLE_DEVICES=1 python scripts/embedding-server.py \
-  --model Qwen/Qwen3-VL-Embedding-2B \
-  --port 8082 \
-  --dtype float16
+# Terminal 2: Multimodal embeddings (16GB GPU)
+CUDA_VISIBLE_DEVICES=1 llama-server \
+  -m Qwen.Qwen3-VL-Embedding-2B.Q8_0.gguf \
+  --mmproj mmproj-Qwen.Qwen3-VL-Embedding-2B.f16.gguf \
+  -c 8192 --port 8082 --embedding -ngl 99
 
 # Terminal 3: egirl
 bun run dev
 ```
 
-For the 8B embedding model:
-```bash
-python scripts/embedding-server.py \
-  --model Qwen/Qwen3-VL-Embedding-8B \
-  --port 8082 \
-  --dtype int8  # Quantize to fit in 16GB
+### Configuration
+
+```toml
+# egirl.toml
+[local.embeddings]
+endpoint = "http://localhost:8082"
+model = "qwen3-vl-embedding-2b"
+dimensions = 2048
+multimodal = true  # Enable image embedding support
 ```
+
+### Model Sizes
+
+| Model | LLM (Q8) | mmproj (F16) | Total |
+|-------|----------|--------------|-------|
+| Qwen3-VL-Embedding-2B | 1.8 GB | 0.8 GB | ~2.6 GB |
+| Qwen3-VL-Embedding-8B | ~8 GB | ~0.8 GB | ~9 GB |
+
+Both fit comfortably on a 16GB card.

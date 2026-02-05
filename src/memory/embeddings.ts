@@ -67,31 +67,31 @@ export class Qwen3VLEmbeddings implements EmbeddingProvider {
 }
 
 /**
- * llama.cpp embedding provider (text only).
+ * llama.cpp embedding provider.
  * Uses the OpenAI-compatible /v1/embeddings endpoint.
+ * Supports multimodal input when running with --mmproj.
  */
 export class LlamaCppEmbeddings implements EmbeddingProvider {
   name: string
   dimensions: number
-  supportsImages = false
+  supportsImages: boolean
   private endpoint: string
 
-  constructor(endpoint: string, model: string, dimensions = 768) {
+  constructor(endpoint: string, model: string, options: { dimensions?: number; multimodal?: boolean } = {}) {
     this.endpoint = endpoint.replace(/\/$/, '')
     this.name = `llamacpp/${model}`
-    this.dimensions = dimensions
+    this.dimensions = options.dimensions ?? 2048
+    this.supportsImages = options.multimodal ?? false
   }
 
   async embed(input: EmbeddingInput): Promise<Float32Array> {
-    if (input.type !== 'text') {
-      throw new Error('LlamaCppEmbeddings only supports text input')
-    }
+    const formattedInput = this.formatInput(input)
 
     const response = await fetch(`${this.endpoint}/v1/embeddings`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        input: input.text,
+        input: formattedInput,
       }),
     })
 
@@ -107,10 +107,14 @@ export class LlamaCppEmbeddings implements EmbeddingProvider {
   }
 
   async embedBatch(inputs: EmbeddingInput[]): Promise<Float32Array[]> {
-    // llama.cpp supports batch via array input
+    // Process sequentially for multimodal, batch for text-only
+    if (this.supportsImages && inputs.some(i => i.type !== 'text')) {
+      return Promise.all(inputs.map(input => this.embed(input)))
+    }
+
     const texts = inputs.map(input => {
       if (input.type !== 'text') {
-        throw new Error('LlamaCppEmbeddings only supports text input')
+        throw new Error('Batch embedding only supports text input')
       }
       return input.text
     })
@@ -130,6 +134,30 @@ export class LlamaCppEmbeddings implements EmbeddingProvider {
 
     const data = (await response.json()) as { data: Array<{ embedding: number[] }> }
     return data.data.map(d => new Float32Array(d.embedding))
+  }
+
+  /**
+   * Format input for llama.cpp embeddings API.
+   * For multimodal, uses content array format like chat completions.
+   */
+  private formatInput(input: EmbeddingInput): string | Array<{ type: string; text?: string; image_url?: { url: string } }> {
+    if (input.type === 'text') {
+      return input.text
+    }
+
+    if (!this.supportsImages) {
+      throw new Error('Image input requires multimodal embedding model (use --mmproj)')
+    }
+
+    if (input.type === 'image') {
+      return [{ type: 'image_url', image_url: { url: input.image } }]
+    }
+
+    // Multimodal: text + image
+    return [
+      { type: 'text', text: input.text },
+      { type: 'image_url', image_url: { url: input.image } },
+    ]
   }
 }
 
@@ -212,6 +240,7 @@ export interface EmbeddingProviderConfig {
   apiKey?: string
   model?: string
   dimensions?: number
+  multimodal?: boolean  // For llamacpp with mmproj
 }
 
 export function createEmbeddingProvider(
@@ -227,8 +256,11 @@ export function createEmbeddingProvider(
     case 'llamacpp':
       return new LlamaCppEmbeddings(
         config.endpoint ?? 'http://localhost:8081',
-        config.model ?? 'nomic-embed-text',
-        config.dimensions ?? 768
+        config.model ?? 'qwen3-vl-embedding',
+        {
+          dimensions: config.dimensions ?? 2048,
+          multimodal: config.multimodal ?? false,
+        }
       )
     case 'openai':
       if (!config.apiKey) throw new Error('OpenAI API key required')
