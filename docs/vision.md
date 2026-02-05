@@ -36,7 +36,7 @@ What's in this image?
 <|vision_start|><|image_pad|><|vision_end|><|im_end|>
 ```
 
-For the OpenAI-compatible API (llama.cpp), images are passed as base64 in the content array:
+For the OpenAI-compatible chat API (llama.cpp), images are passed as base64 in the content array:
 
 ```json
 {
@@ -44,6 +44,17 @@ For the OpenAI-compatible API (llama.cpp), images are passed as base64 in the co
   "content": [
     {"type": "text", "text": "What's in this image?"},
     {"type": "image_url", "image_url": {"url": "data:image/png;base64,..."}}
+  ]
+}
+```
+
+For the embeddings API (`/embeddings`), use the `[img-N]` placeholder format:
+
+```json
+{
+  "content": "[img-1]\nOptional description text",
+  "image_data": [
+    {"id": 1, "data": "<base64 without data: prefix>"}
   ]
 }
 ```

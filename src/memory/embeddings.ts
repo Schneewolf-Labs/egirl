@@ -68,8 +68,14 @@ export class Qwen3VLEmbeddings implements EmbeddingProvider {
 
 /**
  * llama.cpp embedding provider.
- * Uses the OpenAI-compatible /v1/embeddings endpoint.
+ * Uses /embeddings endpoint (non-OpenAI format for multimodal support).
  * Supports multimodal input when running with --mmproj.
+ *
+ * API format for multimodal:
+ * {
+ *   "content": "Image: [img-1].\nDescription text",
+ *   "image_data": [{ "id": 1, "data": "<base64>" }]
+ * }
  */
 export class LlamaCppEmbeddings implements EmbeddingProvider {
   name: string
@@ -85,14 +91,17 @@ export class LlamaCppEmbeddings implements EmbeddingProvider {
   }
 
   async embed(input: EmbeddingInput): Promise<Float32Array> {
-    const formattedInput = this.formatInput(input)
+    const payload = this.formatPayload(input)
 
-    const response = await fetch(`${this.endpoint}/v1/embeddings`, {
+    // Use /embeddings for multimodal, /v1/embeddings for text-only
+    const endpoint = this.supportsImages && input.type !== 'text'
+      ? `${this.endpoint}/embeddings`
+      : `${this.endpoint}/v1/embeddings`
+
+    const response = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        input: formattedInput,
-      }),
+      body: JSON.stringify(payload),
     })
 
     if (!response.ok) {
@@ -100,10 +109,20 @@ export class LlamaCppEmbeddings implements EmbeddingProvider {
       throw new Error(`llama.cpp embeddings error: ${response.status} - ${error}`)
     }
 
-    const data = (await response.json()) as { data: Array<{ embedding: number[] }> }
-    const first = data.data[0]
-    if (!first) throw new Error('No embedding returned')
-    return new Float32Array(first.embedding)
+    const data = await response.json()
+
+    // Handle different response formats
+    if ('embedding' in data) {
+      // Non-OpenAI format: { embedding: number[] }
+      return new Float32Array(data.embedding as number[])
+    } else if ('data' in data) {
+      // OpenAI format: { data: [{ embedding: number[] }] }
+      const first = (data.data as Array<{ embedding: number[] }>)[0]
+      if (!first) throw new Error('No embedding returned')
+      return new Float32Array(first.embedding)
+    }
+
+    throw new Error('Unexpected response format')
   }
 
   async embedBatch(inputs: EmbeddingInput[]): Promise<Float32Array[]> {
@@ -122,9 +141,7 @@ export class LlamaCppEmbeddings implements EmbeddingProvider {
     const response = await fetch(`${this.endpoint}/v1/embeddings`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        input: texts,
-      }),
+      body: JSON.stringify({ input: texts }),
     })
 
     if (!response.ok) {
@@ -137,27 +154,44 @@ export class LlamaCppEmbeddings implements EmbeddingProvider {
   }
 
   /**
-   * Format input for llama.cpp embeddings API.
-   * For multimodal, uses content array format like chat completions.
+   * Format payload for llama.cpp embeddings API.
+   * Multimodal uses [img-N] placeholder syntax with image_data array.
    */
-  private formatInput(input: EmbeddingInput): string | Array<{ type: string; text?: string; image_url?: { url: string } }> {
+  private formatPayload(input: EmbeddingInput): Record<string, unknown> {
     if (input.type === 'text') {
-      return input.text
+      return { input: input.text }
     }
 
     if (!this.supportsImages) {
       throw new Error('Image input requires multimodal embedding model (use --mmproj)')
     }
 
+    // Extract base64 data from data URL if present
+    const imageData = this.extractBase64(input.image)
+
     if (input.type === 'image') {
-      return [{ type: 'image_url', image_url: { url: input.image } }]
+      return {
+        content: '[img-1]',
+        image_data: [{ id: 1, data: imageData }],
+      }
     }
 
     // Multimodal: text + image
-    return [
-      { type: 'text', text: input.text },
-      { type: 'image_url', image_url: { url: input.image } },
-    ]
+    return {
+      content: `[img-1]\n${input.text}`,
+      image_data: [{ id: 1, data: imageData }],
+    }
+  }
+
+  /**
+   * Extract base64 data from a data URL or return as-is
+   */
+  private extractBase64(imageData: string): string {
+    if (imageData.startsWith('data:')) {
+      const parts = imageData.split(',')
+      return parts[1] ?? imageData
+    }
+    return imageData
   }
 }
 
