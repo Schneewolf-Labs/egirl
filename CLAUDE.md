@@ -6,6 +6,19 @@ egirl is a personal AI agent designed for users with local GPU inference capabil
 
 This is a single-user tool, not a general-purpose framework. No auth, no multi-user, no deployment patterns.
 
+## Purpose
+
+egirl is built to be a productive employee for Schneewolf Labs — not a generic personal assistant. Feature development should prioritize workflows that help get real work done: code review, research, file management, task automation, and technical problem-solving.
+
+This is not OpenClaw. OpenClaw is a general-purpose agent framework. egirl is a purpose-built tool for a specific team's needs. When deciding what to build:
+
+- **Build**: Features that make the agent more useful for software development, research, and lab operations
+- **Skip**: Generic assistant features (weather, jokes, small talk, general knowledge Q&A)
+- **Prioritize**: Deep integration with the tools and workflows Schneewolf Labs actually uses
+- **Avoid**: Breadth for its own sake — depth in relevant areas beats shallow coverage
+
+The agent should behave like a competent colleague who knows the codebase, remembers context, and can be trusted with real tasks.
+
 ## Design Philosophy
 
 1. **Single-user focus** — No auth, no pairing, no multi-user complexity
@@ -394,3 +407,48 @@ bun test            # Run tests
 - Workspace files (AGENTS.md, SOUL.md, etc.) are personality/config — read on every request
 - Keep provider implementations thin (~80-100 lines each)
 - Escalation log tracks events for tuning routing rules over time
+
+## Code Style
+
+### TypeScript
+- Use `type` over `interface` unless you need declaration merging
+- Prefer explicit return types on exported functions
+- Use TypeBox for runtime validation, infer static types from schemas
+- No `any` — use `unknown` and narrow with type guards
+- Barrel exports (`index.ts`) only at module boundaries, not within modules
+
+### Error Handling
+- Throw errors early, catch them at boundaries (agent loop, channel handlers)
+- Use discriminated unions for expected failure states, not exceptions
+- Never swallow errors silently — log them at minimum
+- Tool execution errors should return `{ success: false, output: "..." }`, not throw
+
+### Patterns to Follow
+- One file = one concept. If a file exceeds ~200 lines, split it
+- Functions over classes unless you need stateful instances
+- Explicit dependencies via function parameters, not module-level singletons
+- Config is loaded once at startup and passed down — no `getConfig()` calls scattered around
+- Use early returns to reduce nesting
+
+### Patterns to Avoid
+- No dependency injection frameworks
+- No decorators
+- No `class` inheritance hierarchies — composition only
+- No barrel files that re-export everything from a directory
+- No `"use strict"` (TypeScript handles this)
+- No default exports (named exports are greppable)
+- No `null` — use `undefined` for absence
+- No complex generics unless absolutely necessary
+
+### Naming
+- Files: `kebab-case.ts`
+- Types/Interfaces: `PascalCase`
+- Functions/variables: `camelCase`
+- Constants: `SCREAMING_SNAKE_CASE` only for true constants (not config values)
+- Boolean variables: prefix with `is`, `has`, `should`, `can`
+
+### Testing
+- Test files live next to source: `foo.ts` → `foo.test.ts`
+- Use `bun:test` — no Jest, no Vitest
+- Test behavior, not implementation
+- Mock at module boundaries (providers, file system), not internal functions
