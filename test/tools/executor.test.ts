@@ -1,6 +1,5 @@
 import { describe, test, expect } from 'bun:test'
 import { createDefaultToolExecutor } from '../../src/tools'
-import type { ToolContext } from '../../src/tools/types'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { writeFile, mkdir, rm } from 'fs/promises'
@@ -8,12 +7,6 @@ import { writeFile, mkdir, rm } from 'fs/promises'
 describe('ToolExecutor', () => {
   const executor = createDefaultToolExecutor()
   const testDir = join(tmpdir(), 'egirl-test-' + Date.now())
-
-  const context: ToolContext = {
-    workspaceDir: testDir,
-    sessionId: 'test-session',
-    currentModel: 'local',
-  }
 
   test('has builtin tools registered', () => {
     const tools = executor.listTools()
@@ -29,13 +22,12 @@ describe('ToolExecutor', () => {
 
     const result = await executor.execute(
       { id: 'call_1', name: 'write_file', arguments: { path: 'test.txt', content: 'hello world' } },
-      context
+      testDir
     )
 
     expect(result.success).toBe(true)
     expect(result.output).toContain('Successfully wrote')
 
-    // Cleanup
     await rm(testDir, { recursive: true, force: true })
   })
 
@@ -45,20 +37,19 @@ describe('ToolExecutor', () => {
 
     const result = await executor.execute(
       { id: 'call_1', name: 'read_file', arguments: { path: 'read-test.txt' } },
-      context
+      testDir
     )
 
     expect(result.success).toBe(true)
     expect(result.output).toBe('test content')
 
-    // Cleanup
     await rm(testDir, { recursive: true, force: true })
   })
 
   test('handles unknown tool gracefully', async () => {
     const result = await executor.execute(
       { id: 'call_1', name: 'nonexistent_tool', arguments: {} },
-      context
+      testDir
     )
 
     expect(result.success).toBe(false)
@@ -70,13 +61,12 @@ describe('ToolExecutor', () => {
 
     const result = await executor.execute(
       { id: 'call_1', name: 'execute_command', arguments: { command: 'echo "hello"' } },
-      context
+      testDir
     )
 
     expect(result.success).toBe(true)
     expect(result.output).toContain('hello')
 
-    // Cleanup
     await rm(testDir, { recursive: true, force: true })
   })
 })

@@ -1,7 +1,7 @@
 {
   "name": "egirl",
   "version": "0.1.0",
-  "description": "Local-first AI agent framework with smart escalation to cloud models",
+  "description": "Local-first AI agent for Schneewolf Labs",
   "type": "module",
   "main": "src/index.ts",
   "bin": {
@@ -9,16 +9,16 @@
   },
   "scripts": {
     "dev": "bun run --watch src/index.ts",
-    "build": "bun build src/index.ts --outdir dist --target bun",
     "start": "bun run src/index.ts",
-    "test": "bun test",
-    "egirl": "bun run src/index.ts"
+    "cli": "bun run src/index.ts cli",
+    "test": "bun test"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
     "@sinclair/typebox": "^0.34.0",
+    "discord.js": "^14.25.1",
     "openai": "^4.77.0",
-    "yaml": "^2.7.0"
+    "smol-toml": "^1.6.0"
   },
   "devDependencies": {
     "@types/bun": "^1.1.0",
@@ -29,7 +29,7 @@
     "agent",
     "llm",
     "local-first",
-    "ollama",
+    "llama.cpp",
     "claude",
     "openai"
   ],

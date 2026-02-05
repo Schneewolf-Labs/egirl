@@ -1,5 +1,5 @@
 import type { ChatMessage } from '../providers/types'
-import type { EgirlConfig } from '../config'
+import type { RuntimeConfig } from '../config'
 
 export interface AgentContext {
   systemPrompt: string
@@ -22,7 +22,7 @@ Guidelines:
 - Ask for clarification if instructions are unclear
 - Be careful with file operations and command execution`
 
-export function buildSystemPrompt(config: EgirlConfig, additionalContext?: string): string {
+export function buildSystemPrompt(config: RuntimeConfig, additionalContext?: string): string {
   let prompt = DEFAULT_SYSTEM_PROMPT
 
   if (additionalContext) {
@@ -33,14 +33,14 @@ export function buildSystemPrompt(config: EgirlConfig, additionalContext?: strin
 }
 
 export function createAgentContext(
-  config: EgirlConfig,
+  config: RuntimeConfig,
   sessionId: string,
   additionalContext?: string
 ): AgentContext {
   return {
     systemPrompt: buildSystemPrompt(config, additionalContext),
     messages: [],
-    workspaceDir: config.workspace,
+    workspaceDir: config.workspace.path,
     sessionId,
   }
 }

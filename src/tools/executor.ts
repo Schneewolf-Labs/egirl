@@ -1,6 +1,6 @@
-import type { Tool, ToolContext, ToolResult, ToolDefinition } from './types'
+import type { Tool, ToolResult, ToolDefinition } from './types'
 import type { ToolCall } from '../providers/types'
-import { log } from '../utils/logger'
+import { log } from '../util/logger'
 
 export class ToolExecutor {
   private tools: Map<string, Tool> = new Map()
@@ -24,7 +24,7 @@ export class ToolExecutor {
     return Array.from(this.tools.values()).map(t => t.definition)
   }
 
-  async execute(call: ToolCall, context: ToolContext): Promise<ToolResult> {
+  async execute(call: ToolCall, cwd: string): Promise<ToolResult> {
     const tool = this.tools.get(call.name)
 
     if (!tool) {
@@ -37,7 +37,7 @@ export class ToolExecutor {
     log.debug('tools', `Executing tool: ${call.name}`, call.arguments)
 
     try {
-      const result = await tool.execute(call.arguments, context)
+      const result = await tool.execute(call.arguments, cwd)
       log.debug('tools', `Tool ${call.name} completed:`, {
         success: result.success,
         outputLength: result.output.length,
@@ -53,12 +53,11 @@ export class ToolExecutor {
     }
   }
 
-  async executeAll(calls: ToolCall[], context: ToolContext): Promise<Map<string, ToolResult>> {
+  async executeAll(calls: ToolCall[], cwd: string): Promise<Map<string, ToolResult>> {
     const results = new Map<string, ToolResult>()
 
-    // Execute tools in parallel
     const executions = calls.map(async (call) => {
-      const result = await this.execute(call, context)
+      const result = await this.execute(call, cwd)
       return { id: call.id, result }
     })
 

@@ -1,56 +1,81 @@
 import { Type, Static } from '@sinclair/typebox'
 
 export const EgirlConfigSchema = Type.Object({
-  // Workspace
-  workspace: Type.String({ default: '~/.egirl/workspace' }),
+  workspace: Type.Object({
+    path: Type.String({ default: '~/.egirl/workspace' }),
+  }),
 
-  // Local model configuration
   local: Type.Object({
-    provider: Type.Union([
-      Type.Literal('llamacpp'),
-      Type.Literal('ollama'),
-      Type.Literal('vllm')
-    ]),
-    endpoint: Type.String(),
-    model: Type.String(),
-    contextLength: Type.Number({ default: 8192 }),
-    confidenceEstimation: Type.Boolean({ default: true }),
-  }),
-
-  // Remote model configuration
-  remote: Type.Object({
-    anthropic: Type.Optional(Type.Object({
-      apiKey: Type.String(),
-      defaultModel: Type.String({ default: 'claude-sonnet-4-20250514' }),
-    })),
-    openai: Type.Optional(Type.Object({
-      apiKey: Type.String(),
-      defaultModel: Type.String({ default: 'gpt-4o' }),
+    endpoint: Type.String({ default: 'http://localhost:8080' }),
+    model: Type.String({ default: 'qwen2.5-32b-instruct' }),
+    context_length: Type.Number({ default: 32768 }),
+    max_concurrent: Type.Number({ default: 2 }),
+    embeddings: Type.Optional(Type.Object({
+      endpoint: Type.String({ default: 'http://localhost:8081' }),
+      model: Type.String({ default: 'nomic-embed-text-v1.5' }),
     })),
   }),
 
-  // Routing rules
   routing: Type.Object({
-    defaultModel: Type.Union([Type.Literal('local'), Type.Literal('remote')], { default: 'local' }),
-    escalationThreshold: Type.Number({ default: 0.4 }),
-    alwaysLocal: Type.Array(Type.String(), { default: ['memory_search', 'memory_get'] }),
-    alwaysRemote: Type.Array(Type.String(), { default: ['code_generation', 'code_review'] }),
+    default: Type.Union([Type.Literal('local'), Type.Literal('remote')], { default: 'local' }),
+    escalation_threshold: Type.Number({ default: 0.4 }),
+    always_local: Type.Array(Type.String(), { default: ['memory_search', 'memory_get', 'greeting', 'acknowledgment'] }),
+    always_remote: Type.Array(Type.String(), { default: ['code_generation', 'code_review', 'complex_reasoning'] }),
   }),
 
-  // Channels
-  channels: Type.Object({
+  channels: Type.Optional(Type.Object({
     discord: Type.Optional(Type.Object({
-      token: Type.String(),
-      allowedUsers: Type.Array(Type.String()),
+      allowed_channels: Type.Array(Type.String(), { default: ['dm'] }),
+      allowed_users: Type.Array(Type.String(), { default: [] }),
     })),
-  }),
+  })),
 
-  // Skills directories
   skills: Type.Object({
-    directories: Type.Array(Type.String(), {
-      default: ['~/.egirl/skills', '{workspace}/skills']
-    }),
+    dirs: Type.Array(Type.String(), { default: ['~/.egirl/skills', '{workspace}/skills'] }),
   }),
 })
 
 export type EgirlConfig = Static<typeof EgirlConfigSchema>
+
+// Runtime config with resolved paths and secrets from .env
+export interface RuntimeConfig {
+  workspace: {
+    path: string
+  }
+  local: {
+    endpoint: string
+    model: string
+    contextLength: number
+    maxConcurrent: number
+    embeddings?: {
+      endpoint: string
+      model: string
+    }
+  }
+  remote: {
+    anthropic?: {
+      apiKey: string
+      model: string
+    }
+    openai?: {
+      apiKey: string
+      model: string
+    }
+  }
+  routing: {
+    default: 'local' | 'remote'
+    escalationThreshold: number
+    alwaysLocal: string[]
+    alwaysRemote: string[]
+  }
+  channels: {
+    discord?: {
+      token: string
+      allowedChannels: string[]
+      allowedUsers: string[]
+    }
+  }
+  skills: {
+    dirs: string[]
+  }
+}

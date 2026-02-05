@@ -6,8 +6,3 @@ export {
   getMessagesWithSystem,
   type AgentContext,
 } from './context'
-export {
-  handleStream,
-  createConsoleStreamHandler,
-  type StreamHandler,
-} from './streaming'

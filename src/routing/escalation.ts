@@ -64,7 +64,7 @@ export function analyzeResponseForEscalation(
   }
 
   // Very short response to a complex question might indicate struggle
-  if (content.length < 50 && !response.toolCalls) {
+  if (content.length < 50 && !response.tool_calls) {
     return {
       shouldEscalate: true,
       reason: 'insufficient_response',

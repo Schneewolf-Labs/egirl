@@ -1,13 +1,10 @@
 # egirl
 
-A local-first AI agent framework that uses a local LLM for decision-making and task routing, escalating to cloud models (Claude, GPT) only when necessary for complex tasks.
+A personal AI agent for Schneewolf Labs. Local-first, escalates to Claude/GPT only when needed.
 
-## Features
+## What This Is
 
-- **Local-First**: The local LLM handles routing decisions, memory operations, simple conversations, and task decomposition
-- **Smart Escalation**: Complex tasks (code generation, deep reasoning) automatically escalate to cloud models
-- **OpenClaw Compatible**: Skills, workspace structure, and session format are compatible with OpenClaw ecosystem
-- **Cost Aware**: Track savings from local execution vs what cloud would have cost
+egirl is a personal AI agent built for a single power user running a fat GPU cluster (200GB+ VRAM). It talks to you on Discord and from the terminal, runs most things locally on llama.cpp, and escalates to Claude/GPT only when the task genuinely requires it.
 
 ## Quick Start
 
@@ -15,103 +12,116 @@ A local-first AI agent framework that uses a local LLM for decision-making and t
 # Install dependencies
 bun install
 
-# Copy and configure environment
+# Configure secrets
 cp .env.example .env
-# Edit .env with your settings
+# Edit .env with your API keys
 
-# Run interactive chat
-bun run egirl chat
+# Run interactive CLI
+bun run cli
 
 # Or send a single message
-bun run egirl chat -m "Hello, how are you?"
+bun run cli -- -m "Hello, how are you?"
 
 # Check status
-bun run egirl status
+bun run start status
 ```
 
 ## Configuration
 
-Configuration is loaded from environment variables. See `.env.example` for all options.
+Config is in `egirl.toml`. Secrets (API keys) go in `.env`.
 
-### Local Model
+### egirl.toml
 
-The framework supports multiple local LLM backends:
+```toml
+[workspace]
+path = "~/.egirl/workspace"
 
-- **llama.cpp** (default): `EGIRL_LOCAL_PROVIDER=llamacpp`
-- **Ollama**: `EGIRL_LOCAL_PROVIDER=ollama`
-- **vLLM**: `EGIRL_LOCAL_PROVIDER=vllm`
+[local]
+endpoint = "http://localhost:8080"      # llama.cpp server
+model = "qwen2.5-32b-instruct"
+context_length = 32768
+max_concurrent = 2
 
-```bash
-EGIRL_LOCAL_PROVIDER=llamacpp
-EGIRL_LOCAL_ENDPOINT=http://localhost:8080
-EGIRL_LOCAL_MODEL=default
+[local.embeddings]
+endpoint = "http://localhost:8081"      # separate embedding server
+model = "nomic-embed-text-v1.5"
+
+[routing]
+default = "local"
+escalation_threshold = 0.4
+always_local = ["memory_search", "memory_get", "greeting", "acknowledgment"]
+always_remote = ["code_generation", "code_review", "complex_reasoning"]
+
+[channels.discord]
+allowed_channels = ["dm"]
+allowed_users = ["YOUR_DISCORD_ID"]
+
+[skills]
+dirs = ["~/.egirl/skills", "{workspace}/skills"]
 ```
 
-### Remote Models (Optional)
-
-For escalation to cloud models:
+### .env (secrets only)
 
 ```bash
-# Anthropic (Claude)
 ANTHROPIC_API_KEY=sk-ant-...
-
-# OpenAI
 OPENAI_API_KEY=sk-...
-```
-
-### Routing
-
-Control when tasks escalate to remote models:
-
-```bash
-EGIRL_DEFAULT_MODEL=local
-EGIRL_ESCALATION_THRESHOLD=0.4
-EGIRL_ALWAYS_LOCAL=memory_search,memory_get
-EGIRL_ALWAYS_REMOTE=code_generation,code_review
+DISCORD_TOKEN=...
 ```
 
 ## Architecture
 
 ```
 egirl/
+├── egirl.toml                # Main config file
+├── .env                      # Secrets only
 ├── src/
-│   ├── agent/          # Agent loop and context management
-│   ├── channels/       # Input channels (CLI, Discord)
-│   ├── config/         # Configuration loading
-│   ├── gateway/        # WebSocket server (future)
-│   ├── memory/         # Memory storage and search
-│   ├── providers/      # LLM providers (local & remote)
-│   ├── routing/        # Model routing decisions
-│   ├── skills/         # Skill loading (OpenClaw compatible)
-│   ├── tools/          # Built-in tools
-│   ├── tracking/       # Usage and cost tracking
-│   └── workspace/      # Workspace management
+│   ├── index.ts              # Entry point
+│   ├── config.ts             # Load egirl.toml + .env
+│   ├── agent/
+│   │   ├── loop.ts           # Core loop: route → execute → respond
+│   │   └── context.ts        # Build system prompt
+│   ├── router/
+│   │   ├── router.ts         # Decide local vs remote
+│   │   ├── escalation.ts     # Detect when local needs escalation
+│   │   └── heuristics.ts     # Fast pattern-match rules
+│   ├── providers/
+│   │   ├── types.ts          # LLMProvider interface
+│   │   ├── llamacpp.ts       # llama.cpp HTTP client
+│   │   ├── anthropic.ts      # Claude client
+│   │   └── openai.ts         # OpenAI client
+│   ├── tools/
+│   │   ├── registry.ts       # Tool registration
+│   │   ├── executor.ts       # Run tool calls
+│   │   └── builtin/          # read, write, edit, exec, glob, memory
+│   ├── memory/
+│   │   ├── manager.ts        # MEMORY.md and daily logs
+│   │   └── search.ts         # Hybrid BM25 + vector search
+│   ├── skills/
+│   │   └── loader.ts         # Parse SKILL.md files
+│   └── channels/
+│       ├── discord.ts        # Discord bot
+│       └── cli.ts            # Terminal REPL
 ```
 
 ## Tools
 
-Built-in tools available to the agent:
+Built-in tools:
 
 - `read_file` - Read file contents
 - `write_file` - Write content to a file
-- `edit_file` - Edit a file with string replacement
+- `edit_file` - Edit with string replacement
 - `execute_command` - Run shell commands
-- `glob_files` - Find files matching a pattern
-- `memory_search` - Search stored memories
+- `glob_files` - Find files by pattern
+- `memory_search` - Search memories
 - `memory_get` - Retrieve a specific memory
-- `memory_set` - Store a new memory
 
-## Development
+## Commands
 
 ```bash
-# Run in development mode with hot reload
-bun run dev
-
-# Run tests
-bun test
-
-# Type check
-bunx tsc --noEmit
+bun run dev         # Start with --watch
+bun run start       # Production start
+bun run cli         # Direct CLI mode
+bun test            # Run tests
 ```
 
 ## License

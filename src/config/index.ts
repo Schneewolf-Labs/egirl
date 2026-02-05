@@ -1,11 +1,10 @@
-import { Value } from '@sinclair/typebox/value'
-import { EgirlConfigSchema, type EgirlConfig } from './schema'
-import { defaultConfig } from './defaults'
+import { parse } from 'smol-toml'
+import { readFileSync, existsSync } from 'fs'
 import { resolve } from 'path'
 import { homedir } from 'os'
+import type { RuntimeConfig, EgirlConfig } from './schema'
 
-export { EgirlConfigSchema, type EgirlConfig } from './schema'
-export { defaultConfig } from './defaults'
+export { type EgirlConfig, type RuntimeConfig } from './schema'
 
 function expandPath(path: string, workspaceDir?: string): string {
   let result = path.replace(/^~/, homedir())
@@ -14,107 +13,124 @@ function expandPath(path: string, workspaceDir?: string): string {
     result = result.replace(/\{workspace\}/g, workspaceDir)
   }
 
-  return result
+  return resolve(result)
 }
 
-function getEnvString(key: string, fallback?: string): string | undefined {
-  return process.env[key] ?? fallback
+function findConfigFile(): string | null {
+  const candidates = [
+    resolve(process.cwd(), 'egirl.toml'),
+    resolve(homedir(), '.egirl', 'egirl.toml'),
+    resolve(homedir(), '.config', 'egirl', 'egirl.toml'),
+  ]
+
+  for (const path of candidates) {
+    if (existsSync(path)) return path
+  }
+
+  return null
 }
 
-function getEnvNumber(key: string, fallback?: number): number | undefined {
-  const val = process.env[key]
-  if (val === undefined) return fallback
-  const num = parseFloat(val)
-  return isNaN(num) ? fallback : num
+function loadTomlConfig(path: string): EgirlConfig {
+  const content = readFileSync(path, 'utf-8')
+  return parse(content) as unknown as EgirlConfig
 }
 
-function getEnvArray(key: string, fallback?: string[]): string[] | undefined {
-  const val = process.env[key]
-  if (val === undefined) return fallback
-  return val.split(',').map(s => s.trim()).filter(Boolean)
+const defaultToml: EgirlConfig = {
+  workspace: { path: '~/.egirl/workspace' },
+  local: {
+    endpoint: 'http://localhost:8080',
+    model: 'qwen2.5-32b-instruct',
+    context_length: 32768,
+    max_concurrent: 2,
+  },
+  routing: {
+    default: 'local',
+    escalation_threshold: 0.4,
+    always_local: ['memory_search', 'memory_get', 'greeting', 'acknowledgment'],
+    always_remote: ['code_generation', 'code_review', 'complex_reasoning'],
+  },
+  skills: {
+    dirs: ['~/.egirl/skills', '{workspace}/skills'],
+  },
 }
 
-export function loadConfig(overrides?: Partial<EgirlConfig>): EgirlConfig {
-  // Build config from environment variables
-  const envWorkspace = getEnvString('EGIRL_WORKSPACE')
+export function loadConfig(): RuntimeConfig {
+  // Load TOML config
+  const configPath = findConfigFile()
+  const toml: EgirlConfig = configPath ? loadTomlConfig(configPath) : defaultToml
 
-  const envConfig = {
+  // Resolve workspace path first (needed for other path expansions)
+  const workspacePath = expandPath(toml.workspace?.path ?? defaultToml.workspace.path)
+
+  // Build runtime config with snake_case from TOML mapped to camelCase
+  const config: RuntimeConfig = {
+    workspace: {
+      path: workspacePath,
+    },
     local: {
-      provider: (getEnvString('EGIRL_LOCAL_PROVIDER', 'llamacpp') as 'ollama' | 'llamacpp' | 'vllm'),
-      endpoint: getEnvString('EGIRL_LOCAL_ENDPOINT', 'http://localhost:8080')!,
-      model: getEnvString('EGIRL_LOCAL_MODEL', 'default')!,
-      contextLength: getEnvNumber('EGIRL_LOCAL_CONTEXT_LENGTH', 8192)!,
-      confidenceEstimation: getEnvString('EGIRL_LOCAL_CONFIDENCE_ESTIMATION') !== 'false',
-    },
-    remote: {
-      ...(getEnvString('ANTHROPIC_API_KEY') && {
-        anthropic: {
-          apiKey: getEnvString('ANTHROPIC_API_KEY')!,
-          defaultModel: getEnvString('ANTHROPIC_DEFAULT_MODEL', 'claude-sonnet-4-20250514')!,
-        },
-      }),
-      ...(getEnvString('OPENAI_API_KEY') && {
-        openai: {
-          apiKey: getEnvString('OPENAI_API_KEY')!,
-          defaultModel: getEnvString('OPENAI_DEFAULT_MODEL', 'gpt-4o')!,
+      endpoint: toml.local?.endpoint ?? defaultToml.local.endpoint,
+      model: toml.local?.model ?? defaultToml.local.model,
+      contextLength: toml.local?.context_length ?? defaultToml.local.context_length,
+      maxConcurrent: toml.local?.max_concurrent ?? defaultToml.local.max_concurrent,
+      ...(toml.local?.embeddings && {
+        embeddings: {
+          endpoint: toml.local.embeddings.endpoint,
+          model: toml.local.embeddings.model,
         },
       }),
     },
+    remote: {},
     routing: {
-      defaultModel: (getEnvString('EGIRL_DEFAULT_MODEL', 'local') as 'local' | 'remote'),
-      escalationThreshold: getEnvNumber('EGIRL_ESCALATION_THRESHOLD', 0.4)!,
-      alwaysLocal: getEnvArray('EGIRL_ALWAYS_LOCAL', ['memory_search', 'memory_get'])!,
-      alwaysRemote: getEnvArray('EGIRL_ALWAYS_REMOTE', ['code_generation', 'code_review'])!,
+      default: toml.routing?.default ?? defaultToml.routing.default,
+      escalationThreshold: toml.routing?.escalation_threshold ?? defaultToml.routing.escalation_threshold,
+      alwaysLocal: toml.routing?.always_local ?? defaultToml.routing.always_local,
+      alwaysRemote: toml.routing?.always_remote ?? defaultToml.routing.always_remote,
     },
-    channels: {
-      ...(getEnvString('DISCORD_BOT_TOKEN') && {
-        discord: {
-          token: getEnvString('DISCORD_BOT_TOKEN')!,
-          allowedUsers: getEnvArray('DISCORD_ALLOWED_USERS', [])!,
-        },
-      }),
-    },
+    channels: {},
     skills: {
-      directories: getEnvArray('EGIRL_SKILL_DIRECTORIES', ['~/.egirl/skills', '{workspace}/skills'])!,
+      dirs: (toml.skills?.dirs ?? defaultToml.skills.dirs).map(d => expandPath(d, workspacePath)),
     },
   }
 
-  // Merge: defaults -> env -> overrides
-  const merged = {
-    ...defaultConfig,
-    ...(envWorkspace && { workspace: envWorkspace }),
-    ...overrides,
-    local: { ...defaultConfig.local, ...envConfig.local, ...overrides?.local },
-    remote: { ...defaultConfig.remote, ...envConfig.remote, ...overrides?.remote },
-    routing: { ...defaultConfig.routing, ...envConfig.routing, ...overrides?.routing },
-    channels: { ...defaultConfig.channels, ...envConfig.channels, ...overrides?.channels },
-    skills: { ...defaultConfig.skills, ...envConfig.skills, ...overrides?.skills },
+  // Load secrets from environment
+  const anthropicKey = process.env.ANTHROPIC_API_KEY
+  const openaiKey = process.env.OPENAI_API_KEY
+  const discordToken = process.env.DISCORD_TOKEN
+
+  if (anthropicKey) {
+    config.remote.anthropic = {
+      apiKey: anthropicKey,
+      model: process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-4-20250514',
+    }
   }
 
-  // Validate
-  if (!Value.Check(EgirlConfigSchema, merged)) {
-    const errors = [...Value.Errors(EgirlConfigSchema, merged)]
-    throw new Error(`Invalid config: ${errors.map(e => `${e.path}: ${e.message}`).join(', ')}`)
+  if (openaiKey) {
+    config.remote.openai = {
+      apiKey: openaiKey,
+      model: process.env.OPENAI_MODEL ?? 'gpt-4o',
+    }
   }
 
-  // Expand paths
-  merged.workspace = expandPath(merged.workspace)
-  merged.skills.directories = merged.skills.directories.map(d =>
-    expandPath(d, merged.workspace)
-  )
+  if (discordToken && toml.channels?.discord) {
+    config.channels.discord = {
+      token: discordToken,
+      allowedChannels: toml.channels.discord.allowed_channels ?? ['dm'],
+      allowedUsers: toml.channels.discord.allowed_users ?? [],
+    }
+  }
 
-  return merged
+  return config
 }
 
-let _config: EgirlConfig | null = null
+let _config: RuntimeConfig | null = null
 
-export function getConfig(): EgirlConfig {
+export function getConfig(): RuntimeConfig {
   if (!_config) {
     _config = loadConfig()
   }
   return _config
 }
 
-export function setConfig(config: EgirlConfig): void {
+export function setConfig(config: RuntimeConfig): void {
   _config = config
 }

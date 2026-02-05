@@ -1,11 +1,15 @@
 import * as readline from 'readline'
-import type { Channel, ChannelMessage, ChannelResponse } from './types'
+import type { AgentLoop } from '../agent'
+import { log } from '../util/logger'
 
-export class CLIChannel implements Channel {
-  name = 'cli'
+export class CLIChannel {
   private rl: readline.Interface | null = null
-  private handler: ((message: ChannelMessage) => Promise<ChannelResponse>) | null = null
+  private agent: AgentLoop
   private running = false
+
+  constructor(agent: AgentLoop) {
+    this.agent = agent
+  }
 
   async start(): Promise<void> {
     this.rl = readline.createInterface({
@@ -24,10 +28,6 @@ export class CLIChannel implements Channel {
     this.running = false
     this.rl?.close()
     this.rl = null
-  }
-
-  onMessage(handler: (message: ChannelMessage) => Promise<ChannelResponse>): void {
-    this.handler = handler
   }
 
   private prompt(): void {
@@ -56,24 +56,20 @@ export class CLIChannel implements Channel {
         return
       }
 
-      if (this.handler) {
-        const message: ChannelMessage = {
-          id: crypto.randomUUID(),
-          content: trimmed,
-          userId: 'cli-user',
-          userName: 'User',
-          channelId: 'cli',
-          timestamp: new Date(),
-        }
+      try {
+        console.log()
+        const response = await this.agent.run(trimmed)
 
-        try {
-          console.log()  // Blank line before response
-          const response = await this.handler(message)
-          console.log(`\negirl> ${response.content}\n`)
-        } catch (error) {
-          const message = error instanceof Error ? error.message : String(error)
-          console.error(`\nError: ${message}\n`)
-        }
+        // Show routing info
+        const routingInfo = response.escalated
+          ? `[escalated to ${response.provider}]`
+          : `[${response.provider}]`
+
+        log.debug('cli', routingInfo)
+        console.log(`\negirl> ${response.content}\n`)
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        console.error(`\nError: ${message}\n`)
       }
 
       this.prompt()
@@ -81,6 +77,6 @@ export class CLIChannel implements Channel {
   }
 }
 
-export function createCLIChannel(): Channel {
-  return new CLIChannel()
+export function createCLIChannel(agent: AgentLoop): CLIChannel {
+  return new CLIChannel(agent)
 }

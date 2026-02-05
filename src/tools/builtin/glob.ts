@@ -1,10 +1,5 @@
 import { resolve, isAbsolute } from 'path'
-import type { Tool, ToolContext, ToolResult } from '../types'
-
-interface GlobParams {
-  pattern: string
-  cwd?: string
-}
+import type { Tool, ToolResult } from '../types'
 
 export const globTool: Tool = {
   definition: {
@@ -17,24 +12,24 @@ export const globTool: Tool = {
           type: 'string',
           description: 'The glob pattern to match (e.g., "**/*.ts", "src/**/*.js")',
         },
-        cwd: {
+        dir: {
           type: 'string',
-          description: 'The directory to search in (defaults to workspace)',
+          description: 'The directory to search in (defaults to cwd)',
         },
       },
       required: ['pattern'],
     },
   },
 
-  async execute(params: unknown, context: ToolContext): Promise<ToolResult> {
-    const { pattern, cwd } = params as GlobParams
+  async execute(params: Record<string, unknown>, cwd: string): Promise<ToolResult> {
+    const pattern = params.pattern as string
+    const dir = params.dir as string | undefined
 
-    const workingDir = cwd
-      ? (isAbsolute(cwd) ? cwd : resolve(context.workspaceDir, cwd))
-      : context.workspaceDir
+    const workingDir = dir
+      ? (isAbsolute(dir) ? dir : resolve(cwd, dir))
+      : cwd
 
     try {
-      // Use Bun's native glob
       const glob = new Bun.Glob(pattern)
       const matches: string[] = []
 

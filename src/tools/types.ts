@@ -1,34 +1,17 @@
 export interface ToolDefinition {
   name: string
   description: string
-  parameters: {
-    type: 'object'
-    properties: Record<string, {
-      type: string
-      description: string
-      enum?: string[]
-      items?: object
-      default?: unknown
-    }>
-    required?: string[]
-  }
-}
-
-export interface ToolContext {
-  workspaceDir: string
-  sessionId: string
-  currentModel: 'local' | 'remote'
+  parameters: Record<string, unknown>  // JSON Schema
 }
 
 export interface ToolResult {
   success: boolean
   output: string
-  // egirl extensions
-  suggestEscalation?: boolean
-  escalationReason?: string
+  suggest_escalation?: boolean
+  escalation_reason?: string
 }
 
 export interface Tool {
   definition: ToolDefinition
-  execute(params: unknown, context: ToolContext): Promise<ToolResult>
+  execute(params: Record<string, unknown>, cwd: string): Promise<ToolResult>
 }

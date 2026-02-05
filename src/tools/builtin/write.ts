@@ -1,12 +1,6 @@
 import { writeFile, mkdir } from 'fs/promises'
 import { resolve, isAbsolute, dirname } from 'path'
-import type { Tool, ToolContext, ToolResult } from '../types'
-
-interface WriteParams {
-  path: string
-  content: string
-  createDirectories?: boolean
-}
+import type { Tool, ToolResult } from '../types'
 
 export const writeTool: Tool = {
   definition: {
@@ -17,13 +11,13 @@ export const writeTool: Tool = {
       properties: {
         path: {
           type: 'string',
-          description: 'The path to the file to write (relative to workspace or absolute)',
+          description: 'The path to the file to write (relative to cwd or absolute)',
         },
         content: {
           type: 'string',
           description: 'The content to write to the file',
         },
-        createDirectories: {
+        create_directories: {
           type: 'boolean',
           description: 'Whether to create parent directories if they do not exist',
           default: true,
@@ -33,11 +27,13 @@ export const writeTool: Tool = {
     },
   },
 
-  async execute(params: unknown, context: ToolContext): Promise<ToolResult> {
-    const { path, content, createDirectories = true } = params as WriteParams
+  async execute(params: Record<string, unknown>, cwd: string): Promise<ToolResult> {
+    const path = params.path as string
+    const content = params.content as string
+    const createDirectories = params.create_directories !== false
 
     try {
-      const fullPath = isAbsolute(path) ? path : resolve(context.workspaceDir, path)
+      const fullPath = isAbsolute(path) ? path : resolve(cwd, path)
 
       if (createDirectories) {
         await mkdir(dirname(fullPath), { recursive: true })

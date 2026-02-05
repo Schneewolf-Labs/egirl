@@ -1,14 +1,8 @@
 import { spawn } from 'child_process'
 import { resolve, isAbsolute } from 'path'
-import type { Tool, ToolContext, ToolResult } from '../types'
+import type { Tool, ToolResult } from '../types'
 
-interface ExecParams {
-  command: string
-  cwd?: string
-  timeout?: number
-}
-
-const DEFAULT_TIMEOUT = 30000 // 30 seconds
+const DEFAULT_TIMEOUT = 30000
 
 export const execTool: Tool = {
   definition: {
@@ -21,9 +15,9 @@ export const execTool: Tool = {
           type: 'string',
           description: 'The shell command to execute',
         },
-        cwd: {
+        working_dir: {
           type: 'string',
-          description: 'The working directory for the command (defaults to workspace)',
+          description: 'The working directory for the command (defaults to cwd)',
         },
         timeout: {
           type: 'number',
@@ -34,12 +28,12 @@ export const execTool: Tool = {
     },
   },
 
-  async execute(params: unknown, context: ToolContext): Promise<ToolResult> {
-    const { command, cwd, timeout = DEFAULT_TIMEOUT } = params as ExecParams
-
-    const workingDir = cwd
-      ? (isAbsolute(cwd) ? cwd : resolve(context.workspaceDir, cwd))
-      : context.workspaceDir
+  async execute(params: Record<string, unknown>, cwd: string): Promise<ToolResult> {
+    const command = params.command as string
+    const workingDir = params.working_dir
+      ? (isAbsolute(params.working_dir as string) ? params.working_dir as string : resolve(cwd, params.working_dir as string))
+      : cwd
+    const timeout = (params.timeout as number) ?? DEFAULT_TIMEOUT
 
     return new Promise((resolvePromise) => {
       let stdout = ''

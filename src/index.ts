@@ -1,31 +1,31 @@
 #!/usr/bin/env bun
 
-import { loadConfig, type EgirlConfig } from './config'
+import { loadConfig, type RuntimeConfig } from './config'
 import { createProviderRegistry } from './providers'
-import { createModelRouter } from './routing'
+import { createRouter } from './routing'
 import { createDefaultToolExecutor } from './tools'
-import { createAgentLoop, createConsoleStreamHandler } from './agent'
+import { createAgentLoop } from './agent'
 import { createCLIChannel } from './channels'
 import { createStatsTracker } from './tracking'
-import { log } from './utils/logger'
+import { log } from './util/logger'
 
 async function main() {
   const args = process.argv.slice(2)
-  const command = args[0] ?? 'chat'
+  const command = args[0] ?? 'cli'
 
   // Load configuration
-  let config: EgirlConfig
+  let config: RuntimeConfig
   try {
     config = loadConfig()
-    log.info('main', `Loaded config: workspace=${config.workspace}`)
+    log.info('main', `Loaded config: workspace=${config.workspace.path}`)
   } catch (error) {
     console.error('Failed to load config:', error)
     process.exit(1)
   }
 
   switch (command) {
-    case 'chat':
-      await runChat(config, args.slice(1))
+    case 'cli':
+      await runCLI(config, args.slice(1))
       break
 
     case 'status':
@@ -45,7 +45,7 @@ async function main() {
   }
 }
 
-async function runChat(config: EgirlConfig, args: string[]) {
+async function runCLI(config: RuntimeConfig, args: string[]) {
   // Set log level from args
   if (args.includes('--debug') || args.includes('-d')) {
     log.setLevel('debug')
@@ -58,18 +58,13 @@ async function runChat(config: EgirlConfig, args: string[]) {
   // Create providers
   const providers = createProviderRegistry(config)
 
-  if (!providers.local) {
-    console.error('No local provider configured')
-    process.exit(1)
-  }
-
   log.info('main', `Local provider: ${providers.local.name}`)
   if (providers.remote) {
     log.info('main', `Remote provider: ${providers.remote.name}`)
   }
 
   // Create router and tools
-  const router = createModelRouter(config)
+  const router = createRouter(config)
   const toolExecutor = createDefaultToolExecutor()
 
   // Create stats tracker
@@ -87,20 +82,17 @@ async function runChat(config: EgirlConfig, args: string[]) {
   // Single message mode
   if (singleMessage) {
     try {
-      const response = await agent.run(singleMessage, {
-        stream: true,
-        streamHandler: createConsoleStreamHandler(),
-      })
+      const response = await agent.run(singleMessage)
 
       stats.recordRequest(
-        response.model,
+        response.target,
         response.provider,
-        response.usage.inputTokens,
-        response.usage.outputTokens,
+        response.usage.input_tokens,
+        response.usage.output_tokens,
         response.escalated
       )
 
-      console.log()  // Newline after streamed response
+      console.log(response.content)
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       console.error(`Error: ${message}`)
@@ -110,69 +102,27 @@ async function runChat(config: EgirlConfig, args: string[]) {
   }
 
   // Interactive CLI mode
-  const cli = createCLIChannel()
-
-  cli.onMessage(async (message) => {
-    // Handle special commands
-    if (message.content.toLowerCase() === '/stats') {
-      return { content: stats.formatSummary() }
-    }
-
-    if (message.content.toLowerCase() === '/clear') {
-      agent.clearContext()
-      return { content: 'Conversation cleared.' }
-    }
-
-    if (message.content.toLowerCase() === '/help') {
-      return {
-        content: `Commands:
-  /stats  - Show usage statistics
-  /clear  - Clear conversation history
-  /help   - Show this help
-  exit    - Quit the program`
-      }
-    }
-
-    const response = await agent.run(message.content, {
-      stream: false,  // CLI handles its own output
-    })
-
-    stats.recordRequest(
-      response.model,
-      response.provider,
-      response.usage.inputTokens,
-      response.usage.outputTokens,
-      response.escalated
-    )
-
-    const modelInfo = response.escalated
-      ? ` [escalated to ${response.provider}]`
-      : ` [${response.provider}]`
-
-    return { content: response.content + modelInfo }
-  })
-
+  const cli = createCLIChannel(agent)
   await cli.start()
 }
 
-async function showStatus(config: EgirlConfig) {
+async function showStatus(config: RuntimeConfig) {
   console.log('egirl Status\n')
 
   console.log('Configuration:')
-  console.log(`  Workspace: ${config.workspace}`)
-  console.log(`  Local Provider: ${config.local.provider}`)
+  console.log(`  Workspace: ${config.workspace.path}`)
   console.log(`  Local Model: ${config.local.model}`)
   console.log(`  Local Endpoint: ${config.local.endpoint}`)
 
   if (config.remote.anthropic) {
-    console.log(`  Remote (Anthropic): ${config.remote.anthropic.defaultModel}`)
+    console.log(`  Remote (Anthropic): ${config.remote.anthropic.model}`)
   }
   if (config.remote.openai) {
-    console.log(`  Remote (OpenAI): ${config.remote.openai.defaultModel}`)
+    console.log(`  Remote (OpenAI): ${config.remote.openai.model}`)
   }
 
   console.log(`\nRouting:`)
-  console.log(`  Default Model: ${config.routing.defaultModel}`)
+  console.log(`  Default: ${config.routing.default}`)
   console.log(`  Escalation Threshold: ${config.routing.escalationThreshold}`)
   console.log(`  Always Local: ${config.routing.alwaysLocal.join(', ')}`)
   console.log(`  Always Remote: ${config.routing.alwaysRemote.join(', ')}`)
@@ -181,12 +131,10 @@ async function showStatus(config: EgirlConfig) {
   console.log('\nProvider Status:')
   try {
     const providers = createProviderRegistry(config)
-    if (providers.local) {
-      const testResponse = await providers.local.chat({
-        messages: [{ role: 'user', content: 'Say "ok" and nothing else.' }],
-      })
-      console.log(`  Local: Connected (${testResponse.model})`)
-    }
+    const testResponse = await providers.local.chat({
+      messages: [{ role: 'user', content: 'Say "ok" and nothing else.' }],
+    })
+    console.log(`  Local: Connected (${testResponse.model})`)
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     console.log(`  Local: Error - ${message}`)
@@ -195,24 +143,24 @@ async function showStatus(config: EgirlConfig) {
 
 function showHelp() {
   console.log(`
-egirl - Local-First AI Agent Framework
+egirl - Local-First AI Agent for Schneewolf Labs
 
 Usage:
   egirl [command] [options]
 
 Commands:
-  chat      Start interactive chat (default)
+  cli       Start interactive CLI (default)
   status    Show current configuration and status
   help      Show this help message
 
-Options for chat:
+Options for cli:
   -m <msg>  Send a single message and exit
   -d, --debug  Enable debug logging
 
 Examples:
-  egirl chat              # Start interactive chat
-  egirl chat -m "Hello"   # Send a single message
-  egirl status            # Show status
+  bun run dev           # Start with --watch
+  bun run start         # Production start
+  bun run cli           # Direct CLI mode
 `)
 }
 

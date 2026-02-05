@@ -1,39 +1,35 @@
 import type { LLMProvider } from './types'
-import type { EgirlConfig } from '../config'
-import { createLocalProvider, type LocalProviderType } from './local'
-import { createRemoteProvider, type RemoteProviderType } from './remote'
+import type { RuntimeConfig } from '../config'
+import { createLlamaCppProvider } from './llamacpp'
+import { createAnthropicProvider } from './anthropic'
+import { createOpenAIProvider } from './openai'
 
 export * from './types'
-export { createLocalProvider, type LocalProviderType } from './local'
-export { createRemoteProvider, type RemoteProviderType } from './remote'
+export { createLlamaCppProvider } from './llamacpp'
+export { createAnthropicProvider } from './anthropic'
+export { createOpenAIProvider } from './openai'
 
 export interface ProviderRegistry {
-  local: LLMProvider | null
+  local: LLMProvider
   remote: LLMProvider | null
   getProvider(type: 'local' | 'remote'): LLMProvider | null
 }
 
-export function createProviderRegistry(config: EgirlConfig): ProviderRegistry {
-  // Create local provider
-  const local = createLocalProvider(
-    config.local.provider as LocalProviderType,
-    config.local.endpoint,
-    config.local.model
-  )
+export function createProviderRegistry(config: RuntimeConfig): ProviderRegistry {
+  // Create local provider (always llama.cpp)
+  const local = createLlamaCppProvider(config.local.endpoint, config.local.model)
 
   // Create remote provider (prefer Anthropic, fallback to OpenAI)
   let remote: LLMProvider | null = null
   if (config.remote.anthropic) {
-    remote = createRemoteProvider(
-      'anthropic',
+    remote = createAnthropicProvider(
       config.remote.anthropic.apiKey,
-      config.remote.anthropic.defaultModel
+      config.remote.anthropic.model
     )
   } else if (config.remote.openai) {
-    remote = createRemoteProvider(
-      'openai',
+    remote = createOpenAIProvider(
       config.remote.openai.apiKey,
-      config.remote.openai.defaultModel
+      config.remote.openai.model
     )
   }
 

@@ -1,11 +1,11 @@
 import type { ChatMessage } from '../providers/types'
-import type { EgirlConfig } from '../config'
+import type { RuntimeConfig } from '../config'
 import { analyzeMessageHeuristics, estimateComplexity } from './heuristics'
 import { createRoutingRules, applyRules, type RuleContext } from './rules'
-import { log } from '../utils/logger'
+import { log } from '../util/logger'
 
 export interface RoutingDecision {
-  model: 'local' | 'remote'
+  target: 'local' | 'remote'
   provider?: string
   reason: string
   confidence: number
@@ -18,11 +18,11 @@ export interface TaskAnalysis {
   skillsInvolved: string[]
 }
 
-export class ModelRouter {
-  private config: EgirlConfig
+export class Router {
+  private config: RuntimeConfig
   private rules: ReturnType<typeof createRoutingRules>
 
-  constructor(config: EgirlConfig) {
+  constructor(config: RuntimeConfig) {
     this.config = config
     this.rules = createRoutingRules(config)
   }
@@ -31,7 +31,7 @@ export class ModelRouter {
     const lastMessage = messages[messages.length - 1]
     if (!lastMessage) {
       return {
-        model: 'local',
+        target: 'local',
         reason: 'no_message',
         confidence: 1.0,
       }
@@ -62,48 +62,47 @@ export class ModelRouter {
     const ruleResult = applyRules(this.rules, context)
 
     // Combine heuristics and rules
-    let finalModel: 'local' | 'remote' = ruleResult.target
+    let finalTarget: 'local' | 'remote' = ruleResult.target
     let finalReason = ruleResult.rule
     let finalConfidence = heuristics.confidence
 
     // If heuristics strongly suggest escalation
     if (heuristics.shouldEscalate && heuristics.confidence > 0.7) {
-      finalModel = 'remote'
+      finalTarget = 'remote'
       finalReason = heuristics.reason ?? 'heuristic_escalation'
       finalConfidence = heuristics.confidence
     }
 
     // Check if we have a remote provider
-    if (finalModel === 'remote' && !this.config.remote.anthropic && !this.config.remote.openai) {
+    if (finalTarget === 'remote' && !this.config.remote.anthropic && !this.config.remote.openai) {
       log.warn('routing', 'Remote model requested but no remote provider configured, falling back to local')
-      finalModel = 'local'
+      finalTarget = 'local'
       finalReason = 'no_remote_provider'
       finalConfidence = 0.5
     }
 
     const decision: RoutingDecision = {
-      model: finalModel,
+      target: finalTarget,
       reason: finalReason,
       confidence: finalConfidence,
     }
 
-    if (finalModel === 'remote') {
+    if (finalTarget === 'remote') {
       if (this.config.remote.anthropic) {
-        decision.provider = `anthropic/${this.config.remote.anthropic.defaultModel}`
+        decision.provider = `anthropic/${this.config.remote.anthropic.model}`
       } else if (this.config.remote.openai) {
-        decision.provider = `openai/${this.config.remote.openai.defaultModel}`
+        decision.provider = `openai/${this.config.remote.openai.model}`
       }
     } else {
-      decision.provider = `${this.config.local.provider}/${this.config.local.model}`
+      decision.provider = `llamacpp/${this.config.local.model}`
     }
 
-    log.debug('routing', `Routed to ${decision.model}: ${decision.reason} (confidence: ${decision.confidence})`)
+    log.debug('routing', `Routed to ${decision.target}: ${decision.reason} (confidence: ${decision.confidence})`)
 
     return decision
   }
 
   private estimateTokens(messages: ChatMessage[]): number {
-    // Rough estimate: ~4 characters per token
     let totalChars = 0
     for (const msg of messages) {
       totalChars += msg.content.length
@@ -144,11 +143,11 @@ export class ModelRouter {
       type: this.detectTaskType(content),
       complexity: estimateComplexity(content),
       estimatedTokens: this.estimateTokens(messages),
-      skillsInvolved: [],  // TODO: Detect skills from content
+      skillsInvolved: [],
     }
   }
 }
 
-export function createModelRouter(config: EgirlConfig): ModelRouter {
-  return new ModelRouter(config)
+export function createRouter(config: RuntimeConfig): Router {
+  return new Router(config)
 }

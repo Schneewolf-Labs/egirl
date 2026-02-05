@@ -1,0 +1,25 @@
+[workspace]
+path = "~/.egirl/workspace"
+
+[local]
+endpoint = "http://localhost:8080"      # llama.cpp server
+model = "qwen2.5-32b-instruct"          # for display/logging only
+context_length = 32768
+max_concurrent = 2                       # you have the VRAM for parallel requests
+
+[local.embeddings]
+endpoint = "http://localhost:8081"       # separate llama.cpp instance for embeddings
+model = "nomic-embed-text-v1.5"
+
+[routing]
+default = "local"
+escalation_threshold = 0.4               # confidence below this triggers escalation
+always_local = ["memory_search", "memory_get", "greeting", "acknowledgment"]
+always_remote = ["code_generation", "code_review", "complex_reasoning"]
+
+[channels.discord]
+allowed_channels = ["dm"]                # or specific channel IDs
+allowed_users = []                       # set your Discord user ID
+
+[skills]
+dirs = ["~/.egirl/skills", "{workspace}/skills"]

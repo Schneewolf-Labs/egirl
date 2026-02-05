@@ -1,12 +1,6 @@
 import { readFile } from 'fs/promises'
 import { resolve, isAbsolute } from 'path'
-import type { Tool, ToolContext, ToolResult } from '../types'
-
-interface ReadParams {
-  path: string
-  startLine?: number
-  endLine?: number
-}
+import type { Tool, ToolResult } from '../types'
 
 export const readTool: Tool = {
   definition: {
@@ -17,13 +11,13 @@ export const readTool: Tool = {
       properties: {
         path: {
           type: 'string',
-          description: 'The path to the file to read (relative to workspace or absolute)',
+          description: 'The path to the file to read (relative to cwd or absolute)',
         },
-        startLine: {
+        start_line: {
           type: 'number',
           description: 'The starting line number (1-indexed, inclusive)',
         },
-        endLine: {
+        end_line: {
           type: 'number',
           description: 'The ending line number (1-indexed, inclusive)',
         },
@@ -32,12 +26,13 @@ export const readTool: Tool = {
     },
   },
 
-  async execute(params: unknown, context: ToolContext): Promise<ToolResult> {
-    const { path, startLine, endLine } = params as ReadParams
+  async execute(params: Record<string, unknown>, cwd: string): Promise<ToolResult> {
+    const path = params.path as string
+    const startLine = params.start_line as number | undefined
+    const endLine = params.end_line as number | undefined
 
     try {
-      const fullPath = isAbsolute(path) ? path : resolve(context.workspaceDir, path)
-
+      const fullPath = isAbsolute(path) ? path : resolve(cwd, path)
       const content = await readFile(fullPath, 'utf-8')
 
       if (startLine !== undefined || endLine !== undefined) {

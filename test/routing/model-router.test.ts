@@ -1,23 +1,40 @@
 import { describe, test, expect } from 'bun:test'
-import { createModelRouter } from '../../src/routing'
-import { defaultConfig } from '../../src/config/defaults'
+import { createRouter } from '../../src/routing'
 import type { ChatMessage } from '../../src/providers/types'
-import type { EgirlConfig } from '../../src/config'
+import type { RuntimeConfig } from '../../src/config'
 
-describe('ModelRouter', () => {
-  // Create config with mock remote provider for routing tests
-  const configWithRemote: EgirlConfig = {
-    ...defaultConfig,
+describe('Router', () => {
+  const baseConfig: RuntimeConfig = {
+    workspace: { path: '/tmp/test' },
+    local: {
+      endpoint: 'http://localhost:8080',
+      model: 'test-model',
+      contextLength: 32768,
+      maxConcurrent: 2,
+    },
+    remote: {},
+    routing: {
+      default: 'local',
+      escalationThreshold: 0.4,
+      alwaysLocal: ['memory_search', 'memory_get'],
+      alwaysRemote: ['code_generation', 'code_review'],
+    },
+    channels: {},
+    skills: { dirs: [] },
+  }
+
+  const configWithRemote: RuntimeConfig = {
+    ...baseConfig,
     remote: {
       anthropic: {
         apiKey: 'test-key',
-        defaultModel: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-20250514',
       },
     },
   }
 
-  const router = createModelRouter(configWithRemote)
-  const localOnlyRouter = createModelRouter(defaultConfig)
+  const router = createRouter(configWithRemote)
+  const localOnlyRouter = createRouter(baseConfig)
 
   test('routes simple greetings to local', () => {
     const messages: ChatMessage[] = [
@@ -25,7 +42,7 @@ describe('ModelRouter', () => {
     ]
 
     const decision = router.route(messages)
-    expect(decision.model).toBe('local')
+    expect(decision.target).toBe('local')
   })
 
   test('routes code generation requests to remote', () => {
@@ -34,7 +51,7 @@ describe('ModelRouter', () => {
     ]
 
     const decision = router.route(messages)
-    expect(decision.model).toBe('remote')
+    expect(decision.target).toBe('remote')
   })
 
   test('analyzes task complexity', () => {
@@ -52,7 +69,7 @@ describe('ModelRouter', () => {
     ]
 
     const decision = localOnlyRouter.route(messages)
-    expect(decision.model).toBe('local')
+    expect(decision.target).toBe('local')
     expect(decision.reason).toBe('no_remote_provider')
   })
 
@@ -62,7 +79,7 @@ describe('ModelRouter', () => {
     ]
 
     const decision = router.route(messages)
-    expect(decision.model).toBe('remote')
+    expect(decision.target).toBe('remote')
     expect(decision.reason).toContain('code')
   })
 

@@ -1,8 +1,8 @@
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant' | 'tool'
   content: string
-  toolCallId?: string
-  toolCalls?: ToolCall[]
+  tool_call_id?: string
+  tool_calls?: ToolCall[]
 }
 
 export interface ToolCall {
@@ -14,47 +14,25 @@ export interface ToolCall {
 export interface ToolDefinition {
   name: string
   description: string
-  parameters: {
-    type: 'object'
-    properties: Record<string, unknown>
-    required?: string[]
-  }
+  parameters: Record<string, unknown>  // JSON Schema
 }
 
 export interface ChatRequest {
   messages: ChatMessage[]
   tools?: ToolDefinition[]
   temperature?: number
-  maxTokens?: number
-  stream?: boolean
+  max_tokens?: number
 }
 
 export interface ChatResponse {
   content: string
-  toolCalls?: ToolCall[]
-  usage: {
-    inputTokens: number
-    outputTokens: number
-  }
-  // egirl extensions
-  confidence?: number  // 0-1, only from local with confidence estimation
+  tool_calls?: ToolCall[]
+  usage: { input_tokens: number; output_tokens: number }
+  confidence?: number  // local model only, 0-1
   model: string
-  provider: 'local' | 'remote'
-}
-
-export interface ChatStreamChunk {
-  type: 'content' | 'tool_call' | 'done'
-  content?: string
-  toolCall?: Partial<ToolCall>
-  usage?: {
-    inputTokens: number
-    outputTokens: number
-  }
 }
 
 export interface LLMProvider {
-  name: string
-  type: 'local' | 'remote'
-  chat(request: ChatRequest): Promise<ChatResponse>
-  chatStream?(request: ChatRequest): AsyncIterable<ChatStreamChunk>
+  readonly name: string
+  chat(req: ChatRequest): Promise<ChatResponse>
 }

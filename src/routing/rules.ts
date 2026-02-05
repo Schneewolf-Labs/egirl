@@ -1,4 +1,4 @@
-import type { EgirlConfig } from '../config'
+import type { RuntimeConfig } from '../config'
 
 export interface RoutingRule {
   name: string
@@ -15,7 +15,7 @@ export interface RuleContext {
   userContent: string
 }
 
-export function createRoutingRules(config: EgirlConfig): RoutingRule[] {
+export function createRoutingRules(config: RuntimeConfig): RoutingRule[] {
   const rules: RoutingRule[] = []
 
   // Always local rules
@@ -65,7 +65,7 @@ export function createRoutingRules(config: EgirlConfig): RoutingRule[] {
   rules.push({
     name: 'default',
     match: () => true,
-    target: config.routing.defaultModel,
+    target: config.routing.default,
     priority: 0,
   })
 
@@ -78,6 +78,5 @@ export function applyRules(rules: RoutingRule[], context: RuleContext): { target
       return { target: rule.target, rule: rule.name }
     }
   }
-  // Should never reach here since we have a default rule
   return { target: 'local', rule: 'fallback' }
 }

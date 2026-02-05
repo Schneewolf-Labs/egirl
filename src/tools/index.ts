@@ -8,7 +8,6 @@ export {
   globTool,
   memorySearchTool,
   memoryGetTool,
-  memorySetTool,
 } from './builtin'
 
 import { createToolExecutor } from './executor'
@@ -20,7 +19,6 @@ import {
   globTool,
   memorySearchTool,
   memoryGetTool,
-  memorySetTool,
 } from './builtin'
 
 export function createDefaultToolExecutor() {
@@ -33,7 +31,6 @@ export function createDefaultToolExecutor() {
     globTool,
     memorySearchTool,
     memoryGetTool,
-    memorySetTool,
   ])
   return executor
 }
