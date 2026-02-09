@@ -124,6 +124,16 @@ export function loadConfig(): RuntimeConfig {
     }
   }
 
+  if (toml.channels?.claude_code) {
+    const cc = toml.channels.claude_code
+    config.channels.claudeCode = {
+      permissionMode: cc.permission_mode ?? 'bypassPermissions',
+      model: cc.model,
+      workingDir: cc.working_dir ? expandPath(cc.working_dir, workspacePath) : process.cwd(),
+      maxTurns: cc.max_turns,
+    }
+  }
+
   return config
 }
 

@@ -28,6 +28,17 @@ export const EgirlConfigSchema = Type.Object({
       allowed_channels: Type.Array(Type.String(), { default: ['dm'] }),
       allowed_users: Type.Array(Type.String(), { default: [] }),
     })),
+    claude_code: Type.Optional(Type.Object({
+      permission_mode: Type.Union([
+        Type.Literal('default'),
+        Type.Literal('acceptEdits'),
+        Type.Literal('bypassPermissions'),
+        Type.Literal('plan'),
+      ], { default: 'bypassPermissions' }),
+      model: Type.Optional(Type.String()),
+      working_dir: Type.Optional(Type.String()),
+      max_turns: Type.Optional(Type.Number()),
+    })),
   })),
 
   skills: Type.Object({
@@ -73,6 +84,12 @@ export interface RuntimeConfig {
       token: string
       allowedChannels: string[]
       allowedUsers: string[]
+    }
+    claudeCode?: {
+      permissionMode: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan'
+      model?: string
+      workingDir: string
+      maxTurns?: number
     }
   }
   skills: {
