@@ -5,7 +5,7 @@ import { createProviderRegistry } from './providers'
 import { createRouter } from './routing'
 import { createDefaultToolExecutor } from './tools'
 import { createAgentLoop } from './agent'
-import { createCLIChannel, createClaudeCodeChannel, type ClaudeCodeConfig } from './channels'
+import { createCLIChannel, createClaudeCodeChannel, createDiscordChannel, type ClaudeCodeConfig } from './channels'
 import { createStatsTracker } from './tracking'
 import { createMemoryManager, Qwen3VLEmbeddings, type MemoryManager } from './memory'
 import { log } from './util/logger'
@@ -67,6 +67,10 @@ async function main() {
     case 'claude-code':
     case 'cc':
       await runClaudeCode(config, args.slice(1))
+      break
+
+    case 'discord':
+      await runDiscord(config, args.slice(1))
       break
 
     case 'help':
@@ -273,6 +277,63 @@ async function runClaudeCode(config: RuntimeConfig, args: string[]) {
   await channel.startInteractive()
 }
 
+async function runDiscord(config: RuntimeConfig, args: string[]) {
+  // Set log level from args
+  if (args.includes('--quiet') || args.includes('-q')) {
+    log.setLevel('error')
+  } else if (args.includes('--verbose') || args.includes('-v') || args.includes('--debug') || args.includes('-d')) {
+    log.setLevel('debug')
+  }
+
+  // Check Discord config
+  if (!config.channels.discord) {
+    console.error('Error: Discord not configured. Add DISCORD_TOKEN to .env and configure channels.discord in egirl.toml')
+    process.exit(1)
+  }
+
+  // Create providers
+  const providers = createProviderRegistry(config)
+
+  log.info('main', `Local provider: ${providers.local.name}`)
+  if (providers.remote) {
+    log.info('main', `Remote provider: ${providers.remote.name}`)
+  }
+
+  // Create memory system
+  const memory = createMemory(config)
+
+  // Create router and tools
+  const router = createRouter(config)
+  const toolExecutor = createDefaultToolExecutor(memory)
+
+  // Create agent loop
+  const agent = createAgentLoop(
+    config,
+    router,
+    toolExecutor,
+    providers.local,
+    providers.remote
+  )
+
+  // Create and start Discord channel
+  const discord = createDiscordChannel(agent, config.channels.discord)
+
+  // Handle graceful shutdown
+  const shutdown = async () => {
+    log.info('main', 'Shutting down...')
+    await discord.stop()
+    process.exit(0)
+  }
+
+  process.on('SIGINT', shutdown)
+  process.on('SIGTERM', shutdown)
+
+  await discord.start()
+
+  // Keep alive
+  log.info('main', 'Discord bot running. Press Ctrl+C to stop.')
+}
+
 function showHelp() {
   console.log(`
 egirl - Local-First AI Agent for Schneewolf Labs
@@ -282,12 +343,18 @@ Usage:
 
 Commands:
   cli            Start interactive CLI (default)
+  discord        Start Discord bot
   claude-code    Bridge to Claude Code with local model supervision (alias: cc)
   status         Show current configuration and status
   help           Show this help message
 
 Options for cli:
   -m <msg>       Send a single message and exit
+  -v, --verbose  Enable verbose/debug logging
+  -d, --debug    Alias for --verbose
+  -q, --quiet    Only show errors
+
+Options for discord:
   -v, --verbose  Enable verbose/debug logging
   -d, --debug    Alias for --verbose
   -q, --quiet    Only show errors
@@ -303,6 +370,7 @@ Examples:
   bun run dev                          # Start with --watch
   bun run start                        # Production start
   bun run cli                          # Direct CLI mode
+  bun run start discord                # Start Discord bot
   bun run start claude-code            # Claude Code bridge (interactive)
   bun run start cc -m "fix the tests"  # Single task mode
 `)
