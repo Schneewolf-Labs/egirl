@@ -8,8 +8,10 @@ context_length = 32768
 max_concurrent = 2                       # you have the VRAM for parallel requests
 
 [local.embeddings]
-endpoint = "http://localhost:8081"       # separate llama.cpp instance for embeddings
-model = "nomic-embed-text-v1.5"
+endpoint = "http://localhost:8082"       # Qwen3-VL-Embedding Python service
+model = "qwen3-vl-embedding-2b"
+dimensions = 2048
+multimodal = true                        # supports text + image embeddings
 
 [routing]
 default = "local"
