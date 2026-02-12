@@ -104,6 +104,7 @@ export class AgentLoop {
         const toolResults = await this.executeTools(response.tool_calls)
 
         for (const [callId, result] of toolResults) {
+          log.debug('agent', `Tool ${callId}: ${result.output.substring(0, 100)}${result.output.length > 100 ? '...' : ''}`)
           addMessage(this.context, {
             role: 'tool',
             content: result.output,

@@ -3,7 +3,7 @@ path = "~/.egirl/workspace"
 
 [local]
 endpoint = "http://localhost:8080"      # llama.cpp server
-model = "qwen2.5-32b-instruct"          # for display/logging only
+model = "qwen3-vl-32b"                   # for display/logging only
 context_length = 32768
 max_concurrent = 2                       # you have the VRAM for parallel requests
 

@@ -1,5 +1,5 @@
 import { parse } from 'smol-toml'
-import { readFileSync, existsSync } from 'fs'
+import { readFileSync, existsSync, mkdirSync } from 'fs'
 import { resolve } from 'path'
 import { homedir } from 'os'
 import type { RuntimeConfig, EgirlConfig } from './schema'
@@ -61,6 +61,11 @@ export function loadConfig(): RuntimeConfig {
 
   // Resolve workspace path first (needed for other path expansions)
   const workspacePath = expandPath(toml.workspace?.path ?? defaultToml.workspace.path)
+
+  // Create workspace directory if it doesn't exist
+  if (!existsSync(workspacePath)) {
+    mkdirSync(workspacePath, { recursive: true })
+  }
 
   // Build runtime config with snake_case from TOML mapped to camelCase
   const config: RuntimeConfig = {

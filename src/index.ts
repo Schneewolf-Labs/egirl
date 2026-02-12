@@ -47,7 +47,9 @@ async function main() {
 
 async function runCLI(config: RuntimeConfig, args: string[]) {
   // Set log level from args
-  if (args.includes('--debug') || args.includes('-d')) {
+  if (args.includes('--quiet') || args.includes('-q')) {
+    log.setLevel('error')
+  } else if (args.includes('--verbose') || args.includes('-v') || args.includes('--debug') || args.includes('-d')) {
     log.setLevel('debug')
   }
 
@@ -154,8 +156,10 @@ Commands:
   help      Show this help message
 
 Options for cli:
-  -m <msg>  Send a single message and exit
-  -d, --debug  Enable debug logging
+  -m <msg>     Send a single message and exit
+  -v, --verbose  Enable verbose/debug logging
+  -d, --debug    Alias for --verbose
+  -q, --quiet    Only show errors
 
 Examples:
   bun run dev           # Start with --watch

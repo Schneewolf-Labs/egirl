@@ -66,11 +66,17 @@ export function parseToolCalls(content: string): { content: string; toolCalls: T
 
   let match
   while ((match = TOOL_CALL_REGEX.exec(content)) !== null) {
-    const jsonStr = match[1]
+    let jsonStr = match[1]
     if (!jsonStr) continue
 
     try {
-      const parsed = JSON.parse(jsonStr)
+      // Try to fix Python-style single quotes
+      // Replace single quotes with double quotes, being careful about nested quotes
+      const fixedJson = jsonStr
+        .replace(/'/g, '"')
+        .replace(/"(\w+)":/g, '"$1":')  // Ensure property names are quoted
+
+      const parsed = JSON.parse(fixedJson)
       if (parsed.name) {
         toolCalls.push({
           id: `call_${callIndex++}`,
@@ -80,7 +86,20 @@ export function parseToolCalls(content: string): { content: string; toolCalls: T
         cleanContent = cleanContent.replace(match[0], '')
       }
     } catch {
-      // Invalid JSON, skip this match
+      // Try original string as fallback
+      try {
+        const parsed = JSON.parse(jsonStr)
+        if (parsed.name) {
+          toolCalls.push({
+            id: `call_${callIndex++}`,
+            name: parsed.name,
+            arguments: parsed.arguments ?? {},
+          })
+          cleanContent = cleanContent.replace(match[0], '')
+        }
+      } catch {
+        // Invalid JSON, skip this match
+      }
     }
   }
 

@@ -1,5 +1,6 @@
 import type { LLMProvider, ChatRequest, ChatResponse, ChatMessage, ContentPart } from './types'
-import { parseToolCalls, buildToolsSection, formatToolResponse } from '../tools/format'
+import { parseToolCalls } from '../tools/format'
+import { log } from '../util/logger'
 
 type FormattedContent = string | ContentPart[]
 type FormattedMessage = { role: string; content: FormattedContent }
@@ -56,13 +57,24 @@ export class LlamaCppProvider implements LLMProvider {
   }
 
   async chat(req: ChatRequest): Promise<ChatResponse> {
-    const messages = this.formatMessages(req.messages, req.tools ?? [])
+    const messages = this.formatMessages(req.messages)
+
+    // Format tools for llama.cpp (Qwen3 template expects this format)
+    const tools = req.tools?.map(tool => ({
+      type: 'function' as const,
+      function: {
+        name: tool.name,
+        description: tool.description,
+        parameters: tool.parameters,
+      },
+    }))
 
     const response = await fetch(`${this.endpoint}/v1/chat/completions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         messages,
+        tools: tools?.length ? tools : undefined,
         temperature: req.temperature,
         max_tokens: req.max_tokens,
         stream: false,
@@ -84,6 +96,8 @@ export class LlamaCppProvider implements LLMProvider {
 
     let content = data.choices[0]?.message?.content ?? ''
 
+    log.debug('llamacpp', `Raw response (${content.length} chars): ${content.substring(0, 200)}${content.length > 200 ? '...' : ''}`)
+
     // If we stopped at </tool_call>, add the closing tag back
     if (req.tools?.length && content.includes('<tool_call>') && !content.includes('</tool_call>')) {
       content += '</tool_call>'
@@ -91,6 +105,10 @@ export class LlamaCppProvider implements LLMProvider {
 
     // Parse tool calls from response
     const { content: cleanContent, toolCalls } = parseToolCalls(content)
+
+    if (toolCalls.length > 0) {
+      log.debug('llamacpp', `Parsed ${toolCalls.length} tool calls: ${toolCalls.map(tc => tc.name).join(', ')}`)
+    }
 
     return {
       content: cleanContent,
@@ -104,80 +122,51 @@ export class LlamaCppProvider implements LLMProvider {
   }
 
   /**
-   * Format messages for Qwen3 chat template:
-   * - Inject tools section into system prompt
-   * - Convert tool role messages to user role with <tool_response> tags
-   * - Handle multimodal content (images)
+   * Format messages for Qwen3 chat template.
+   * The template handles:
+   * - Tools section in system prompt (via tools parameter)
+   * - Tool role messages converted to user role with <tool_response> tags
+   * - Multimodal content (images/videos)
+   *
+   * We only need to handle special cases like image tool results.
    */
-  private formatMessages(
-    messages: ChatMessage[],
-    tools: ChatRequest['tools']
-  ): FormattedMessage[] {
+  private formatMessages(messages: ChatMessage[]): FormattedMessage[] {
     const formatted: FormattedMessage[] = []
-    const toolsSection = tools?.length ? buildToolsSection(tools) : ''
-
-    // Batch consecutive tool messages
-    let pendingToolResponses: ContentPart[] = []
-
-    const flushToolResponses = () => {
-      if (pendingToolResponses.length > 0) {
-        formatted.push({
-          role: 'user',
-          content: pendingToolResponses,
-        })
-        pendingToolResponses = []
-      }
-    }
 
     for (const msg of messages) {
-      if (msg.role === 'system') {
-        // Append tools section to system prompt
-        const systemContent = this.getTextContent(msg.content)
-        formatted.push({
-          role: 'system',
-          content: systemContent + toolsSection,
-        })
-      } else if (msg.role === 'tool') {
-        // Batch tool responses (Qwen3 uses user role with <tool_response> tags)
+      if (msg.role === 'tool') {
         const textContent = this.getTextContent(msg.content)
 
         // Check if this is an image result (base64 data URL)
+        // For images, we need to pass multimodal content
         if (textContent.startsWith('data:image/')) {
-          pendingToolResponses.push({
-            type: 'text',
-            text: formatToolResponse('Screenshot captured'),
-          })
-          pendingToolResponses.push({
-            type: 'image_url',
-            image_url: { url: textContent },
+          formatted.push({
+            role: 'tool',
+            content: [
+              { type: 'text', text: 'Screenshot captured' },
+              { type: 'image_url', image_url: { url: textContent } },
+            ],
           })
         } else {
-          pendingToolResponses.push({
-            type: 'text',
-            text: formatToolResponse(textContent),
+          formatted.push({
+            role: msg.role,
+            content: textContent,
           })
         }
+      } else if (Array.isArray(msg.content)) {
+        // Multimodal message, pass through
+        formatted.push({
+          role: msg.role,
+          content: msg.content,
+        })
       } else {
-        // Flush any pending tool responses before non-tool message
-        flushToolResponses()
-
-        // Handle multimodal user messages
-        if (Array.isArray(msg.content)) {
-          formatted.push({
-            role: msg.role,
-            content: msg.content,
-          })
-        } else {
-          formatted.push({
-            role: msg.role,
-            content: msg.content,
-          })
-        }
+        // Regular text message
+        formatted.push({
+          role: msg.role,
+          content: msg.content,
+        })
       }
     }
-
-    // Flush remaining tool responses
-    flushToolResponses()
 
     return formatted
   }
