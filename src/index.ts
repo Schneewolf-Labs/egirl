@@ -7,7 +7,39 @@ import { createDefaultToolExecutor } from './tools'
 import { createAgentLoop } from './agent'
 import { createCLIChannel, createClaudeCodeChannel, type ClaudeCodeConfig } from './channels'
 import { createStatsTracker } from './tracking'
+import { createMemoryManager, Qwen3VLEmbeddings, type MemoryManager } from './memory'
 import { log } from './util/logger'
+
+/**
+ * Create memory manager with embeddings if configured
+ */
+function createMemory(config: RuntimeConfig): MemoryManager | undefined {
+  const embeddingsConfig = config.local.embeddings
+  if (!embeddingsConfig) {
+    log.info('main', 'No embeddings configured - memory system disabled')
+    return undefined
+  }
+
+  try {
+    // Create embedding provider (using Qwen3-VL by default)
+    const embeddings = new Qwen3VLEmbeddings(
+      embeddingsConfig.endpoint,
+      embeddingsConfig.dimensions
+    )
+
+    const memory = createMemoryManager({
+      workspaceDir: config.workspace.path,
+      embeddings,
+      embeddingDimensions: embeddingsConfig.dimensions,
+    })
+
+    log.info('main', `Memory system initialized: ${embeddingsConfig.model} @ ${embeddingsConfig.endpoint}`)
+    return memory
+  } catch (error) {
+    log.warn('main', 'Failed to initialize memory system:', error)
+    return undefined
+  }
+}
 
 async function main() {
   const args = process.argv.slice(2)
@@ -70,9 +102,12 @@ async function runCLI(config: RuntimeConfig, args: string[]) {
     log.info('main', `Remote provider: ${providers.remote.name}`)
   }
 
+  // Create memory system (if embeddings configured)
+  const memory = createMemory(config)
+
   // Create router and tools
   const router = createRouter(config)
-  const toolExecutor = createDefaultToolExecutor()
+  const toolExecutor = createDefaultToolExecutor(memory)
 
   // Create stats tracker
   const stats = createStatsTracker()
@@ -128,6 +163,11 @@ async function showStatus(config: RuntimeConfig) {
     console.log(`  Remote (OpenAI): ${config.remote.openai.model}`)
   }
 
+  if (config.local.embeddings) {
+    console.log(`  Embeddings: ${config.local.embeddings.model} @ ${config.local.embeddings.endpoint}`)
+    console.log(`    Dimensions: ${config.local.embeddings.dimensions}, Multimodal: ${config.local.embeddings.multimodal}`)
+  }
+
   console.log(`\nRouting:`)
   console.log(`  Default: ${config.routing.default}`)
   console.log(`  Escalation Threshold: ${config.routing.escalationThreshold}`)
@@ -145,6 +185,22 @@ async function showStatus(config: RuntimeConfig) {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     console.log(`  Local: Error - ${message}`)
+  }
+
+  // Test embeddings service
+  if (config.local.embeddings) {
+    try {
+      const response = await fetch(`${config.local.embeddings.endpoint}/health`)
+      if (response.ok) {
+        const health = await response.json() as { status: string; device: string }
+        console.log(`  Embeddings: Connected (${health.device})`)
+      } else {
+        console.log(`  Embeddings: Error - ${response.status}`)
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      console.log(`  Embeddings: Error - ${message}`)
+    }
   }
 }
 

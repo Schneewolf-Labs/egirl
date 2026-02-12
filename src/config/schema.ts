@@ -11,8 +11,10 @@ export const EgirlConfigSchema = Type.Object({
     context_length: Type.Number({ default: 32768 }),
     max_concurrent: Type.Number({ default: 2 }),
     embeddings: Type.Optional(Type.Object({
-      endpoint: Type.String({ default: 'http://localhost:8081' }),
-      model: Type.String({ default: 'nomic-embed-text-v1.5' }),
+      endpoint: Type.String({ default: 'http://localhost:8082' }),
+      model: Type.String({ default: 'qwen3-vl-embedding-2b' }),
+      dimensions: Type.Number({ default: 2048 }),
+      multimodal: Type.Boolean({ default: true }),
     })),
   }),
 
@@ -61,6 +63,8 @@ export interface RuntimeConfig {
     embeddings?: {
       endpoint: string
       model: string
+      dimensions: number
+      multimodal: boolean
     }
   }
   remote: {

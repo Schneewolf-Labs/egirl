@@ -81,6 +81,8 @@ export function loadConfig(): RuntimeConfig {
         embeddings: {
           endpoint: toml.local.embeddings.endpoint,
           model: toml.local.embeddings.model,
+          dimensions: toml.local.embeddings.dimensions ?? 2048,
+          multimodal: toml.local.embeddings.multimodal ?? true,
         },
       }),
     },
