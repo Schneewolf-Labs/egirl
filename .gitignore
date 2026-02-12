@@ -31,3 +31,11 @@ Thumbs.db
 
 # Test coverage
 coverage/
+
+# Python (embedding service)
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.Python
+*.egg-info/
