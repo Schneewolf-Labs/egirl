@@ -1,10 +1,28 @@
-# egirl
+<p align="center">
+  <img src="logo.png" alt="egirl" width="300" />
+</p>
 
-A local-first AI agent that runs on your own hardware and escalates to cloud providers only when needed.
+<p align="center">
+  <strong>Local-first AI agent that runs on your hardware</strong><br>
+  Escalates to cloud only when needed. Meet Kira.
+</p>
+
+---
 
 ## What This Is
 
-egirl is a personal AI agent designed for users with local GPU inference capability. It communicates via Discord and terminal, runs most tasks locally using llama.cpp, and intelligently escalates to Claude or GPT when the complexity demands it—keeping API costs low while maintaining quality where it matters.
+egirl is a personal AI agent for users with local GPU inference. It runs most tasks locally via llama.cpp, remembers conversations, and intelligently escalates to Claude or GPT when complexity demands it.
+
+**Default personality: Kira** - confident, sharp, gets stuff done. Will tease you when you push to main.
+
+## Features
+
+- **Local-first** - Runs on your hardware, zero API cost for most tasks
+- **Smart routing** - Escalates to Claude/GPT only when needed
+- **Memory system** - Hybrid search (keyword + semantic) with multimodal embeddings
+- **Discord & CLI** - Talk via Discord DMs or terminal
+- **Tool use** - File ops, command execution, memory search
+- **Customizable personality** - Kira is the default, make her your own
 
 ## Quick Start
 
@@ -12,23 +30,24 @@ egirl is a personal AI agent designed for users with local GPU inference capabil
 # Install dependencies
 bun install
 
-# Configure secrets
+# Configure
 cp .env.example .env
-# Edit .env with your API keys
+# Edit .env with your API keys (optional - only needed for escalation)
 
-# Run interactive CLI
-bun run cli
+# Start llama.cpp server (your local model)
+llama-server -m your-model.gguf -c 32768 --port 8080
 
-# Or send a single message
-bun run cli -- -m "Hello, how are you?"
+# Start embedding service (for memory)
+cd services/embeddings && ./run.sh
 
-# Check status
-bun run start status
+# Run CLI
+bun run start cli
+
+# Or Discord bot
+bun run start discord
 ```
 
 ## Configuration
-
-Config is in `egirl.toml`. Secrets (API keys) go in `.env`.
 
 ### egirl.toml
 
@@ -38,92 +57,98 @@ path = "~/.egirl/workspace"
 
 [local]
 endpoint = "http://localhost:8080"      # llama.cpp server
-model = "qwen2.5-32b-instruct"
+model = "qwen3-vl-32b"
 context_length = 32768
-max_concurrent = 2
 
 [local.embeddings]
-endpoint = "http://localhost:8081"      # separate embedding server
-model = "nomic-embed-text-v1.5"
+endpoint = "http://localhost:8082"      # Qwen3-VL-Embedding service
+model = "qwen3-vl-embedding-2b"
+dimensions = 2048
+multimodal = true
 
 [routing]
 default = "local"
 escalation_threshold = 0.4
-always_local = ["memory_search", "memory_get", "greeting", "acknowledgment"]
-always_remote = ["code_generation", "code_review", "complex_reasoning"]
+always_local = ["memory_search", "memory_get", "greeting"]
+always_remote = ["code_generation", "complex_reasoning"]
 
 [channels.discord]
 allowed_channels = ["dm"]
-allowed_users = ["YOUR_DISCORD_ID"]
-
-[skills]
-dirs = ["~/.egirl/skills", "{workspace}/skills"]
+allowed_users = []  # empty = allow all
 ```
 
-### .env (secrets only)
+### .env
 
 ```bash
-ANTHROPIC_API_KEY=sk-ant-...
-OPENAI_API_KEY=sk-...
-DISCORD_TOKEN=...
+ANTHROPIC_API_KEY=sk-ant-...   # Optional - for escalation
+OPENAI_API_KEY=sk-...          # Optional - for escalation
+DISCORD_TOKEN=...              # Required for Discord bot
+```
+
+## Commands
+
+```bash
+bun run start cli              # Interactive CLI
+bun run start cli -m "hello"   # Single message
+bun run start discord          # Discord bot
+bun run start status           # Check config and connections
+bun run start help             # Show all commands
 ```
 
 ## Architecture
 
 ```
 egirl/
-├── egirl.toml                # Main config file
-├── .env                      # Secrets only
+├── egirl.toml                 # Config
 ├── src/
-│   ├── index.ts              # Entry point
-│   ├── config.ts             # Load egirl.toml + .env
-│   ├── agent/
-│   │   ├── loop.ts           # Core loop: route → execute → respond
-│   │   └── context.ts        # Build system prompt
-│   ├── router/
-│   │   ├── router.ts         # Decide local vs remote
-│   │   ├── escalation.ts     # Detect when local needs escalation
-│   │   └── heuristics.ts     # Fast pattern-match rules
-│   ├── providers/
-│   │   ├── types.ts          # LLMProvider interface
-│   │   ├── llamacpp.ts       # llama.cpp HTTP client
-│   │   ├── anthropic.ts      # Claude client
-│   │   └── openai.ts         # OpenAI client
-│   ├── tools/
-│   │   ├── registry.ts       # Tool registration
-│   │   ├── executor.ts       # Run tool calls
-│   │   └── builtin/          # read, write, edit, exec, glob, memory
-│   ├── memory/
-│   │   ├── manager.ts        # MEMORY.md and daily logs
-│   │   └── search.ts         # Hybrid BM25 + vector search
-│   ├── skills/
-│   │   └── loader.ts         # Parse SKILL.md files
-│   └── channels/
-│       ├── discord.ts        # Discord bot
-│       └── cli.ts            # Terminal REPL
+│   ├── agent/                 # Core loop, context building
+│   ├── providers/             # llama.cpp, Anthropic, OpenAI
+│   ├── routing/               # Local vs remote decisions
+│   ├── memory/                # SQLite + embeddings search
+│   ├── tools/                 # File ops, exec, memory
+│   └── channels/              # CLI, Discord
+├── services/
+│   └── embeddings/            # Qwen3-VL-Embedding Python service
+└── templates/                 # Default personality (Kira)
 ```
+
+## Customizing Kira
+
+Personality files live in `~/.egirl/workspace/`:
+
+- `IDENTITY.md` - Name, appearance, role
+- `SOUL.md` - Personality, voice, behavior
+- `USER.md` - Info about you
+- `AGENTS.md` - Operating instructions
+
+Edit these to customize. Or replace Kira entirely.
 
 ## Tools
 
-Built-in tools:
+| Tool | Description |
+|------|-------------|
+| `read_file` | Read file contents |
+| `write_file` | Write to file |
+| `edit_file` | String replacement edit |
+| `execute_command` | Run shell commands |
+| `glob_files` | Find files by pattern |
+| `memory_search` | Hybrid search memories |
+| `memory_get` | Get memory by key |
+| `memory_set` | Store a memory |
 
-- `read_file` - Read file contents
-- `write_file` - Write content to a file
-- `edit_file` - Edit with string replacement
-- `execute_command` - Run shell commands
-- `glob_files` - Find files by pattern
-- `memory_search` - Search memories
-- `memory_get` - Retrieve a specific memory
+## Requirements
 
-## Commands
-
-```bash
-bun run dev         # Start with --watch
-bun run start       # Production start
-bun run cli         # Direct CLI mode
-bun test            # Run tests
-```
+- [Bun](https://bun.sh) runtime
+- [llama.cpp](https://github.com/ggerganov/llama.cpp) server
+- Python 3.10+ (for embedding service)
+- GPU with enough VRAM for your model
 
 ## License
 
 MIT
+
+---
+
+<p align="center">
+  Built by <a href="https://github.com/Schneewolf-Labs">Schneewolf Labs</a>
+</p>
