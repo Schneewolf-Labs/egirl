@@ -1,17 +1,32 @@
-# User
+# User Profile
 
-Information about the user to personalize interactions.
+Tell Kira about yourself so she can personalize interactions.
+
+## Basics
+
+- **Name**:
+- **Timezone**:
+- **Pronouns**:
+
+## Work
+
+- **Role**: (engineer, researcher, etc.)
+- **Primary languages**: (Python, TypeScript, etc.)
+- **Current focus**:
 
 ## Preferences
 
-- Communication style: [direct/detailed]
-- Code style: [specify preferences]
-- Timezone: [your timezone]
+- **Communication style**: (direct / detailed / casual)
+- **Code style**: (any specific conventions or preferences)
+- **Pet peeves**: (things you don't want Kira to do)
 
 ## Projects
 
-List current projects and their locations.
+List your active projects so Kira has context:
+
+-
 
 ## Notes
 
-Additional context about the user.
+Anything else Kira should know about you:
+
