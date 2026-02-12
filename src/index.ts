@@ -5,7 +5,7 @@ import { createProviderRegistry } from './providers'
 import { createRouter } from './routing'
 import { createDefaultToolExecutor } from './tools'
 import { createAgentLoop } from './agent'
-import { createCLIChannel } from './channels'
+import { createCLIChannel, createClaudeCodeChannel, type ClaudeCodeConfig } from './channels'
 import { createStatsTracker } from './tracking'
 import { log } from './util/logger'
 
@@ -30,6 +30,11 @@ async function main() {
 
     case 'status':
       await showStatus(config)
+      break
+
+    case 'claude-code':
+    case 'cc':
+      await runClaudeCode(config, args.slice(1))
       break
 
     case 'help':
@@ -143,6 +148,75 @@ async function showStatus(config: RuntimeConfig) {
   }
 }
 
+async function runClaudeCode(config: RuntimeConfig, args: string[]) {
+  // Set log level from args
+  if (args.includes('--quiet') || args.includes('-q')) {
+    log.setLevel('error')
+  } else if (args.includes('--verbose') || args.includes('-v') || args.includes('--debug') || args.includes('-d')) {
+    log.setLevel('debug')
+  }
+
+  const providers = createProviderRegistry(config)
+
+  const ccConfig: ClaudeCodeConfig = {
+    permissionMode: config.channels.claudeCode?.permissionMode ?? 'bypassPermissions',
+    claudeModel: config.channels.claudeCode?.model,
+    workingDir: config.channels.claudeCode?.workingDir ?? process.cwd(),
+    maxTurns: config.channels.claudeCode?.maxTurns,
+  }
+
+  const channel = createClaudeCodeChannel(providers.local, ccConfig)
+
+  // Single task mode
+  const messageIndex = args.indexOf('-m')
+  if (messageIndex !== -1) {
+    const prompt = args[messageIndex + 1]
+    if (!prompt) {
+      console.error('Error: -m requires a message')
+      process.exit(1)
+    }
+
+    try {
+      const result = await channel.runTask(prompt)
+      console.log(`\n${result.result}`)
+      console.log(`\n[${result.turns} turns | $${result.costUsd.toFixed(4)} | ${(result.durationMs / 1000).toFixed(1)}s]`)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      console.error(`Error: ${message}`)
+      process.exit(1)
+    }
+    return
+  }
+
+  // Resume mode
+  const resumeIndex = args.indexOf('--resume')
+  if (resumeIndex !== -1) {
+    const sessionId = args[resumeIndex + 1] as string | undefined
+    if (!sessionId) {
+      console.error('Error: --resume requires a session ID')
+      process.exit(1)
+      return
+    }
+
+    const promptIdx = args.indexOf('-m', resumeIndex + 2)
+    const followUp = promptIdx !== -1 ? (args[promptIdx + 1] ?? 'Continue.') : 'Continue the previous task.'
+
+    try {
+      const result = await channel.resumeSession(sessionId, followUp)
+      console.log(`\n${result.result}`)
+      console.log(`\n[${result.turns} turns | $${result.costUsd.toFixed(4)} | ${(result.durationMs / 1000).toFixed(1)}s]`)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      console.error(`Error: ${message}`)
+      process.exit(1)
+    }
+    return
+  }
+
+  // Interactive mode
+  await channel.startInteractive()
+}
+
 function showHelp() {
   console.log(`
 egirl - Local-First AI Agent for Schneewolf Labs
@@ -151,20 +225,30 @@ Usage:
   egirl [command] [options]
 
 Commands:
-  cli       Start interactive CLI (default)
-  status    Show current configuration and status
-  help      Show this help message
+  cli            Start interactive CLI (default)
+  claude-code    Bridge to Claude Code with local model supervision (alias: cc)
+  status         Show current configuration and status
+  help           Show this help message
 
 Options for cli:
-  -m <msg>     Send a single message and exit
+  -m <msg>       Send a single message and exit
+  -v, --verbose  Enable verbose/debug logging
+  -d, --debug    Alias for --verbose
+  -q, --quiet    Only show errors
+
+Options for claude-code:
+  -m <msg>       Run a single task and exit
+  --resume <id>  Resume a previous Claude Code session
   -v, --verbose  Enable verbose/debug logging
   -d, --debug    Alias for --verbose
   -q, --quiet    Only show errors
 
 Examples:
-  bun run dev           # Start with --watch
-  bun run start         # Production start
-  bun run cli           # Direct CLI mode
+  bun run dev                          # Start with --watch
+  bun run start                        # Production start
+  bun run cli                          # Direct CLI mode
+  bun run start claude-code            # Claude Code bridge (interactive)
+  bun run start cc -m "fix the tests"  # Single task mode
 `)
 }
 

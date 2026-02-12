@@ -21,5 +21,11 @@ always_remote = ["code_generation", "code_review", "complex_reasoning"]
 allowed_channels = ["dm"]                # or specific channel IDs
 allowed_users = []                       # set your Discord user ID
 
+[channels.claude_code]
+permission_mode = "default"               # local model handles permissions
+# model = "sonnet"                       # claude model (sonnet, opus, haiku)
+# working_dir = "~/projects/myrepo"      # defaults to cwd
+# max_turns = 30                         # safety limit on turns per task
+
 [skills]
 dirs = ["~/.egirl/skills", "{workspace}/skills"]
