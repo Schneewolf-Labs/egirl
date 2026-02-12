@@ -20,7 +20,7 @@ egirl is a personal AI agent for users with local GPU inference. It runs most ta
 - **Local-first** - Runs on your hardware, zero API cost for most tasks
 - **Smart routing** - Escalates to Claude/GPT only when needed
 - **Memory system** - Hybrid search (keyword + semantic) with multimodal embeddings
-- **Discord & CLI** - Talk via Discord DMs or terminal
+- **Discord & CLI** - Talk via [Discord](DISCORD.md) DMs or terminal
 - **Tool use** - File ops, command execution, memory search
 - **Customizable personality** - Kira is the default, make her your own
 
@@ -43,7 +43,7 @@ cd services/embeddings && ./run.sh
 # Run CLI
 bun run start cli
 
-# Or Discord bot
+# Or Discord bot (see DISCORD.md for setup)
 bun run start discord
 ```
 

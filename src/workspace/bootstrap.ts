@@ -1,7 +1,7 @@
 import { mkdir, writeFile, access, readFile } from 'fs/promises'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
-import { log } from '../utils/logger'
+import { log } from '../util/logger'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const TEMPLATES_DIR = join(__dirname, 'templates')

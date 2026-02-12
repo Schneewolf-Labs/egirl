@@ -8,6 +8,7 @@ import { createAgentLoop } from './agent'
 import { createCLIChannel, createClaudeCodeChannel, createDiscordChannel, type ClaudeCodeConfig } from './channels'
 import { createStatsTracker } from './tracking'
 import { createMemoryManager, Qwen3VLEmbeddings, type MemoryManager } from './memory'
+import { bootstrapWorkspace } from './workspace/bootstrap'
 import { log } from './util/logger'
 
 /**
@@ -53,6 +54,13 @@ async function main() {
   } catch (error) {
     console.error('Failed to load config:', error)
     process.exit(1)
+  }
+
+  // Bootstrap workspace (copy templates if needed)
+  try {
+    await bootstrapWorkspace(config.workspace.path)
+  } catch (error) {
+    log.warn('main', 'Failed to bootstrap workspace:', error)
   }
 
   switch (command) {
