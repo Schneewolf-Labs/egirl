@@ -42,6 +42,14 @@ export interface LLMProvider {
 }
 
 /**
+ * Counts tokens for a string using the provider's actual tokenizer.
+ * Implementations should cache results for repeated calls with the same input.
+ */
+export interface Tokenizer {
+  countTokens(text: string): Promise<number>
+}
+
+/**
  * Thrown when the prompt exceeds the provider's context window.
  * Contains the actual token counts from the server for retry logic.
  */

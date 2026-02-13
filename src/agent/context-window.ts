@@ -1,4 +1,4 @@
-import type { ChatMessage, ContentPart, ToolDefinition } from '../providers/types'
+import type { ChatMessage, ContentPart, ToolDefinition, Tokenizer } from '../providers/types'
 import { log } from '../util/logger'
 
 export interface ContextWindowConfig {
@@ -7,8 +7,12 @@ export interface ContextWindowConfig {
   maxToolResultTokens?: number    // max tokens per individual tool result (default 8000)
 }
 
+// ---------------------------------------------------------------------------
+// Token counting — uses real tokenizer when available, estimation as fallback
+// ---------------------------------------------------------------------------
+
 /**
- * Estimate tokens for a string.
+ * Estimate tokens for a string. Fallback when no tokenizer is available.
  * Uses chars/3.5 ratio (slightly conservative to avoid undercount).
  */
 function estimateStringTokens(text: string): number {
@@ -16,17 +20,28 @@ function estimateStringTokens(text: string): number {
 }
 
 /**
- * Estimate token count for a single ChatMessage including content, tool calls, and structure.
+ * Count tokens for a string, preferring the real tokenizer when provided.
  */
-export function estimateMessageTokens(message: ChatMessage): number {
-  let tokens = 4  // message framing (role, separators)
+async function countStringTokens(text: string, tokenizer?: Tokenizer): Promise<number> {
+  if (tokenizer) return tokenizer.countTokens(text)
+  return estimateStringTokens(text)
+}
+
+/**
+ * Count tokens for a ChatMessage, using the tokenizer for text content
+ * and falling back to estimation for structural overhead.
+ */
+async function countMessageTokens(message: ChatMessage, tokenizer?: Tokenizer): Promise<number> {
+  // Per-message framing: role tag, special tokens, separators.
+  // Template-dependent but ~7 tokens covers Qwen3/ChatML-style templates.
+  let tokens = 7
 
   if (typeof message.content === 'string') {
-    tokens += estimateStringTokens(message.content)
+    tokens += await countStringTokens(message.content, tokenizer)
   } else if (Array.isArray(message.content)) {
     for (const part of message.content) {
       if (part.type === 'text') {
-        tokens += estimateStringTokens(part.text)
+        tokens += await countStringTokens(part.text, tokenizer)
       } else if (part.type === 'image_url') {
         tokens += 1000  // rough estimate for vision tokens
       }
@@ -35,9 +50,58 @@ export function estimateMessageTokens(message: ChatMessage): number {
 
   if (message.tool_calls) {
     for (const call of message.tool_calls) {
+      const callText = `${call.name}\n${JSON.stringify(call.arguments)}`
+      tokens += await countStringTokens(callText, tokenizer)
+      tokens += 15  // id + structural overhead
+    }
+  }
+
+  if (message.tool_call_id) {
+    tokens += 5
+  }
+
+  return tokens
+}
+
+/**
+ * Count tokens for tool definitions (serialized into the prompt by the chat template).
+ */
+async function countToolDefinitionTokens(tools: ToolDefinition[], tokenizer?: Tokenizer): Promise<number> {
+  if (tools.length === 0) return 0
+
+  // Tokenize the full JSON representation — this is close to what the template serializes
+  const toolsJson = JSON.stringify(
+    tools.map(t => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.parameters } }))
+  )
+  const contentTokens = await countStringTokens(toolsJson, tokenizer)
+  // Add overhead for template wrapping around the tools block
+  return contentTokens + 20
+}
+
+/**
+ * Sync token estimation for a ChatMessage (no tokenizer).
+ * Kept as a public API for routing heuristics and other sync callers.
+ */
+export function estimateMessageTokens(message: ChatMessage): number {
+  let tokens = 4
+
+  if (typeof message.content === 'string') {
+    tokens += estimateStringTokens(message.content)
+  } else if (Array.isArray(message.content)) {
+    for (const part of message.content) {
+      if (part.type === 'text') {
+        tokens += estimateStringTokens(part.text)
+      } else if (part.type === 'image_url') {
+        tokens += 1000
+      }
+    }
+  }
+
+  if (message.tool_calls) {
+    for (const call of message.tool_calls) {
       tokens += estimateStringTokens(call.name)
       tokens += estimateStringTokens(JSON.stringify(call.arguments))
-      tokens += 15  // id + structural overhead
+      tokens += 15
     }
   }
 
@@ -48,39 +112,48 @@ export function estimateMessageTokens(message: ChatMessage): number {
   return tokens
 }
 
-/**
- * Estimate tokens consumed by tool definitions in the request.
- * These get serialized into the prompt by the chat template.
- */
-function estimateToolDefinitionTokens(tools: ToolDefinition[]): number {
-  let tokens = 0
-  for (const tool of tools) {
-    tokens += estimateStringTokens(tool.name)
-    tokens += estimateStringTokens(tool.description)
-    tokens += estimateStringTokens(JSON.stringify(tool.parameters))
-    tokens += 20  // per-tool structural overhead
-  }
-  return tokens
-}
+// ---------------------------------------------------------------------------
+// Tool result truncation
+// ---------------------------------------------------------------------------
 
 /**
  * Truncate a single tool result message if it exceeds the token budget.
  */
-function truncateToolResult(message: ChatMessage, maxTokens: number): ChatMessage {
+async function truncateToolResult(
+  message: ChatMessage,
+  maxTokens: number,
+  tokenizer?: Tokenizer
+): Promise<ChatMessage> {
   if (message.role !== 'tool' || typeof message.content !== 'string') {
     return message
   }
 
-  if (estimateStringTokens(message.content) <= maxTokens) {
+  const actual = await countStringTokens(message.content, tokenizer)
+  if (actual <= maxTokens) {
     return message
   }
 
-  const maxChars = Math.floor(maxTokens * 3.5)
+  // Binary-ish approach: estimate char cut point then verify with tokenizer
+  let maxChars = Math.floor(maxTokens * 3.5)
+  if (tokenizer && maxChars < message.content.length) {
+    // Refine: tokenize the cut to verify we're under budget
+    const cutContent = message.content.slice(0, maxChars)
+    const cutTokens = await tokenizer.countTokens(cutContent)
+    if (cutTokens > maxTokens) {
+      // Over-shot — scale down proportionally
+      maxChars = Math.floor(maxChars * (maxTokens / cutTokens) * 0.95)
+    }
+  }
+
   return {
     ...message,
     content: message.content.slice(0, maxChars) + '\n\n[Output truncated to fit context window]',
   }
 }
+
+// ---------------------------------------------------------------------------
+// Message grouping
+// ---------------------------------------------------------------------------
 
 interface MessageGroup {
   startIdx: number
@@ -122,8 +195,15 @@ function buildMessageGroups(messages: ChatMessage[], tokenCounts: number[]): Mes
   return groups
 }
 
+// ---------------------------------------------------------------------------
+// Main context window fitting
+// ---------------------------------------------------------------------------
+
 /**
  * Fit conversation messages into a context window budget.
+ *
+ * When a Tokenizer is provided, token counts come from the llama.cpp /tokenize
+ * endpoint (with caching). Otherwise falls back to char-ratio estimation.
  *
  * Strategy:
  * 1. Calculate token budget after system prompt, tool definitions, and output reserve
@@ -137,20 +217,21 @@ function buildMessageGroups(messages: ChatMessage[], tokenCounts: number[]): Mes
  * Extensible: future versions can summarize dropped messages, score importance,
  * or inject RAG-retrieved context into the truncation notice.
  */
-export function fitToContextWindow(
+export async function fitToContextWindow(
   systemPrompt: string,
   messages: ChatMessage[],
   tools: ToolDefinition[],
-  config: ContextWindowConfig
-): ChatMessage[] {
+  config: ContextWindowConfig,
+  tokenizer?: Tokenizer
+): Promise<ChatMessage[]> {
   const {
     contextLength,
     reserveForOutput = 2048,
     maxToolResultTokens = 8000,
   } = config
 
-  const systemTokens = estimateStringTokens(systemPrompt) + 4
-  const toolDefTokens = estimateToolDefinitionTokens(tools)
+  const systemTokens = await countStringTokens(systemPrompt, tokenizer) + 4
+  const toolDefTokens = await countToolDefinitionTokens(tools, tokenizer)
   const budget = contextLength - reserveForOutput - systemTokens - toolDefTokens
 
   if (budget <= 0) {
@@ -162,12 +243,17 @@ export function fitToContextWindow(
     return lastUser ? [lastUser] : messages.slice(-1)
   }
 
-  // Truncate oversized tool results
-  const processed = messages.map(msg =>
-    msg.role === 'tool' ? truncateToolResult(msg, maxToolResultTokens) : msg
+  // Truncate oversized tool results (in parallel)
+  const processed = await Promise.all(
+    messages.map(msg =>
+      msg.role === 'tool' ? truncateToolResult(msg, maxToolResultTokens, tokenizer) : msg
+    )
   )
 
-  const tokenCounts = processed.map(estimateMessageTokens)
+  // Count tokens for all messages (in parallel)
+  const tokenCounts = await Promise.all(
+    processed.map(msg => countMessageTokens(msg, tokenizer))
+  )
   const totalTokens = tokenCounts.reduce((sum, t) => sum + t, 0)
 
   // Everything fits — no trimming needed

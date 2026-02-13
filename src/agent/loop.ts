@@ -1,10 +1,11 @@
-import type { ChatMessage, ChatResponse, LLMProvider, ToolCall, ToolDefinition } from '../providers/types'
+import type { ChatMessage, ChatResponse, LLMProvider, ToolCall, ToolDefinition, Tokenizer } from '../providers/types'
 import { ContextSizeError } from '../providers/types'
 import type { RuntimeConfig } from '../config'
 import type { ToolExecutor, ToolResult } from '../tools'
 import { Router, shouldRetryWithRemote } from '../routing'
 import { createAgentContext, addMessage, type AgentContext } from './context'
 import { fitToContextWindow } from './context-window'
+import { createLlamaCppTokenizer } from '../providers/llamacpp'
 import { log } from '../util/logger'
 
 /** Default context limits for remote providers */
@@ -33,6 +34,7 @@ export class AgentLoop {
   private localProvider: LLMProvider
   private remoteProvider: LLMProvider | null
   private context: AgentContext
+  private tokenizer: Tokenizer
 
   constructor(
     config: RuntimeConfig,
@@ -48,6 +50,7 @@ export class AgentLoop {
     this.localProvider = localProvider
     this.remoteProvider = remoteProvider
     this.context = createAgentContext(config, sessionId)
+    this.tokenizer = createLlamaCppTokenizer(config.local.endpoint)
   }
 
   async run(userMessage: string, options: AgentLoopOptions = {}): Promise<AgentResponse> {
@@ -145,8 +148,8 @@ export class AgentLoop {
 
   /**
    * Send messages to a provider with context window management.
-   * Fits messages to the provider's context limit, retries once with
-   * the server's actual n_ctx if the estimate was wrong.
+   * Uses the llama.cpp tokenizer for accurate token counting.
+   * Retries once with the server's actual n_ctx if the count was still off.
    */
   private async chatWithContextWindow(
     provider: LLMProvider,
@@ -157,11 +160,15 @@ export class AgentLoop {
       ? this.config.local.contextLength
       : REMOTE_CONTEXT_LENGTH
 
-    const fitted = fitToContextWindow(
+    // Use real tokenizer for local provider, skip for remote (no endpoint to call)
+    const tokenizer = target === 'local' ? this.tokenizer : undefined
+
+    const fitted = await fitToContextWindow(
       this.context.systemPrompt,
       this.context.messages,
       tools,
-      { contextLength }
+      { contextLength },
+      tokenizer
     )
 
     const messages: ChatMessage[] = [
@@ -182,11 +189,12 @@ export class AgentLoop {
         `Server n_ctx=${error.contextSize} differs from config (${contextLength}). Retrimming.`
       )
 
-      const refitted = fitToContextWindow(
+      const refitted = await fitToContextWindow(
         this.context.systemPrompt,
         this.context.messages,
         tools,
-        { contextLength: error.contextSize }
+        { contextLength: error.contextSize },
+        tokenizer
       )
 
       const retryMessages: ChatMessage[] = [

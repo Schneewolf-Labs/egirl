@@ -5,7 +5,7 @@ import { createAnthropicProvider } from './anthropic'
 import { createOpenAIProvider } from './openai'
 
 export * from './types'
-export { createLlamaCppProvider } from './llamacpp'
+export { createLlamaCppProvider, createLlamaCppTokenizer } from './llamacpp'
 export { createAnthropicProvider } from './anthropic'
 export { createOpenAIProvider } from './openai'
 
