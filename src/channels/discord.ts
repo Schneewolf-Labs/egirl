@@ -5,6 +5,11 @@ import {
   Message,
   ChannelType,
   Events,
+  type MessageReaction,
+  type User,
+  type PartialMessageReaction,
+  type PartialUser,
+  type Interaction,
 } from 'discord.js'
 import type { AgentLoop } from '../agent'
 import type { AgentEventHandler } from '../agent/events'
@@ -17,6 +22,16 @@ export interface DiscordConfig {
   allowedChannels: string[]  // Channel IDs or 'dm' for DMs
   allowedUsers: string[]     // User IDs (empty = allow all)
 }
+
+export interface ReactionEvent {
+  emoji: string
+  userId: string
+  messageId: string
+  isBot: boolean
+}
+
+export type ReactionHandler = (event: ReactionEvent) => void | Promise<void>
+export type InteractionHandler = (interaction: Interaction) => void | Promise<void>
 
 function formatToolCallsMarkdown(calls: ToolCall[]): string {
   const lines = calls.map(call => {
@@ -88,6 +103,8 @@ export class DiscordChannel {
   private agent: AgentLoop
   private config: DiscordConfig
   private ready = false
+  private reactionHandlers: ReactionHandler[] = []
+  private interactionHandlers: InteractionHandler[] = []
 
   constructor(agent: AgentLoop, config: DiscordConfig) {
     this.agent = agent
@@ -99,14 +116,26 @@ export class DiscordChannel {
         GatewayIntentBits.GuildMessages,
         GatewayIntentBits.MessageContent,
         GatewayIntentBits.DirectMessages,
+        GatewayIntentBits.GuildMessageReactions,
       ],
       partials: [
         Partials.Channel,  // Required for DMs
         Partials.Message,
+        Partials.Reaction,
       ],
     })
 
     this.setupEventHandlers()
+  }
+
+  /** Register a handler called when a reaction is added to any message */
+  onReaction(handler: ReactionHandler): void {
+    this.reactionHandlers.push(handler)
+  }
+
+  /** Register a handler called when a Discord interaction occurs (slash commands, buttons, etc.) */
+  onInteraction(handler: InteractionHandler): void {
+    this.interactionHandlers.push(handler)
   }
 
   private setupEventHandlers(): void {
@@ -125,9 +154,64 @@ export class DiscordChannel {
       await this.handleMessage(message)
     })
 
+    this.client.on(Events.MessageReactionAdd, async (reaction, user) => {
+      await this.handleReaction(reaction, user)
+    })
+
+    this.client.on(Events.InteractionCreate, async (interaction) => {
+      await this.handleInteraction(interaction)
+    })
+
     this.client.on(Events.Error, (error) => {
       log.error('discord', 'Client error:', error)
     })
+  }
+
+  private async handleReaction(
+    reaction: MessageReaction | PartialMessageReaction,
+    user: User | PartialUser
+  ): Promise<void> {
+    // Fetch partial reaction/message if needed
+    if (reaction.partial) {
+      try {
+        await reaction.fetch()
+      } catch (error) {
+        log.debug('discord', 'Failed to fetch partial reaction:', error)
+        return
+      }
+    }
+
+    const emoji = reaction.emoji.name ?? reaction.emoji.id ?? 'unknown'
+    const isBot = user.bot ?? false
+
+    log.debug('discord', `Reaction ${emoji} from ${user.id} on ${reaction.message.id}`)
+
+    const event: ReactionEvent = {
+      emoji,
+      userId: user.id,
+      messageId: reaction.message.id,
+      isBot,
+    }
+
+    for (const handler of this.reactionHandlers) {
+      try {
+        await handler(event)
+      } catch (error) {
+        log.error('discord', 'Reaction handler error:', error)
+      }
+    }
+  }
+
+  private async handleInteraction(interaction: Interaction): Promise<void> {
+    log.debug('discord', `Interaction ${interaction.type} from ${interaction.user.tag}`)
+
+    for (const handler of this.interactionHandlers) {
+      try {
+        await handler(interaction)
+      } catch (error) {
+        log.error('discord', 'Interaction handler error:', error)
+      }
+    }
   }
 
   private async handleMessage(message: Message): Promise<void> {
