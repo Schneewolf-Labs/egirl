@@ -69,6 +69,8 @@ export class LlamaCppProvider implements LLMProvider {
       },
     }))
 
+    const shouldStream = !!req.onToken
+
     const response = await fetch(`${this.endpoint}/v1/chat/completions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -77,7 +79,7 @@ export class LlamaCppProvider implements LLMProvider {
         tools: tools?.length ? tools : undefined,
         temperature: req.temperature,
         max_tokens: req.max_tokens,
-        stream: false,
+        stream: shouldStream,
         // Stop at tool_call close tag to prevent runaway generation
         stop: req.tools?.length ? ['</tool_call>'] : undefined,
       }),
@@ -88,13 +90,25 @@ export class LlamaCppProvider implements LLMProvider {
       throw new Error(`llama.cpp error: ${response.status} - ${error}`)
     }
 
-    const data = (await response.json()) as {
-      choices: Array<{ message: { content: string } }>
-      usage: { prompt_tokens: number; completion_tokens: number }
-      model: string
-    }
+    let content: string
+    let usage = { prompt_tokens: 0, completion_tokens: 0 }
+    let model = this.name
 
-    let content = data.choices[0]?.message?.content ?? ''
+    if (shouldStream && response.body) {
+      const result = await this.readStream(response.body, req.onToken!, (req.tools?.length ?? 0) > 0)
+      content = result.content
+      usage = result.usage
+      model = result.model ?? this.name
+    } else {
+      const data = (await response.json()) as {
+        choices: Array<{ message: { content: string } }>
+        usage: { prompt_tokens: number; completion_tokens: number }
+        model: string
+      }
+      content = data.choices[0]?.message?.content ?? ''
+      usage = data.usage ?? usage
+      model = data.model ?? this.name
+    }
 
     log.debug('llamacpp', `Raw response (${content.length} chars): ${content.substring(0, 200)}${content.length > 200 ? '...' : ''}`)
 
@@ -114,11 +128,126 @@ export class LlamaCppProvider implements LLMProvider {
       content: cleanContent,
       tool_calls: toolCalls.length > 0 ? toolCalls : undefined,
       usage: {
-        input_tokens: data.usage?.prompt_tokens ?? 0,
-        output_tokens: data.usage?.completion_tokens ?? 0,
+        input_tokens: usage.prompt_tokens,
+        output_tokens: usage.completion_tokens,
       },
-      model: data.model ?? this.name,
+      model,
     }
+  }
+
+  /**
+   * Read an SSE stream from llama.cpp, emitting tokens via callback.
+   * Buffers text near `<tool_call>` tags to avoid leaking raw XML to the user.
+   */
+  private async readStream(
+    body: ReadableStream<Uint8Array>,
+    onToken: (token: string) => void,
+    hasTools: boolean
+  ): Promise<{ content: string; usage: { prompt_tokens: number; completion_tokens: number }; model?: string }> {
+    const decoder = new TextDecoder()
+    const reader = body.getReader()
+
+    let fullContent = ''
+    let buffer = ''
+    let inToolCall = false
+    let usage = { prompt_tokens: 0, completion_tokens: 0 }
+    let model: string | undefined
+
+    const TOOL_OPEN = '<tool_call>'
+
+    const flushBuffer = () => {
+      if (buffer) {
+        onToken(buffer)
+        buffer = ''
+      }
+    }
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        const chunk = decoder.decode(value, { stream: true })
+        const lines = chunk.split('\n')
+
+        for (const line of lines) {
+          const trimmed = line.trim()
+          if (!trimmed || !trimmed.startsWith('data: ')) continue
+
+          const data = trimmed.slice(6)
+          if (data === '[DONE]') continue
+
+          try {
+            const parsed = JSON.parse(data) as {
+              choices?: Array<{ delta?: { content?: string } }>
+              usage?: { prompt_tokens: number; completion_tokens: number }
+              model?: string
+            }
+
+            if (parsed.usage) usage = parsed.usage
+            if (parsed.model) model = parsed.model
+
+            const token = parsed.choices?.[0]?.delta?.content
+            if (!token) continue
+
+            fullContent += token
+
+            if (inToolCall) {
+              // Already inside a tool call, don't emit
+              continue
+            }
+
+            if (hasTools) {
+              // Buffer tokens to detect <tool_call> tag
+              buffer += token
+              const openIdx = buffer.indexOf(TOOL_OPEN)
+              if (openIdx !== -1) {
+                // Emit everything before the tag
+                const before = buffer.substring(0, openIdx)
+                if (before) onToken(before)
+                buffer = ''
+                inToolCall = true
+              } else if (!TOOL_OPEN.startsWith(buffer.slice(-TOOL_OPEN.length))) {
+                // Buffer doesn't look like a partial match, flush it
+                // Keep only trailing chars that could be a partial match
+                const safeEnd = this.findPartialMatchLength(buffer, TOOL_OPEN)
+                if (safeEnd > 0) {
+                  onToken(buffer.substring(0, buffer.length - safeEnd))
+                  buffer = buffer.substring(buffer.length - safeEnd)
+                } else {
+                  flushBuffer()
+                }
+              }
+            } else {
+              onToken(token)
+            }
+          } catch {
+            // Invalid JSON line, skip
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock()
+    }
+
+    // Flush any remaining buffer (not a tool call tag)
+    if (!inToolCall && buffer) {
+      onToken(buffer)
+    }
+
+    return { content: fullContent, usage, model }
+  }
+
+  /**
+   * Check how many trailing characters of `text` could be the start of `pattern`.
+   */
+  private findPartialMatchLength(text: string, pattern: string): number {
+    for (let len = Math.min(text.length, pattern.length - 1); len > 0; len--) {
+      if (text.endsWith(pattern.substring(0, len))) {
+        return len
+      }
+    }
+    return 0
   }
 
   /**

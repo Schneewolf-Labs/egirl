@@ -15,7 +15,7 @@ export class AnthropicProvider implements LLMProvider {
   async chat(req: ChatRequest): Promise<ChatResponse> {
     const { systemPrompt, messages } = this.prepareMessages(req.messages)
 
-    const anthropicReq: Anthropic.Messages.MessageCreateParams = {
+    const params: Anthropic.Messages.MessageCreateParamsNonStreaming = {
       model: this.model,
       max_tokens: req.max_tokens ?? 4096,
       messages,
@@ -24,15 +24,37 @@ export class AnthropicProvider implements LLMProvider {
     }
 
     if (req.tools && req.tools.length > 0) {
-      anthropicReq.tools = req.tools.map(t => ({
+      params.tools = req.tools.map(t => ({
         name: t.name,
         description: t.description,
         input_schema: t.parameters as Anthropic.Messages.Tool['input_schema'],
       }))
     }
 
-    const response = await this.client.messages.create(anthropicReq)
+    if (req.onToken) {
+      return this.chatStream(params, req.onToken)
+    }
 
+    const response = await this.client.messages.create(params)
+
+    return this.parseResponse(response)
+  }
+
+  private async chatStream(
+    params: Anthropic.Messages.MessageCreateParamsNonStreaming,
+    onToken: (token: string) => void
+  ): Promise<ChatResponse> {
+    const stream = this.client.messages.stream(params)
+
+    stream.on('text', (text) => {
+      onToken(text)
+    })
+
+    const response = await stream.finalMessage()
+    return this.parseResponse(response)
+  }
+
+  private parseResponse(response: Anthropic.Messages.Message): ChatResponse {
     let content = ''
     const tool_calls: ToolCall[] = []
 

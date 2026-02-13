@@ -6,3 +6,4 @@ export {
   getMessagesWithSystem,
   type AgentContext,
 } from './context'
+export { type AgentEventHandler } from './events'
