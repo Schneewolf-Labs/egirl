@@ -137,6 +137,13 @@ export function loadConfig(): RuntimeConfig {
     }
   }
 
+  if (toml.channels?.api) {
+    config.channels.api = {
+      port: toml.channels.api.port ?? 3000,
+      host: toml.channels.api.host ?? '127.0.0.1',
+    }
+  }
+
   return config
 }
 

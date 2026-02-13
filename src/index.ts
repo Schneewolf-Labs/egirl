@@ -8,6 +8,7 @@ import { createAgentLoop } from './agent'
 import { createCLIChannel, createClaudeCodeChannel, createDiscordChannel, type ClaudeCodeConfig } from './channels'
 import { createStatsTracker } from './tracking'
 import { createMemoryManager, Qwen3VLEmbeddings, type MemoryManager } from './memory'
+import { createAPIServer } from './api'
 import { bootstrapWorkspace } from './workspace/bootstrap'
 import { log } from './util/logger'
 
@@ -79,6 +80,10 @@ async function main() {
 
     case 'discord':
       await runDiscord(config, args.slice(1))
+      break
+
+    case 'api':
+      await runAPI(config, args.slice(1))
       break
 
     case 'help':
@@ -342,6 +347,70 @@ async function runDiscord(config: RuntimeConfig, args: string[]) {
   log.info('main', 'Discord bot running. Press Ctrl+C to stop.')
 }
 
+async function runAPI(config: RuntimeConfig, args: string[]) {
+  // Set log level from args
+  if (args.includes('--quiet') || args.includes('-q')) {
+    log.setLevel('error')
+  } else if (args.includes('--verbose') || args.includes('-v') || args.includes('--debug') || args.includes('-d')) {
+    log.setLevel('debug')
+  }
+
+  // Port/host from args override config
+  const portIndex = args.indexOf('--port')
+  const hostIndex = args.indexOf('--host')
+  const port = portIndex !== -1 ? parseInt(args[portIndex + 1]!, 10) : (config.channels.api?.port ?? 3000)
+  const host = hostIndex !== -1 ? args[hostIndex + 1]! : (config.channels.api?.host ?? '127.0.0.1')
+
+  // Create providers
+  const providers = createProviderRegistry(config)
+
+  log.info('main', `Local provider: ${providers.local.name}`)
+  if (providers.remote) {
+    log.info('main', `Remote provider: ${providers.remote.name}`)
+  }
+
+  // Create memory system
+  const memory = createMemory(config)
+
+  // Create router and tools
+  const router = createRouter(config)
+  const toolExecutor = createDefaultToolExecutor(memory)
+
+  // Create stats tracker
+  const stats = createStatsTracker()
+
+  // Create agent loop
+  const agent = createAgentLoop(
+    config,
+    router,
+    toolExecutor,
+    providers.local,
+    providers.remote
+  )
+
+  // Create and start API server
+  const api = createAPIServer({ port, host }, {
+    config,
+    agent,
+    toolExecutor,
+    memory,
+    providers,
+    stats,
+  })
+
+  // Handle graceful shutdown
+  const shutdown = () => {
+    log.info('main', 'Shutting down...')
+    api.stop()
+    process.exit(0)
+  }
+
+  process.on('SIGINT', shutdown)
+  process.on('SIGTERM', shutdown)
+
+  api.start()
+}
+
 function showHelp() {
   console.log(`
 egirl - Local-First AI Agent for Schneewolf Labs
@@ -352,6 +421,7 @@ Usage:
 Commands:
   cli            Start interactive CLI (default)
   discord        Start Discord bot
+  api            Start HTTP API server
   claude-code    Bridge to Claude Code with local model supervision (alias: cc)
   status         Show current configuration and status
   help           Show this help message
@@ -363,6 +433,13 @@ Options for cli:
   -q, --quiet    Only show errors
 
 Options for discord:
+  -v, --verbose  Enable verbose/debug logging
+  -d, --debug    Alias for --verbose
+  -q, --quiet    Only show errors
+
+Options for api:
+  --port <n>     Port to listen on (default: 3000)
+  --host <addr>  Host to bind to (default: 127.0.0.1)
   -v, --verbose  Enable verbose/debug logging
   -d, --debug    Alias for --verbose
   -q, --quiet    Only show errors
@@ -379,6 +456,8 @@ Examples:
   bun run start                        # Production start
   bun run cli                          # Direct CLI mode
   bun run start discord                # Start Discord bot
+  bun run start api                    # Start HTTP API on :3000
+  bun run start api --port 8080        # Start HTTP API on :8080
   bun run start claude-code            # Claude Code bridge (interactive)
   bun run start cc -m "fix the tests"  # Single task mode
 `)

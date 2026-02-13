@@ -23,6 +23,10 @@ always_remote = ["code_generation", "code_review", "complex_reasoning"]
 allowed_channels = ["dm"]                # or specific channel IDs
 allowed_users = []                       # set your Discord user ID
 
+[channels.api]
+port = 3000
+host = "127.0.0.1"
+
 [channels.claude_code]
 permission_mode = "default"               # local model handles permissions
 # model = "sonnet"                       # claude model (sonnet, opus, haiku)

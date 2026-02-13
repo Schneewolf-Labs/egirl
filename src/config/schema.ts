@@ -41,6 +41,10 @@ export const EgirlConfigSchema = Type.Object({
       working_dir: Type.Optional(Type.String()),
       max_turns: Type.Optional(Type.Number()),
     })),
+    api: Type.Optional(Type.Object({
+      port: Type.Number({ default: 3000 }),
+      host: Type.String({ default: '127.0.0.1' }),
+    })),
   })),
 
   skills: Type.Object({
@@ -95,6 +99,10 @@ export interface RuntimeConfig {
       model?: string
       workingDir: string
       maxTurns?: number
+    }
+    api?: {
+      port: number
+      host: string
     }
   }
   skills: {
