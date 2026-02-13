@@ -3,6 +3,7 @@ import { ContextSizeError } from '../providers/types'
 import type { RuntimeConfig } from '../config'
 import type { ToolExecutor, ToolResult } from '../tools'
 import type { AgentEventHandler } from './events'
+import type { ConversationStore } from '../conversation'
 import { Router, shouldRetryWithRemote, analyzeResponseForEscalation } from '../routing'
 import { createAgentContext, addMessage, type AgentContext } from './context'
 import { fitToContextWindow } from './context-window'
@@ -37,6 +38,8 @@ export class AgentLoop {
   private remoteProvider: LLMProvider | null
   private context: AgentContext
   private tokenizer: Tokenizer
+  private conversationStore: ConversationStore | null
+  private persistedIndex: number = 0
 
   constructor(
     config: RuntimeConfig,
@@ -44,15 +47,27 @@ export class AgentLoop {
     toolExecutor: ToolExecutor,
     localProvider: LLMProvider,
     remoteProvider: LLMProvider | null,
-    sessionId: string
+    sessionId: string,
+    conversationStore?: ConversationStore
   ) {
     this.config = config
     this.router = router
     this.toolExecutor = toolExecutor
     this.localProvider = localProvider
     this.remoteProvider = remoteProvider
+    this.conversationStore = conversationStore ?? null
     this.context = createAgentContext(config, sessionId)
     this.tokenizer = createLlamaCppTokenizer(config.local.endpoint)
+
+    // Load conversation history from store
+    if (this.conversationStore) {
+      const history = this.conversationStore.loadMessages(sessionId)
+      if (history.length > 0) {
+        this.context.messages = history
+        this.persistedIndex = history.length
+        log.info('agent', `Loaded ${history.length} messages for session ${sessionId}`)
+      }
+    }
   }
 
   async run(userMessage: string, options: AgentLoopOptions = {}): Promise<AgentResponse> {
@@ -192,6 +207,19 @@ export class AgentLoop {
       }
 
       events?.onResponseComplete?.()
+    }
+
+    // Persist new messages from this run
+    if (this.conversationStore) {
+      try {
+        const newMessages = this.context.messages.slice(this.persistedIndex)
+        if (newMessages.length > 0) {
+          this.conversationStore.appendMessages(this.context.sessionId, newMessages)
+          this.persistedIndex = this.context.messages.length
+        }
+      } catch (error) {
+        log.warn('agent', 'Failed to persist conversation:', error)
+      }
     }
 
     return {
@@ -360,8 +388,18 @@ export class AgentLoop {
 
   clearContext(): void {
     this.context = createAgentContext(this.config, this.context.sessionId)
+    this.persistedIndex = 0
+  }
+
+  resetSession(): void {
+    if (this.conversationStore) {
+      this.conversationStore.deleteSession(this.context.sessionId)
+    }
+    this.clearContext()
   }
 }
+
+export type AgentFactory = (sessionId: string) => AgentLoop
 
 export function createAgentLoop(
   config: RuntimeConfig,
@@ -369,7 +407,8 @@ export function createAgentLoop(
   toolExecutor: ToolExecutor,
   localProvider: LLMProvider,
   remoteProvider: LLMProvider | null,
-  sessionId?: string
+  sessionId?: string,
+  conversationStore?: ConversationStore
 ): AgentLoop {
   return new AgentLoop(
     config,
@@ -377,6 +416,7 @@ export function createAgentLoop(
     toolExecutor,
     localProvider,
     remoteProvider,
-    sessionId ?? crypto.randomUUID()
+    sessionId ?? crypto.randomUUID(),
+    conversationStore
   )
 }

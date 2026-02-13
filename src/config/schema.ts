@@ -53,6 +53,13 @@ export const EgirlConfigSchema = Type.Object({
     })),
   })),
 
+  conversation: Type.Optional(Type.Object({
+    enabled: Type.Boolean({ default: true }),
+    max_age_days: Type.Number({ default: 30 }),
+    max_messages: Type.Number({ default: 1000 }),
+    compact_on_startup: Type.Boolean({ default: true }),
+  })),
+
   skills: Type.Object({
     dirs: Type.Array(Type.String(), { default: ['~/.egirl/skills', '{workspace}/skills'] }),
   }),
@@ -118,6 +125,12 @@ export interface RuntimeConfig {
       port: number
       host: string
     }
+  }
+  conversation: {
+    enabled: boolean
+    maxAgeDays: number
+    maxMessages: number
+    compactOnStartup: boolean
   }
   skills: {
     dirs: string[]
