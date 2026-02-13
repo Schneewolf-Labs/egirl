@@ -7,12 +7,80 @@ import {
   Events,
 } from 'discord.js'
 import type { AgentLoop } from '../agent'
+import type { AgentEventHandler } from '../agent/events'
+import type { ToolCall } from '../providers/types'
+import type { ToolResult } from '../tools/types'
 import { log } from '../util/logger'
 
 export interface DiscordConfig {
   token: string
   allowedChannels: string[]  // Channel IDs or 'dm' for DMs
   allowedUsers: string[]     // User IDs (empty = allow all)
+}
+
+function formatToolCallsMarkdown(calls: ToolCall[]): string {
+  const lines = calls.map(call => {
+    const args = Object.entries(call.arguments)
+    if (args.length === 0) return call.name + '()'
+    if (args.length === 1) {
+      const [key, val] = args[0]!
+      const valStr = typeof val === 'string' ? val : JSON.stringify(val)
+      if (valStr.length < 60) return `${call.name}(${key}: ${valStr})`
+    }
+    return `${call.name}(${JSON.stringify(call.arguments)})`
+  })
+  return lines.join('\n')
+}
+
+interface ToolCallEntry {
+  call: string
+  result?: string
+}
+
+interface DiscordEventState {
+  entries: ToolCallEntry[]
+}
+
+function truncateResult(output: string, maxLen: number): string {
+  const trimmed = output.trim()
+  if (!trimmed) return ''
+  if (trimmed.length <= maxLen) return trimmed
+  return trimmed.substring(0, maxLen) + '...'
+}
+
+function createDiscordEventHandler(): { handler: AgentEventHandler; state: DiscordEventState } {
+  const state: DiscordEventState = { entries: [] }
+  let pendingCalls: ToolCall[] = []
+
+  const handler: AgentEventHandler = {
+    onToolCallStart(calls: ToolCall[]) {
+      pendingCalls = calls
+      for (const call of calls) {
+        state.entries.push({ call: formatToolCallsMarkdown([call]) })
+      }
+    },
+
+    onToolCallComplete(_callId: string, name: string, result: ToolResult) {
+      // Find the matching entry and attach the result
+      const entry = state.entries.find(e => e.call.startsWith(name) && !e.result)
+      if (entry) {
+        const status = result.success ? 'ok' : 'err'
+        const preview = truncateResult(result.output, 150)
+        entry.result = `  -> ${status}${preview ? ': ' + preview : ''}`
+      }
+    },
+  }
+
+  return { handler, state }
+}
+
+function buildToolCallPrefix(state: DiscordEventState): string {
+  if (state.entries.length === 0) return ''
+  const lines = state.entries.map(e => {
+    if (e.result) return `${e.call}\n${e.result}`
+    return e.call
+  })
+  return `\`\`\`\n${lines.join('\n')}\n\`\`\`\n`
 }
 
 export class DiscordChannel {
@@ -92,11 +160,16 @@ export class DiscordChannel {
       // Show typing indicator
       await message.channel.sendTyping()
 
-      // Run through agent
-      const response = await this.agent.run(content)
+      // Run through agent with event handler for tool transparency
+      const { handler, state } = createDiscordEventHandler()
+      const response = await this.agent.run(content, { events: handler })
+
+      // Build response with tool call prefix
+      const prefix = buildToolCallPrefix(state)
+      const fullResponse = prefix + response.content
 
       // Send response (split if too long)
-      await this.sendResponse(message, response.content)
+      await this.sendResponse(message, fullResponse)
 
       log.debug('discord', `Responded via ${response.provider}${response.escalated ? ' (escalated)' : ''}`)
     } catch (error) {

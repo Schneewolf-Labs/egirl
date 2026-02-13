@@ -1,6 +1,90 @@
 import * as readline from 'readline'
 import type { AgentLoop } from '../agent'
+import type { AgentEventHandler } from '../agent/events'
+import type { ToolCall } from '../providers/types'
+import type { ToolResult } from '../tools/types'
 import { log } from '../util/logger'
+
+const DIM = '\x1b[2m'
+const RESET = '\x1b[0m'
+const CYAN = '\x1b[36m'
+const GREEN = '\x1b[32m'
+const RED = '\x1b[31m'
+
+function truncateResult(output: string, maxLen: number): string {
+  const trimmed = output.trim()
+  if (!trimmed) return ''
+  if (trimmed.length <= maxLen) return trimmed
+  return trimmed.substring(0, maxLen) + '...'
+}
+
+function formatArgs(args: Record<string, unknown>): string {
+  const entries = Object.entries(args)
+  if (entries.length === 0) return ''
+  if (entries.length === 1) {
+    const [key, val] = entries[0]!
+    const valStr = typeof val === 'string' ? val : JSON.stringify(val)
+    // Short single-arg: show inline
+    if (valStr.length < 60) return `${key}: ${valStr}`
+  }
+  return JSON.stringify(args, null, 2)
+}
+
+interface CLIEventState {
+  streamed: boolean
+}
+
+function createCLIEventHandler(): { handler: AgentEventHandler; state: CLIEventState } {
+  const state: CLIEventState = { streamed: false }
+
+  const handler: AgentEventHandler = {
+    onThinking(text: string) {
+      if (text.trim()) {
+        process.stdout.write(`${DIM}${text.trim()}${RESET}\n`)
+      }
+    },
+
+    onToolCallStart(calls: ToolCall[]) {
+      for (const call of calls) {
+        const args = formatArgs(call.arguments)
+        if (args.includes('\n')) {
+          process.stdout.write(`${DIM}  > ${call.name}(\n${args}\n  )${RESET}\n`)
+        } else {
+          process.stdout.write(`${DIM}  > ${call.name}(${args})${RESET}\n`)
+        }
+      }
+    },
+
+    onToolCallComplete(_callId: string, name: string, result: ToolResult) {
+      const status = result.success
+        ? `${GREEN}ok${RESET}`
+        : `${RED}err${RESET}`
+      const preview = truncateResult(result.output, 200)
+      process.stdout.write(`${DIM}  < ${name} ${status}${RESET}\n`)
+      if (preview) {
+        for (const line of preview.split('\n')) {
+          process.stdout.write(`${DIM}    ${line}${RESET}\n`)
+        }
+      }
+    },
+
+    onToken(token: string) {
+      if (!state.streamed) {
+        process.stdout.write(`\n${CYAN}egirl>${RESET} `)
+        state.streamed = true
+      }
+      process.stdout.write(token)
+    },
+
+    onResponseComplete() {
+      if (state.streamed) {
+        process.stdout.write('\n\n')
+      }
+    },
+  }
+
+  return { handler, state }
+}
 
 export class CLIChannel {
   private rl: readline.Interface | null = null
@@ -58,7 +142,13 @@ export class CLIChannel {
 
       try {
         console.log()
-        const response = await this.agent.run(trimmed)
+        const { handler, state } = createCLIEventHandler()
+        const response = await this.agent.run(trimmed, { events: handler })
+
+        // If streaming didn't happen, print the response directly
+        if (!state.streamed && response.content) {
+          console.log(`\negirl> ${response.content}\n`)
+        }
 
         // Show routing info
         const routingInfo = response.escalated
@@ -66,7 +156,6 @@ export class CLIChannel {
           : `[${response.provider}]`
 
         log.debug('cli', routingInfo)
-        console.log(`\negirl> ${response.content}\n`)
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
         console.error(`\nError: ${message}\n`)

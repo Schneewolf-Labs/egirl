@@ -1,12 +1,14 @@
 import type { ChatMessage, ChatResponse, LLMProvider, ToolCall } from '../providers/types'
 import type { RuntimeConfig } from '../config'
 import type { ToolExecutor, ToolResult } from '../tools'
+import type { AgentEventHandler } from './events'
 import { Router, shouldRetryWithRemote } from '../routing'
 import { createAgentContext, addMessage, getMessagesWithSystem, type AgentContext } from './context'
 import { log } from '../util/logger'
 
 export interface AgentLoopOptions {
   maxTurns?: number
+  events?: AgentEventHandler
 }
 
 export interface AgentResponse {
@@ -46,7 +48,7 @@ export class AgentLoop {
   }
 
   async run(userMessage: string, options: AgentLoopOptions = {}): Promise<AgentResponse> {
-    const { maxTurns = 10 } = options
+    const { maxTurns = 10, events } = options
 
     // Add user message to context
     addMessage(this.context, { role: 'user', content: userMessage })
@@ -77,7 +79,12 @@ export class AgentLoop {
 
       log.debug('agent', `Turn ${turns}: sending ${messages.length} messages to ${currentProvider.name}`)
 
-      const response = await currentProvider.chat({ messages, tools })
+      const response = await currentProvider.chat({
+        messages,
+        tools,
+        // Stream tokens when a handler is listening
+        onToken: events?.onToken,
+      })
 
       totalUsage.input_tokens += response.usage.input_tokens
       totalUsage.output_tokens += response.usage.output_tokens
@@ -101,10 +108,22 @@ export class AgentLoop {
           tool_calls: response.tool_calls,
         })
 
+        // Emit thinking text (content that came with tool calls)
+        if (response.content && events?.onThinking) {
+          events.onThinking(response.content)
+        }
+
+        // Emit tool call start event
+        events?.onToolCallStart?.(response.tool_calls)
+
         const toolResults = await this.executeTools(response.tool_calls)
 
         for (const [callId, result] of toolResults) {
           log.debug('agent', `Tool ${callId}: ${result.output.substring(0, 100)}${result.output.length > 100 ? '...' : ''}`)
+
+          const call = response.tool_calls.find(c => c.id === callId)
+          events?.onToolCallComplete?.(callId, call?.name ?? 'unknown', result)
+
           addMessage(this.context, {
             role: 'tool',
             content: result.output,
@@ -125,6 +144,7 @@ export class AgentLoop {
       // No tool calls, we have a final response
       finalContent = response.content
       addMessage(this.context, { role: 'assistant', content: finalContent })
+      events?.onResponseComplete?.()
       break
     }
 
