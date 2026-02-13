@@ -29,7 +29,8 @@ export function createProviderRegistry(config: RuntimeConfig): ProviderRegistry 
   } else if (config.remote.openai) {
     remote = createOpenAIProvider(
       config.remote.openai.apiKey,
-      config.remote.openai.model
+      config.remote.openai.model,
+      config.remote.openai.baseUrl
     )
   }
 

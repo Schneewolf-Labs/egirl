@@ -75,6 +75,7 @@ export interface RuntimeConfig {
     openai?: {
       apiKey: string
       model: string
+      baseUrl?: string
     }
   }
   routing: {

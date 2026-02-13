@@ -115,6 +115,7 @@ export function loadConfig(): RuntimeConfig {
     config.remote.openai = {
       apiKey: openaiKey,
       model: process.env.OPENAI_MODEL ?? 'gpt-4o',
+      ...(process.env.OPENAI_BASE_URL && { baseUrl: process.env.OPENAI_BASE_URL }),
     }
   }
 
