@@ -6,3 +6,4 @@ export {
   getMessagesWithSystem,
   type AgentContext,
 } from './context'
+export { fitToContextWindow, estimateMessageTokens, type ContextWindowConfig } from './context-window'

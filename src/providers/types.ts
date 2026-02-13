@@ -40,3 +40,19 @@ export interface LLMProvider {
   readonly name: string
   chat(req: ChatRequest): Promise<ChatResponse>
 }
+
+/**
+ * Thrown when the prompt exceeds the provider's context window.
+ * Contains the actual token counts from the server for retry logic.
+ */
+export class ContextSizeError extends Error {
+  readonly promptTokens: number
+  readonly contextSize: number
+
+  constructor(promptTokens: number, contextSize: number) {
+    super(`Prompt (${promptTokens} tokens) exceeds context size (${contextSize} tokens)`)
+    this.name = 'ContextSizeError'
+    this.promptTokens = promptTokens
+    this.contextSize = contextSize
+  }
+}

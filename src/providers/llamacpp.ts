@@ -1,4 +1,5 @@
 import type { LLMProvider, ChatRequest, ChatResponse, ChatMessage, ContentPart } from './types'
+import { ContextSizeError } from './types'
 import { parseToolCalls } from '../tools/format'
 import { log } from '../util/logger'
 
@@ -84,8 +85,27 @@ export class LlamaCppProvider implements LLMProvider {
     })
 
     if (!response.ok) {
-      const error = await response.text()
-      throw new Error(`llama.cpp error: ${response.status} - ${error}`)
+      const errorText = await response.text()
+
+      // Parse context size overflow errors so the agent loop can retry with trimmed context
+      if (response.status === 400) {
+        try {
+          const errorJson = JSON.parse(errorText) as {
+            error?: { type?: string; n_prompt_tokens?: number; n_ctx?: number }
+          }
+          if (errorJson.error?.type === 'exceed_context_size_error') {
+            throw new ContextSizeError(
+              errorJson.error.n_prompt_tokens ?? 0,
+              errorJson.error.n_ctx ?? 0
+            )
+          }
+        } catch (e) {
+          if (e instanceof ContextSizeError) throw e
+          // JSON parse failed — fall through to generic error
+        }
+      }
+
+      throw new Error(`llama.cpp error: ${response.status} - ${errorText}`)
     }
 
     const data = (await response.json()) as {

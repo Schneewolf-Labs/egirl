@@ -1,9 +1,14 @@
-import type { ChatMessage, ChatResponse, LLMProvider, ToolCall } from '../providers/types'
+import type { ChatMessage, ChatResponse, LLMProvider, ToolCall, ToolDefinition } from '../providers/types'
+import { ContextSizeError } from '../providers/types'
 import type { RuntimeConfig } from '../config'
 import type { ToolExecutor, ToolResult } from '../tools'
 import { Router, shouldRetryWithRemote } from '../routing'
-import { createAgentContext, addMessage, getMessagesWithSystem, type AgentContext } from './context'
+import { createAgentContext, addMessage, type AgentContext } from './context'
+import { fitToContextWindow } from './context-window'
 import { log } from '../util/logger'
+
+/** Default context limits for remote providers */
+const REMOTE_CONTEXT_LENGTH = 200_000
 
 export interface AgentLoopOptions {
   maxTurns?: number
@@ -72,12 +77,12 @@ export class AgentLoop {
     while (turns < maxTurns) {
       turns++
 
-      const messages = getMessagesWithSystem(this.context)
       const tools = this.toolExecutor.getDefinitions()
-
-      log.debug('agent', `Turn ${turns}: sending ${messages.length} messages to ${currentProvider.name}`)
-
-      const response = await currentProvider.chat({ messages, tools })
+      const response = await this.chatWithContextWindow(
+        currentProvider,
+        tools,
+        currentTarget
+      )
 
       totalUsage.input_tokens += response.usage.input_tokens
       totalUsage.output_tokens += response.usage.output_tokens
@@ -135,6 +140,61 @@ export class AgentLoop {
       usage: totalUsage,
       escalated,
       turns,
+    }
+  }
+
+  /**
+   * Send messages to a provider with context window management.
+   * Fits messages to the provider's context limit, retries once with
+   * the server's actual n_ctx if the estimate was wrong.
+   */
+  private async chatWithContextWindow(
+    provider: LLMProvider,
+    tools: ToolDefinition[],
+    target: 'local' | 'remote'
+  ): Promise<ChatResponse> {
+    const contextLength = target === 'local'
+      ? this.config.local.contextLength
+      : REMOTE_CONTEXT_LENGTH
+
+    const fitted = fitToContextWindow(
+      this.context.systemPrompt,
+      this.context.messages,
+      tools,
+      { contextLength }
+    )
+
+    const messages: ChatMessage[] = [
+      { role: 'system', content: this.context.systemPrompt },
+      ...fitted,
+    ]
+
+    log.debug('agent', `Sending ${messages.length} messages to ${provider.name} (budget: ${contextLength}t)`)
+
+    try {
+      return await provider.chat({ messages, tools })
+    } catch (error) {
+      if (!(error instanceof ContextSizeError)) throw error
+
+      // Server reported a different context size than our config — retrim and retry once
+      log.warn(
+        'agent',
+        `Server n_ctx=${error.contextSize} differs from config (${contextLength}). Retrimming.`
+      )
+
+      const refitted = fitToContextWindow(
+        this.context.systemPrompt,
+        this.context.messages,
+        tools,
+        { contextLength: error.contextSize }
+      )
+
+      const retryMessages: ChatMessage[] = [
+        { role: 'system', content: this.context.systemPrompt },
+        ...refitted,
+      ]
+
+      return await provider.chat({ messages: retryMessages, tools })
     }
   }
 
