@@ -106,10 +106,12 @@ egirl/
 │   ├── routing/               # Local vs remote decisions
 │   ├── memory/                # SQLite + embeddings search
 │   ├── tools/                 # File ops, exec, memory
-│   └── channels/              # CLI, Discord
+│   ├── channels/              # CLI, Discord, Claude Code
+│   ├── skills/                # Skill loading and management
+│   └── tracking/              # Usage stats and cost tracking
 ├── services/
-│   └── embeddings/            # Qwen3-VL-Embedding Python service
-└── templates/                 # Default personality (Kira)
+│   └── embeddings/            # Qwen3-VL-Embedding service
+└── workspace/                 # Default personality templates (Kira)
 ```
 
 ## Customizing Kira
@@ -136,11 +138,28 @@ Edit these to customize. Or replace Kira entirely.
 | `memory_get` | Get memory by key |
 | `memory_set` | Store a memory |
 
+## Documentation
+
+| Document | Description |
+|----------|-------------|
+| [Architecture](docs/architecture.md) | System overview, request lifecycle, module dependencies, design decisions |
+| [Configuration](docs/configuration.md) | Complete reference for `egirl.toml` and `.env` |
+| [Routing & Escalation](docs/routing.md) | How requests are routed between local and remote models |
+| [Memory System](docs/memory.md) | Hybrid search, embeddings, storage, and search strategies |
+| [Tools Reference](docs/tools.md) | All 7 built-in tools with parameters and examples |
+| [Claude Code Integration](docs/claude-code.md) | Using egirl as a Claude Code supervisor |
+| [Skills](docs/skills.md) | Creating and managing skill files |
+| [Development Guide](docs/development.md) | Setup, testing, code style, and contributing |
+| [Discord Setup](DISCORD.md) | Step-by-step Discord bot configuration |
+| [Tool Format](docs/tool-format.md) | Qwen3 native tool calling specification |
+| [Vision](docs/vision.md) | Multimodal capabilities with Qwen3-VL |
+| [Fine-Tuning](docs/fine-tuning.md) | Training data strategy for custom models |
+
 ## Requirements
 
 - [Bun](https://bun.sh) runtime
 - [llama.cpp](https://github.com/ggerganov/llama.cpp) server
-- Python 3.10+ (for embedding service)
+- Python 3.10+ (optional — for embedding service)
 - GPU with enough VRAM for your model
 
 ## License
