@@ -3,7 +3,7 @@
 import { loadConfig, type RuntimeConfig } from './config'
 import { createProviderRegistry } from './providers'
 import { createRouter } from './routing'
-import { createDefaultToolExecutor } from './tools'
+import { createDefaultToolExecutor, type CodeAgentConfig } from './tools'
 import { createAgentLoop } from './agent'
 import { createCLIChannel, createClaudeCodeChannel, createDiscordChannel, type ClaudeCodeConfig } from './channels'
 import { createStatsTracker } from './tracking'
@@ -40,6 +40,17 @@ function createMemory(config: RuntimeConfig): MemoryManager | undefined {
   } catch (error) {
     log.warn('main', 'Failed to initialize memory system:', error)
     return undefined
+  }
+}
+
+function getCodeAgentConfig(config: RuntimeConfig): CodeAgentConfig | undefined {
+  const cc = config.channels.claudeCode
+  if (!cc) return undefined
+  return {
+    permissionMode: cc.permissionMode,
+    model: cc.model,
+    workingDir: cc.workingDir,
+    maxTurns: cc.maxTurns,
   }
 }
 
@@ -124,7 +135,7 @@ async function runCLI(config: RuntimeConfig, args: string[]) {
 
   // Create router and tools
   const router = createRouter(config)
-  const toolExecutor = createDefaultToolExecutor(memory)
+  const toolExecutor = createDefaultToolExecutor(memory, getCodeAgentConfig(config))
 
   // Create stats tracker
   const stats = createStatsTracker()
@@ -317,7 +328,7 @@ async function runDiscord(config: RuntimeConfig, args: string[]) {
 
   // Create router and tools
   const router = createRouter(config)
-  const toolExecutor = createDefaultToolExecutor(memory)
+  const toolExecutor = createDefaultToolExecutor(memory, getCodeAgentConfig(config))
 
   // Create agent loop
   const agent = createAgentLoop(
@@ -374,7 +385,7 @@ async function runAPI(config: RuntimeConfig, args: string[]) {
 
   // Create router and tools
   const router = createRouter(config)
-  const toolExecutor = createDefaultToolExecutor(memory)
+  const toolExecutor = createDefaultToolExecutor(memory, getCodeAgentConfig(config))
 
   // Create stats tracker
   const stats = createStatsTracker()

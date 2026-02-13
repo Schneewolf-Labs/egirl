@@ -12,6 +12,8 @@ export {
   screenshotTool,
   webResearchTool,
   createMemoryTools,
+  createCodeAgentTool,
+  type CodeAgentConfig,
 } from './builtin'
 
 import { createToolExecutor } from './executor'
@@ -27,14 +29,16 @@ import {
   screenshotTool,
   webResearchTool,
   createMemoryTools,
+  createCodeAgentTool,
+  type CodeAgentConfig,
 } from './builtin'
 
 /**
  * Create tool executor with all default tools.
  * If MemoryManager is provided, memory tools will be functional.
- * Otherwise, they'll return "not initialized" errors.
+ * If CodeAgentConfig is provided, the code_agent tool will be available.
  */
-export function createDefaultToolExecutor(memory?: MemoryManager) {
+export function createDefaultToolExecutor(memory?: MemoryManager, codeAgent?: CodeAgentConfig) {
   const executor = createToolExecutor()
 
   // Base tools (always available)
@@ -55,6 +59,11 @@ export function createDefaultToolExecutor(memory?: MemoryManager) {
   } else {
     // Register stubs that return helpful error messages
     executor.registerAll([memorySearchTool, memoryGetTool])
+  }
+
+  // Code agent tool (available if claude code config provided)
+  if (codeAgent) {
+    executor.register(createCodeAgentTool(codeAgent))
   }
 
   return executor
