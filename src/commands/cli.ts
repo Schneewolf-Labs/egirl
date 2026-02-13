@@ -11,7 +11,7 @@ export async function runCLI(config: RuntimeConfig, args: string[]): Promise<voi
   const messageIndex = args.indexOf('-m')
   const singleMessage = messageIndex !== -1 ? args[messageIndex + 1] : null
 
-  const { providers, memory, conversations, router, toolExecutor, stats } = createAppServices(config)
+  const { providers, memory, conversations, router, toolExecutor, stats, skills } = await createAppServices(config)
 
   // Create agent loop with conversation persistence and memory
   const sessionId = singleMessage ? crypto.randomUUID() : 'cli:default'
@@ -24,6 +24,7 @@ export async function runCLI(config: RuntimeConfig, args: string[]): Promise<voi
     sessionId,
     memory,
     conversationStore: conversations,
+    skills,
   })
 
   // Single message mode

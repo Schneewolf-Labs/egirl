@@ -1,5 +1,6 @@
 import type { RuntimeConfig } from '../config'
 import { createProviderRegistry } from '../providers'
+import { createSkillManager } from '../skills'
 
 export async function showStatus(config: RuntimeConfig): Promise<void> {
   console.log('egirl Status\n')
@@ -19,6 +20,20 @@ export async function showStatus(config: RuntimeConfig): Promise<void> {
   if (config.local.embeddings) {
     console.log(`  Embeddings: ${config.local.embeddings.model} @ ${config.local.embeddings.endpoint}`)
     console.log(`    Dimensions: ${config.local.embeddings.dimensions}, Multimodal: ${config.local.embeddings.multimodal}`)
+  }
+
+  // Show loaded skills
+  const skillManager = createSkillManager()
+  try {
+    await skillManager.loadFromDirectories(config.skills.dirs)
+  } catch { /* already logged */ }
+  const skills = skillManager.getAll()
+  console.log(`\nSkills: ${skills.length} loaded`)
+  for (const skill of skills) {
+    const emoji = skill.metadata.openclaw?.emoji ?? ''
+    const complexity = skill.metadata.egirl?.complexity ?? 'auto'
+    const status = skill.enabled ? 'enabled' : 'disabled'
+    console.log(`  ${emoji ? emoji + ' ' : ''}${skill.name} [${complexity}] (${status})`)
   }
 
   console.log(`\nRouting:`)

@@ -5,6 +5,7 @@ export {
   addMessage,
   getMessagesWithSystem,
   type AgentContext,
+  type SystemPromptOptions,
 } from './context'
 export { fitToContextWindow, estimateMessageTokens, type ContextWindowConfig } from './context-window'
 export { type AgentEventHandler } from './events'

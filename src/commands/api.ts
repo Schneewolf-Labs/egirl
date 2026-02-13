@@ -14,7 +14,7 @@ export async function runAPI(config: RuntimeConfig, args: string[]): Promise<voi
   const port = portIndex !== -1 ? parseInt(args[portIndex + 1]!, 10) : (config.channels.api?.port ?? 3000)
   const host = hostIndex !== -1 ? args[hostIndex + 1]! : (config.channels.api?.host ?? '127.0.0.1')
 
-  const { providers, memory, router, toolExecutor, stats } = createAppServices(config)
+  const { providers, memory, router, toolExecutor, stats, skills } = await createAppServices(config)
 
   const agent = createAgentLoop({
     config,
@@ -23,6 +23,7 @@ export async function runAPI(config: RuntimeConfig, args: string[]): Promise<voi
     localProvider: providers.local,
     remoteProvider: providers.remote,
     sessionId: 'api:default',
+    skills,
   })
 
   const api = createAPIServer({ port, host }, {
