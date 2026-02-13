@@ -9,6 +9,7 @@ import { createCLIChannel, createClaudeCodeChannel, createDiscordChannel, type C
 import { createStatsTracker } from './tracking'
 import { createMemoryManager, Qwen3VLEmbeddings, type MemoryManager } from './memory'
 import { bootstrapWorkspace } from './workspace/bootstrap'
+import { buildSafetyConfig } from './safety/config-bridge'
 import { log } from './util/logger'
 
 /**
@@ -120,6 +121,7 @@ async function runCLI(config: RuntimeConfig, args: string[]) {
   // Create router and tools
   const router = createRouter(config)
   const toolExecutor = createDefaultToolExecutor(memory)
+  toolExecutor.setSafety(buildSafetyConfig(config))
 
   // Create stats tracker
   const stats = createStatsTracker()
@@ -313,6 +315,7 @@ async function runDiscord(config: RuntimeConfig, args: string[]) {
   // Create router and tools
   const router = createRouter(config)
   const toolExecutor = createDefaultToolExecutor(memory)
+  toolExecutor.setSafety(buildSafetyConfig(config))
 
   // Create agent loop
   const agent = createAgentLoop(

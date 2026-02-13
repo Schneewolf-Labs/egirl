@@ -1,9 +1,23 @@
 import type { Tool, ToolResult, ToolDefinition } from './types'
 import type { ToolCall } from '../providers/types'
+import type { SafetyConfig } from '../safety'
+import { checkToolCall, logToolExecution } from '../safety'
 import { log } from '../util/logger'
+
+export type ConfirmCallback = (toolName: string, args: Record<string, unknown>) => Promise<boolean>
 
 export class ToolExecutor {
   private tools: Map<string, Tool> = new Map()
+  private safety?: SafetyConfig
+  private confirmCallback?: ConfirmCallback
+
+  setSafety(config: SafetyConfig): void {
+    this.safety = config
+  }
+
+  setConfirmCallback(callback: ConfirmCallback): void {
+    this.confirmCallback = callback
+  }
 
   register(tool: Tool): void {
     this.tools.set(tool.definition.name, tool)
@@ -34,6 +48,30 @@ export class ToolExecutor {
       }
     }
 
+    // Safety checks
+    if (this.safety?.enabled) {
+      const check = checkToolCall(call.name, call.arguments, cwd, this.safety)
+
+      if (!check.allowed) {
+        if (check.needsConfirmation && this.confirmCallback) {
+          const confirmed = await this.confirmCallback(call.name, call.arguments)
+          if (!confirmed) {
+            if (this.safety.auditLog) {
+              logToolExecution(call.name, call.arguments, { success: false, blocked: true, reason: 'User denied confirmation' }, this.safety.auditLog)
+            }
+            return { success: false, output: 'Tool execution denied by user.' }
+          }
+          // Confirmed — fall through to execute
+        } else {
+          if (this.safety.auditLog) {
+            logToolExecution(call.name, call.arguments, { success: false, blocked: true, reason: check.reason }, this.safety.auditLog)
+          }
+          log.warn('safety', `Blocked tool call: ${call.name}`, { reason: check.reason })
+          return { success: false, output: `Safety check failed: ${check.reason}` }
+        }
+      }
+    }
+
     log.debug('tools', `Executing tool: ${call.name}`, call.arguments)
 
     try {
@@ -42,10 +80,20 @@ export class ToolExecutor {
         success: result.success,
         outputLength: result.output.length,
       })
+
+      if (this.safety?.auditLog) {
+        logToolExecution(call.name, call.arguments, { success: result.success }, this.safety.auditLog)
+      }
+
       return result
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       log.error('tools', `Tool ${call.name} failed:`, error)
+
+      if (this.safety?.auditLog) {
+        logToolExecution(call.name, call.arguments, { success: false, reason: message }, this.safety.auditLog)
+      }
+
       return {
         success: false,
         output: `Tool execution error: ${message}`,

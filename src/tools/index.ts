@@ -1,6 +1,6 @@
 export * from './types'
 export * from './format'
-export { ToolExecutor, createToolExecutor } from './executor'
+export { ToolExecutor, createToolExecutor, type ConfirmCallback } from './executor'
 export {
   readTool,
   writeTool,

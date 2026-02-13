@@ -43,6 +43,15 @@ export const EgirlConfigSchema = Type.Object({
     })),
   })),
 
+  safety: Type.Optional(Type.Object({
+    enabled: Type.Boolean({ default: true }),
+    audit_log: Type.Optional(Type.String()),
+    blocked_patterns: Type.Optional(Type.Array(Type.String())),
+    allowed_paths: Type.Optional(Type.Array(Type.String())),
+    sensitive_patterns: Type.Optional(Type.Array(Type.String())),
+    require_confirmation: Type.Boolean({ default: false }),
+  })),
+
   skills: Type.Object({
     dirs: Type.Array(Type.String(), { default: ['~/.egirl/skills', '{workspace}/skills'] }),
   }),
@@ -96,6 +105,14 @@ export interface RuntimeConfig {
       workingDir: string
       maxTurns?: number
     }
+  }
+  safety: {
+    enabled: boolean
+    auditLog?: string
+    blockedPatterns: string[]
+    allowedPaths: string[]
+    sensitivePatterns: string[]
+    requireConfirmation: boolean
   }
   skills: {
     dirs: string[]

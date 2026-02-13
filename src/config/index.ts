@@ -94,6 +94,16 @@ export function loadConfig(): RuntimeConfig {
       alwaysRemote: toml.routing?.always_remote ?? defaultToml.routing.always_remote,
     },
     channels: {},
+    safety: {
+      enabled: toml.safety?.enabled ?? true,
+      auditLog: toml.safety?.audit_log
+        ? expandPath(toml.safety.audit_log, workspacePath)
+        : undefined,
+      blockedPatterns: toml.safety?.blocked_patterns ?? [],
+      allowedPaths: (toml.safety?.allowed_paths ?? []).map(p => expandPath(p, workspacePath)),
+      sensitivePatterns: toml.safety?.sensitive_patterns ?? [],
+      requireConfirmation: toml.safety?.require_confirmation ?? false,
+    },
     skills: {
       dirs: (toml.skills?.dirs ?? defaultToml.skills.dirs).map(d => expandPath(d, workspacePath)),
     },
