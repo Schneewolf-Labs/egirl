@@ -209,6 +209,20 @@ export class MemoryManager {
   }
 
   /**
+   * List all memories with metadata
+   */
+  list(limit = 100, offset = 0): Array<{ key: string; value: string; contentType: string; updatedAt: number }> {
+    return this.indexer.list(limit, offset)
+  }
+
+  /**
+   * Count total stored memories
+   */
+  count(): number {
+    return this.indexer.count()
+  }
+
+  /**
    * Delete a memory
    */
   delete(key: string): boolean {

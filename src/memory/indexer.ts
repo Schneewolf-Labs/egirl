@@ -225,6 +225,32 @@ export class MemoryIndexer {
     }))
   }
 
+  list(limit = 100, offset = 0): Array<{ key: string; value: string; contentType: ContentType; updatedAt: number }> {
+    const rows = this.db.query(`
+      SELECT key, value, content_type, updated_at
+      FROM memories
+      ORDER BY updated_at DESC
+      LIMIT ? OFFSET ?
+    `).all(limit, offset) as Array<{
+      key: string
+      value: string
+      content_type: string
+      updated_at: number
+    }>
+
+    return rows.map(row => ({
+      key: row.key,
+      value: row.value,
+      contentType: row.content_type as ContentType,
+      updatedAt: row.updated_at,
+    }))
+  }
+
+  count(): number {
+    const row = this.db.query(`SELECT COUNT(*) as count FROM memories`).get() as { count: number }
+    return row.count
+  }
+
   delete(key: string): boolean {
     const result = this.db.run(`DELETE FROM memories WHERE key = ?`, [key])
     return result.changes > 0
