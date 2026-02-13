@@ -3,7 +3,7 @@ import { ContextSizeError } from '../providers/types'
 import type { RuntimeConfig } from '../config'
 import type { ToolExecutor, ToolResult } from '../tools'
 import type { AgentEventHandler } from './events'
-import { Router, shouldRetryWithRemote } from '../routing'
+import { Router, shouldRetryWithRemote, analyzeResponseForEscalation } from '../routing'
 import { createAgentContext, addMessage, type AgentContext } from './context'
 import { fitToContextWindow } from './context-window'
 import { createLlamaCppTokenizer } from '../providers/llamacpp'
@@ -63,6 +63,7 @@ export class AgentLoop {
 
     // Route the request
     const routingDecision = this.router.route(this.context.messages, this.toolExecutor.listTools())
+    events?.onRoutingDecision?.(routingDecision)
 
     let provider: LLMProvider = routingDecision.target === 'local' ? this.localProvider : (this.remoteProvider ?? this.localProvider)
 
@@ -83,20 +84,30 @@ export class AgentLoop {
       turns++
 
       const tools = this.toolExecutor.getDefinitions()
-      const response = await this.chatWithContextWindow(
-        currentProvider,
-        tools,
-        currentTarget,
-        events?.onToken
-      )
+
+      let response: ChatResponse
+      try {
+        response = await this.chatWithContextWindow(
+          currentProvider,
+          tools,
+          currentTarget,
+          events?.onToken
+        )
+      } catch (error) {
+        const err = error instanceof Error ? error : new Error(String(error))
+        events?.onError?.(err)
+        throw error
+      }
 
       totalUsage.input_tokens += response.usage.input_tokens
       totalUsage.output_tokens += response.usage.output_tokens
 
       // Check for escalation if we're using local
       if (currentTarget === 'local' && this.remoteProvider) {
-        if (shouldRetryWithRemote(response, this.config.routing.escalationThreshold)) {
+        const escalationDecision = analyzeResponseForEscalation(response, this.config.routing.escalationThreshold)
+        if (escalationDecision.shouldEscalate) {
           log.info('agent', 'Escalating to remote model')
+          events?.onEscalation?.(escalationDecision, currentProvider.name, this.remoteProvider.name)
           currentProvider = this.remoteProvider
           currentTarget = 'remote'
           escalated = true
@@ -120,7 +131,7 @@ export class AgentLoop {
         // Emit tool call start event
         events?.onToolCallStart?.(response.tool_calls)
 
-        const toolResults = await this.executeTools(response.tool_calls)
+        const toolResults = await this.executeToolsWithHooks(response.tool_calls, events)
 
         for (const [callId, result] of toolResults) {
           log.debug('agent', `Tool ${callId}: ${result.output.substring(0, 100)}${result.output.length > 100 ? '...' : ''}`)
@@ -135,7 +146,9 @@ export class AgentLoop {
           })
 
           if (result.suggest_escalation && currentTarget === 'local' && this.remoteProvider) {
+            const escalationDecision = analyzeResponseForEscalation(response, this.config.routing.escalationThreshold)
             log.info('agent', `Tool suggests escalation: ${result.escalation_reason}`)
+            events?.onEscalation?.(escalationDecision, currentProvider.name, this.remoteProvider.name)
             currentProvider = this.remoteProvider
             currentTarget = 'remote'
             escalated = true
@@ -225,6 +238,43 @@ export class AgentLoop {
 
   private async executeTools(toolCalls: ToolCall[]): Promise<Map<string, ToolResult>> {
     return this.toolExecutor.executeAll(toolCalls, this.context.workspaceDir)
+  }
+
+  private async executeToolsWithHooks(
+    toolCalls: ToolCall[],
+    events?: AgentEventHandler
+  ): Promise<Map<string, ToolResult>> {
+    if (!events?.onBeforeToolExec && !events?.onAfterToolExec) {
+      return this.executeTools(toolCalls)
+    }
+
+    const results = new Map<string, ToolResult>()
+
+    const executions = toolCalls.map(async (call) => {
+      // Pre-execution hook — skip if it returns false
+      if (events?.onBeforeToolExec) {
+        const shouldRun = await events.onBeforeToolExec(call)
+        if (shouldRun === false) {
+          const skipped: ToolResult = { success: false, output: `Tool ${call.name} skipped by hook` }
+          events?.onAfterToolExec?.(call, skipped)
+          return { id: call.id, result: skipped }
+        }
+      }
+
+      const result = await this.toolExecutor.execute(call, this.context.workspaceDir)
+
+      // Post-execution hook
+      events?.onAfterToolExec?.(call, result)
+
+      return { id: call.id, result }
+    })
+
+    const resolved = await Promise.all(executions)
+    for (const { id, result } of resolved) {
+      results.set(id, result)
+    }
+
+    return results
   }
 
   getContext(): AgentContext {
