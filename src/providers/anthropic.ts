@@ -85,46 +85,70 @@ export class AnthropicProvider implements LLMProvider {
     systemPrompt: string | undefined
     messages: Anthropic.Messages.MessageParam[]
   } {
-    let systemPrompt: string | undefined
-    const anthropicMessages: Anthropic.Messages.MessageParam[] = []
-
-    for (const msg of messages) {
-      if (msg.role === 'system') {
-        systemPrompt = (systemPrompt ? systemPrompt + '\n\n' : '') + msg.content
-      } else if (msg.role === 'user') {
-        anthropicMessages.push({ role: 'user', content: msg.content })
-      } else if (msg.role === 'assistant') {
-        if (msg.tool_calls && msg.tool_calls.length > 0) {
-          const content: Anthropic.Messages.ContentBlockParam[] = []
-          if (msg.content) {
-            content.push({ type: 'text', text: msg.content })
-          }
-          for (const tc of msg.tool_calls) {
-            content.push({
-              type: 'tool_use',
-              id: tc.id,
-              name: tc.name,
-              input: tc.arguments,
-            })
-          }
-          anthropicMessages.push({ role: 'assistant', content })
-        } else {
-          anthropicMessages.push({ role: 'assistant', content: msg.content })
-        }
-      } else if (msg.role === 'tool') {
-        anthropicMessages.push({
-          role: 'user',
-          content: [{
-            type: 'tool_result',
-            tool_use_id: msg.tool_call_id!,
-            content: msg.content,
-          }],
-        })
-      }
-    }
-
-    return { systemPrompt, messages: anthropicMessages }
+    return prepareAnthropicMessages(messages)
   }
+}
+
+/**
+ * Convert internal ChatMessage array to Anthropic API format.
+ * Handles system prompt extraction, tool_use blocks on assistant messages,
+ * and merging consecutive tool results into a single user message.
+ */
+export function prepareAnthropicMessages(messages: ChatMessage[]): {
+  systemPrompt: string | undefined
+  messages: Anthropic.Messages.MessageParam[]
+} {
+  let systemPrompt: string | undefined
+  const anthropicMessages: Anthropic.Messages.MessageParam[] = []
+  let i = 0
+
+  while (i < messages.length) {
+    const msg = messages[i]!
+
+    if (msg.role === 'system') {
+      systemPrompt = (systemPrompt ? systemPrompt + '\n\n' : '') + msg.content
+      i++
+    } else if (msg.role === 'user') {
+      anthropicMessages.push({ role: 'user', content: msg.content })
+      i++
+    } else if (msg.role === 'assistant') {
+      if (msg.tool_calls && msg.tool_calls.length > 0) {
+        const content: Anthropic.Messages.ContentBlockParam[] = []
+        if (msg.content) {
+          content.push({ type: 'text', text: msg.content })
+        }
+        for (const tc of msg.tool_calls) {
+          content.push({
+            type: 'tool_use',
+            id: tc.id,
+            name: tc.name,
+            input: tc.arguments,
+          })
+        }
+        anthropicMessages.push({ role: 'assistant', content })
+      } else {
+        anthropicMessages.push({ role: 'assistant', content: msg.content })
+      }
+      i++
+    } else if (msg.role === 'tool') {
+      // Group consecutive tool results into a single user message
+      const toolResults: Anthropic.Messages.ToolResultBlockParam[] = []
+      while (i < messages.length && messages[i]!.role === 'tool') {
+        const toolMsg = messages[i]!
+        toolResults.push({
+          type: 'tool_result',
+          tool_use_id: toolMsg.tool_call_id!,
+          content: toolMsg.content,
+        })
+        i++
+      }
+      anthropicMessages.push({ role: 'user', content: toolResults })
+    } else {
+      i++
+    }
+  }
+
+  return { systemPrompt, messages: anthropicMessages }
 }
 
 export function createAnthropicProvider(apiKey: string, model: string): LLMProvider {
