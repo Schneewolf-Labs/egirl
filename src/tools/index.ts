@@ -10,6 +10,7 @@ export {
   memorySearchTool,
   memoryGetTool,
   screenshotTool,
+  webResearchTool,
   createMemoryTools,
 } from './builtin'
 
@@ -24,6 +25,7 @@ import {
   memorySearchTool,
   memoryGetTool,
   screenshotTool,
+  webResearchTool,
   createMemoryTools,
 } from './builtin'
 
@@ -43,6 +45,7 @@ export function createDefaultToolExecutor(memory?: MemoryManager) {
     execTool,
     globTool,
     screenshotTool,
+    webResearchTool,
   ])
 
   // Memory tools (functional if MemoryManager provided)
