@@ -116,6 +116,12 @@ export function loadConfig(): RuntimeConfig {
       compactOnStartup: toml.conversation?.compact_on_startup ?? true,
     },
     channels: {},
+    memory: {
+      proactiveRetrieval: toml.memory?.proactive_retrieval ?? true,
+      scoreThreshold: toml.memory?.score_threshold ?? 0.35,
+      maxResults: toml.memory?.max_results ?? 5,
+      maxTokensBudget: toml.memory?.max_tokens_budget ?? 2000,
+    },
     skills: {
       dirs: (toml.skills?.dirs ?? defaultToml.skills.dirs).map(d => expandPath(d, workspacePath)),
     },

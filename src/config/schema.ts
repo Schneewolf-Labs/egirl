@@ -60,6 +60,13 @@ export const EgirlConfigSchema = Type.Object({
     compact_on_startup: Type.Boolean({ default: true }),
   })),
 
+  memory: Type.Optional(Type.Object({
+    proactive_retrieval: Type.Boolean({ default: true }),
+    score_threshold: Type.Number({ default: 0.35 }),
+    max_results: Type.Number({ default: 5 }),
+    max_tokens_budget: Type.Number({ default: 2000 }),
+  })),
+
   skills: Type.Object({
     dirs: Type.Array(Type.String(), { default: ['~/.egirl/skills', '{workspace}/skills'] }),
   }),
@@ -131,6 +138,12 @@ export interface RuntimeConfig {
     maxAgeDays: number
     maxMessages: number
     compactOnStartup: boolean
+  }
+  memory: {
+    proactiveRetrieval: boolean
+    scoreThreshold: number
+    maxResults: number
+    maxTokensBudget: number
   }
   skills: {
     dirs: string[]

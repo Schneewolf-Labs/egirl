@@ -1,6 +1,7 @@
 export { MemoryFiles, createMemoryFiles, type MemoryEntry } from './files'
 export { MemoryIndexer, createMemoryIndexer, type IndexedMemory, type ContentType } from './indexer'
 export { MemorySearch, createMemorySearch, type SearchResult, type SearchOptions } from './search'
+export { retrieveForContext, type RetrievalConfig } from './retrieval'
 export {
   createEmbeddingProvider,
   Qwen3VLEmbeddings,
