@@ -32,25 +32,42 @@ function formatToolCallsMarkdown(calls: ToolCall[]): string {
   return lines.join('\n')
 }
 
+interface ToolCallEntry {
+  call: string
+  result?: string
+}
+
 interface DiscordEventState {
-  toolCalls: string[]
-  toolResults: string[]
+  entries: ToolCallEntry[]
+}
+
+function truncateResult(output: string, maxLen: number): string {
+  const trimmed = output.trim()
+  if (!trimmed) return ''
+  if (trimmed.length <= maxLen) return trimmed
+  return trimmed.substring(0, maxLen) + '...'
 }
 
 function createDiscordEventHandler(): { handler: AgentEventHandler; state: DiscordEventState } {
-  const state: DiscordEventState = {
-    toolCalls: [],
-    toolResults: [],
-  }
+  const state: DiscordEventState = { entries: [] }
+  let pendingCalls: ToolCall[] = []
 
   const handler: AgentEventHandler = {
     onToolCallStart(calls: ToolCall[]) {
-      state.toolCalls.push(formatToolCallsMarkdown(calls))
+      pendingCalls = calls
+      for (const call of calls) {
+        state.entries.push({ call: formatToolCallsMarkdown([call]) })
+      }
     },
 
     onToolCallComplete(_callId: string, name: string, result: ToolResult) {
-      const status = result.success ? 'ok' : 'err'
-      state.toolResults.push(`${name}: ${status}`)
+      // Find the matching entry and attach the result
+      const entry = state.entries.find(e => e.call.startsWith(name) && !e.result)
+      if (entry) {
+        const status = result.success ? 'ok' : 'err'
+        const preview = truncateResult(result.output, 150)
+        entry.result = `  -> ${status}${preview ? ': ' + preview : ''}`
+      }
     },
   }
 
@@ -58,9 +75,12 @@ function createDiscordEventHandler(): { handler: AgentEventHandler; state: Disco
 }
 
 function buildToolCallPrefix(state: DiscordEventState): string {
-  if (state.toolCalls.length === 0) return ''
-  const calls = state.toolCalls.join('\n')
-  return `\`\`\`\n${calls}\n\`\`\`\n`
+  if (state.entries.length === 0) return ''
+  const lines = state.entries.map(e => {
+    if (e.result) return `${e.call}\n${e.result}`
+    return e.call
+  })
+  return `\`\`\`\n${lines.join('\n')}\n\`\`\`\n`
 }
 
 export class DiscordChannel {

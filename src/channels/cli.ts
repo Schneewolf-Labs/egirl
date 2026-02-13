@@ -11,6 +11,13 @@ const CYAN = '\x1b[36m'
 const GREEN = '\x1b[32m'
 const RED = '\x1b[31m'
 
+function truncateResult(output: string, maxLen: number): string {
+  const trimmed = output.trim()
+  if (!trimmed) return ''
+  if (trimmed.length <= maxLen) return trimmed
+  return trimmed.substring(0, maxLen) + '...'
+}
+
 function formatArgs(args: Record<string, unknown>): string {
   const entries = Object.entries(args)
   if (entries.length === 0) return ''
@@ -52,7 +59,13 @@ function createCLIEventHandler(): { handler: AgentEventHandler; state: CLIEventS
       const status = result.success
         ? `${GREEN}ok${RESET}`
         : `${RED}err${RESET}`
+      const preview = truncateResult(result.output, 200)
       process.stdout.write(`${DIM}  < ${name} ${status}${RESET}\n`)
+      if (preview) {
+        for (const line of preview.split('\n')) {
+          process.stdout.write(`${DIM}    ${line}${RESET}\n`)
+        }
+      }
     },
 
     onToken(token: string) {
