@@ -6,8 +6,8 @@ export class OpenAIProvider implements LLMProvider {
   private client: OpenAI
   private model: string
 
-  constructor(apiKey: string, model: string) {
-    this.client = new OpenAI({ apiKey })
+  constructor(apiKey: string, model: string, baseUrl?: string) {
+    this.client = new OpenAI({ apiKey, ...(baseUrl && { baseURL: baseUrl }) })
     this.model = model
     this.name = `openai/${model}`
   }
@@ -87,6 +87,6 @@ export class OpenAIProvider implements LLMProvider {
   }
 }
 
-export function createOpenAIProvider(apiKey: string, model: string): LLMProvider {
-  return new OpenAIProvider(apiKey, model)
+export function createOpenAIProvider(apiKey: string, model: string, baseUrl?: string): LLMProvider {
+  return new OpenAIProvider(apiKey, model, baseUrl)
 }

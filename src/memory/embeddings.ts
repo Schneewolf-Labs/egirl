@@ -204,11 +204,13 @@ export class OpenAIEmbeddings implements EmbeddingProvider {
   supportsImages = false
   private apiKey: string
   private model: string
+  private baseUrl: string
 
-  constructor(apiKey: string, model = 'text-embedding-3-small', dimensions = 1536) {
+  constructor(apiKey: string, model = 'text-embedding-3-small', dimensions = 1536, baseUrl = 'https://api.openai.com/v1') {
     this.apiKey = apiKey
     this.model = model
     this.dimensions = dimensions
+    this.baseUrl = baseUrl.replace(/\/$/, '')
   }
 
   async embed(input: EmbeddingInput): Promise<Float32Array> {
@@ -216,7 +218,7 @@ export class OpenAIEmbeddings implements EmbeddingProvider {
       throw new Error('OpenAIEmbeddings only supports text input')
     }
 
-    const response = await fetch('https://api.openai.com/v1/embeddings', {
+    const response = await fetch(`${this.baseUrl}/embeddings`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -246,7 +248,7 @@ export class OpenAIEmbeddings implements EmbeddingProvider {
       return input.text
     })
 
-    const response = await fetch('https://api.openai.com/v1/embeddings', {
+    const response = await fetch(`${this.baseUrl}/embeddings`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -275,6 +277,7 @@ export interface EmbeddingProviderConfig {
   model?: string
   dimensions?: number
   multimodal?: boolean  // For llamacpp with mmproj
+  baseUrl?: string      // Custom base URL for OpenAI-compatible APIs
 }
 
 export function createEmbeddingProvider(
@@ -298,7 +301,7 @@ export function createEmbeddingProvider(
       )
     case 'openai':
       if (!config.apiKey) throw new Error('OpenAI API key required')
-      return new OpenAIEmbeddings(config.apiKey, config.model, config.dimensions)
+      return new OpenAIEmbeddings(config.apiKey, config.model, config.dimensions, config.baseUrl)
     default:
       throw new Error(`Unknown embedding provider: ${type}`)
   }
