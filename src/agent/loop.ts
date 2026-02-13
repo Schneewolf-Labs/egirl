@@ -1,10 +1,16 @@
-import type { ChatMessage, ChatResponse, LLMProvider, ToolCall } from '../providers/types'
+import type { ChatMessage, ChatResponse, LLMProvider, ToolCall, ToolDefinition, Tokenizer } from '../providers/types'
+import { ContextSizeError } from '../providers/types'
 import type { RuntimeConfig } from '../config'
 import type { ToolExecutor, ToolResult } from '../tools'
 import type { AgentEventHandler } from './events'
 import { Router, shouldRetryWithRemote } from '../routing'
-import { createAgentContext, addMessage, getMessagesWithSystem, type AgentContext } from './context'
+import { createAgentContext, addMessage, type AgentContext } from './context'
+import { fitToContextWindow } from './context-window'
+import { createLlamaCppTokenizer } from '../providers/llamacpp'
 import { log } from '../util/logger'
+
+/** Default context limits for remote providers */
+const REMOTE_CONTEXT_LENGTH = 200_000
 
 export interface AgentLoopOptions {
   maxTurns?: number
@@ -30,6 +36,7 @@ export class AgentLoop {
   private localProvider: LLMProvider
   private remoteProvider: LLMProvider | null
   private context: AgentContext
+  private tokenizer: Tokenizer
 
   constructor(
     config: RuntimeConfig,
@@ -45,6 +52,7 @@ export class AgentLoop {
     this.localProvider = localProvider
     this.remoteProvider = remoteProvider
     this.context = createAgentContext(config, sessionId)
+    this.tokenizer = createLlamaCppTokenizer(config.local.endpoint)
   }
 
   async run(userMessage: string, options: AgentLoopOptions = {}): Promise<AgentResponse> {
@@ -74,17 +82,13 @@ export class AgentLoop {
     while (turns < maxTurns) {
       turns++
 
-      const messages = getMessagesWithSystem(this.context)
       const tools = this.toolExecutor.getDefinitions()
-
-      log.debug('agent', `Turn ${turns}: sending ${messages.length} messages to ${currentProvider.name}`)
-
-      const response = await currentProvider.chat({
-        messages,
+      const response = await this.chatWithContextWindow(
+        currentProvider,
         tools,
-        // Stream tokens when a handler is listening
-        onToken: events?.onToken,
-      })
+        currentTarget,
+        events?.onToken
+      )
 
       totalUsage.input_tokens += response.usage.input_tokens
       totalUsage.output_tokens += response.usage.output_tokens
@@ -155,6 +159,67 @@ export class AgentLoop {
       usage: totalUsage,
       escalated,
       turns,
+    }
+  }
+
+  /**
+   * Send messages to a provider with context window management.
+   * Uses the llama.cpp tokenizer for accurate token counting.
+   * Retries once with the server's actual n_ctx if the count was still off.
+   */
+  private async chatWithContextWindow(
+    provider: LLMProvider,
+    tools: ToolDefinition[],
+    target: 'local' | 'remote',
+    onToken?: (token: string) => void
+  ): Promise<ChatResponse> {
+    const contextLength = target === 'local'
+      ? this.config.local.contextLength
+      : REMOTE_CONTEXT_LENGTH
+
+    // Use real tokenizer for local provider, skip for remote (no endpoint to call)
+    const tokenizer = target === 'local' ? this.tokenizer : undefined
+
+    const fitted = await fitToContextWindow(
+      this.context.systemPrompt,
+      this.context.messages,
+      tools,
+      { contextLength },
+      tokenizer
+    )
+
+    const messages: ChatMessage[] = [
+      { role: 'system', content: this.context.systemPrompt },
+      ...fitted,
+    ]
+
+    log.debug('agent', `Sending ${messages.length} messages to ${provider.name} (budget: ${contextLength}t)`)
+
+    try {
+      return await provider.chat({ messages, tools, onToken })
+    } catch (error) {
+      if (!(error instanceof ContextSizeError)) throw error
+
+      // Server reported a different context size than our config — retrim and retry once
+      log.warn(
+        'agent',
+        `Server n_ctx=${error.contextSize} differs from config (${contextLength}). Retrimming.`
+      )
+
+      const refitted = await fitToContextWindow(
+        this.context.systemPrompt,
+        this.context.messages,
+        tools,
+        { contextLength: error.contextSize },
+        tokenizer
+      )
+
+      const retryMessages: ChatMessage[] = [
+        { role: 'system', content: this.context.systemPrompt },
+        ...refitted,
+      ]
+
+      return await provider.chat({ messages: retryMessages, tools, onToken })
     }
   }
 
