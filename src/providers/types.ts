@@ -26,6 +26,8 @@ export interface ChatRequest {
   tools?: ToolDefinition[]
   temperature?: number
   max_tokens?: number
+  /** If provided, the provider streams tokens via this callback */
+  onToken?: (token: string) => void
 }
 
 export interface ChatResponse {

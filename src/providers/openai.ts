@@ -6,8 +6,8 @@ export class OpenAIProvider implements LLMProvider {
   private client: OpenAI
   private model: string
 
-  constructor(apiKey: string, model: string) {
-    this.client = new OpenAI({ apiKey })
+  constructor(apiKey: string, model: string, baseUrl?: string) {
+    this.client = new OpenAI({ apiKey, ...(baseUrl && { baseURL: baseUrl }) })
     this.model = model
     this.name = `openai/${model}`
   }
@@ -15,7 +15,7 @@ export class OpenAIProvider implements LLMProvider {
   async chat(req: ChatRequest): Promise<ChatResponse> {
     const messages = this.prepareMessages(req.messages)
 
-    const openaiReq: OpenAI.Chat.ChatCompletionCreateParams = {
+    const params: OpenAI.Chat.ChatCompletionCreateParamsNonStreaming = {
       model: this.model,
       messages,
       ...(req.max_tokens && { max_tokens: req.max_tokens }),
@@ -23,7 +23,7 @@ export class OpenAIProvider implements LLMProvider {
     }
 
     if (req.tools && req.tools.length > 0) {
-      openaiReq.tools = req.tools.map(t => ({
+      params.tools = req.tools.map(t => ({
         type: 'function',
         function: {
           name: t.name,
@@ -33,7 +33,11 @@ export class OpenAIProvider implements LLMProvider {
       }))
     }
 
-    const response = await this.client.chat.completions.create(openaiReq)
+    if (req.onToken) {
+      return this.chatStream(params, req.onToken)
+    }
+
+    const response = await this.client.chat.completions.create(params)
 
     const choice = response.choices[0]
     const tool_calls: ToolCall[] | undefined = choice?.message?.tool_calls?.map(tc => ({
@@ -50,6 +54,74 @@ export class OpenAIProvider implements LLMProvider {
         output_tokens: response.usage?.completion_tokens ?? 0,
       },
       model: response.model,
+    }
+  }
+
+  private async chatStream(
+    params: OpenAI.Chat.ChatCompletionCreateParamsNonStreaming,
+    onToken: (token: string) => void
+  ): Promise<ChatResponse> {
+    const stream = await this.client.chat.completions.create({
+      ...params,
+      stream: true,
+      stream_options: { include_usage: true },
+    })
+
+    let content = ''
+    const toolCallAccumulator = new Map<number, { id: string; name: string; arguments: string }>()
+    let usage = { prompt_tokens: 0, completion_tokens: 0 }
+    let model = this.model
+
+    for await (const chunk of stream) {
+      model = chunk.model ?? model
+
+      if (chunk.usage) {
+        usage = {
+          prompt_tokens: chunk.usage.prompt_tokens ?? 0,
+          completion_tokens: chunk.usage.completion_tokens ?? 0,
+        }
+      }
+
+      const delta = chunk.choices?.[0]?.delta
+      if (!delta) continue
+
+      if (delta.content) {
+        content += delta.content
+        onToken(delta.content)
+      }
+
+      if (delta.tool_calls) {
+        for (const tc of delta.tool_calls) {
+          const existing = toolCallAccumulator.get(tc.index)
+          if (existing) {
+            existing.arguments += tc.function?.arguments ?? ''
+          } else {
+            toolCallAccumulator.set(tc.index, {
+              id: tc.id ?? '',
+              name: tc.function?.name ?? '',
+              arguments: tc.function?.arguments ?? '',
+            })
+          }
+        }
+      }
+    }
+
+    const tool_calls: ToolCall[] | undefined = toolCallAccumulator.size > 0
+      ? Array.from(toolCallAccumulator.values()).map(tc => ({
+          id: tc.id,
+          name: tc.name,
+          arguments: JSON.parse(tc.arguments),
+        }))
+      : undefined
+
+    return {
+      content,
+      tool_calls,
+      usage: {
+        input_tokens: usage.prompt_tokens,
+        output_tokens: usage.completion_tokens,
+      },
+      model,
     }
   }
 
@@ -87,6 +159,6 @@ export class OpenAIProvider implements LLMProvider {
   }
 }
 
-export function createOpenAIProvider(apiKey: string, model: string): LLMProvider {
-  return new OpenAIProvider(apiKey, model)
+export function createOpenAIProvider(apiKey: string, model: string, baseUrl?: string): LLMProvider {
+  return new OpenAIProvider(apiKey, model, baseUrl)
 }

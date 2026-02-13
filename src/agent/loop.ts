@@ -2,6 +2,7 @@ import type { ChatMessage, ChatResponse, LLMProvider, ToolCall, ToolDefinition, 
 import { ContextSizeError } from '../providers/types'
 import type { RuntimeConfig } from '../config'
 import type { ToolExecutor, ToolResult } from '../tools'
+import type { AgentEventHandler } from './events'
 import { Router, shouldRetryWithRemote } from '../routing'
 import { createAgentContext, addMessage, type AgentContext } from './context'
 import { fitToContextWindow } from './context-window'
@@ -13,6 +14,7 @@ const REMOTE_CONTEXT_LENGTH = 200_000
 
 export interface AgentLoopOptions {
   maxTurns?: number
+  events?: AgentEventHandler
 }
 
 export interface AgentResponse {
@@ -54,7 +56,7 @@ export class AgentLoop {
   }
 
   async run(userMessage: string, options: AgentLoopOptions = {}): Promise<AgentResponse> {
-    const { maxTurns = 10 } = options
+    const { maxTurns = 10, events } = options
 
     // Add user message to context
     addMessage(this.context, { role: 'user', content: userMessage })
@@ -84,7 +86,8 @@ export class AgentLoop {
       const response = await this.chatWithContextWindow(
         currentProvider,
         tools,
-        currentTarget
+        currentTarget,
+        events?.onToken
       )
 
       totalUsage.input_tokens += response.usage.input_tokens
@@ -109,10 +112,22 @@ export class AgentLoop {
           tool_calls: response.tool_calls,
         })
 
+        // Emit thinking text (content that came with tool calls)
+        if (response.content && events?.onThinking) {
+          events.onThinking(response.content)
+        }
+
+        // Emit tool call start event
+        events?.onToolCallStart?.(response.tool_calls)
+
         const toolResults = await this.executeTools(response.tool_calls)
 
         for (const [callId, result] of toolResults) {
           log.debug('agent', `Tool ${callId}: ${result.output.substring(0, 100)}${result.output.length > 100 ? '...' : ''}`)
+
+          const call = response.tool_calls.find(c => c.id === callId)
+          events?.onToolCallComplete?.(callId, call?.name ?? 'unknown', result)
+
           addMessage(this.context, {
             role: 'tool',
             content: result.output,
@@ -133,6 +148,7 @@ export class AgentLoop {
       // No tool calls, we have a final response
       finalContent = response.content
       addMessage(this.context, { role: 'assistant', content: finalContent })
+      events?.onResponseComplete?.()
       break
     }
 
@@ -154,7 +170,8 @@ export class AgentLoop {
   private async chatWithContextWindow(
     provider: LLMProvider,
     tools: ToolDefinition[],
-    target: 'local' | 'remote'
+    target: 'local' | 'remote',
+    onToken?: (token: string) => void
   ): Promise<ChatResponse> {
     const contextLength = target === 'local'
       ? this.config.local.contextLength
@@ -179,7 +196,7 @@ export class AgentLoop {
     log.debug('agent', `Sending ${messages.length} messages to ${provider.name} (budget: ${contextLength}t)`)
 
     try {
-      return await provider.chat({ messages, tools })
+      return await provider.chat({ messages, tools, onToken })
     } catch (error) {
       if (!(error instanceof ContextSizeError)) throw error
 
@@ -202,7 +219,7 @@ export class AgentLoop {
         ...refitted,
       ]
 
-      return await provider.chat({ messages: retryMessages, tools })
+      return await provider.chat({ messages: retryMessages, tools, onToken })
     }
   }
 

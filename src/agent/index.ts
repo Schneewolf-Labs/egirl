@@ -7,3 +7,4 @@ export {
   type AgentContext,
 } from './context'
 export { fitToContextWindow, estimateMessageTokens, type ContextWindowConfig } from './context-window'
+export { type AgentEventHandler } from './events'
