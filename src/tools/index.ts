@@ -46,6 +46,7 @@ import {
   createGitHubTools,
   type GitHubConfig,
 } from './builtin'
+import { createWorkflowTool, builtinWorkflows } from '../workflows'
 
 /**
  * Create tool executor with all default tools.
@@ -114,6 +115,9 @@ export function createDefaultToolExecutor(
       gh.ghBranchCreateTool,
     ])
   }
+
+  // Workflow tool (registered last — it references the executor to call other tools)
+  executor.register(createWorkflowTool(executor, builtinWorkflows))
 
   return executor
 }
