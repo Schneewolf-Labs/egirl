@@ -77,11 +77,14 @@ CREATE TABLE tasks (
   kind TEXT NOT NULL,              -- 'scheduled' | 'event' | 'oneshot'
   status TEXT NOT NULL,            -- 'proposed' | 'active' | 'paused' | 'done' | 'failed'
 
-  -- What to do (the agent prompt for this task)
+  -- What to do: either a prompt (agent decides how) or a workflow (structured steps)
   prompt TEXT NOT NULL,
+  workflow TEXT,                  -- JSON: optional workflow definition (see Workflow Integration)
+                                 -- If set, runs via WorkflowEngine instead of prompt-based AgentLoop
 
   -- Memory context: keys the agent should load before running
   memory_context TEXT,            -- JSON array of memory keys, e.g. ["deploy-config", "ci-notes"]
+  memory_category TEXT,           -- category filter for proactive retrieval: 'project', 'fact', etc.
 
   -- Scheduling (for kind='scheduled')
   interval_ms INTEGER,            -- run every N ms
@@ -259,7 +262,7 @@ async function handleWebhook(req: Request): Promise<Response> {
 
 #### GitHub Events (`src/tasks/events/github.ts`)
 
-Polls GitHub via the `gh` CLI. This is deliberate — it avoids requiring webhook infrastructure, works behind firewalls, and `gh` is already authenticated.
+Polls GitHub using the native GitHub tools (`gh_pr_list`, `gh_ci_status`, `gh_issue_list`, etc. from `src/tools/builtin/github.ts`). This avoids requiring webhook infrastructure, works behind firewalls, and uses the existing `GITHUB_TOKEN` auth.
 
 ```typescript
 // event_config schema:
@@ -282,19 +285,21 @@ type GitHubEventType =
   | 'release'        // new release published
 ```
 
-**Implementation**: Each event type maps to a `gh` command:
+**Implementation**: Each event type maps to a GitHub tool from `src/tools/builtin/github.ts`:
 
-| Event | Command | Diffing |
-|-------|---------|---------|
-| `push` | `gh api repos/{repo}/commits?sha={ref}&per_page=1` | compare HEAD SHA |
-| `pr_opened` | `gh pr list --state open --json number,createdAt` | compare count/latest |
-| `pr_review` | `gh pr view {number} --json reviews,comments` | compare review count |
-| `ci_complete` | `gh run list --branch {ref} --limit 1 --json status,conclusion` | compare run ID + status |
-| `ci_failed` | same as ci_complete | filter for `conclusion=failure` |
-| `issue_opened` | `gh issue list --state open --json number,createdAt` | compare count/latest |
-| `release` | `gh release list --limit 1` | compare tag name |
+| Event | Tool / API | Diffing |
+|-------|-----------|---------|
+| `push` | `gh_ci_status` (ref) or GitHub commits API | compare HEAD SHA |
+| `pr_opened` | `gh_pr_list` (state=open) | compare count/latest number |
+| `pr_review` | `gh_pr_view` (number, includes reviews) | compare review count |
+| `pr_merged` | `gh_pr_list` (state=closed) | check merge status |
+| `ci_complete` | `gh_ci_status` (ref) | compare check run conclusions |
+| `ci_failed` | `gh_ci_status` (ref) | filter for `conclusion=failure` |
+| `issue_opened` | `gh_issue_list` (state=open) | compare count/latest |
+| `issue_comment` | `gh_issue_view` (number, includes comments) | compare comment count |
+| `release` | GitHub releases API | compare tag name |
 
-The source maintains a snapshot of the last-seen state. On each poll, it compares and fires if anything changed. The snapshot is stored in the task's `last_result_hash` field.
+The event source calls the tools directly via the `ToolExecutor` — no LLM involved in polling. It maintains a snapshot of the last-seen state. On each poll, it compares and fires if anything changed. The snapshot is stored in the task's `last_result_hash` field.
 
 **Why not GitHub webhooks?** You can use them — configure a `webhook` event source pointing at `/hooks/github` and set up the webhook on GitHub. But the poll approach works out of the box with zero setup, which fits the local-first philosophy. Most events don't need sub-second latency.
 
@@ -361,26 +366,112 @@ interface TaskRunner {
 **Execution flow per task:**
 
 ```
-1. Load memory context: if task.memory_context is set,
-   fetch those memory keys and include as system context
-2. Create a fresh AgentLoop with session ID "task:{taskId}"
-3. Build system prompt:
+1. Check if task has a workflow definition:
+   - YES → run via WorkflowEngine (no LLM, see Workflow Integration below)
+   - NO  → continue with prompt-based execution
+
+2. Gather workspace context via gatherStandup() — gives the agent
+   branch state, uncommitted changes, recent commits for free
+
+3. Load memory context:
+   - Pre-load task.memory_context keys (explicit context)
+   - Run proactive retrieval against task.prompt with category filter
+     (same as interactive — uses memory.retrieveForContext())
+
+4. Create a fresh AgentLoop with session ID "task:{taskId}"
+
+5. Build system prompt:
    "You are executing a background task: {task.description}
     Use memory tools to store any findings worth remembering.
+    Use memory_recall for temporal context ('what happened last run').
     If you need context from previous runs, search memory."
-4. If triggered by event, prepend event payload to user message:
+   + standup context (appended as additionalContext)
+   + pre-loaded memory context
+
+6. If triggered by event, prepend event payload to user message:
    "[Event: {payload.summary}]\n{payload.data}\n\n{task.prompt}"
-5. Run the agent with the prompt
-6. Capture the final response content
-7. Hash the result, compare with last_result_hash (for on_change notification)
-8. If notification criteria met → send to channel via Outbound
-9. Update scheduling state (next_run_at, run_count, last_run_at)
-10. If max_runs reached → set status to 'done'
+
+7. Run the agent with the prompt
+
+8. Capture the final response content
+
+9. Auto-extract memories from the task conversation (fire-and-forget,
+   same as interactive — uses extractMemories() with source='auto',
+   tagged with session "task:{taskId}" for traceability)
+
+10. Hash the result, compare with last_result_hash (for on_change notification)
+
+11. If notification criteria met → send to channel via Outbound
+
+12. Update scheduling state (next_run_at, run_count, last_run_at)
+
+13. If max_runs reached → set status to 'done'
 ```
 
-**Memory integration**: Task prompts have access to the full tool set including memory tools. The system prompt encourages the agent to use `memory_set` for persisting findings and `memory_search` for retrieving context from prior runs. This way the agent builds up institutional knowledge across runs without needing conversation history. When creating a task, the user or agent can specify `memory_context` — a list of memory keys to pre-load into the system prompt. This gives the task agent immediate access to relevant context without searching for it.
+**Memory integration**: Task prompts have access to the full tool set including all memory tools — `memory_search`, `memory_set`, `memory_recall` (temporal queries), `memory_list`, and `memory_delete`. The enhanced memory system (PR #31) provides:
 
-### 4. Outbound Messaging
+- **Proactive retrieval**: Before the agent sees the prompt, relevant memories are automatically injected into context (same hybrid search used in interactive sessions, filtered by `memory_category` if set on the task)
+- **Categories**: Task memories can be categorized (`project`, `fact`, `entity`, etc.) for scoped retrieval. A CI task stores findings as `category: 'project'`, a PR watcher as `category: 'entity'`
+- **Temporal queries**: `memory_recall` lets the agent ask "what happened in the last hour" — useful for comparing across runs without explicit state management
+- **Auto-extraction**: After each task run, the auto-extractor scans the conversation for notable facts and stores them with `source: 'auto'`. This is fire-and-forget, uses the local model, zero cost
+- **Explicit context**: `memory_context` pre-loads specific keys. `memory_category` scopes proactive retrieval to relevant categories
+
+This means the agent builds up institutional knowledge across runs. A CI watcher doesn't just report "build failed" — it can correlate with previous failures, track flaky tests, and reference decisions stored in memory.
+
+### 4. Workflow Integration
+
+Tasks with structured, repeatable steps can use the workflow engine (`src/workflows/engine.ts`) instead of prompt-based execution. When a task has a `workflow` field, the runner bypasses the `AgentLoop` entirely and runs the workflow via `executeWorkflow()`. This is faster, cheaper (no LLM tokens), and deterministic.
+
+**When to use workflows vs prompts:**
+
+| Use case | Approach | Why |
+|----------|----------|-----|
+| "Run tests and report" | Workflow | Deterministic steps, no LLM needed |
+| "Check CI and analyze failures" | Prompt | Needs LLM to interpret failure output |
+| "Pull, test, fix, push" | Workflow | Built-in `pull-test-fix` workflow |
+| "Watch PR and summarize reviews" | Prompt | Needs LLM to summarize prose |
+| "Git pull then run linter" | Workflow | Two sequential commands |
+
+**Workflow task definition:**
+
+```json
+{
+  "name": "auto-test-fix",
+  "description": "Pull latest, run tests, auto-fix if broken",
+  "kind": "scheduled",
+  "interval": "1h",
+  "workflow": {
+    "name": "pull-test-fix",
+    "params": {
+      "branch": "main",
+      "test_command": "bun test",
+      "remote": "origin"
+    }
+  },
+  "notify": "on_failure"
+}
+```
+
+**Hybrid approach**: A task can have both a `workflow` and a `prompt`. In this case, the workflow runs first. If any step fails, the prompt-based agent takes over with the workflow results as context — it can analyze what went wrong and decide what to do. This gives you deterministic happy-path execution with LLM-powered error handling.
+
+```json
+{
+  "name": "smart-test-fix",
+  "description": "Run tests, use AI to diagnose failures",
+  "workflow": {
+    "steps": [
+      { "name": "test", "tool": "execute_command", "params": { "command": "bun test" } }
+    ]
+  },
+  "prompt": "The test run failed. Analyze the output above, identify the root cause, and suggest a fix. Store your analysis in memory as 'test-failure-{date}'."
+}
+```
+
+**Ad-hoc workflow steps**: The `task_add` tool accepts inline `steps` for simple multi-command tasks. These are compiled into a workflow at creation time, avoiding the overhead of naming and registering a formal workflow.
+
+The runner integrates with `WorkflowEngine.executeWorkflow()` and uses `{{steps.x.output}}` interpolation for passing data between steps. Retry and `continue_on_error` settings from the workflow spec apply per-step.
+
+### 5. Outbound Messaging
 
 Channels gain a `send()` method for unprompted outbound messages.
 
@@ -409,7 +500,7 @@ async send(target: string, message: string): Promise<void> {
 
 **CLI implementation:** Print inline to stdout. The model can format however it wants — it's just text output. No special framing needed; the model will naturally indicate what it's reporting on.
 
-### 5. Task Tools (`src/tools/builtin/tasks.ts`)
+### 6. Task Tools (`src/tools/builtin/tasks.ts`)
 
 Tools the agent can use during normal conversations to manage background work.
 
@@ -431,13 +522,15 @@ Tools the agent can use during normal conversations to manage background work.
   "name": "string — short identifier",
   "description": "string — what this task does",
   "prompt": "string — the agent prompt to execute each run",
+  "workflow": "string | object — named workflow ('pull-test-fix') or inline steps",
   "kind": "scheduled | event | oneshot",
   "interval": "string — human-readable: '30m', '2h', '1d' (scheduled only)",
   "event_source": "file | webhook | github | command (event only)",
   "event_config": "object — source-specific config (event only)",
   "notify": "always | on_change | on_failure | never",
   "max_runs": "number | null",
-  "memory_context": "string[] — memory keys to pre-load"
+  "memory_context": "string[] — memory keys to pre-load",
+  "memory_category": "string — category filter for proactive retrieval"
 }
 ```
 
@@ -461,7 +554,7 @@ The channel and target are inferred from the current conversation context — if
 }
 ```
 
-### 6. Proposal & Approval Flow
+### 7. Proposal & Approval Flow
 
 When the agent notices an opportunity for background work, it uses `task_propose` instead of `task_add`. Proposed tasks don't run until approved.
 
@@ -499,7 +592,7 @@ discord.onReaction(async (event) => {
 
 Print the proposal. User types `approve <taskId>` or `reject <taskId>`.
 
-### 7. Discovery: Finding Work (`src/tasks/discovery.ts`)
+### 8. Discovery: Finding Work (`src/tasks/discovery.ts`)
 
 A special scheduled "meta-task" that looks for useful work. Runs at low frequency during idle time (default: every 30 minutes, only when no interactive messages for 10+ minutes).
 
@@ -507,16 +600,17 @@ A special scheduled "meta-task" that looks for useful work. Runs at low frequenc
 
 **How it works:**
 
-1. Build context from: recent conversation snippets (last few messages from active sessions), current git status, active tasks list, time of day
-2. Pre-load any memory context that seems relevant (let the agent call `memory_search` too)
-3. Prompt the agent:
-   > "Based on recent context, is there any useful background work worth proposing?
-   > Consider: CI status, open PRs, pending TODOs mentioned in conversation, files being discussed, anything the user seemed to be waiting on.
-   > Use memory_search to check for relevant stored context.
+1. Gather workspace context via `gatherStandup()` — branch state, uncommitted files, recent commits
+2. Run proactive memory retrieval against a broad query ("recent project context, pending work, open items")
+3. Build context: standup + recalled memories + active tasks list + time of day
+4. Prompt the agent (local model, full tool access):
+   > "Based on the workspace and memory context below, is there any useful background work worth proposing?
+   > Consider: CI status, open PRs, pending TODOs, files being discussed, anything the user seemed to be waiting on.
+   > Use memory_search and memory_recall to check for relevant context.
    > Only propose something if it's genuinely useful — don't make work for the sake of it.
    > Use task_propose for each suggestion."
-4. If the agent produces `task_propose` calls → those go through the normal approval flow
-5. If nothing useful → do nothing, silently
+5. If the agent produces `task_propose` calls → those go through the normal approval flow
+6. If nothing useful → do nothing, silently
 
 **Guard rails:**
 
@@ -560,24 +654,49 @@ Created in `createAppServices()` after conversation store, similar pattern. The 
 
 ### Agent Loop
 
-No changes to `AgentLoop` itself. Background tasks use the same `AgentLoop` class with a different session ID (`task:{taskId}`) and the full tool set.
+No changes to `AgentLoop` itself. Prompt-based background tasks use the same `AgentLoop` class with a different session ID (`task:{taskId}`), full tool set, and `additionalContext` set to standup output. Workflow-based tasks bypass `AgentLoop` entirely and use `executeWorkflow()` from `src/workflows/engine.ts`.
+
+### Workflow Engine
+
+Tasks with a `workflow` field run through the existing `WorkflowEngine` (`src/workflows/engine.ts`). This means:
+- No LLM tokens consumed for deterministic steps
+- Step interpolation (`{{steps.test.output}}`) passes data between steps
+- Conditional execution (`if: "test.failed"`) handles branching
+- Per-step retry logic handles transient failures
+- Built-in workflows (`pull-test-fix`, `test-fix`, `commit-push`) are available immediately
+- The `run_workflow` tool is also available to prompt-based tasks, so the agent can decide to use a workflow mid-execution
 
 ### Memory
 
-Background tasks have full access to memory tools. The system prompt encourages the agent to:
-- Use `memory_set` to persist findings across runs ("CI pipeline #4521: 3 tests failed in auth module")
-- Use `memory_search` to retrieve context from prior runs or related conversations
-- Pre-load specific memory keys via `memory_context` field on the task
+The enhanced memory system (PR #31) integrates deeply with background tasks:
 
-This means the agent builds up knowledge over time. A task watching CI doesn't just report "build failed" — it can correlate with previous failures, track flaky tests, notice patterns.
+- **Proactive retrieval**: Before each task run, `retrieveForContext()` injects relevant memories based on the task prompt. Filtered by `memory_category` if set on the task
+- **Auto-extraction**: After each task run, `extractMemories()` scans the conversation for notable facts (fire-and-forget, local model). Stored with `source: 'auto'`, `session_id: 'task:{taskId}'`
+- **Temporal queries**: `memory_recall` lets the agent query by time range — "what happened in the last hour" is natural for comparing across runs
+- **Categories**: Task memories should use appropriate categories (`project` for CI findings, `entity` for PR/issue state, `fact` for concrete results). This scopes retrieval so a CI task doesn't get flooded with unrelated conversation memories
+- **Pre-loaded keys**: `memory_context` field explicitly loads specific keys into system prompt before execution
+
+### Standup Context
+
+Background tasks get workspace context via `gatherStandup()` from `src/standup/gather.ts`. This is injected as `additionalContext` on the `AgentLoop`, same as interactive sessions. The agent immediately knows: current branch, ahead/behind status, uncommitted files, recent commits, stash count. No git commands needed to orient itself.
 
 ### Conversation Store
 
 Task runs are persisted in `task_runs`, not in `conversations`. The task agent's conversation is ephemeral — it's rebuilt each run from the task prompt plus memory context. This keeps the conversation store clean (no phantom "conversations" from background work).
 
+### GitHub Tools
+
+The GitHub event source (`src/tasks/events/github.ts`) uses the native GitHub tools from `src/tools/builtin/github.ts` for polling — `gh_pr_list`, `gh_ci_status`, `gh_issue_list`, `gh_pr_view`, etc. These tools call the GitHub API directly via `fetch()` with token auth, no `gh` CLI dependency for polling. The event source calls tools through `ToolExecutor` directly (no LLM), compares output hashes, and fires events on change.
+
+Prompt-based task agents also have access to the full GitHub tool set, so they can create PRs, comment on issues, check CI, and create branches as part of task execution.
+
 ### Routing
 
 Background tasks always start with the local model. The normal escalation logic still applies — if the local model can't handle a task, it escalates to remote. But this should be rare; background tasks are typically simple (check a status, parse some output, diff two things).
+
+### Notification Filtering
+
+For Discord passive channels, the batch evaluator (`src/channels/discord/batch-evaluator.ts`) provides a relevance scoring pattern. Background task notifications can optionally use the same approach — before sending a notification to a passive channel, run `evaluateRelevance()` to check if the result is actually worth interrupting for. This prevents noisy tasks from spamming channels. Active channels (DMs, direct mentions) skip this filter — if you asked for a task, you get the notification.
 
 ### API Server
 
@@ -602,10 +721,11 @@ Agent calls `task_add`:
 {
   "name": "watch-ci-main",
   "description": "Monitor CI pipeline for main branch",
-  "prompt": "Check the CI status for the main branch. Run `gh run list --branch main --limit 5` and look at the status. If any runs failed since the last check, report which ones and what failed. Store results in memory with key 'ci-main-latest' for future reference. If all passing, report nothing.",
+  "prompt": "Check CI status for main using gh_ci_status. If any checks failed since the last run, report which ones and what failed. Use memory_recall to compare with previous results. Store findings in memory with key 'ci-main-latest' (category: project). If all passing, report nothing.",
   "kind": "scheduled",
   "interval": "30m",
-  "notify": "on_change"
+  "notify": "on_change",
+  "memory_category": "project"
 }
 ```
 
@@ -655,7 +775,7 @@ Agent calls `task_add`:
 {
   "name": "watch-pr-42-reviews",
   "description": "Watch PR #42 for new reviews",
-  "prompt": "Check PR #42 for new reviews or comments. Run `gh pr view 42 --json reviews,comments`. Compare with memory key 'pr-42-state'. If there are new reviews or comments since last check, summarize them. Update 'pr-42-state' with current state.",
+  "prompt": "Check PR #42 for new reviews or comments using gh_pr_view. Compare with memory key 'pr-42-state'. If there are new reviews or comments since last check, summarize them. Update 'pr-42-state' with current state.",
   "kind": "event",
   "event_source": "github",
   "event_config": {
@@ -663,7 +783,8 @@ Agent calls `task_add`:
     "poll_interval_ms": 120000
   },
   "notify": "on_change",
-  "memory_context": ["pr-42-state"]
+  "memory_context": ["pr-42-state"],
+  "memory_category": "entity"
 }
 ```
 
@@ -679,7 +800,7 @@ Agent calls `task_add`:
     "events": ["issue_opened"],
     "poll_interval_ms": 300000
   },
-  "prompt": "A new issue was opened. Read it with `gh issue view {number}`. Give a brief summary — title, who opened it, key points. If it looks like a bug report, note the severity.",
+  "prompt": "A new issue was opened. Use gh_issue_view to read it. Give a brief summary — title, who opened it, key points. If it looks like a bug report, note the severity. Store a summary in memory as 'issue-{number}-summary' (category: entity).",
   "notify": "always"
 }
 ```
@@ -702,6 +823,53 @@ User has a CI pipeline that can POST to a webhook on completion:
   "notify": "on_failure"
 }
 ```
+
+### "Pull and test every hour" (workflow-based, no LLM)
+
+```json
+{
+  "name": "hourly-test",
+  "description": "Pull latest and run tests — no AI needed",
+  "kind": "scheduled",
+  "interval": "1h",
+  "workflow": {
+    "name": "pull-test-fix",
+    "params": {
+      "branch": "main",
+      "test_command": "bun test",
+      "remote": "origin"
+    }
+  },
+  "notify": "on_failure"
+}
+```
+
+Zero LLM tokens per run. The workflow engine pulls, tests, and only notifies if something breaks. If the built-in `pull-test-fix` workflow includes an auto-fix step that fails, the notification includes the workflow step output.
+
+### "Smart test watcher" (hybrid: workflow + prompt fallback)
+
+```json
+{
+  "name": "smart-test",
+  "description": "Run tests on file change, AI diagnoses failures",
+  "kind": "event",
+  "event_source": "file",
+  "event_config": {
+    "paths": ["src/"],
+    "debounce_ms": 5000
+  },
+  "workflow": {
+    "steps": [
+      { "name": "test", "tool": "execute_command", "params": { "command": "bun test" } }
+    ]
+  },
+  "prompt": "Tests failed. Analyze the output above. Identify the root cause, check if this is a known flaky test (use memory_search for 'flaky'), and suggest a fix. Store analysis as 'test-failure-latest' (category: project).",
+  "notify": "on_failure",
+  "memory_category": "project"
+}
+```
+
+Workflow runs first (fast, free). If tests pass, done — no LLM. If tests fail, the prompt-based agent kicks in to analyze and diagnose.
 
 ### Agent discovers work
 
@@ -767,7 +935,7 @@ src/api/server.ts              # Add addWebhookRoute/removeWebhookRoute
 ## Future Work
 
 - **Cron expressions**: Interval-based scheduling covers most cases, but cron would be nice for "every weekday at 9am". Would need a cron parsing dependency
-- **Task chaining**: "When task A finishes, run task B." Can be done with a `depends_on` field. Not needed yet
-- **Resource budgeting**: Token/cost caps per task per day. Currently relies on timeout + max_runs limits
+- **Task chaining**: "When task A finishes, run task B." Workflow engine already supports step chaining within a task. Cross-task chaining (task A triggers task B) would need a `depends_on` field. Not needed yet
+- **Resource budgeting**: Token/cost caps per task per day. Currently relies on timeout + max_runs limits. Could use the `StatsTracker` to track per-task token usage and enforce budgets
 - **Multi-channel delivery**: A task reports to one channel. Broadcasting isn't hard but isn't needed for single-user
-- **True GitHub webhooks**: Currently GitHub events use polling. Could add a dedicated webhook receiver that parses GitHub's webhook format (X-GitHub-Event headers, signature verification). For now, the generic webhook source works if you point GitHub's webhooks at it
+- **Dedicated GitHub webhook receiver**: Currently GitHub events use polling via the native GitHub tools. The generic webhook event source works for receiving GitHub webhooks too, but a dedicated receiver could parse `X-GitHub-Event` headers and verify signatures with the GitHub HMAC scheme specifically
