@@ -12,15 +12,19 @@ import {
   type Interaction,
 } from 'discord.js'
 import type { AgentLoop, AgentFactory } from '../agent'
+import type { LLMProvider } from '../providers/types'
 import type { Channel } from './types'
 import { createDiscordEventHandler, buildToolCallPrefix } from './discord/events'
 import { splitMessage } from './discord/formatting'
+import { MessageBatcher, evaluateRelevance, formatBatchForAgent, type BufferedMessage } from './discord/batch-evaluator'
 import { log } from '../util/logger'
 
 export interface DiscordConfig {
   token: string
   allowedChannels: string[]  // Channel IDs or 'dm' for DMs
   allowedUsers: string[]     // User IDs (empty = allow all)
+  passiveChannels: string[]  // Channel IDs to passively monitor (respond without being tagged)
+  batchWindowMs: number      // Debounce window before evaluating a batch (ms)
 }
 
 export interface ReactionEvent {
@@ -44,10 +48,21 @@ export class DiscordChannel implements Channel {
   private interactionHandlers: InteractionHandler[] = []
   private messageQueue: Array<() => Promise<void>> = []
   private processing = false
+  private batcher: MessageBatcher | null = null
+  private localProvider: LLMProvider | null = null
 
-  constructor(agentFactory: AgentFactory, config: DiscordConfig) {
+  constructor(agentFactory: AgentFactory, config: DiscordConfig, localProvider?: LLMProvider) {
     this.agentFactory = agentFactory
     this.config = config
+
+    if (config.passiveChannels.length > 0 && localProvider) {
+      this.localProvider = localProvider
+      this.batcher = new MessageBatcher(
+        { windowMs: config.batchWindowMs },
+        (channelId, messages) => this.handleBatch(channelId, messages)
+      )
+      log.info('discord', `Passive monitoring enabled for ${config.passiveChannels.length} channel(s), batch window ${config.batchWindowMs}ms`)
+    }
 
     this.client = new Client({
       intents: [
@@ -187,14 +202,40 @@ export class DiscordChannel implements Channel {
       return
     }
 
-    // Check if channel is allowed
-    if (!this.isChannelAllowed(message)) {
+    const isMentioned = this.isMentioned(message)
+    const isPassive = this.isPassiveChannel(message)
+
+    // Check if channel is allowed (passive channels are implicitly allowed)
+    if (!isPassive && !this.isChannelAllowed(message)) {
       return
     }
 
-    // For guild channels, only respond to mentions
-    if (message.guild && !this.isMentioned(message)) {
+    // For guild channels without a mention
+    if (message.guild && !isMentioned) {
+      // Buffer for passive channels
+      if (isPassive && this.batcher) {
+        const content = message.content.trim()
+        if (!content) return
+
+        log.debug('discord', `Buffering passive message from ${message.author.tag} in ${message.channel.id}`)
+        this.batcher.add(message.channel.id, {
+          author: message.author.displayName ?? message.author.username,
+          authorId: message.author.id,
+          content,
+          timestamp: message.createdAt,
+          message,
+        })
+        return
+      }
+
+      // Non-passive channels require a mention
       return
+    }
+
+    // Direct mention in a passive channel — flush any buffered messages
+    // so they become part of the conversation history
+    if (isPassive && this.batcher) {
+      this.batcher.flushNow(message.channel.id)
     }
 
     // Get the message content (strip bot mention if present)
@@ -286,6 +327,51 @@ export class DiscordChannel implements Channel {
     return false
   }
 
+  private isPassiveChannel(message: Message): boolean {
+    const { passiveChannels } = this.config
+    if (passiveChannels.length === 0) return false
+
+    // DMs are never passive
+    if (message.channel.type === ChannelType.DM) return false
+
+    if (passiveChannels.includes(message.channel.id)) return true
+
+    // Check parent channel for threads
+    if ('parentId' in message.channel && message.channel.parentId) {
+      return passiveChannels.includes(message.channel.parentId)
+    }
+
+    return false
+  }
+
+  /**
+   * Called when the batcher's debounce timer fires for a passive channel.
+   * Evaluates whether the bot should respond, and if so, sends the batch
+   * through the agent loop.
+   */
+  private async handleBatch(channelId: string, messages: BufferedMessage[]): Promise<void> {
+    if (!this.localProvider || messages.length === 0) return
+
+    const botName = this.client.user?.displayName ?? this.client.user?.username ?? 'Kira'
+
+    log.debug('discord', `Evaluating batch of ${messages.length} message(s) in channel ${channelId}`)
+
+    const decision = await evaluateRelevance(this.localProvider, messages, botName)
+    if (!decision.shouldRespond) {
+      log.debug('discord', `Skipping batch in ${channelId}: ${decision.reason}`)
+      return
+    }
+
+    log.info('discord', `Responding to batch in ${channelId}: ${decision.reason}`)
+
+    // Use the last message in the batch as the reply target
+    const lastMessage = messages[messages.length - 1]!.message
+    const agentInput = formatBatchForAgent(messages)
+
+    // Process through the normal agent pipeline
+    this.enqueueMessage(() => this.processMessage(lastMessage, agentInput))
+  }
+
   private isMentioned(message: Message): boolean {
     if (!this.client.user) return false
     return message.mentions.has(this.client.user)
@@ -334,6 +420,7 @@ export class DiscordChannel implements Channel {
 
   async stop(): Promise<void> {
     log.info('discord', 'Stopping Discord bot...')
+    this.batcher?.clear()
     this.client.destroy()
     this.ready = false
   }
@@ -343,6 +430,6 @@ export class DiscordChannel implements Channel {
   }
 }
 
-export function createDiscordChannel(agentFactory: AgentFactory, config: DiscordConfig): DiscordChannel {
-  return new DiscordChannel(agentFactory, config)
+export function createDiscordChannel(agentFactory: AgentFactory, config: DiscordConfig, localProvider?: LLMProvider): DiscordChannel {
+  return new DiscordChannel(agentFactory, config, localProvider)
 }

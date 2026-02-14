@@ -29,6 +29,8 @@ export const EgirlConfigSchema = Type.Object({
     discord: Type.Optional(Type.Object({
       allowed_channels: Type.Array(Type.String(), { default: ['dm'] }),
       allowed_users: Type.Array(Type.String(), { default: [] }),
+      passive_channels: Type.Array(Type.String(), { default: [] }),
+      batch_window_ms: Type.Number({ default: 3000 }),
     })),
     claude_code: Type.Optional(Type.Object({
       permission_mode: Type.Union([
@@ -137,6 +139,8 @@ export interface RuntimeConfig {
       token: string
       allowedChannels: string[]
       allowedUsers: string[]
+      passiveChannels: string[]
+      batchWindowMs: number
     }
     claudeCode?: {
       permissionMode: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan'
