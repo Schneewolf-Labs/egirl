@@ -88,11 +88,12 @@ You have access to these tools:
 - \`git_show\` - Show a specific commit's contents and diff
 
 **Memory:**
-- \`memory_search\` - Search memories (hybrid keyword + semantic)
+- \`memory_search\` - Search memories (hybrid keyword + semantic, with category and time filters)
 - \`memory_get\` - Retrieve a specific memory by key
-- \`memory_set\` - Store a memory for later recall
+- \`memory_set\` - Store a memory with optional category (fact, preference, decision, project, entity)
 - \`memory_delete\` - Delete a memory by key
-- \`memory_list\` - List all stored memories
+- \`memory_list\` - List stored memories (filterable by category and source)
+- \`memory_recall\` - Recall memories from a time period ("last week", "3 days ago", etc.)
 
 **Web:**
 - \`web_research\` - Fetch a URL and return its text content

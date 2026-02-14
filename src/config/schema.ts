@@ -65,6 +65,9 @@ export const EgirlConfigSchema = Type.Object({
     score_threshold: Type.Number({ default: 0.35 }),
     max_results: Type.Number({ default: 5 }),
     max_tokens_budget: Type.Number({ default: 2000 }),
+    auto_extract: Type.Boolean({ default: true }),
+    extraction_min_messages: Type.Number({ default: 2 }),
+    extraction_max_per_turn: Type.Number({ default: 5 }),
   })),
 
   safety: Type.Optional(Type.Object({
@@ -168,6 +171,9 @@ export interface RuntimeConfig {
     scoreThreshold: number
     maxResults: number
     maxTokensBudget: number
+    autoExtract: boolean
+    extractionMinMessages: number
+    extractionMaxPerTurn: number
   }
   safety: {
     enabled: boolean

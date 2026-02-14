@@ -1,4 +1,4 @@
-import type { MemoryIndexer, IndexedMemory, ContentType } from './indexer'
+import type { MemoryIndexer, IndexedMemory, ContentType, MemoryCategory } from './indexer'
 import type { EmbeddingProvider, EmbeddingInput } from './embeddings/index'
 
 export interface SearchResult {
@@ -12,6 +12,9 @@ export interface SearchOptions {
   ftsWeight?: number
   vectorWeight?: number
   contentTypes?: ContentType[]  // Filter by content type
+  categories?: MemoryCategory[]  // Filter by category
+  since?: number  // Filter by creation time (epoch ms)
+  until?: number  // Filter by creation time (epoch ms)
 }
 
 /**
@@ -71,13 +74,26 @@ export class MemorySearch {
     queryEmbedding: Float32Array,
     options: SearchOptions = {}
   ): Promise<SearchResult[]> {
-    const { limit = 10, contentTypes } = options
+    const { limit = 10, contentTypes, categories, since, until } = options
 
     let candidates = this.indexer.getAllWithEmbeddings()
 
     // Filter by content type if specified
     if (contentTypes && contentTypes.length > 0) {
       candidates = candidates.filter(m => contentTypes.includes(m.contentType))
+    }
+
+    // Filter by category if specified
+    if (categories && categories.length > 0) {
+      candidates = candidates.filter(m => categories.includes(m.category))
+    }
+
+    // Filter by time range if specified
+    if (since !== undefined) {
+      candidates = candidates.filter(m => m.createdAt >= since)
+    }
+    if (until !== undefined) {
+      candidates = candidates.filter(m => m.createdAt <= until)
     }
 
     // Compute similarities
@@ -135,7 +151,7 @@ export class MemorySearch {
     query: string,
     options: SearchOptions = {}
   ): Promise<SearchResult[]> {
-    const { limit = 10, ftsWeight = 0.3, vectorWeight = 0.7 } = options
+    const { limit = 10, ftsWeight = 0.3, vectorWeight = 0.7, categories, since, until } = options
 
     // Get FTS results
     const ftsResults = await this.searchText(query, { limit: limit * 2 })
@@ -144,7 +160,7 @@ export class MemorySearch {
     // Get vector results if embeddings available
     let vectorScoreMap = new Map<string, number>()
     if (this.embeddings) {
-      const vectorResults = await this.searchSemantic(query, { limit: limit * 2 })
+      const vectorResults = await this.searchSemantic(query, { limit: limit * 2, categories, since, until })
       vectorScoreMap = new Map(vectorResults.map(r => [r.memory.key, r.score]))
     }
 
@@ -158,13 +174,18 @@ export class MemorySearch {
       const hybridScore = ftsScore * ftsWeight + vectorScore * vectorWeight
 
       const memory = this.indexer.get(key)
-      if (memory) {
-        combined.push({
-          memory,
-          score: hybridScore,
-          matchType: 'hybrid',
-        })
-      }
+      if (!memory) continue
+
+      // Apply category/time filters to combined results (FTS doesn't filter these)
+      if (categories && categories.length > 0 && !categories.includes(memory.category)) continue
+      if (since !== undefined && memory.createdAt < since) continue
+      if (until !== undefined && memory.createdAt > until) continue
+
+      combined.push({
+        memory,
+        score: hybridScore,
+        matchType: 'hybrid',
+      })
     }
 
     return combined.sort((a, b) => b.score - a.score).slice(0, limit)

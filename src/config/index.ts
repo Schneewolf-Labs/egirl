@@ -146,6 +146,9 @@ export function loadConfig(): RuntimeConfig {
       scoreThreshold: toml.memory?.score_threshold ?? 0.35,
       maxResults: toml.memory?.max_results ?? 5,
       maxTokensBudget: toml.memory?.max_tokens_budget ?? 2000,
+      autoExtract: toml.memory?.auto_extract ?? true,
+      extractionMinMessages: toml.memory?.extraction_min_messages ?? 2,
+      extractionMaxPerTurn: toml.memory?.extraction_max_per_turn ?? 5,
     },
     skills: {
       dirs: (toml.skills?.dirs ?? defaultToml.skills.dirs).map(d => expandPath(d, workspacePath)),

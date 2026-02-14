@@ -1,7 +1,8 @@
 export { MemoryFiles, createMemoryFiles, type MemoryEntry } from './files'
-export { MemoryIndexer, createMemoryIndexer, type IndexedMemory, type ContentType } from './indexer'
+export { MemoryIndexer, createMemoryIndexer, type IndexedMemory, type ContentType, type MemoryCategory, type MemorySource } from './indexer'
 export { MemorySearch, createMemorySearch, type SearchResult, type SearchOptions } from './search'
 export { retrieveForContext, type RetrievalConfig } from './retrieval'
+export { extractMemories, type ExtractionResult } from './extractor'
 export {
   createEmbeddingProvider,
   Qwen3VLEmbeddings,
@@ -14,8 +15,8 @@ export {
 
 import { join } from 'path'
 import { createMemoryFiles, type MemoryFiles } from './files'
-import { createMemoryIndexer, type MemoryIndexer, type ContentType } from './indexer'
-import { createMemorySearch, type MemorySearch, type SearchResult } from './search'
+import { createMemoryIndexer, type MemoryIndexer, type ContentType, type MemoryCategory, type MemorySource } from './indexer'
+import { createMemorySearch, type MemorySearch, type SearchResult, type SearchOptions } from './search'
 import { type EmbeddingProvider, type EmbeddingInput } from './embeddings/index'
 import { log } from '../util/logger'
 
@@ -46,7 +47,11 @@ export class MemoryManager {
   /**
    * Store a text memory
    */
-  async set(key: string, value: string): Promise<void> {
+  async set(
+    key: string,
+    value: string,
+    options?: { category?: MemoryCategory; source?: MemorySource; sessionId?: string }
+  ): Promise<void> {
     let embedding: Float32Array | undefined
 
     if (this.embeddings) {
@@ -58,9 +63,15 @@ export class MemoryManager {
       }
     }
 
-    this.indexer.set(key, value, { contentType: 'text', embedding })
-    await this.files.appendToDailyLog(`SET ${key}: ${value.slice(0, 100)}...`)
-    log.debug('memory', `Set memory: ${key}`)
+    this.indexer.set(key, value, {
+      contentType: 'text',
+      embedding,
+      category: options?.category,
+      source: options?.source,
+      sessionId: options?.sessionId,
+    })
+    await this.files.appendToDailyLog(`SET ${key} [${options?.category ?? 'general'}]: ${value.slice(0, 100)}...`)
+    log.debug('memory', `Set memory: ${key} (category=${options?.category ?? 'general'}, source=${options?.source ?? 'manual'})`)
   }
 
   /**
@@ -127,13 +138,17 @@ export class MemoryManager {
   /**
    * Get a memory by key
    */
-  get(key: string): { value: string; imagePath?: string } | null {
+  get(key: string): { value: string; category: MemoryCategory; source: MemorySource; imagePath?: string; createdAt: number; updatedAt: number } | null {
     const memory = this.indexer.get(key)
     if (!memory) return null
 
     return {
       value: memory.value,
+      category: memory.category,
+      source: memory.source,
       imagePath: memory.imagePath,
+      createdAt: memory.createdAt,
+      updatedAt: memory.updatedAt,
     }
   }
 
@@ -183,8 +198,9 @@ export class MemoryManager {
   /**
    * Hybrid search combining FTS and vector
    */
-  async searchHybrid(query: string, limit = 10): Promise<SearchResult[]> {
-    return this.search.searchHybrid(query, { limit })
+  async searchHybrid(query: string, limit?: number | SearchOptions): Promise<SearchResult[]> {
+    const options: SearchOptions = typeof limit === 'number' ? { limit } : (limit ?? {})
+    return this.search.searchHybrid(query, options)
   }
 
   /**
@@ -211,8 +227,43 @@ export class MemoryManager {
   /**
    * List all memories with metadata
    */
-  list(limit = 100, offset = 0): Array<{ key: string; value: string; contentType: string; updatedAt: number }> {
-    return this.indexer.list(limit, offset)
+  list(
+    limit = 100,
+    offset = 0,
+    filters?: { category?: MemoryCategory; source?: MemorySource; since?: number; until?: number }
+  ): Array<{ key: string; value: string; contentType: string; category: MemoryCategory; source: MemorySource; createdAt: number; updatedAt: number }> {
+    return this.indexer.list(limit, offset, filters)
+  }
+
+  /**
+   * Search with category and time-range filters
+   */
+  async searchFiltered(
+    query: string,
+    options?: { limit?: number; categories?: MemoryCategory[]; since?: number; until?: number }
+  ): Promise<SearchResult[]> {
+    return this.search.searchHybrid(query, {
+      limit: options?.limit,
+      categories: options?.categories,
+      since: options?.since,
+      until: options?.until,
+    })
+  }
+
+  /**
+   * Get memories by category
+   */
+  getByCategory(category: MemoryCategory, limit = 100): SearchResult[] {
+    const memories = this.indexer.getByCategory(category, limit)
+    return memories.map(m => ({ memory: m, score: 1, matchType: 'hybrid' as const }))
+  }
+
+  /**
+   * Get memories within a time range
+   */
+  getByTimeRange(since: number, until?: number, limit = 100): SearchResult[] {
+    const memories = this.indexer.getByTimeRange(since, until, limit)
+    return memories.map(m => ({ memory: m, score: 1, matchType: 'hybrid' as const }))
   }
 
   /**
