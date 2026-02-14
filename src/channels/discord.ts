@@ -11,7 +11,7 @@ import {
   type PartialUser,
   type Interaction,
 } from 'discord.js'
-import type { AgentLoop } from '../agent'
+import type { AgentLoop, AgentFactory } from '../agent'
 import type { AgentEventHandler } from '../agent/events'
 import type { ToolCall } from '../providers/types'
 import type { ToolResult } from '../tools/types'
@@ -102,7 +102,8 @@ function buildToolCallPrefix(state: DiscordEventState): string {
 export class DiscordChannel implements Channel {
   readonly name = 'discord'
   private client: Client
-  private agent: AgentLoop
+  private agentFactory: AgentFactory
+  private sessions: Map<string, AgentLoop> = new Map()
   private config: DiscordConfig
   private ready = false
   private reactionHandlers: ReactionHandler[] = []
@@ -110,8 +111,8 @@ export class DiscordChannel implements Channel {
   private messageQueue: Array<() => Promise<void>> = []
   private processing = false
 
-  constructor(agent: AgentLoop, config: DiscordConfig) {
-    this.agent = agent
+  constructor(agentFactory: AgentFactory, config: DiscordConfig) {
+    this.agentFactory = agentFactory
     this.config = config
 
     this.client = new Client({
@@ -218,6 +219,30 @@ export class DiscordChannel implements Channel {
     }
   }
 
+  private resolveSessionKey(message: Message): string {
+    if (message.channel.type === ChannelType.DM) {
+      return `discord:dm:${message.author.id}`
+    }
+    if (
+      message.channel.type === ChannelType.PublicThread ||
+      message.channel.type === ChannelType.PrivateThread ||
+      message.channel.type === ChannelType.AnnouncementThread
+    ) {
+      return `discord:thread:${message.channel.id}`
+    }
+    return `discord:channel:${message.channel.id}`
+  }
+
+  private getOrCreateAgent(sessionKey: string): AgentLoop {
+    let agent = this.sessions.get(sessionKey)
+    if (!agent) {
+      agent = this.agentFactory(sessionKey)
+      this.sessions.set(sessionKey, agent)
+      log.debug('discord', `Created agent for session ${sessionKey}`)
+    }
+    return agent
+  }
+
   private async handleMessage(message: Message): Promise<void> {
     // Ignore bot messages (including our own)
     if (message.author.bot) return
@@ -269,6 +294,9 @@ export class DiscordChannel implements Channel {
   private async processMessage(message: Message, content: string): Promise<void> {
     log.info('discord', `Message from ${message.author.tag}: ${content.slice(0, 100)}...`)
 
+    const sessionKey = this.resolveSessionKey(message)
+    const agent = this.getOrCreateAgent(sessionKey)
+
     // Keep typing indicator alive (Discord expires it after ~10s)
     const typingInterval = setInterval(() => {
       message.channel.sendTyping().catch(() => {})
@@ -280,7 +308,7 @@ export class DiscordChannel implements Channel {
 
       // Run through agent with event handler for tool transparency
       const { handler, state } = createDiscordEventHandler()
-      const response = await this.agent.run(content, { events: handler })
+      const response = await agent.run(content, { events: handler })
 
       // Build response with tool call prefix
       const prefix = buildToolCallPrefix(state)
@@ -289,7 +317,7 @@ export class DiscordChannel implements Channel {
       // Send response (split if too long)
       await this.sendResponse(message, fullResponse)
 
-      log.debug('discord', `Responded via ${response.provider}${response.escalated ? ' (escalated)' : ''}`)
+      log.debug('discord', `[${sessionKey}] Responded via ${response.provider}${response.escalated ? ' (escalated)' : ''}`)
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error)
       log.error('discord', `Error processing message:`, error)
@@ -314,7 +342,14 @@ export class DiscordChannel implements Channel {
     }
 
     // Check specific channel ID
-    return allowedChannels.includes(message.channel.id)
+    if (allowedChannels.includes(message.channel.id)) return true
+
+    // Check parent channel for threads
+    if ('parentId' in message.channel && message.channel.parentId) {
+      return allowedChannels.includes(message.channel.parentId)
+    }
+
+    return false
   }
 
   private isMentioned(message: Message): boolean {
@@ -402,6 +437,6 @@ export class DiscordChannel implements Channel {
   }
 }
 
-export function createDiscordChannel(agent: AgentLoop, config: DiscordConfig): DiscordChannel {
-  return new DiscordChannel(agent, config)
+export function createDiscordChannel(agentFactory: AgentFactory, config: DiscordConfig): DiscordChannel {
+  return new DiscordChannel(agentFactory, config)
 }

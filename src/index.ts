@@ -1,16 +1,46 @@
 #!/usr/bin/env bun
 
+import { join } from 'path'
 import { loadConfig, type RuntimeConfig } from './config'
 import { createProviderRegistry } from './providers'
 import { createRouter } from './routing'
 import { createDefaultToolExecutor, type CodeAgentConfig } from './tools'
-import { createAgentLoop } from './agent'
+import { createAgentLoop, type AgentFactory } from './agent'
 import { createCLIChannel, createClaudeCodeChannel, createDiscordChannel, createXMPPChannel, type ClaudeCodeConfig } from './channels'
 import { createStatsTracker } from './tracking'
 import { createMemoryManager, Qwen3VLEmbeddings, type MemoryManager } from './memory'
+import { createConversationStore, type ConversationStore } from './conversation'
 import { createAPIServer } from './api'
 import { bootstrapWorkspace } from './workspace/bootstrap'
 import { log } from './util/logger'
+
+/**
+ * Create conversation store if enabled, run compaction on startup
+ */
+function createConversations(config: RuntimeConfig): ConversationStore | undefined {
+  if (!config.conversation.enabled) {
+    log.info('main', 'Conversation persistence disabled')
+    return undefined
+  }
+
+  try {
+    const dbPath = join(config.workspace.path, 'conversations.db')
+    const store = createConversationStore(dbPath)
+
+    if (config.conversation.compactOnStartup) {
+      store.compact({
+        maxAgeDays: config.conversation.maxAgeDays,
+        maxMessages: config.conversation.maxMessages,
+      })
+    }
+
+    log.info('main', `Conversation persistence enabled (${config.conversation.maxAgeDays}d retention, ${config.conversation.maxMessages} max messages)`)
+    return store
+  } catch (error) {
+    log.warn('main', 'Failed to initialize conversation store:', error)
+    return undefined
+  }
+}
 
 /**
  * Create memory manager with embeddings if configured
@@ -137,6 +167,9 @@ async function runCLI(config: RuntimeConfig, args: string[]) {
   // Create memory system (if embeddings configured)
   const memory = createMemory(config)
 
+  // Create conversation store
+  const conversations = createConversations(config)
+
   // Create router and tools
   const router = createRouter(config)
   const toolExecutor = createDefaultToolExecutor(memory, getCodeAgentConfig(config))
@@ -144,13 +177,16 @@ async function runCLI(config: RuntimeConfig, args: string[]) {
   // Create stats tracker
   const stats = createStatsTracker()
 
-  // Create agent loop
+  // Create agent loop with conversation persistence
+  const sessionId = singleMessage ? crypto.randomUUID() : 'cli:default'
   const agent = createAgentLoop(
     config,
     router,
     toolExecutor,
     providers.local,
-    providers.remote
+    providers.remote,
+    sessionId,
+    conversations
   )
 
   // Single message mode
@@ -330,26 +366,32 @@ async function runDiscord(config: RuntimeConfig, args: string[]) {
   // Create memory system
   const memory = createMemory(config)
 
+  // Create conversation store
+  const conversations = createConversations(config)
+
   // Create router and tools
   const router = createRouter(config)
   const toolExecutor = createDefaultToolExecutor(memory, getCodeAgentConfig(config))
 
-  // Create agent loop
-  const agent = createAgentLoop(
+  // Create agent factory for per-session loops
+  const agentFactory: AgentFactory = (sessionId: string) => createAgentLoop(
     config,
     router,
     toolExecutor,
     providers.local,
-    providers.remote
+    providers.remote,
+    sessionId,
+    conversations
   )
 
   // Create and start Discord channel
-  const discord = createDiscordChannel(agent, config.channels.discord)
+  const discord = createDiscordChannel(agentFactory, config.channels.discord)
 
   // Handle graceful shutdown
   const shutdown = async () => {
     log.info('main', 'Shutting down...')
     await discord.stop()
+    conversations?.close()
     process.exit(0)
   }
 

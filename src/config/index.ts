@@ -59,6 +59,12 @@ const defaultToml: EgirlConfig = {
     always_local: ['memory_search', 'memory_get', 'greeting', 'acknowledgment'],
     always_remote: ['code_generation', 'code_review', 'complex_reasoning'],
   },
+  conversation: {
+    enabled: true,
+    max_age_days: 30,
+    max_messages: 1000,
+    compact_on_startup: true,
+  },
   skills: {
     dirs: ['~/.egirl/skills', '{workspace}/skills'],
   },
@@ -102,6 +108,12 @@ export function loadConfig(): RuntimeConfig {
       escalationThreshold: toml.routing?.escalation_threshold ?? defaultToml.routing.escalation_threshold,
       alwaysLocal: toml.routing?.always_local ?? defaultToml.routing.always_local,
       alwaysRemote: toml.routing?.always_remote ?? defaultToml.routing.always_remote,
+    },
+    conversation: {
+      enabled: toml.conversation?.enabled ?? true,
+      maxAgeDays: toml.conversation?.max_age_days ?? 30,
+      maxMessages: toml.conversation?.max_messages ?? 1000,
+      compactOnStartup: toml.conversation?.compact_on_startup ?? true,
     },
     channels: {},
     skills: {
