@@ -52,10 +52,6 @@ export interface Tokenizer {
 }
 
 /**
- * Thrown when the prompt exceeds the provider's context window.
- * Contains the actual token counts from the server for retry logic.
- */
-/**
  * Extract text from string or ContentPart[] message content.
  */
 export function getTextContent(content: string | ContentPart[]): string {
@@ -66,6 +62,10 @@ export function getTextContent(content: string | ContentPart[]): string {
     .join('\n')
 }
 
+/**
+ * Thrown when the prompt exceeds the provider's context window.
+ * Contains the actual token counts from the server for retry logic.
+ */
 export class ContextSizeError extends Error {
   readonly promptTokens: number
   readonly contextSize: number

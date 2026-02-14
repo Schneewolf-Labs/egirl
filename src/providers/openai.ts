@@ -1,5 +1,15 @@
 import OpenAI from 'openai'
-import type { LLMProvider, ChatRequest, ChatResponse, ToolCall, ChatMessage } from './types'
+import type { LLMProvider, ChatRequest, ChatResponse, ToolCall, ChatMessage, ContentPart } from './types'
+import { getTextContent } from './types'
+
+function toOpenAIContent(parts: ContentPart[]): OpenAI.Chat.ChatCompletionContentPart[] {
+  return parts.map((part): OpenAI.Chat.ChatCompletionContentPart => {
+    if (part.type === 'text') {
+      return { type: 'text', text: part.text }
+    }
+    return { type: 'image_url', image_url: { url: part.image_url.url } }
+  })
+}
 
 export class OpenAIProvider implements LLMProvider {
   readonly name: string
@@ -128,14 +138,21 @@ export class OpenAIProvider implements LLMProvider {
   private prepareMessages(messages: ChatMessage[]): OpenAI.Chat.ChatCompletionMessageParam[] {
     return messages.map(msg => {
       if (msg.role === 'system') {
-        return { role: 'system', content: msg.content }
+        return { role: 'system' as const, content: getTextContent(msg.content) }
       } else if (msg.role === 'user') {
-        return { role: 'user', content: msg.content }
+        if (typeof msg.content === 'string') {
+          return { role: 'user' as const, content: msg.content }
+        }
+        return {
+          role: 'user' as const,
+          content: toOpenAIContent(msg.content),
+        }
       } else if (msg.role === 'assistant') {
+        const text = getTextContent(msg.content)
         if (msg.tool_calls && msg.tool_calls.length > 0) {
           return {
-            role: 'assistant',
-            content: msg.content || null,
+            role: 'assistant' as const,
+            content: text || null,
             tool_calls: msg.tool_calls.map(tc => ({
               id: tc.id,
               type: 'function' as const,
@@ -146,11 +163,11 @@ export class OpenAIProvider implements LLMProvider {
             })),
           }
         }
-        return { role: 'assistant', content: msg.content }
+        return { role: 'assistant' as const, content: text }
       } else if (msg.role === 'tool') {
         return {
-          role: 'tool',
-          content: msg.content,
+          role: 'tool' as const,
+          content: getTextContent(msg.content),
           tool_call_id: msg.tool_call_id!,
         }
       }

@@ -273,13 +273,14 @@ export class DiscordChannel implements Channel {
     const agent = this.getOrCreateAgent(sessionKey)
 
     // Keep typing indicator alive (Discord expires it after ~10s)
+    const channel = message.channel
     const typingInterval = setInterval(() => {
-      message.channel.sendTyping().catch(() => {})
+      if ('sendTyping' in channel) channel.sendTyping().catch(() => {})
     }, 8_000)
 
     try {
       // Show typing indicator immediately
-      await message.channel.sendTyping()
+      if ('sendTyping' in channel) await channel.sendTyping()
 
       // Run through agent with event handler for tool transparency
       const { handler, state } = createDiscordEventHandler()
@@ -408,7 +409,7 @@ export class DiscordChannel implements Channel {
     for (let i = 1; i < chunks.length; i++) {
       const chunk = chunks[i]
       if (chunk) {
-        await message.channel.send(chunk)
+        if ('send' in message.channel) await message.channel.send(chunk)
       }
     }
   }

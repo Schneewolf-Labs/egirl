@@ -1,4 +1,4 @@
-import { query, type ClaudeAgentOptions } from '@anthropic-ai/claude-agent-sdk'
+import { query, type Options as ClaudeAgentOptions } from '@anthropic-ai/claude-agent-sdk'
 import type { Tool, ToolResult } from '../types'
 import { log } from '../../util/logger'
 
@@ -63,12 +63,14 @@ export function createCodeAgentTool(config: CodeAgentConfig): Tool {
       const abortController = new AbortController()
       const timeoutId = setTimeout(() => abortController.abort(), timeoutMs)
 
+      const isBypass = config.permissionMode === 'bypassPermissions'
       const options: ClaudeAgentOptions = {
-        permissionMode: config.permissionMode === 'bypassPermissions' ? 'bypassPermissions' : 'default',
-        model: config.model as 'claude-sonnet-4-20250514' | undefined,
+        permissionMode: isBypass ? 'bypassPermissions' : 'default',
+        ...(isBypass && { allowDangerouslySkipPermissions: true }),
+        model: config.model,
         maxTurns: config.maxTurns,
         cwd: workingDir,
-        abortSignal: abortController.signal,
+        abortController,
       }
 
       try {
