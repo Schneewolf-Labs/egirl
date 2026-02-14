@@ -1,6 +1,7 @@
 import type { ChatMessage } from '../providers/types'
 import { getTextContent } from '../providers/types'
 import type { RuntimeConfig } from '../config'
+import type { Skill } from '../skills/types'
 import { analyzeMessageHeuristics, estimateComplexity } from './heuristics'
 import { createRoutingRules, applyRules, type RuleContext } from './rules'
 import { log } from '../util/logger'
@@ -22,10 +23,18 @@ export interface TaskAnalysis {
 export class Router {
   private config: RuntimeConfig
   private rules: ReturnType<typeof createRoutingRules>
+  private skills: Skill[] = []
 
-  constructor(config: RuntimeConfig) {
+  constructor(config: RuntimeConfig, skills?: Skill[]) {
     this.config = config
     this.rules = createRoutingRules(config)
+    if (skills) {
+      this.skills = skills
+    }
+  }
+
+  setSkills(skills: Skill[]): void {
+    this.skills = skills
   }
 
   route(messages: ChatMessage[], toolsAvailable?: string[]): RoutingDecision {
@@ -55,6 +64,9 @@ export class Router {
     // Detect which tools the message likely involves (not all registered tools)
     const likelyTools = this.detectLikelyTools(lastContent, toolsAvailable ?? [])
 
+    // Check if any skills match and have routing preferences
+    const matchedSkills = this.matchSkills(lastMessage.content)
+
     // Build rule context
     const context: RuleContext = {
       taskType,
@@ -77,6 +89,20 @@ export class Router {
       finalTarget = 'remote'
       finalReason = heuristics.reason ?? 'heuristic_escalation'
       finalConfidence = heuristics.confidence
+    }
+
+    // Skill-based routing override
+    for (const skill of matchedSkills) {
+      const skillComplexity = skill.metadata.egirl?.complexity
+      if (skillComplexity === 'remote') {
+        finalTarget = 'remote'
+        finalReason = `skill:${skill.name}`
+        break
+      } else if (skillComplexity === 'local') {
+        finalTarget = 'local'
+        finalReason = `skill:${skill.name}`
+        break
+      }
     }
 
     // Check if we have a remote provider
@@ -169,16 +195,45 @@ export class Router {
   analyzeTask(messages: ChatMessage[]): TaskAnalysis {
     const lastMessage = messages[messages.length - 1]
     const content = lastMessage ? getTextContent(lastMessage.content) : ''
+    const matched = this.matchSkills(content)
 
     return {
       type: this.detectTaskType(content),
       complexity: estimateComplexity(content),
       estimatedTokens: this.estimateTokens(messages),
-      skillsInvolved: [],
+      skillsInvolved: matched.map(s => s.name),
     }
+  }
+
+  private matchSkills(content: string): Skill[] {
+    if (this.skills.length === 0) return []
+
+    const lower = content.toLowerCase()
+    const matched: Skill[] = []
+
+    for (const skill of this.skills) {
+      const nameLower = skill.name.toLowerCase()
+      // Match against skill name (split into words for flexible matching)
+      const nameWords = nameLower.split(/[\s-]+/)
+      const isNameMatch = nameWords.some(word => word.length > 2 && lower.includes(word))
+
+      if (isNameMatch) {
+        matched.push(skill)
+        continue
+      }
+
+      // Match against escalation triggers from metadata
+      const triggers = skill.metadata.egirl?.escalationTriggers ?? []
+      const isTriggerMatch = triggers.some(t => lower.includes(t.toLowerCase()))
+      if (isTriggerMatch) {
+        matched.push(skill)
+      }
+    }
+
+    return matched
   }
 }
 
-export function createRouter(config: RuntimeConfig): Router {
-  return new Router(config)
+export function createRouter(config: RuntimeConfig, skills?: Skill[]): Router {
+  return new Router(config, skills)
 }

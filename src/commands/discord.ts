@@ -13,7 +13,7 @@ export async function runDiscord(config: RuntimeConfig, args: string[]): Promise
     process.exit(1)
   }
 
-  const { providers, memory, conversations, router, toolExecutor } = createAppServices(config)
+  const { providers, memory, conversations, router, toolExecutor, skills } = await createAppServices(config)
 
   // Create agent factory for per-session loops
   const agentFactory: AgentFactory = (sessionId: string) => createAgentLoop({
@@ -25,6 +25,7 @@ export async function runDiscord(config: RuntimeConfig, args: string[]): Promise
     sessionId,
     memory,
     conversationStore: conversations,
+    skills,
   })
 
   const discord = createDiscordChannel(agentFactory, config.channels.discord)

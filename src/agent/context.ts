@@ -2,6 +2,7 @@ import { readFileSync, existsSync } from 'fs'
 import { join } from 'path'
 import type { ChatMessage } from '../providers/types'
 import type { RuntimeConfig } from '../config'
+import type { Skill } from '../skills/types'
 import { log } from '../util/logger'
 
 export interface AgentContext {
@@ -26,11 +27,17 @@ function loadWorkspaceFile(workspaceDir: string, filename: string): string {
   return ''
 }
 
+export interface SystemPromptOptions {
+  skills?: Skill[]
+  additionalContext?: string
+}
+
 /**
  * Build system prompt from workspace personality files
  */
-export function buildSystemPrompt(config: RuntimeConfig, additionalContext?: string): string {
+export function buildSystemPrompt(config: RuntimeConfig, options: SystemPromptOptions = {}): string {
   const { path: workspaceDir } = config.workspace
+  const { skills, additionalContext } = options
 
   // Load personality files
   const identity = loadWorkspaceFile(workspaceDir, 'IDENTITY.md')
@@ -95,6 +102,11 @@ You have access to these tools:
 
 Use tools proactively to gather information rather than asking. Use git tools directly instead of running git via execute_command. Delegate coding tasks to code_agent by default — you're a coordinator, not a code generator. Only use edit_file directly for trivial single-line changes you're certain about.`)
 
+  // Add skills
+  if (skills && skills.length > 0) {
+    sections.push(buildSkillsSection(skills))
+  }
+
   // Add any additional context
   if (additionalContext) {
     sections.push(additionalContext)
@@ -111,12 +123,33 @@ ${sections[0]}`
   return sections.join('\n\n---\n\n')
 }
 
+/**
+ * Build the skills section for the system prompt
+ */
+function buildSkillsSection(skills: Skill[]): string {
+  const lines: string[] = ['## Available Skills', '']
+
+  for (const skill of skills) {
+    const emoji = skill.metadata.openclaw?.emoji ?? ''
+    const prefix = emoji ? `${emoji} ` : ''
+    lines.push(`### ${prefix}${skill.name}`)
+    if (skill.description) {
+      lines.push(skill.description)
+    }
+    lines.push('')
+    lines.push(skill.content)
+    lines.push('')
+  }
+
+  return lines.join('\n')
+}
+
 export function createAgentContext(
   config: RuntimeConfig,
   sessionId: string,
-  additionalContext?: string
+  options: SystemPromptOptions = {}
 ): AgentContext {
-  const systemPrompt = buildSystemPrompt(config, additionalContext)
+  const systemPrompt = buildSystemPrompt(config, options)
 
   log.debug('context', `Built system prompt (${systemPrompt.length} chars)`)
 
