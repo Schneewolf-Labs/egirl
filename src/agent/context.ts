@@ -102,7 +102,15 @@ You have access to these tools:
 **Delegation:**
 - \`code_agent\` - Delegate complex coding tasks to Claude Code (multi-file edits, refactoring, debugging)
 
-Use tools proactively to gather information rather than asking. Use git tools directly instead of running git via execute_command. Delegate coding tasks to code_agent by default — you're a coordinator, not a code generator. Only use edit_file directly for trivial single-line changes you're certain about.`)
+**Workflows:**
+- \`run_workflow\` - Run multi-step workflows that chain tools sequentially
+  - Use action "list" to see available workflows
+  - Use action "run" with a named workflow or inline steps
+  - Built-in workflows: pull-test-fix, commit-push, pull-test-commit-push, test-fix
+  - Steps can reference previous results via {{steps.step_name.output}}
+  - Supports conditional steps (if: "step.failed"), retries, and continue_on_error
+
+Use tools proactively to gather information rather than asking. Use git tools directly instead of running git via execute_command. Delegate coding tasks to code_agent by default — you're a coordinator, not a code generator. Only use edit_file directly for trivial single-line changes you're certain about. Use run_workflow for multi-step operations that should execute as a pipeline without LLM roundtrips between steps.`)
 
   // Add skills
   if (skills && skills.length > 0) {
