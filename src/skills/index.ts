@@ -4,7 +4,7 @@ export { loadSkillsFromDirectory, loadSkillsFromDirectories } from './loader'
 
 import type { Skill } from './types'
 import { loadSkillsFromDirectories } from './loader'
-import { log } from '../utils/logger'
+import { log } from '../util/logger'
 
 export class SkillManager {
   private skills: Map<string, Skill> = new Map()

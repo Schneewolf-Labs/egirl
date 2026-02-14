@@ -1,5 +1,5 @@
 import type { Tool, ToolDefinition } from './types'
-import { log } from '../utils/logger'
+import { log } from '../util/logger'
 
 // Dynamic tool loading from skill directories
 // For now, this is a placeholder - tools are registered programmatically
