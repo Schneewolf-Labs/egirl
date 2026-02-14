@@ -1,5 +1,6 @@
 import YAML from 'yaml'
 import type { SkillMetadata } from './types'
+import { log } from '../util/logger'
 
 interface ParsedSkill {
   metadata: SkillMetadata
@@ -27,7 +28,7 @@ export function parseSkillMarkdown(markdown: string): ParsedSkill {
   try {
     metadata = YAML.parse(frontmatterStr) ?? {}
   } catch (error) {
-    console.warn('Failed to parse skill frontmatter:', error)
+    log.warn('skills', 'Failed to parse skill frontmatter:', error)
   }
 
   return {

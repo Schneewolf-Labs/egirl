@@ -1,4 +1,4 @@
-export { AgentLoop, createAgentLoop, type AgentFactory, type AgentLoopOptions, type AgentResponse } from './loop'
+export { AgentLoop, createAgentLoop, type AgentFactory, type AgentLoopDeps, type AgentLoopOptions, type AgentResponse } from './loop'
 export {
   createAgentContext,
   buildSystemPrompt,

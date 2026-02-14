@@ -6,7 +6,7 @@ import type { ChatMessage } from '../../src/providers/types'
  * extraction. Since formatMessages is a private method, we test via the
  * exported helper: formatMessagesForQwen3.
  */
-import { formatMessagesForQwen3 } from '../../src/providers/llamacpp'
+import { formatMessagesForQwen3 } from '../../src/providers/qwen3-format'
 
 describe('formatMessagesForQwen3', () => {
   test('reconstructs tool call XML in assistant messages', () => {

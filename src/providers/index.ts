@@ -5,7 +5,9 @@ import { createAnthropicProvider } from './anthropic'
 import { createOpenAIProvider } from './openai'
 
 export * from './types'
-export { createLlamaCppProvider, createLlamaCppTokenizer } from './llamacpp'
+export { createLlamaCppProvider } from './llamacpp'
+export { createLlamaCppTokenizer } from './llamacpp-tokenizer'
+export { formatMessagesForQwen3 } from './qwen3-format'
 export { createAnthropicProvider } from './anthropic'
 export { createOpenAIProvider } from './openai'
 
