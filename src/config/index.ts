@@ -152,6 +152,15 @@ export function loadConfig(): RuntimeConfig {
       extractionMinMessages: toml.memory?.extraction_min_messages ?? 2,
       extractionMaxPerTurn: toml.memory?.extraction_max_per_turn ?? 5,
     },
+    tasks: {
+      enabled: toml.tasks?.enabled ?? true,
+      tickIntervalMs: toml.tasks?.tick_interval_ms ?? 30000,
+      maxActiveTasks: toml.tasks?.max_active_tasks ?? 20,
+      taskTimeoutMs: toml.tasks?.task_timeout_ms ?? 300000,
+      discoveryEnabled: toml.tasks?.discovery_enabled ?? true,
+      discoveryIntervalMs: toml.tasks?.discovery_interval_ms ?? 1800000,
+      idleThresholdMs: toml.tasks?.idle_threshold_ms ?? 600000,
+    },
     skills: {
       dirs: (toml.skills?.dirs ?? defaultToml.skills.dirs).map(d => expandPath(d, workspacePath)),
     },

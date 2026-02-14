@@ -21,6 +21,7 @@ export {
   gitShowTool,
   createGitHubTools,
   type GitHubConfig,
+  createTaskTools,
 } from './builtin'
 
 import { createToolExecutor } from './executor'

@@ -13,7 +13,7 @@ import {
 } from 'discord.js'
 import type { AgentLoop, AgentFactory } from '../agent'
 import type { LLMProvider } from '../providers/types'
-import type { Channel } from './types'
+import type { Channel, OutboundChannel } from './types'
 import { createDiscordEventHandler, buildToolCallPrefix } from './discord/events'
 import { splitMessage } from './discord/formatting'
 import { MessageBatcher, evaluateRelevance, formatBatchForAgent, type BufferedMessage } from './discord/batch-evaluator'
@@ -411,6 +411,28 @@ export class DiscordChannel implements Channel {
       if (chunk) {
         if ('send' in message.channel) await message.channel.send(chunk)
       }
+    }
+  }
+
+  /** Outbound: send a message to a channel or user without an inbound trigger */
+  async send(target: string, message: string): Promise<void> {
+    if (!this.ready) {
+      log.warn('discord', `Cannot send outbound message: client not ready`)
+      return
+    }
+
+    try {
+      const channel = await this.client.channels.fetch(target)
+      if (channel && channel.isTextBased() && 'send' in channel) {
+        const chunks = splitMessage(message, 2000)
+        for (const chunk of chunks) {
+          await channel.send(chunk)
+        }
+      } else {
+        log.warn('discord', `Channel ${target} not found or not text-based`)
+      }
+    } catch (err) {
+      log.error('discord', `Failed to send outbound message to ${target}: ${err}`)
     }
   }
 
