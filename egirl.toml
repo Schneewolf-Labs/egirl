@@ -1,3 +1,6 @@
+# CLI color theme: egirl (purple/pink), midnight (blue/teal), neon (green/cyan), mono (grayscale)
+theme = "egirl"
+
 [workspace]
 path = "~/.egirl/workspace"
 

@@ -3,14 +3,9 @@ import type { AgentLoop } from '../agent'
 import type { AgentEventHandler } from '../agent/events'
 import type { ToolCall } from '../providers/types'
 import type { ToolResult } from '../tools/types'
+import { colors, DIM, RESET } from '../ui/theme'
 import { log } from '../util/logger'
 import type { Channel } from './types'
-
-const DIM = '\x1b[2m'
-const RESET = '\x1b[0m'
-const CYAN = '\x1b[36m'
-const GREEN = '\x1b[32m'
-const RED = '\x1b[31m'
 
 function truncateResult(output: string, maxLen: number): string {
   const trimmed = output.trim()
@@ -46,18 +41,22 @@ function createCLIEventHandler(): { handler: AgentEventHandler; state: CLIEventS
     },
 
     onToolCallStart(calls: ToolCall[]) {
+      const c = colors()
       for (const call of calls) {
         const args = formatArgs(call.arguments)
         if (args.includes('\n')) {
-          process.stdout.write(`${DIM}  > ${call.name}(\n${args}\n  )${RESET}\n`)
+          process.stdout.write(
+            `${DIM}  ${c.accent}>${RESET}${DIM} ${call.name}(\n${args}\n  )${RESET}\n`,
+          )
         } else {
-          process.stdout.write(`${DIM}  > ${call.name}(${args})${RESET}\n`)
+          process.stdout.write(`${DIM}  ${c.accent}>${RESET}${DIM} ${call.name}(${args})${RESET}\n`)
         }
       }
     },
 
     onToolCallComplete(_callId: string, name: string, result: ToolResult) {
-      const status = result.success ? `${GREEN}ok${RESET}` : `${RED}err${RESET}`
+      const c = colors()
+      const status = result.success ? `${c.success}ok${RESET}` : `${c.error}err${RESET}`
       const preview = truncateResult(result.output, 200)
       process.stdout.write(`${DIM}  < ${name} ${status}${RESET}\n`)
       if (preview) {
@@ -69,7 +68,8 @@ function createCLIEventHandler(): { handler: AgentEventHandler; state: CLIEventS
 
     onToken(token: string) {
       if (!state.streamed) {
-        process.stdout.write(`\n${CYAN}egirl>${RESET} `)
+        const c = colors()
+        process.stdout.write(`\n${c.secondary}egirl>${RESET} `)
         state.streamed = true
       }
       process.stdout.write(token)
@@ -97,7 +97,8 @@ export class CLIChannel implements Channel {
 
   /** Outbound: print a background task result to stdout */
   async send(_target: string, message: string): Promise<void> {
-    process.stdout.write(`\n${CYAN}[background]${RESET} ${message}\n\n`)
+    const c = colors()
+    process.stdout.write(`\n${c.accent}[background]${RESET} ${message}\n\n`)
   }
 
   async start(): Promise<void> {
@@ -108,7 +109,10 @@ export class CLIChannel implements Channel {
 
     this.running = true
 
-    console.log('\negirl CLI - Type your message and press Enter. Type "exit" to quit.\n')
+    const c = colors()
+    console.log(
+      `\n${c.primary}egirl CLI${RESET} ${DIM}— Type your message and press Enter. Type "exit" to quit.${RESET}\n`,
+    )
 
     this.prompt()
   }
@@ -122,7 +126,8 @@ export class CLIChannel implements Channel {
   private prompt(): void {
     if (!this.running || !this.rl) return
 
-    this.rl.question('you> ', async (input) => {
+    const c = colors()
+    this.rl.question(`${c.primary}you>${RESET} `, async (input) => {
       if (!this.running) return
 
       const trimmed = input.trim()
@@ -152,7 +157,7 @@ export class CLIChannel implements Channel {
 
         // If streaming didn't happen, print the response directly
         if (!state.streamed && response.content) {
-          console.log(`\negirl> ${response.content}\n`)
+          console.log(`\n${c.secondary}egirl>${RESET} ${response.content}\n`)
         }
 
         // Show routing info
@@ -163,7 +168,7 @@ export class CLIChannel implements Channel {
         log.debug('cli', routingInfo)
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
-        console.error(`\nError: ${message}\n`)
+        console.error(`\n${c.error}Error:${RESET} ${message}\n`)
       }
 
       this.prompt()

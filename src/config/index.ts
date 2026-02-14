@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync } from 'fs'
 import { homedir } from 'os'
 import { resolve } from 'path'
 import { parse } from 'smol-toml'
+import { setTheme } from '../ui/theme'
 import type { EgirlConfig, RuntimeConfig } from './schema'
 
 export type { EgirlConfig, RuntimeConfig } from './schema'
@@ -89,8 +90,17 @@ export function loadConfig(): RuntimeConfig {
     mkdirSync(workspacePath, { recursive: true })
   }
 
+  // Activate theme early so all subsequent output is themed
+  const themeName = toml.theme ?? 'egirl'
+  try {
+    setTheme(themeName)
+  } catch {
+    // Falls back to default 'egirl' theme
+  }
+
   // Build runtime config with snake_case from TOML mapped to camelCase
   const config: RuntimeConfig = {
+    theme: themeName,
     workspace: {
       path: workspacePath,
     },

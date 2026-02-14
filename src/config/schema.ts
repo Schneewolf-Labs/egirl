@@ -1,6 +1,8 @@
 import { type Static, Type } from '@sinclair/typebox'
 
 export const EgirlConfigSchema = Type.Object({
+  theme: Type.Optional(Type.String({ default: 'egirl' })),
+
   workspace: Type.Object({
     path: Type.String({ default: '~/.egirl/workspace' }),
   }),
@@ -160,6 +162,7 @@ export type EgirlConfig = Static<typeof EgirlConfigSchema>
 
 // Runtime config with resolved paths and secrets from .env
 export interface RuntimeConfig {
+  theme: string
   workspace: {
     path: string
   }

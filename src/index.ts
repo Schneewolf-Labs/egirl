@@ -7,6 +7,7 @@ import { runDiscord } from './commands/discord'
 import { showStatus } from './commands/status'
 import { runXMPP } from './commands/xmpp'
 import { loadConfig, type RuntimeConfig } from './config'
+import { BOLD, colors, DIM, RESET } from './ui/theme'
 import { log } from './util/logger'
 import { bootstrapWorkspace } from './workspace/bootstrap'
 
@@ -71,61 +72,45 @@ async function main() {
 }
 
 function showHelp() {
+  const c = colors()
+
   console.log(`
-egirl - Local-First AI Agent for Schneewolf Labs
+${c.secondary}${BOLD}egirl${RESET} ${DIM}— Local-First AI Agent for Schneewolf Labs${RESET}
 
-Usage:
-  egirl [command] [options]
+${c.primary}Usage${RESET}
+  egirl ${DIM}[command] [options]${RESET}
 
-Commands:
-  cli            Start interactive CLI (default)
-  discord        Start Discord bot
-  xmpp           Start XMPP bot
-  api            Start HTTP API server
-  claude-code    Bridge to Claude Code with local model supervision (alias: cc)
-  status         Show current configuration and status
-  help           Show this help message
+${c.primary}Commands${RESET}
+  ${c.accent}cli${RESET}            Start interactive CLI ${DIM}(default)${RESET}
+  ${c.accent}discord${RESET}        Start Discord bot
+  ${c.accent}xmpp${RESET}           Start XMPP bot
+  ${c.accent}api${RESET}            Start HTTP API server
+  ${c.accent}claude-code${RESET}    Bridge to Claude Code with local model supervision ${DIM}(alias: cc)${RESET}
+  ${c.accent}status${RESET}         Show current configuration and status
+  ${c.accent}help${RESET}           Show this help message
 
-Options for cli:
-  -m <msg>       Send a single message and exit
-  -v, --verbose  Enable verbose/debug logging
-  -d, --debug    Alias for --verbose
-  -q, --quiet    Only show errors
+${c.primary}Options${RESET} ${DIM}(cli, discord, xmpp, api, claude-code)${RESET}
+  ${c.accent}-v, --verbose${RESET}  Enable verbose/debug logging
+  ${c.accent}-d, --debug${RESET}    Alias for --verbose
+  ${c.accent}-q, --quiet${RESET}    Only show errors
 
-Options for discord:
-  -v, --verbose  Enable verbose/debug logging
-  -d, --debug    Alias for --verbose
-  -q, --quiet    Only show errors
+${c.primary}CLI Options${RESET}
+  ${c.accent}-m <msg>${RESET}       Send a single message and exit
 
-Options for xmpp:
-  -v, --verbose  Enable verbose/debug logging
-  -d, --debug    Alias for --verbose
-  -q, --quiet    Only show errors
+${c.primary}API Options${RESET}
+  ${c.accent}--port <n>${RESET}     Port to listen on ${DIM}(default: 3000)${RESET}
+  ${c.accent}--host <addr>${RESET}  Host to bind to ${DIM}(default: 127.0.0.1)${RESET}
 
-Options for api:
-  --port <n>     Port to listen on (default: 3000)
-  --host <addr>  Host to bind to (default: 127.0.0.1)
-  -v, --verbose  Enable verbose/debug logging
-  -d, --debug    Alias for --verbose
-  -q, --quiet    Only show errors
+${c.primary}Claude Code Options${RESET}
+  ${c.accent}-m <msg>${RESET}       Run a single task and exit
+  ${c.accent}--resume <id>${RESET}  Resume a previous session
 
-Options for claude-code:
-  -m <msg>       Run a single task and exit
-  --resume <id>  Resume a previous Claude Code session
-  -v, --verbose  Enable verbose/debug logging
-  -d, --debug    Alias for --verbose
-  -q, --quiet    Only show errors
-
-Examples:
-  bun run dev                          # Start with --watch
-  bun run start                        # Production start
-  bun run cli                          # Direct CLI mode
-  bun run start discord                # Start Discord bot
-  bun run start xmpp                   # Start XMPP bot
-  bun run start api                    # Start HTTP API on :3000
-  bun run start api --port 8080        # Start HTTP API on :8080
-  bun run start claude-code            # Claude Code bridge (interactive)
-  bun run start cc -m "fix the tests"  # Single task mode
+${c.primary}Examples${RESET}
+  ${DIM}$${RESET} bun run dev                          ${DIM}# Start with --watch${RESET}
+  ${DIM}$${RESET} bun run start                        ${DIM}# Production start${RESET}
+  ${DIM}$${RESET} bun run start discord                ${DIM}# Start Discord bot${RESET}
+  ${DIM}$${RESET} bun run start api --port 8080        ${DIM}# HTTP API on :8080${RESET}
+  ${DIM}$${RESET} bun run start cc -m "fix the tests"  ${DIM}# Single task mode${RESET}
 `)
 }
 
