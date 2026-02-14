@@ -97,6 +97,11 @@ export class CLIChannel implements Channel {
     this.agent = agent
   }
 
+  /** Outbound: print a background task result to stdout */
+  async send(_target: string, message: string): Promise<void> {
+    process.stdout.write(`\n${CYAN}[background]${RESET} ${message}\n\n`)
+  }
+
   async start(): Promise<void> {
     this.rl = readline.createInterface({
       input: process.stdin,

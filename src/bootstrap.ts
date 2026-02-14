@@ -6,6 +6,7 @@ import { createDefaultToolExecutor, type ToolExecutor, type CodeAgentConfig, typ
 import { createMemoryManager, Qwen3VLEmbeddings, type MemoryManager } from './memory'
 import { createConversationStore, type ConversationStore } from './conversation'
 import { createStatsTracker, type StatsTracker } from './tracking'
+import { createTaskStore, type TaskStore } from './tasks'
 import { buildSafetyConfig } from './safety/config-bridge'
 import { createSkillManager } from './skills'
 import type { Skill } from './skills/types'
@@ -20,6 +21,7 @@ export interface AppServices {
   providers: ProviderRegistry
   memory: MemoryManager | undefined
   conversations: ConversationStore | undefined
+  taskStore: TaskStore | undefined
   router: Router
   toolExecutor: ToolExecutor
   stats: StatsTracker
@@ -133,6 +135,26 @@ async function loadSkills(config: RuntimeConfig): Promise<Skill[]> {
 }
 
 /**
+ * Create task store if tasks are enabled.
+ */
+function createTasks(config: RuntimeConfig): TaskStore | undefined {
+  if (!config.tasks.enabled) {
+    log.info('main', 'Background tasks disabled')
+    return undefined
+  }
+
+  try {
+    const dbPath = join(config.workspace.path, 'tasks.db')
+    const store = createTaskStore(dbPath)
+    log.info('main', `Task store initialized (max ${config.tasks.maxActiveTasks} active tasks)`)
+    return store
+  } catch (error) {
+    log.warn('main', 'Failed to initialize task store:', error)
+    return undefined
+  }
+}
+
+/**
  * Bootstrap all shared services from config.
  */
 export async function createAppServices(config: RuntimeConfig): Promise<AppServices> {
@@ -145,11 +167,12 @@ export async function createAppServices(config: RuntimeConfig): Promise<AppServi
 
   const memory = createMemory(config)
   const conversations = createConversations(config)
+  const taskStore = createTasks(config)
   const skills = await loadSkills(config)
   const router = createRouter(config, skills)
   const toolExecutor = createDefaultToolExecutor(memory, getCodeAgentConfig(config), getGitHubConfig(config))
   toolExecutor.setSafety(buildSafetyConfig(config))
   const stats = createStatsTracker()
 
-  return { config, providers, memory, conversations, router, toolExecutor, stats, skills }
+  return { config, providers, memory, conversations, taskStore, router, toolExecutor, stats, skills }
 }

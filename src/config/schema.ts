@@ -102,6 +102,16 @@ export const EgirlConfigSchema = Type.Object({
     default_repo: Type.Optional(Type.String()),
   })),
 
+  tasks: Type.Optional(Type.Object({
+    enabled: Type.Boolean({ default: true }),
+    tick_interval_ms: Type.Number({ default: 30000 }),
+    max_active_tasks: Type.Number({ default: 20 }),
+    task_timeout_ms: Type.Number({ default: 300000 }),
+    discovery_enabled: Type.Boolean({ default: true }),
+    discovery_interval_ms: Type.Number({ default: 1800000 }),
+    idle_threshold_ms: Type.Number({ default: 600000 }),
+  })),
+
   skills: Type.Object({
     dirs: Type.Array(Type.String(), { default: ['~/.egirl/skills', '{workspace}/skills'] }),
   }),
@@ -213,6 +223,15 @@ export interface RuntimeConfig {
     token: string
     defaultOwner?: string
     defaultRepo?: string
+  }
+  tasks: {
+    enabled: boolean
+    tickIntervalMs: number
+    maxActiveTasks: number
+    taskTimeoutMs: number
+    discoveryEnabled: boolean
+    discoveryIntervalMs: number
+    idleThresholdMs: number
   }
   skills: {
     dirs: string[]

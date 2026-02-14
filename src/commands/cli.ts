@@ -2,7 +2,10 @@ import type { RuntimeConfig } from '../config'
 import { createAgentLoop } from '../agent'
 import { createCLIChannel } from '../channels'
 import { createAppServices } from '../bootstrap'
+import { createTaskRunner, createDiscovery } from '../tasks'
+import { createTaskTools } from '../tools/builtin/tasks'
 import { applyLogLevel } from '../util/args'
+import { log } from '../util/logger'
 import { gatherStandup } from '../standup'
 
 export async function runCLI(config: RuntimeConfig, args: string[]): Promise<void> {
@@ -12,7 +15,7 @@ export async function runCLI(config: RuntimeConfig, args: string[]): Promise<voi
   const messageIndex = args.indexOf('-m')
   const singleMessage = messageIndex !== -1 ? args[messageIndex + 1] : null
 
-  const { providers, memory, conversations, router, toolExecutor, stats, skills } = await createAppServices(config)
+  const { providers, memory, conversations, taskStore, router, toolExecutor, stats, skills } = await createAppServices(config)
 
   // Gather workspace standup for agent context
   const standup = await gatherStandup(config.workspace.path)
@@ -32,7 +35,7 @@ export async function runCLI(config: RuntimeConfig, args: string[]): Promise<voi
     additionalContext: standup.context || undefined,
   })
 
-  // Single message mode
+  // Single message mode — no task runner
   if (singleMessage) {
     try {
       const response = await agent.run(singleMessage)
@@ -56,5 +59,79 @@ export async function runCLI(config: RuntimeConfig, args: string[]): Promise<voi
 
   // Interactive CLI mode
   const cli = createCLIChannel(agent)
+
+  // Set up background task runner if task store is available
+  let taskRunner: ReturnType<typeof createTaskRunner> | undefined
+  let discovery: ReturnType<typeof createDiscovery> | undefined
+
+  if (taskStore && config.tasks.enabled) {
+    const outbound = new Map<string, { send(target: string, message: string): Promise<void> }>()
+    outbound.set('cli', cli)
+
+    taskRunner = createTaskRunner({
+      config,
+      tasksConfig: config.tasks,
+      store: taskStore,
+      toolExecutor,
+      router,
+      localProvider: providers.local,
+      remoteProvider: providers.remote,
+      memory,
+      outbound,
+    })
+
+    // Register task tools on the shared tool executor
+    const taskTools = createTaskTools(
+      taskStore,
+      taskRunner,
+      config.tasks.maxActiveTasks,
+      () => ({ channel: 'cli', channelTarget: 'stdout' }),
+    )
+    toolExecutor.registerAll([
+      taskTools.taskAddTool,
+      taskTools.taskProposeTool,
+      taskTools.taskListTool,
+      taskTools.taskPauseTool,
+      taskTools.taskResumeTool,
+      taskTools.taskCancelTool,
+      taskTools.taskRunNowTool,
+      taskTools.taskHistoryTool,
+    ])
+
+    // Set up discovery if enabled
+    if (config.tasks.discoveryEnabled) {
+      discovery = createDiscovery({
+        config,
+        tasksConfig: config.tasks,
+        store: taskStore,
+        runner: taskRunner,
+        toolExecutor,
+        router,
+        localProvider: providers.local,
+        memory,
+      })
+    }
+
+    log.info('main', 'Background task system initialized')
+  }
+
+  // Handle graceful shutdown
+  const shutdown = async () => {
+    log.info('main', 'Shutting down...')
+    discovery?.stop()
+    taskRunner?.stop()
+    await cli.stop()
+    taskStore?.close()
+    conversations?.close()
+    process.exit(0)
+  }
+
+  process.on('SIGINT', shutdown)
+  process.on('SIGTERM', shutdown)
+
   await cli.start()
+
+  // Start task runner and discovery after CLI is ready
+  taskRunner?.start()
+  discovery?.start()
 }
