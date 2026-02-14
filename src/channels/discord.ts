@@ -12,10 +12,9 @@ import {
   type Interaction,
 } from 'discord.js'
 import type { AgentLoop, AgentFactory } from '../agent'
-import type { AgentEventHandler } from '../agent/events'
-import type { ToolCall } from '../providers/types'
-import type { ToolResult } from '../tools/types'
 import type { Channel } from './types'
+import { createDiscordEventHandler, buildToolCallPrefix } from './discord/events'
+import { splitMessage } from './discord/formatting'
 import { log } from '../util/logger'
 
 export interface DiscordConfig {
@@ -33,71 +32,6 @@ export interface ReactionEvent {
 
 export type ReactionHandler = (event: ReactionEvent) => void | Promise<void>
 export type InteractionHandler = (interaction: Interaction) => void | Promise<void>
-
-function formatToolCallsMarkdown(calls: ToolCall[]): string {
-  const lines = calls.map(call => {
-    const args = Object.entries(call.arguments)
-    if (args.length === 0) return call.name + '()'
-    if (args.length === 1) {
-      const [key, val] = args[0]!
-      const valStr = typeof val === 'string' ? val : JSON.stringify(val)
-      if (valStr.length < 60) return `${call.name}(${key}: ${valStr})`
-    }
-    return `${call.name}(${JSON.stringify(call.arguments)})`
-  })
-  return lines.join('\n')
-}
-
-interface ToolCallEntry {
-  call: string
-  result?: string
-}
-
-interface DiscordEventState {
-  entries: ToolCallEntry[]
-}
-
-function truncateResult(output: string, maxLen: number): string {
-  const trimmed = output.trim()
-  if (!trimmed) return ''
-  if (trimmed.length <= maxLen) return trimmed
-  return trimmed.substring(0, maxLen) + '...'
-}
-
-function createDiscordEventHandler(): { handler: AgentEventHandler; state: DiscordEventState } {
-  const state: DiscordEventState = { entries: [] }
-  let pendingCalls: ToolCall[] = []
-
-  const handler: AgentEventHandler = {
-    onToolCallStart(calls: ToolCall[]) {
-      pendingCalls = calls
-      for (const call of calls) {
-        state.entries.push({ call: formatToolCallsMarkdown([call]) })
-      }
-    },
-
-    onToolCallComplete(_callId: string, name: string, result: ToolResult) {
-      // Find the matching entry and attach the result
-      const entry = state.entries.find(e => e.call.startsWith(name) && !e.result)
-      if (entry) {
-        const status = result.success ? 'ok' : 'err'
-        const preview = truncateResult(result.output, 150)
-        entry.result = `  -> ${status}${preview ? ': ' + preview : ''}`
-      }
-    },
-  }
-
-  return { handler, state }
-}
-
-function buildToolCallPrefix(state: DiscordEventState): string {
-  if (state.entries.length === 0) return ''
-  const lines = state.entries.map(e => {
-    if (e.result) return `${e.call}\n${e.result}`
-    return e.call
-  })
-  return `\`\`\`\n${lines.join('\n')}\n\`\`\`\n`
-}
 
 export class DiscordChannel implements Channel {
   readonly name = 'discord'
@@ -379,7 +313,7 @@ export class DiscordChannel implements Channel {
     }
 
     // Split into chunks
-    const chunks = this.splitMessage(content, maxLength)
+    const chunks = splitMessage(content, maxLength)
 
     // Reply to first chunk
     await message.reply(chunks[0] ?? content.slice(0, maxLength))
@@ -391,34 +325,6 @@ export class DiscordChannel implements Channel {
         await message.channel.send(chunk)
       }
     }
-  }
-
-  private splitMessage(content: string, maxLength: number): string[] {
-    const chunks: string[] = []
-    let remaining = content
-
-    while (remaining.length > 0) {
-      if (remaining.length <= maxLength) {
-        chunks.push(remaining)
-        break
-      }
-
-      // Try to split at a newline
-      let splitIndex = remaining.lastIndexOf('\n', maxLength)
-      if (splitIndex === -1 || splitIndex < maxLength / 2) {
-        // Try to split at a space
-        splitIndex = remaining.lastIndexOf(' ', maxLength)
-      }
-      if (splitIndex === -1 || splitIndex < maxLength / 2) {
-        // Hard split
-        splitIndex = maxLength
-      }
-
-      chunks.push(remaining.slice(0, splitIndex))
-      remaining = remaining.slice(splitIndex).trimStart()
-    }
-
-    return chunks
   }
 
   async start(): Promise<void> {

@@ -10,13 +10,13 @@ export {
   type EmbeddingProvider,
   type EmbeddingInput,
   type EmbeddingProviderType,
-} from './embeddings'
+} from './embeddings/index'
 
 import { join } from 'path'
 import { createMemoryFiles, type MemoryFiles } from './files'
 import { createMemoryIndexer, type MemoryIndexer, type ContentType } from './indexer'
 import { createMemorySearch, type MemorySearch, type SearchResult } from './search'
-import { type EmbeddingProvider, type EmbeddingInput } from './embeddings'
+import { type EmbeddingProvider, type EmbeddingInput } from './embeddings/index'
 import { log } from '../util/logger'
 
 export interface MemoryManagerConfig {

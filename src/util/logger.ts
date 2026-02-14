@@ -26,6 +26,10 @@ class Logger {
     this.minLevel = level
   }
 
+  getLevel(): LogLevel {
+    return this.minLevel
+  }
+
   private shouldLog(level: LogLevel): boolean {
     const levels: LogLevel[] = ['debug', 'info', 'warn', 'error']
     return levels.indexOf(level) >= levels.indexOf(this.minLevel)

@@ -9,7 +9,7 @@ import { Router, shouldRetryWithRemote, analyzeResponseForEscalation } from '../
 import { createAgentContext, addMessage, type AgentContext } from './context'
 import { fitToContextWindow } from './context-window'
 import { retrieveForContext } from '../memory/retrieval'
-import { createLlamaCppTokenizer } from '../providers/llamacpp'
+import { createLlamaCppTokenizer } from '../providers/llamacpp-tokenizer'
 import { log } from '../util/logger'
 
 /** Default context limits for remote providers */
@@ -32,6 +32,17 @@ export interface AgentResponse {
   turns: number
 }
 
+export interface AgentLoopDeps {
+  config: RuntimeConfig
+  router: Router
+  toolExecutor: ToolExecutor
+  localProvider: LLMProvider
+  remoteProvider: LLMProvider | null
+  sessionId: string
+  memory?: MemoryManager
+  conversationStore?: ConversationStore
+}
+
 export class AgentLoop {
   private config: RuntimeConfig
   private router: Router
@@ -44,33 +55,24 @@ export class AgentLoop {
   private conversationStore: ConversationStore | null
   private persistedIndex: number = 0
 
-  constructor(
-    config: RuntimeConfig,
-    router: Router,
-    toolExecutor: ToolExecutor,
-    localProvider: LLMProvider,
-    remoteProvider: LLMProvider | null,
-    sessionId: string,
-    memory?: MemoryManager,
-    conversationStore?: ConversationStore
-  ) {
-    this.config = config
-    this.router = router
-    this.toolExecutor = toolExecutor
-    this.localProvider = localProvider
-    this.remoteProvider = remoteProvider
-    this.memory = memory ?? null
-    this.conversationStore = conversationStore ?? null
-    this.context = createAgentContext(config, sessionId)
-    this.tokenizer = createLlamaCppTokenizer(config.local.endpoint)
+  constructor(deps: AgentLoopDeps) {
+    this.config = deps.config
+    this.router = deps.router
+    this.toolExecutor = deps.toolExecutor
+    this.localProvider = deps.localProvider
+    this.remoteProvider = deps.remoteProvider
+    this.memory = deps.memory ?? null
+    this.conversationStore = deps.conversationStore ?? null
+    this.context = createAgentContext(deps.config, deps.sessionId)
+    this.tokenizer = createLlamaCppTokenizer(deps.config.local.endpoint)
 
     // Load conversation history from store
     if (this.conversationStore) {
-      const history = this.conversationStore.loadMessages(sessionId)
+      const history = this.conversationStore.loadMessages(deps.sessionId)
       if (history.length > 0) {
         this.context.messages = history
         this.persistedIndex = history.length
-        log.info('agent', `Loaded ${history.length} messages for session ${sessionId}`)
+        log.info('agent', `Loaded ${history.length} messages for session ${deps.sessionId}`)
       }
     }
   }
@@ -418,24 +420,9 @@ export class AgentLoop {
 
 export type AgentFactory = (sessionId: string) => AgentLoop
 
-export function createAgentLoop(
-  config: RuntimeConfig,
-  router: Router,
-  toolExecutor: ToolExecutor,
-  localProvider: LLMProvider,
-  remoteProvider: LLMProvider | null,
-  sessionId?: string,
-  memory?: MemoryManager,
-  conversationStore?: ConversationStore
-): AgentLoop {
-  return new AgentLoop(
-    config,
-    router,
-    toolExecutor,
-    localProvider,
-    remoteProvider,
-    sessionId ?? crypto.randomUUID(),
-    memory,
-    conversationStore
-  )
+export function createAgentLoop(deps: AgentLoopDeps): AgentLoop {
+  return new AgentLoop({
+    ...deps,
+    sessionId: deps.sessionId ?? crypto.randomUUID(),
+  })
 }

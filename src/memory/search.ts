@@ -1,5 +1,5 @@
 import type { MemoryIndexer, IndexedMemory, ContentType } from './indexer'
-import type { EmbeddingProvider, EmbeddingInput } from './embeddings'
+import type { EmbeddingProvider, EmbeddingInput } from './embeddings/index'
 
 export interface SearchResult {
   memory: IndexedMemory
