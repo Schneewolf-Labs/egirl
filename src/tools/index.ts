@@ -85,6 +85,7 @@ export function createDefaultToolExecutor(
       tools.memorySetTool,
       tools.memoryDeleteTool,
       tools.memoryListTool,
+      tools.memoryRecallTool,
     ])
   } else {
     // Register stubs that return helpful error messages

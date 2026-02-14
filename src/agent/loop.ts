@@ -11,6 +11,7 @@ import { createAgentContext, addMessage, type AgentContext, type SystemPromptOpt
 import { fitToContextWindow } from './context-window'
 import { summarizeMessages, formatSummaryMessage } from './context-summarizer'
 import { retrieveForContext } from '../memory/retrieval'
+import { extractMemories } from '../memory/extractor'
 import { createLlamaCppTokenizer } from '../providers/llamacpp-tokenizer'
 import { log } from '../util/logger'
 
@@ -252,6 +253,11 @@ export class AgentLoop {
       }
     }
 
+    // Auto-extract memories from the conversation (fire and forget)
+    if (this.memory && this.config.memory.autoExtract) {
+      this.runAutoExtraction(this.context.messages, this.context.sessionId)
+    }
+
     return {
       content: finalContent,
       target: currentTarget,
@@ -458,6 +464,43 @@ export class AgentLoop {
     }
 
     return results
+  }
+
+  /**
+   * Run automatic memory extraction in the background.
+   * Does not block the response — failures are logged and swallowed.
+   */
+  private runAutoExtraction(messages: ChatMessage[], sessionId: string): void {
+    // Use the local provider for extraction to avoid API costs
+    const provider = this.localProvider
+
+    extractMemories(messages, provider, {
+      minMessages: this.config.memory.extractionMinMessages,
+      maxExtractions: this.config.memory.extractionMaxPerTurn,
+    })
+      .then(async (extractions) => {
+        if (extractions.length === 0) return
+
+        log.info('agent', `Auto-extracted ${extractions.length} memories from conversation`)
+
+        for (const extraction of extractions) {
+          try {
+            // Prefix auto-extracted keys to distinguish from manual ones
+            const key = `auto/${extraction.key}`
+            await this.memory!.set(key, extraction.value, {
+              category: extraction.category,
+              source: 'auto',
+              sessionId,
+            })
+            log.debug('agent', `Stored auto-extracted memory: ${key} [${extraction.category}]`)
+          } catch (error) {
+            log.warn('agent', `Failed to store extracted memory ${extraction.key}:`, error)
+          }
+        }
+      })
+      .catch((error) => {
+        log.warn('agent', 'Auto-extraction failed:', error)
+      })
   }
 
   getContext(): AgentContext {
