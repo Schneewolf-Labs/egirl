@@ -91,4 +91,78 @@ describe('Router', () => {
     const analysis = router.analyzeTask(messages)
     expect(analysis.type).toBe('memory_op')
   })
+
+  test('skill-based routing overrides default for matched skills', () => {
+    const skills = [{
+      name: 'Code Review',
+      description: 'Review code changes',
+      content: '# Code Review\n\nInstructions...',
+      metadata: { egirl: { complexity: 'remote' as const } },
+      baseDir: '/tmp/skills/code-review',
+      enabled: true,
+    }]
+
+    const routerWithSkills = createRouter(configWithRemote, skills)
+
+    const messages: ChatMessage[] = [
+      { role: 'user', content: 'Can you review this change?' },
+    ]
+
+    const decision = routerWithSkills.route(messages)
+    expect(decision.target).toBe('remote')
+    expect(decision.reason).toBe('skill:Code Review')
+  })
+
+  test('handles ContentPart[] messages without crashing', () => {
+    const skills = [{
+      name: 'Code Review',
+      description: 'Review code changes',
+      content: '# Code Review',
+      metadata: { egirl: { complexity: 'remote' as const } },
+      baseDir: '/tmp/skills/code-review',
+      enabled: true,
+    }]
+
+    const routerWithSkills = createRouter(configWithRemote, skills)
+
+    const messages: ChatMessage[] = [
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'Please review this code' },
+          { type: 'image_url', image_url: { url: 'data:image/png;base64,...' } },
+        ],
+      },
+    ]
+
+    // Should not throw — previously crashed because matchSkills received ContentPart[]
+    const decision = routerWithSkills.route(messages)
+    expect(decision.target).toBeDefined()
+  })
+
+  test('matches skills via escalation triggers', () => {
+    const skills = [{
+      name: 'Research',
+      description: 'Research topics',
+      content: '# Research',
+      metadata: {
+        egirl: {
+          complexity: 'remote' as const,
+          escalationTriggers: ['investigate', 'look up'],
+        },
+      },
+      baseDir: '/tmp/skills/research',
+      enabled: true,
+    }]
+
+    const routerWithSkills = createRouter(configWithRemote, skills)
+
+    const messages: ChatMessage[] = [
+      { role: 'user', content: 'Can you investigate how Bun handles ESM imports?' },
+    ]
+
+    const decision = routerWithSkills.route(messages)
+    expect(decision.target).toBe('remote')
+    expect(decision.reason).toBe('skill:Research')
+  })
 })

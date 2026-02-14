@@ -65,7 +65,7 @@ export class Router {
     const likelyTools = this.detectLikelyTools(lastContent, toolsAvailable ?? [])
 
     // Check if any skills match and have routing preferences
-    const matchedSkills = this.matchSkills(lastMessage.content)
+    const matchedSkills = this.matchSkills(lastContent)
 
     // Build rule context
     const context: RuleContext = {
