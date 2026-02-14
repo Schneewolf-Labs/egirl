@@ -44,6 +44,44 @@ The agent should behave like a competent colleague who knows the codebase, remem
 
 egirl uses the native Qwen3 chat template for tool calling. See [docs/tool-format.md](docs/tool-format.md) for the full specification.
 
+## Design Language
+
+egirl's visual identity is derived from the logo: deep purples, hot pinks, and dark neutrals. An anime cat-girl with a crescent moon — playful but sharp. The CLI should feel like it belongs to that world.
+
+### Brand Palette
+
+Extracted from the logo. Use these as the source of truth for any UI surface — terminal, HTML docs, Discord embeds.
+
+| Role | Hex | 256-color | Usage |
+|------|-----|-----------|-------|
+| Purple (primary) | `#af5fd7` | 135 | Headings, user prompt, section labels |
+| Hot Pink (secondary) | `#ff5faf` | 198 | Agent name (`egirl>`), emphasis, brand text |
+| Orchid (accent) | `#d75fd7` | 171 | Decorators, separators, tool call arrows |
+| Gray (muted) | `#767676` | 243 | Timestamps, metadata, de-emphasized text |
+| Soft Green (success) | `#87d787` | 114 | `ok` status, connected, enabled |
+| Rose (error) | `#ff5f87` | 204 | `err` status, failures |
+| Gold (warning) | `#ffd75f` | 221 | Warnings, thresholds |
+| Light Purple (info) | `#af87ff` | 141 | Info-level logs |
+
+### CLI Theme System
+
+Themes live in `src/ui/theme.ts`. Four built-in themes:
+
+- **egirl** (default) — Purple/pink. The brand palette above.
+- **midnight** — Steel blue/teal. Late-night hacking.
+- **neon** — Green/cyan. Cyberpunk terminal.
+- **mono** — Grayscale. When you want output, not vibes.
+
+Set via `theme = "egirl"` in `egirl.toml` (root level). All CLI output — logger, prompts, help text, status — uses the active theme through `colors()` from `src/ui/theme.ts`.
+
+### Principles
+
+- **256-color ANSI** — No external color libraries. Raw `\x1b[38;5;{n}m` sequences. Works in every modern terminal.
+- **Theme-aware, not theme-dependent** — Output is readable even without color support. Never encode meaning in color alone.
+- **Semantic color roles** — Don't hardcode ANSI codes in display files. Import `colors()` and use named roles (`primary`, `secondary`, `error`, etc.).
+- **Consistent hierarchy** — `BOLD` for brand name. `primary` for section headers. `accent` for commands/keywords. `DIM` for metadata. `muted` for noise.
+- **HTML docs** — When generating HTML documentation or manuals, use the same hex palette. Purple (`#af5fd7`) for headings, pink (`#ff5faf`) for accents, dark background (`#1a1a2e`) for code blocks.
+
 ## What NOT to Build
 
 - No WebSocket gateway (Discord.js handles its connection, CLI is stdio)

@@ -1,28 +1,35 @@
 import type { RuntimeConfig } from '../config'
 import { createProviderRegistry } from '../providers'
 import { createSkillManager } from '../skills'
+import { BOLD, colors, DIM, getTheme, RESET } from '../ui/theme'
 
 export async function showStatus(config: RuntimeConfig): Promise<void> {
-  console.log('egirl Status\n')
+  const c = colors()
+  const theme = getTheme()
 
-  console.log('Configuration:')
-  console.log(`  Workspace: ${config.workspace.path}`)
-  console.log(`  Local Model: ${config.local.model}`)
-  console.log(`  Local Endpoint: ${config.local.endpoint}`)
+  console.log(`\n${c.secondary}${BOLD}egirl${RESET} ${DIM}Status${RESET}\n`)
+
+  console.log(`${c.primary}Configuration${RESET}`)
+  console.log(`  ${DIM}Workspace${RESET}   ${config.workspace.path}`)
+  console.log(
+    `  ${DIM}Theme${RESET}       ${c.accent}${theme.name}${RESET} ${DIM}(${theme.label})${RESET}`,
+  )
+  console.log(`  ${DIM}Local Model${RESET} ${config.local.model}`)
+  console.log(`  ${DIM}Endpoint${RESET}    ${config.local.endpoint}`)
 
   if (config.remote.anthropic) {
-    console.log(`  Remote (Anthropic): ${config.remote.anthropic.model}`)
+    console.log(`  ${DIM}Anthropic${RESET}   ${config.remote.anthropic.model}`)
   }
   if (config.remote.openai) {
-    console.log(`  Remote (OpenAI): ${config.remote.openai.model}`)
+    console.log(`  ${DIM}OpenAI${RESET}      ${config.remote.openai.model}`)
   }
 
   if (config.local.embeddings) {
     console.log(
-      `  Embeddings: ${config.local.embeddings.model} @ ${config.local.embeddings.endpoint}`,
+      `  ${DIM}Embeddings${RESET}  ${config.local.embeddings.model} ${DIM}@ ${config.local.embeddings.endpoint}${RESET}`,
     )
     console.log(
-      `    Dimensions: ${config.local.embeddings.dimensions}, Multimodal: ${config.local.embeddings.multimodal}`,
+      `              ${DIM}${config.local.embeddings.dimensions}d, multimodal=${config.local.embeddings.multimodal}${RESET}`,
     )
   }
 
@@ -34,31 +41,35 @@ export async function showStatus(config: RuntimeConfig): Promise<void> {
     /* already logged */
   }
   const skills = skillManager.getAll()
-  console.log(`\nSkills: ${skills.length} loaded`)
+  console.log(`\n${c.primary}Skills${RESET} ${DIM}(${skills.length} loaded)${RESET}`)
   for (const skill of skills) {
     const emoji = skill.metadata.openclaw?.emoji ?? ''
     const complexity = skill.metadata.egirl?.complexity ?? 'auto'
-    const status = skill.enabled ? 'enabled' : 'disabled'
-    console.log(`  ${emoji ? `${emoji} ` : ''}${skill.name} [${complexity}] (${status})`)
+    const status = skill.enabled ? `${c.success}enabled${RESET}` : `${c.muted}disabled${RESET}`
+    console.log(
+      `  ${emoji ? `${emoji} ` : ''}${skill.name} ${DIM}[${complexity}]${RESET} ${status}`,
+    )
   }
 
-  console.log(`\nRouting:`)
-  console.log(`  Default: ${config.routing.default}`)
-  console.log(`  Escalation Threshold: ${config.routing.escalationThreshold}`)
-  console.log(`  Always Local: ${config.routing.alwaysLocal.join(', ')}`)
-  console.log(`  Always Remote: ${config.routing.alwaysRemote.join(', ')}`)
+  console.log(`\n${c.primary}Routing${RESET}`)
+  console.log(`  ${DIM}Default${RESET}     ${config.routing.default}`)
+  console.log(`  ${DIM}Threshold${RESET}   ${config.routing.escalationThreshold}`)
+  console.log(`  ${DIM}Local${RESET}       ${config.routing.alwaysLocal.join(', ')}`)
+  console.log(`  ${DIM}Remote${RESET}      ${config.routing.alwaysRemote.join(', ')}`)
 
   // Test local provider connection
-  console.log('\nProvider Status:')
+  console.log(`\n${c.primary}Provider Status${RESET}`)
   try {
     const providers = createProviderRegistry(config)
     const testResponse = await providers.local.chat({
       messages: [{ role: 'user', content: 'Say "ok" and nothing else.' }],
     })
-    console.log(`  Local: Connected (${testResponse.model})`)
+    console.log(
+      `  ${DIM}Local${RESET}       ${c.success}Connected${RESET} ${DIM}(${testResponse.model})${RESET}`,
+    )
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
-    console.log(`  Local: Error - ${message}`)
+    console.log(`  ${DIM}Local${RESET}       ${c.error}Error${RESET} ${DIM}${message}${RESET}`)
   }
 
   // Test embeddings service
@@ -67,13 +78,19 @@ export async function showStatus(config: RuntimeConfig): Promise<void> {
       const response = await fetch(`${config.local.embeddings.endpoint}/health`)
       if (response.ok) {
         const health = (await response.json()) as { status: string; device: string }
-        console.log(`  Embeddings: Connected (${health.device})`)
+        console.log(
+          `  ${DIM}Embeddings${RESET}  ${c.success}Connected${RESET} ${DIM}(${health.device})${RESET}`,
+        )
       } else {
-        console.log(`  Embeddings: Error - ${response.status}`)
+        console.log(
+          `  ${DIM}Embeddings${RESET}  ${c.error}Error${RESET} ${DIM}${response.status}${RESET}`,
+        )
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
-      console.log(`  Embeddings: Error - ${message}`)
+      console.log(`  ${DIM}Embeddings${RESET}  ${c.error}Error${RESET} ${DIM}${message}${RESET}`)
     }
   }
+
+  console.log()
 }

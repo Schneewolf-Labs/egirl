@@ -1,3 +1,5 @@
+import { colors, DIM, RESET } from '../ui/theme'
+
 type LogLevel = 'debug' | 'info' | 'warn' | 'error'
 
 interface LogEntry {
@@ -8,14 +10,19 @@ interface LogEntry {
   timestamp: Date
 }
 
-const LEVEL_COLORS: Record<LogLevel, string> = {
-  debug: '\x1b[90m', // gray
-  info: '\x1b[36m', // cyan
-  warn: '\x1b[33m', // yellow
-  error: '\x1b[31m', // red
+function levelColor(level: LogLevel): string {
+  const c = colors()
+  switch (level) {
+    case 'debug':
+      return c.muted
+    case 'info':
+      return c.info
+    case 'warn':
+      return c.warning
+    case 'error':
+      return c.error
+  }
 }
-
-const RESET = '\x1b[0m'
 
 class Logger {
   private minLevel: LogLevel = 'info'
@@ -36,11 +43,11 @@ class Logger {
   }
 
   private formatMessage(entry: LogEntry): string {
-    const color = LEVEL_COLORS[entry.level]
+    const color = levelColor(entry.level)
     const time = entry.timestamp.toISOString().slice(11, 23)
     const levelPad = entry.level.toUpperCase().padEnd(5)
 
-    let msg = `${color}[${time}] ${levelPad}${RESET} [${entry.category}] ${entry.message}`
+    let msg = `${color}[${time}] ${levelPad}${RESET} ${DIM}[${entry.category}]${RESET} ${entry.message}`
 
     if (entry.data !== undefined) {
       const dataStr =
