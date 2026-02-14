@@ -92,6 +92,11 @@ export const EgirlConfigSchema = Type.Object({
     })),
   })),
 
+  github: Type.Optional(Type.Object({
+    default_owner: Type.Optional(Type.String()),
+    default_repo: Type.Optional(Type.String()),
+  })),
+
   skills: Type.Object({
     dirs: Type.Array(Type.String(), { default: ['~/.egirl/skills', '{workspace}/skills'] }),
   }),
@@ -193,6 +198,11 @@ export interface RuntimeConfig {
       enabled: boolean
       tools: string[]
     }
+  }
+  github?: {
+    token: string
+    defaultOwner?: string
+    defaultRepo?: string
   }
   skills: {
     dirs: string[]

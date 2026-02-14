@@ -2,7 +2,7 @@ import { join } from 'path'
 import type { RuntimeConfig } from './config'
 import { createProviderRegistry, type ProviderRegistry } from './providers'
 import { createRouter, type Router } from './routing'
-import { createDefaultToolExecutor, type ToolExecutor, type CodeAgentConfig } from './tools'
+import { createDefaultToolExecutor, type ToolExecutor, type CodeAgentConfig, type GitHubConfig } from './tools'
 import { createMemoryManager, Qwen3VLEmbeddings, type MemoryManager } from './memory'
 import { createConversationStore, type ConversationStore } from './conversation'
 import { createStatsTracker, type StatsTracker } from './tracking'
@@ -99,6 +99,18 @@ export function getCodeAgentConfig(config: RuntimeConfig): CodeAgentConfig | und
 }
 
 /**
+ * Extract GitHubConfig from RuntimeConfig if GITHUB_TOKEN is set.
+ */
+export function getGitHubConfig(config: RuntimeConfig): GitHubConfig | undefined {
+  if (!config.github) return undefined
+  return {
+    token: config.github.token,
+    defaultOwner: config.github.defaultOwner,
+    defaultRepo: config.github.defaultRepo,
+  }
+}
+
+/**
  * Load skills from bundled + configured directories.
  * Bundled skills are loaded first so user directories can override them.
  */
@@ -135,7 +147,7 @@ export async function createAppServices(config: RuntimeConfig): Promise<AppServi
   const conversations = createConversations(config)
   const skills = await loadSkills(config)
   const router = createRouter(config, skills)
-  const toolExecutor = createDefaultToolExecutor(memory, getCodeAgentConfig(config))
+  const toolExecutor = createDefaultToolExecutor(memory, getCodeAgentConfig(config), getGitHubConfig(config))
   toolExecutor.setSafety(buildSafetyConfig(config))
   const stats = createStatsTracker()
 
