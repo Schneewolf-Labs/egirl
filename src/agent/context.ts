@@ -93,7 +93,7 @@ You have access to these tools:
 **Delegation:**
 - \`code_agent\` - Delegate complex coding tasks to Claude Code (multi-file edits, refactoring, debugging)
 
-Use tools proactively to gather information rather than asking. Use git tools directly instead of running git via execute_command. For complex coding tasks (multi-file edits, refactoring, debugging), delegate to code_agent rather than attempting many sequential edits yourself.`)
+Use tools proactively to gather information rather than asking. Use git tools directly instead of running git via execute_command. Delegate coding tasks to code_agent by default — you're a coordinator, not a code generator. Only use edit_file directly for trivial single-line changes you're certain about.`)
 
   // Add any additional context
   if (additionalContext) {
