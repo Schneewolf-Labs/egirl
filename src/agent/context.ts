@@ -10,6 +10,7 @@ export interface AgentContext {
   messages: ChatMessage[]
   workspaceDir: string
   sessionId: string
+  conversationSummary?: string
 }
 
 /**

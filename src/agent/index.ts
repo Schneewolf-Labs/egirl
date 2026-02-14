@@ -7,5 +7,6 @@ export {
   type AgentContext,
   type SystemPromptOptions,
 } from './context'
-export { fitToContextWindow, estimateMessageTokens, type ContextWindowConfig } from './context-window'
+export { fitToContextWindow, estimateMessageTokens, type ContextWindowConfig, type FitResult } from './context-window'
+export { summarizeMessages, formatSummaryMessage } from './context-summarizer'
 export { type AgentEventHandler } from './events'

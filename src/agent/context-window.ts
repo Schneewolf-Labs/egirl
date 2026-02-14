@@ -7,6 +7,12 @@ export interface ContextWindowConfig {
   maxToolResultTokens?: number    // max tokens per individual tool result (default 8000)
 }
 
+export interface FitResult {
+  messages: ChatMessage[]
+  droppedMessages: ChatMessage[]  // messages that were trimmed from the front
+  wasTrimmed: boolean
+}
+
 // ---------------------------------------------------------------------------
 // Token counting — uses real tokenizer when available, estimation as fallback
 // ---------------------------------------------------------------------------
@@ -214,8 +220,8 @@ function buildMessageGroups(messages: ChatMessage[], tokenCounts: number[]): Mes
  *
  * Returns the fitted message array (without system prompt — caller prepends that).
  *
- * Extensible: future versions can summarize dropped messages, score importance,
- * or inject RAG-retrieved context into the truncation notice.
+ * When messages are dropped, they are returned in `droppedMessages` so the
+ * caller can summarize them for context compaction.
  */
 export async function fitToContextWindow(
   systemPrompt: string,
@@ -223,7 +229,7 @@ export async function fitToContextWindow(
   tools: ToolDefinition[],
   config: ContextWindowConfig,
   tokenizer?: Tokenizer
-): Promise<ChatMessage[]> {
+): Promise<FitResult> {
   const {
     contextLength,
     reserveForOutput = 2048,
@@ -240,7 +246,8 @@ export async function fitToContextWindow(
       `System prompt (~${systemTokens}t) + tools (~${toolDefTokens}t) + reserve (${reserveForOutput}t) exceeds context (${contextLength}t)`
     )
     const lastUser = [...messages].reverse().find(m => m.role === 'user')
-    return lastUser ? [lastUser] : messages.slice(-1)
+    const fallback = lastUser ? [lastUser] : messages.slice(-1)
+    return { messages: fallback, droppedMessages: messages, wasTrimmed: true }
   }
 
   // Truncate oversized tool results (in parallel)
@@ -258,7 +265,7 @@ export async function fitToContextWindow(
 
   // Everything fits — no trimming needed
   if (totalTokens <= budget) {
-    return processed
+    return { messages: processed, droppedMessages: [], wasTrimmed: false }
   }
 
   log.info(
@@ -302,6 +309,10 @@ export async function fitToContextWindow(
     }
   }
 
+  // Collect the dropped messages (original messages that didn't make it into result)
+  const keptStartIdx = fittedGroups.length > 0 ? fittedGroups[0]!.startIdx : messages.length
+  const dropped = messages.slice(0, keptStartIdx)
+
   const droppedCount = messages.length - result.length
   if (droppedCount > 0) {
     log.info('context-window', `Dropped ${droppedCount} older messages, kept ${result.length}`)
@@ -311,5 +322,5 @@ export async function fitToContextWindow(
     })
   }
 
-  return result
+  return { messages: result, droppedMessages: dropped, wasTrimmed: droppedCount > 0 }
 }

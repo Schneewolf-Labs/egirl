@@ -9,6 +9,7 @@ import type { MemoryManager } from '../memory'
 import { Router, shouldRetryWithRemote, analyzeResponseForEscalation } from '../routing'
 import { createAgentContext, addMessage, type AgentContext, type SystemPromptOptions } from './context'
 import { fitToContextWindow } from './context-window'
+import { summarizeMessages, formatSummaryMessage } from './context-summarizer'
 import { retrieveForContext } from '../memory/retrieval'
 import { createLlamaCppTokenizer } from '../providers/llamacpp-tokenizer'
 import { log } from '../util/logger'
@@ -70,13 +71,19 @@ export class AgentLoop {
     this.context = createAgentContext(deps.config, deps.sessionId, this.promptOptions)
     this.tokenizer = createLlamaCppTokenizer(deps.config.local.endpoint)
 
-    // Load conversation history from store
+    // Load conversation history and summary from store
     if (this.conversationStore) {
       const history = this.conversationStore.loadMessages(deps.sessionId)
       if (history.length > 0) {
         this.context.messages = history
         this.persistedIndex = history.length
         log.info('agent', `Loaded ${history.length} messages for session ${deps.sessionId}`)
+      }
+
+      const summary = this.conversationStore.loadSummary(deps.sessionId)
+      if (summary) {
+        this.context.conversationSummary = summary
+        log.info('agent', `Loaded conversation summary (${summary.length} chars)`)
       }
     }
   }
@@ -259,6 +266,9 @@ export class AgentLoop {
    * Send messages to a provider with context window management.
    * Uses the llama.cpp tokenizer for accurate token counting.
    * Retries once with the server's actual n_ctx if the count was still off.
+   *
+   * When messages are dropped to fit the context window, triggers
+   * summarization of the dropped messages to preserve key context.
    */
   private async chatWithContextWindow(
     provider: LLMProvider,
@@ -273,17 +283,33 @@ export class AgentLoop {
     // Use real tokenizer for local provider, skip for remote (no endpoint to call)
     const tokenizer = target === 'local' ? this.tokenizer : undefined
 
-    const fitted = await fitToContextWindow(
+    // If we have a compacted summary, prepend it to the messages for fitting
+    const messagesForFitting = this.context.conversationSummary
+      ? [formatSummaryMessage(this.context.conversationSummary), ...this.context.messages]
+      : this.context.messages
+
+    const fitResult = await fitToContextWindow(
       this.context.systemPrompt,
-      this.context.messages,
+      messagesForFitting,
       tools,
       { contextLength },
       tokenizer
     )
 
+    // Trigger async summarization of dropped messages (if compaction enabled)
+    if (fitResult.wasTrimmed && this.config.conversation.contextCompaction) {
+      // Filter out the summary message itself from dropped messages — only summarize real conversation
+      const droppedConversation = fitResult.droppedMessages.filter(
+        m => !(m.role === 'system' && typeof m.content === 'string' && m.content.startsWith('[Conversation summary'))
+      )
+      if (droppedConversation.length > 0) {
+        this.triggerCompaction(droppedConversation)
+      }
+    }
+
     const messages: ChatMessage[] = [
       { role: 'system', content: this.context.systemPrompt },
-      ...fitted,
+      ...fitResult.messages,
     ]
 
     log.debug('agent', `Sending ${messages.length} messages to ${provider.name} (budget: ${contextLength}t)`)
@@ -299,9 +325,9 @@ export class AgentLoop {
         `Server n_ctx=${error.contextSize} differs from config (${contextLength}). Retrimming.`
       )
 
-      const refitted = await fitToContextWindow(
+      const refitResult = await fitToContextWindow(
         this.context.systemPrompt,
-        this.context.messages,
+        messagesForFitting,
         tools,
         { contextLength: error.contextSize },
         tokenizer
@@ -309,11 +335,40 @@ export class AgentLoop {
 
       const retryMessages: ChatMessage[] = [
         { role: 'system', content: this.context.systemPrompt },
-        ...refitted,
+        ...refitResult.messages,
       ]
 
       return await this.chatWithRetry(provider, retryMessages, tools, onToken)
     }
+  }
+
+  /**
+   * Summarize dropped messages and update the conversation summary.
+   * Runs asynchronously — the summary will be available on the next turn.
+   * Uses the local provider to avoid API costs.
+   */
+  private triggerCompaction(droppedMessages: ChatMessage[]): void {
+    const provider = this.localProvider
+    const existingSummary = this.context.conversationSummary
+
+    // Fire and forget — don't block the current response
+    summarizeMessages(droppedMessages, provider, existingSummary)
+      .then(summary => {
+        this.context.conversationSummary = summary
+        log.info('agent', `Context compacted: summary updated (${summary.length} chars)`)
+
+        // Persist updated summary
+        if (this.conversationStore) {
+          try {
+            this.conversationStore.updateSummary(this.context.sessionId, summary)
+          } catch (error) {
+            log.warn('agent', 'Failed to persist compacted summary:', error)
+          }
+        }
+      })
+      .catch(error => {
+        log.warn('agent', 'Context compaction failed:', error)
+      })
   }
 
   /**

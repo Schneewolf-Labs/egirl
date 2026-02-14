@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'bun:test'
-import { estimateMessageTokens, fitToContextWindow } from '../../src/agent/context-window'
+import { estimateMessageTokens, fitToContextWindow, type FitResult } from '../../src/agent/context-window'
 import type { ChatMessage, ToolDefinition } from '../../src/providers/types'
 
 describe('estimateMessageTokens', () => {
@@ -62,13 +62,15 @@ describe('fitToContextWindow', () => {
       { role: 'user', content: 'Hi' },
       { role: 'assistant', content: 'Hello!' },
     ]
-    const result = await fitToContextWindow('System prompt', messages, [], {
+    const { messages: result, wasTrimmed, droppedMessages } = await fitToContextWindow('System prompt', messages, [], {
       contextLength: 4096,
       reserveForOutput: 200,
     })
     expect(result).toHaveLength(2)
     expect(result[0].content).toBe('Hi')
     expect(result[1].content).toBe('Hello!')
+    expect(wasTrimmed).toBe(false)
+    expect(droppedMessages).toHaveLength(0)
   })
 
   test('trims older messages when context is too small', async () => {
@@ -78,12 +80,14 @@ describe('fitToContextWindow', () => {
       messages.push({ role: 'assistant', content: `Response ${i} with some extra padding text to use tokens` })
     }
 
-    const result = await fitToContextWindow('System', messages, [], smallConfig)
+    const { messages: result, wasTrimmed, droppedMessages } = await fitToContextWindow('System', messages, [], smallConfig)
     // Should have fewer messages than input
     expect(result.length).toBeLessThan(messages.length)
     // Should include truncation notice
     const hasNotice = result.some(m => m.role === 'user' && typeof m.content === 'string' && m.content.includes('trimmed'))
     expect(hasNotice).toBe(true)
+    expect(wasTrimmed).toBe(true)
+    expect(droppedMessages.length).toBeGreaterThan(0)
   })
 
   test('keeps most recent messages when trimming', async () => {
@@ -96,7 +100,7 @@ describe('fitToContextWindow', () => {
       { role: 'assistant', content: 'Recent reply' },
     ]
 
-    const result = await fitToContextWindow('Sys', messages, [], smallConfig)
+    const { messages: result } = await fitToContextWindow('Sys', messages, [], smallConfig)
     const contents = result.map(m => m.content)
     // Recent messages should be preserved
     expect(contents).toContain('Recent message')
@@ -115,7 +119,7 @@ describe('fitToContextWindow', () => {
       { role: 'assistant', content: 'The file contains: file contents here' },
     ]
 
-    const result = await fitToContextWindow('System', messages, [], {
+    const { messages: result } = await fitToContextWindow('System', messages, [], {
       contextLength: 4096,
       reserveForOutput: 200,
     })
@@ -135,7 +139,7 @@ describe('fitToContextWindow', () => {
       { role: 'tool', content: longResult, tool_call_id: 'call_0' },
     ]
 
-    const result = await fitToContextWindow('Sys', messages, [], {
+    const { messages: result } = await fitToContextWindow('Sys', messages, [], {
       contextLength: 8192,
       reserveForOutput: 200,
       maxToolResultTokens: 100,
@@ -153,7 +157,7 @@ describe('fitToContextWindow', () => {
       { role: 'user', content: 'A very long system prompt that takes all the budget' },
     ]
 
-    const result = await fitToContextWindow(
+    const { messages: result } = await fitToContextWindow(
       'A'.repeat(1000), // huge system prompt
       messages,
       [],
