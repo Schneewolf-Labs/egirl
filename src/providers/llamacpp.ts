@@ -1,8 +1,8 @@
-import type { LLMProvider, ChatRequest, ChatResponse, ChatMessage, ContentPart } from './types'
-import { ContextSizeError } from './types'
 import { parseToolCalls } from '../tools/format'
-import { formatMessagesForQwen3 } from './qwen3-format'
 import { log } from '../util/logger'
+import { formatMessagesForQwen3 } from './qwen3-format'
+import type { ChatMessage, ChatRequest, ChatResponse, ContentPart, LLMProvider } from './types'
+import { ContextSizeError } from './types'
 
 type FormattedContent = string | ContentPart[]
 type FormattedMessage = { role: string; content: FormattedContent }
@@ -62,7 +62,7 @@ export class LlamaCppProvider implements LLMProvider {
     const messages = this.formatMessages(req.messages)
 
     // Format tools for llama.cpp (Qwen3 template expects this format)
-    const tools = req.tools?.map(tool => ({
+    const tools = req.tools?.map((tool) => ({
       type: 'function' as const,
       function: {
         name: tool.name,
@@ -97,7 +97,7 @@ export class LlamaCppProvider implements LLMProvider {
           if (errorJson.error?.type === 'exceed_context_size_error') {
             throw new ContextSizeError(
               errorJson.error.n_prompt_tokens ?? 0,
-              errorJson.error.n_ctx ?? 0
+              errorJson.error.n_ctx ?? 0,
             )
           }
         } catch (e) {
@@ -114,7 +114,11 @@ export class LlamaCppProvider implements LLMProvider {
     let model = this.name
 
     if (shouldStream && response.body) {
-      const result = await this.readStream(response.body, req.onToken!, (req.tools?.length ?? 0) > 0)
+      const result = await this.readStream(
+        response.body,
+        req.onToken!,
+        (req.tools?.length ?? 0) > 0,
+      )
       content = result.content
       usage = result.usage
       model = result.model ?? this.name
@@ -129,7 +133,10 @@ export class LlamaCppProvider implements LLMProvider {
       model = data.model ?? this.name
     }
 
-    log.debug('llamacpp', `Raw response (${content.length} chars): ${content.substring(0, 200)}${content.length > 200 ? '...' : ''}`)
+    log.debug(
+      'llamacpp',
+      `Raw response (${content.length} chars): ${content.substring(0, 200)}${content.length > 200 ? '...' : ''}`,
+    )
 
     // If generation was cut off mid-tool-call (e.g. by max_tokens), close the last tag
     if (req.tools?.length && content.includes('<tool_call>')) {
@@ -144,7 +151,10 @@ export class LlamaCppProvider implements LLMProvider {
     const { content: cleanContent, toolCalls } = parseToolCalls(content)
 
     if (toolCalls.length > 0) {
-      log.debug('llamacpp', `Parsed ${toolCalls.length} tool calls: ${toolCalls.map(tc => tc.name).join(', ')}`)
+      log.debug(
+        'llamacpp',
+        `Parsed ${toolCalls.length} tool calls: ${toolCalls.map((tc) => tc.name).join(', ')}`,
+      )
     }
 
     return {
@@ -165,8 +175,12 @@ export class LlamaCppProvider implements LLMProvider {
   private async readStream(
     body: ReadableStream<Uint8Array>,
     onToken: (token: string) => void,
-    hasTools: boolean
-  ): Promise<{ content: string; usage: { prompt_tokens: number; completion_tokens: number }; model?: string }> {
+    hasTools: boolean,
+  ): Promise<{
+    content: string
+    usage: { prompt_tokens: number; completion_tokens: number }
+    model?: string
+  }> {
     const decoder = new TextDecoder()
     const reader = body.getReader()
 

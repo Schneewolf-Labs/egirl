@@ -1,12 +1,12 @@
-import { describe, test, expect, beforeAll, afterAll } from 'bun:test'
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
+import { execSync } from 'child_process'
+import { mkdir, rm, writeFile } from 'fs/promises'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { writeFile, mkdir, rm } from 'fs/promises'
-import { execSync } from 'child_process'
 import { gatherStandup } from '../../src/standup'
 
 describe('gatherStandup', () => {
-  const testDir = join(tmpdir(), 'egirl-standup-integration-' + Date.now())
+  const testDir = join(tmpdir(), `egirl-standup-integration-${Date.now()}`)
 
   function exec(cmd: string): string {
     return execSync(cmd, { cwd: testDir, encoding: 'utf-8' })
@@ -29,7 +29,7 @@ describe('gatherStandup', () => {
   })
 
   test('returns empty context for non-git directories', async () => {
-    const noGitDir = join(tmpdir(), 'egirl-nogit-standup-' + Date.now())
+    const noGitDir = join(tmpdir(), `egirl-nogit-standup-${Date.now()}`)
     await mkdir(noGitDir, { recursive: true })
 
     const report = await gatherStandup(noGitDir)

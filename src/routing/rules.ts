@@ -72,7 +72,10 @@ export function createRoutingRules(config: RuntimeConfig): RoutingRule[] {
   return rules.sort((a, b) => b.priority - a.priority)
 }
 
-export function applyRules(rules: RoutingRule[], context: RuleContext): { target: 'local' | 'remote'; rule: string } {
+export function applyRules(
+  rules: RoutingRule[],
+  context: RuleContext,
+): { target: 'local' | 'remote'; rule: string } {
   for (const rule of rules) {
     if (rule.match(context)) {
       return { target: rule.target, rule: rule.name }

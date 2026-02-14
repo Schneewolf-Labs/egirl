@@ -17,7 +17,11 @@ export class LlamaCppEmbeddings implements EmbeddingProvider {
   supportsImages: boolean
   private endpoint: string
 
-  constructor(endpoint: string, model: string, options: { dimensions?: number; multimodal?: boolean } = {}) {
+  constructor(
+    endpoint: string,
+    model: string,
+    options: { dimensions?: number; multimodal?: boolean } = {},
+  ) {
     this.endpoint = endpoint.replace(/\/$/, '')
     this.name = `llamacpp/${model}`
     this.dimensions = options.dimensions ?? 2048
@@ -28,9 +32,10 @@ export class LlamaCppEmbeddings implements EmbeddingProvider {
     const payload = this.formatPayload(input)
 
     // Use /embeddings for multimodal, /v1/embeddings for text-only
-    const endpoint = this.supportsImages && input.type !== 'text'
-      ? `${this.endpoint}/embeddings`
-      : `${this.endpoint}/v1/embeddings`
+    const endpoint =
+      this.supportsImages && input.type !== 'text'
+        ? `${this.endpoint}/embeddings`
+        : `${this.endpoint}/v1/embeddings`
 
     const response = await fetch(endpoint, {
       method: 'POST',
@@ -61,11 +66,11 @@ export class LlamaCppEmbeddings implements EmbeddingProvider {
 
   async embedBatch(inputs: EmbeddingInput[]): Promise<Float32Array[]> {
     // Process sequentially for multimodal, batch for text-only
-    if (this.supportsImages && inputs.some(i => i.type !== 'text')) {
-      return Promise.all(inputs.map(input => this.embed(input)))
+    if (this.supportsImages && inputs.some((i) => i.type !== 'text')) {
+      return Promise.all(inputs.map((input) => this.embed(input)))
     }
 
-    const texts = inputs.map(input => {
+    const texts = inputs.map((input) => {
       if (input.type !== 'text') {
         throw new Error('Batch embedding only supports text input')
       }
@@ -84,7 +89,7 @@ export class LlamaCppEmbeddings implements EmbeddingProvider {
     }
 
     const data = (await response.json()) as { data: Array<{ embedding: number[] }> }
-    return data.data.map(d => new Float32Array(d.embedding))
+    return data.data.map((d) => new Float32Array(d.embedding))
   }
 
   /**

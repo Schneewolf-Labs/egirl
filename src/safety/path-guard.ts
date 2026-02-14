@@ -1,4 +1,4 @@
-import { resolve, isAbsolute, normalize } from 'path'
+import { isAbsolute, normalize, resolve } from 'path'
 
 const DEFAULT_SENSITIVE_PATTERNS: RegExp[] = [
   /\.env$/,
@@ -32,7 +32,7 @@ export function isPathAllowed(
 
   for (const allowed of allowedPaths) {
     const normalizedAllowed = normalize(allowed)
-    if (fullPath === normalizedAllowed || fullPath.startsWith(normalizedAllowed + '/')) {
+    if (fullPath === normalizedAllowed || fullPath.startsWith(`${normalizedAllowed}/`)) {
       return undefined
     }
   }

@@ -1,5 +1,5 @@
 import { log } from '../../util/logger'
-import type { EventSource, EventPayload } from '../types'
+import type { EventPayload, EventSource } from '../types'
 
 export interface WebhookConfig {
   path: string
@@ -11,7 +11,10 @@ export interface WebhookRouter {
   removeWebhookRoute(path: string): void
 }
 
-async function verifyHmac(req: Request, secret: string): Promise<{ isValid: boolean; body: string }> {
+async function verifyHmac(
+  req: Request,
+  secret: string,
+): Promise<{ isValid: boolean; body: string }> {
   const body = await req.text()
   const signature = req.headers.get('x-hub-signature-256') ?? req.headers.get('x-signature')
 
@@ -28,17 +31,14 @@ async function verifyHmac(req: Request, secret: string): Promise<{ isValid: bool
     ['sign'],
   )
   const sig = await crypto.subtle.sign('HMAC', key, encoder.encode(body))
-  const expected = 'sha256=' + Array.from(new Uint8Array(sig))
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('')
+  const expected = `sha256=${Array.from(new Uint8Array(sig))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('')}`
 
   return { isValid: signature === expected, body }
 }
 
-export function createWebhookSource(
-  config: WebhookConfig,
-  router: WebhookRouter,
-): EventSource {
+export function createWebhookSource(config: WebhookConfig, router: WebhookRouter): EventSource {
   let callback: ((payload: EventPayload) => void) | undefined
 
   const routePath = config.path.startsWith('/') ? config.path : `/${config.path}`

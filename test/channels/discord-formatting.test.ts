@@ -1,11 +1,13 @@
-import { describe, test, expect } from 'bun:test'
-import { formatToolCallsMarkdown, truncateResult, splitMessage } from '../../src/channels/discord/formatting'
+import { describe, expect, test } from 'bun:test'
+import {
+  formatToolCallsMarkdown,
+  splitMessage,
+  truncateResult,
+} from '../../src/channels/discord/formatting'
 
 describe('formatToolCallsMarkdown', () => {
   test('formats no-arg tool call', () => {
-    const result = formatToolCallsMarkdown([
-      { id: '1', name: 'git_status', arguments: {} },
-    ])
+    const result = formatToolCallsMarkdown([{ id: '1', name: 'git_status', arguments: {} }])
     expect(result).toBe('git_status()')
   })
 
@@ -72,14 +74,14 @@ describe('splitMessage', () => {
     const result = splitMessage(content, 50)
     expect(result.length).toBeGreaterThan(1)
     // First chunk should split at the last newline before limit
-    expect(result[0]!.includes('\n') || result[0]!.length <= 50).toBe(true)
+    expect(result[0]?.includes('\n') || result[0]?.length <= 50).toBe(true)
   })
 
   test('hard splits when no good break point', () => {
     const content = 'a'.repeat(300)
     const result = splitMessage(content, 100)
     expect(result.length).toBe(3)
-    expect(result[0]!.length).toBe(100)
+    expect(result[0]?.length).toBe(100)
   })
 
   test('handles empty content', () => {

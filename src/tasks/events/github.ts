@@ -1,6 +1,6 @@
-import { log } from '../../util/logger'
-import type { EventSource, EventPayload } from '../types'
 import type { ToolExecutor } from '../../tools'
+import { log } from '../../util/logger'
+import type { EventPayload, EventSource } from '../types'
 
 export type GitHubEventType =
   | 'push'
@@ -89,9 +89,9 @@ export function createGitHubEventSource(
     start(onTrigger) {
       callback = onTrigger
       // Initial poll to set baseline state (don't trigger on first run)
-      pollAll().catch(err => log.warn('tasks', `Initial GitHub poll failed: ${err}`))
+      pollAll().catch((err) => log.warn('tasks', `Initial GitHub poll failed: ${err}`))
       timer = setInterval(() => {
-        pollAll().catch(err => log.warn('tasks', `GitHub poll failed: ${err}`))
+        pollAll().catch((err) => log.warn('tasks', `GitHub poll failed: ${err}`))
       }, pollMs)
       log.debug('tasks', `GitHub event source started: ${config.events.join(', ')} (${pollMs}ms)`)
     },
@@ -107,15 +107,24 @@ export function createGitHubEventSource(
 
 function getToolForEvent(eventType: GitHubEventType): string {
   switch (eventType) {
-    case 'push': return 'gh_ci_status'
-    case 'pr_opened': return 'gh_pr_list'
-    case 'pr_review': return 'gh_pr_list'
-    case 'pr_merged': return 'gh_pr_list'
-    case 'ci_complete': return 'gh_ci_status'
-    case 'ci_failed': return 'gh_ci_status'
-    case 'issue_opened': return 'gh_issue_list'
-    case 'issue_comment': return 'gh_issue_list'
-    case 'release': return 'gh_issue_list' // fallback — release tool doesn't exist yet
+    case 'push':
+      return 'gh_ci_status'
+    case 'pr_opened':
+      return 'gh_pr_list'
+    case 'pr_review':
+      return 'gh_pr_list'
+    case 'pr_merged':
+      return 'gh_pr_list'
+    case 'ci_complete':
+      return 'gh_ci_status'
+    case 'ci_failed':
+      return 'gh_ci_status'
+    case 'issue_opened':
+      return 'gh_issue_list'
+    case 'issue_comment':
+      return 'gh_issue_list'
+    case 'release':
+      return 'gh_issue_list' // fallback — release tool doesn't exist yet
   }
 }
 
@@ -162,6 +171,6 @@ async function hashString(input: string): Promise<string> {
   const data = new TextEncoder().encode(input)
   const hash = await crypto.subtle.digest('SHA-256', data)
   return Array.from(new Uint8Array(hash))
-    .map(b => b.toString(16).padStart(2, '0'))
+    .map((b) => b.toString(16).padStart(2, '0'))
     .join('')
 }

@@ -1,4 +1,4 @@
-import { describe, test, expect, afterEach } from 'bun:test'
+import { afterEach, describe, expect, test } from 'bun:test'
 import { applyLogLevel } from '../../src/util/args'
 import { log } from '../../src/util/logger'
 

@@ -1,7 +1,7 @@
-import { readFileSync, existsSync } from 'fs'
+import { existsSync, readFileSync } from 'fs'
 import { join } from 'path'
-import type { ChatMessage } from '../providers/types'
 import type { RuntimeConfig } from '../config'
+import type { ChatMessage } from '../providers/types'
 import type { Skill } from '../skills/types'
 import { log } from '../util/logger'
 
@@ -36,7 +36,10 @@ export interface SystemPromptOptions {
 /**
  * Build system prompt from workspace personality files
  */
-export function buildSystemPrompt(config: RuntimeConfig, options: SystemPromptOptions = {}): string {
+export function buildSystemPrompt(
+  config: RuntimeConfig,
+  options: SystemPromptOptions = {},
+): string {
   const { path: workspaceDir } = config.workspace
   const { skills, additionalContext } = options
 
@@ -61,7 +64,7 @@ export function buildSystemPrompt(config: RuntimeConfig, options: SystemPromptOp
     sections.push(agents)
   }
 
-  if (user && user.includes(':') && !user.includes(':\n\n')) {
+  if (user?.includes(':') && !user.includes(':\n\n')) {
     // Only include USER.md if it has actual content (not just template)
     sections.push(user)
   }
@@ -157,7 +160,7 @@ function buildSkillsSection(skills: Skill[]): string {
 export function createAgentContext(
   config: RuntimeConfig,
   sessionId: string,
-  options: SystemPromptOptions = {}
+  options: SystemPromptOptions = {},
 ): AgentContext {
   const systemPrompt = buildSystemPrompt(config, options)
 
@@ -176,8 +179,5 @@ export function addMessage(context: AgentContext, message: ChatMessage): void {
 }
 
 export function getMessagesWithSystem(context: AgentContext): ChatMessage[] {
-  return [
-    { role: 'system', content: context.systemPrompt },
-    ...context.messages,
-  ]
+  return [{ role: 'system', content: context.systemPrompt }, ...context.messages]
 }

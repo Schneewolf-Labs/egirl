@@ -1,5 +1,5 @@
 export function delay(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms))
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 export async function retry<T>(
@@ -9,14 +9,9 @@ export async function retry<T>(
     delayMs?: number
     backoffMultiplier?: number
     onError?: (error: unknown, attempt: number) => void
-  } = {}
+  } = {},
 ): Promise<T> {
-  const {
-    maxAttempts = 3,
-    delayMs = 1000,
-    backoffMultiplier = 2,
-    onError,
-  } = options
+  const { maxAttempts = 3, delayMs = 1000, backoffMultiplier = 2, onError } = options
 
   let lastError: unknown
 
@@ -28,7 +23,7 @@ export async function retry<T>(
       onError?.(error, attempt)
 
       if (attempt < maxAttempts) {
-        const waitTime = delayMs * Math.pow(backoffMultiplier, attempt - 1)
+        const waitTime = delayMs * backoffMultiplier ** (attempt - 1)
         await delay(waitTime)
       }
     }
@@ -41,7 +36,7 @@ export function timeout<T>(promise: Promise<T>, ms: number, message?: string): P
   return Promise.race([
     promise,
     new Promise<T>((_, reject) =>
-      setTimeout(() => reject(new Error(message ?? `Operation timed out after ${ms}ms`)), ms)
+      setTimeout(() => reject(new Error(message ?? `Operation timed out after ${ms}ms`)), ms),
     ),
   ])
 }
@@ -65,7 +60,7 @@ export class AsyncQueue<T> {
       return item
     }
 
-    return new Promise<T>(resolve => {
+    return new Promise<T>((resolve) => {
       this.resolvers.push(resolve)
     })
   }

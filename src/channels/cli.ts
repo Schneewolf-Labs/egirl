@@ -3,8 +3,8 @@ import type { AgentLoop } from '../agent'
 import type { AgentEventHandler } from '../agent/events'
 import type { ToolCall } from '../providers/types'
 import type { ToolResult } from '../tools/types'
-import type { Channel } from './types'
 import { log } from '../util/logger'
+import type { Channel } from './types'
 
 const DIM = '\x1b[2m'
 const RESET = '\x1b[0m'
@@ -16,7 +16,7 @@ function truncateResult(output: string, maxLen: number): string {
   const trimmed = output.trim()
   if (!trimmed) return ''
   if (trimmed.length <= maxLen) return trimmed
-  return trimmed.substring(0, maxLen) + '...'
+  return `${trimmed.substring(0, maxLen)}...`
 }
 
 function formatArgs(args: Record<string, unknown>): string {
@@ -57,9 +57,7 @@ function createCLIEventHandler(): { handler: AgentEventHandler; state: CLIEventS
     },
 
     onToolCallComplete(_callId: string, name: string, result: ToolResult) {
-      const status = result.success
-        ? `${GREEN}ok${RESET}`
-        : `${RED}err${RESET}`
+      const status = result.success ? `${GREEN}ok${RESET}` : `${RED}err${RESET}`
       const preview = truncateResult(result.output, 200)
       process.stdout.write(`${DIM}  < ${name} ${status}${RESET}\n`)
       if (preview) {

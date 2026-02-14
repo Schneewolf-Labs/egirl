@@ -1,30 +1,35 @@
 import {
-  Client,
-  GatewayIntentBits,
-  Partials,
-  Message,
   ChannelType,
+  Client,
   Events,
-  type MessageReaction,
-  type User,
-  type PartialMessageReaction,
-  type PartialUser,
+  GatewayIntentBits,
   type Interaction,
+  type Message,
+  type MessageReaction,
+  type PartialMessageReaction,
+  Partials,
+  type PartialUser,
+  type User,
 } from 'discord.js'
-import type { AgentLoop, AgentFactory } from '../agent'
+import type { AgentFactory, AgentLoop } from '../agent'
 import type { LLMProvider } from '../providers/types'
-import type { Channel, OutboundChannel } from './types'
-import { createDiscordEventHandler, buildToolCallPrefix } from './discord/events'
-import { splitMessage } from './discord/formatting'
-import { MessageBatcher, evaluateRelevance, formatBatchForAgent, type BufferedMessage } from './discord/batch-evaluator'
 import { log } from '../util/logger'
+import {
+  type BufferedMessage,
+  evaluateRelevance,
+  formatBatchForAgent,
+  MessageBatcher,
+} from './discord/batch-evaluator'
+import { buildToolCallPrefix, createDiscordEventHandler } from './discord/events'
+import { splitMessage } from './discord/formatting'
+import type { Channel } from './types'
 
 export interface DiscordConfig {
   token: string
-  allowedChannels: string[]  // Channel IDs or 'dm' for DMs
-  allowedUsers: string[]     // User IDs (empty = allow all)
-  passiveChannels: string[]  // Channel IDs to passively monitor (respond without being tagged)
-  batchWindowMs: number      // Debounce window before evaluating a batch (ms)
+  allowedChannels: string[] // Channel IDs or 'dm' for DMs
+  allowedUsers: string[] // User IDs (empty = allow all)
+  passiveChannels: string[] // Channel IDs to passively monitor (respond without being tagged)
+  batchWindowMs: number // Debounce window before evaluating a batch (ms)
 }
 
 export interface ReactionEvent {
@@ -57,11 +62,13 @@ export class DiscordChannel implements Channel {
 
     if (config.passiveChannels.length > 0 && localProvider) {
       this.localProvider = localProvider
-      this.batcher = new MessageBatcher(
-        { windowMs: config.batchWindowMs },
-        (channelId, messages) => this.handleBatch(channelId, messages)
+      this.batcher = new MessageBatcher({ windowMs: config.batchWindowMs }, (channelId, messages) =>
+        this.handleBatch(channelId, messages),
       )
-      log.info('discord', `Passive monitoring enabled for ${config.passiveChannels.length} channel(s), batch window ${config.batchWindowMs}ms`)
+      log.info(
+        'discord',
+        `Passive monitoring enabled for ${config.passiveChannels.length} channel(s), batch window ${config.batchWindowMs}ms`,
+      )
     }
 
     this.client = new Client({
@@ -73,7 +80,7 @@ export class DiscordChannel implements Channel {
         GatewayIntentBits.GuildMessageReactions,
       ],
       partials: [
-        Partials.Channel,  // Required for DMs
+        Partials.Channel, // Required for DMs
         Partials.Message,
         Partials.Reaction,
       ],
@@ -123,7 +130,7 @@ export class DiscordChannel implements Channel {
 
   private async handleReaction(
     reaction: MessageReaction | PartialMessageReaction,
-    user: User | PartialUser
+    user: User | PartialUser,
   ): Promise<void> {
     // Fetch partial reaction/message if needed
     if (reaction.partial) {
@@ -217,7 +224,10 @@ export class DiscordChannel implements Channel {
         const content = message.content.trim()
         if (!content) return
 
-        log.debug('discord', `Buffering passive message from ${message.author.tag} in ${message.channel.id}`)
+        log.debug(
+          'discord',
+          `Buffering passive message from ${message.author.tag} in ${message.channel.id}`,
+        )
         this.batcher.add(message.channel.id, {
           author: message.author.displayName ?? message.author.username,
           authorId: message.author.id,
@@ -293,7 +303,10 @@ export class DiscordChannel implements Channel {
       // Send response (split if too long)
       await this.sendResponse(message, fullResponse)
 
-      log.debug('discord', `[${sessionKey}] Responded via ${response.provider}${response.escalated ? ' (escalated)' : ''}`)
+      log.debug(
+        'discord',
+        `[${sessionKey}] Responded via ${response.provider}${response.escalated ? ' (escalated)' : ''}`,
+      )
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error)
       log.error('discord', `Error processing message:`, error)
@@ -355,7 +368,10 @@ export class DiscordChannel implements Channel {
 
     const botName = this.client.user?.displayName ?? this.client.user?.username ?? 'Kira'
 
-    log.debug('discord', `Evaluating batch of ${messages.length} message(s) in channel ${channelId}`)
+    log.debug(
+      'discord',
+      `Evaluating batch of ${messages.length} message(s) in channel ${channelId}`,
+    )
 
     const decision = await evaluateRelevance(this.localProvider, messages, botName)
     if (!decision.shouldRespond) {
@@ -366,11 +382,13 @@ export class DiscordChannel implements Channel {
     log.info('discord', `Responding to batch in ${channelId}: ${decision.reason}`)
 
     // Use the last message in the batch as the reply target
-    const lastMessage = messages[messages.length - 1]!.message
+    const lastMessage = messages[messages.length - 1]?.message
     const agentInput = formatBatchForAgent(messages)
 
     // Process through the normal agent pipeline
-    this.enqueueMessage(() => this.processMessage(lastMessage, agentInput))
+    if (lastMessage) {
+      this.enqueueMessage(() => this.processMessage(lastMessage, agentInput))
+    }
   }
 
   private isMentioned(message: Message): boolean {
@@ -423,7 +441,7 @@ export class DiscordChannel implements Channel {
 
     try {
       const channel = await this.client.channels.fetch(target)
-      if (channel && channel.isTextBased() && 'send' in channel) {
+      if (channel?.isTextBased() && 'send' in channel) {
         const chunks = splitMessage(message, 2000)
         for (const chunk of chunks) {
           await channel.send(chunk)
@@ -453,6 +471,10 @@ export class DiscordChannel implements Channel {
   }
 }
 
-export function createDiscordChannel(agentFactory: AgentFactory, config: DiscordConfig, localProvider?: LLMProvider): DiscordChannel {
+export function createDiscordChannel(
+  agentFactory: AgentFactory,
+  config: DiscordConfig,
+  localProvider?: LLMProvider,
+): DiscordChannel {
   return new DiscordChannel(agentFactory, config, localProvider)
 }

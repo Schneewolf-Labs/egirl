@@ -1,22 +1,27 @@
-export type { EmbeddingInput, EmbeddingProvider, EmbeddingProviderType, EmbeddingProviderConfig } from './types'
-export { Qwen3VLEmbeddings } from './qwen3-vl'
 export { LlamaCppEmbeddings } from './llamacpp'
 export { OpenAIEmbeddings } from './openai'
+export { Qwen3VLEmbeddings } from './qwen3-vl'
+export type {
+  EmbeddingInput,
+  EmbeddingProvider,
+  EmbeddingProviderConfig,
+  EmbeddingProviderType,
+} from './types'
 
-import type { EmbeddingProvider, EmbeddingProviderType, EmbeddingProviderConfig } from './types'
-import { Qwen3VLEmbeddings } from './qwen3-vl'
 import { LlamaCppEmbeddings } from './llamacpp'
 import { OpenAIEmbeddings } from './openai'
+import { Qwen3VLEmbeddings } from './qwen3-vl'
+import type { EmbeddingProvider, EmbeddingProviderConfig, EmbeddingProviderType } from './types'
 
 export function createEmbeddingProvider(
   type: EmbeddingProviderType,
-  config: EmbeddingProviderConfig
+  config: EmbeddingProviderConfig,
 ): EmbeddingProvider {
   switch (type) {
     case 'qwen3-vl':
       return new Qwen3VLEmbeddings(
         config.endpoint ?? 'http://localhost:8082',
-        config.dimensions ?? 2048
+        config.dimensions ?? 2048,
       )
     case 'llamacpp':
       return new LlamaCppEmbeddings(
@@ -25,7 +30,7 @@ export function createEmbeddingProvider(
         {
           dimensions: config.dimensions ?? 2048,
           multimodal: config.multimodal ?? false,
-        }
+        },
       )
     case 'openai':
       if (!config.apiKey) throw new Error('OpenAI API key required')

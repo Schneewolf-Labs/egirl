@@ -1,11 +1,11 @@
 import type { AgentLoop, AgentResponse } from '../agent'
-import type { ToolExecutor } from '../tools'
-import type { MemoryManager } from '../memory'
 import type { RuntimeConfig } from '../config'
+import type { MemoryManager, SearchResult } from '../memory'
 import type { ProviderRegistry } from '../providers'
+import type { ToolExecutor } from '../tools'
 import type { StatsTracker } from '../tracking/stats'
-import type { OpenAPISpec } from './openapi'
 import { log } from '../util/logger'
+import type { OpenAPISpec } from './openapi'
 
 export interface RouteDeps {
   agent: AgentLoop
@@ -46,7 +46,7 @@ export function createRoutes(deps: RouteDeps): Map<string, Map<string, RouteHand
     if (!routes.has(path)) {
       routes.set(path, new Map())
     }
-    routes.get(path)!.set(method, handler)
+    routes.get(path)?.set(method, handler)
   }
 
   // GET /health
@@ -62,7 +62,7 @@ export function createRoutes(deps: RouteDeps): Map<string, Map<string, RouteHand
 
   // POST /v1/chat
   route('POST', '/v1/chat', async (req) => {
-    const body = await parseBody(req) as { message?: string; max_turns?: number } | null
+    const body = (await parseBody(req)) as { message?: string; max_turns?: number } | null
     if (!body?.message) {
       return error('Missing required field: message')
     }
@@ -77,7 +77,7 @@ export function createRoutes(deps: RouteDeps): Map<string, Map<string, RouteHand
         response.provider,
         response.usage.input_tokens,
         response.usage.output_tokens,
-        response.escalated
+        response.escalated,
       )
 
       return json({
@@ -108,7 +108,10 @@ export function createRoutes(deps: RouteDeps): Map<string, Map<string, RouteHand
       return error(`Unknown tool: ${name}`, 404)
     }
 
-    const body = await parseBody(req) as { arguments?: Record<string, unknown>; cwd?: string } | null
+    const body = (await parseBody(req)) as {
+      arguments?: Record<string, unknown>
+      cwd?: string
+    } | null
     const args = body?.arguments ?? {}
     const cwd = body?.cwd ?? deps.config.workspace.path
 
@@ -143,7 +146,7 @@ export function createRoutes(deps: RouteDeps): Map<string, Map<string, RouteHand
       return error('Memory system not initialized', 503)
     }
 
-    const body = await parseBody(req) as { value?: string } | null
+    const body = (await parseBody(req)) as { value?: string } | null
     if (!body?.value) {
       return error('Missing required field: value')
     }
@@ -170,7 +173,7 @@ export function createRoutes(deps: RouteDeps): Map<string, Map<string, RouteHand
       return error('Memory system not initialized', 503)
     }
 
-    const body = await parseBody(req) as { query?: string; mode?: string; limit?: number } | null
+    const body = (await parseBody(req)) as { query?: string; mode?: string; limit?: number } | null
     if (!body?.query) {
       return error('Missing required field: query')
     }
@@ -179,7 +182,7 @@ export function createRoutes(deps: RouteDeps): Map<string, Map<string, RouteHand
     const limit = body.limit ?? 10
 
     try {
-      let results
+      let results: SearchResult[]
       switch (mode) {
         case 'text':
           results = await deps.memory.searchText(body.query, limit)
@@ -195,7 +198,7 @@ export function createRoutes(deps: RouteDeps): Map<string, Map<string, RouteHand
       }
 
       return json({
-        results: results.map(r => ({
+        results: results.map((r) => ({
           key: r.memory.key,
           value: r.memory.value,
           score: r.score,

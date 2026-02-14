@@ -1,8 +1,8 @@
-import { describe, test, expect, beforeEach, afterEach } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import { unlinkSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { unlinkSync } from 'fs'
-import { ConversationStore, createConversationStore } from '../../src/conversation/store'
+import { type ConversationStore, createConversationStore } from '../../src/conversation/store'
 import type { ChatMessage } from '../../src/providers/types'
 
 let store: ConversationStore
@@ -15,9 +15,15 @@ beforeEach(() => {
 
 afterEach(() => {
   store.close()
-  try { unlinkSync(dbPath) } catch {}
-  try { unlinkSync(dbPath + '-wal') } catch {}
-  try { unlinkSync(dbPath + '-shm') } catch {}
+  try {
+    unlinkSync(dbPath)
+  } catch {}
+  try {
+    unlinkSync(`${dbPath}-wal`)
+  } catch {}
+  try {
+    unlinkSync(`${dbPath}-shm`)
+  } catch {}
 })
 
 describe('ConversationStore', () => {
@@ -31,10 +37,10 @@ describe('ConversationStore', () => {
     const loaded = store.loadMessages('test:session1')
 
     expect(loaded).toHaveLength(2)
-    expect(loaded[0]!.role).toBe('user')
-    expect(loaded[0]!.content).toBe('Hello')
-    expect(loaded[1]!.role).toBe('assistant')
-    expect(loaded[1]!.content).toBe('Hi there!')
+    expect(loaded[0]?.role).toBe('user')
+    expect(loaded[0]?.content).toBe('Hello')
+    expect(loaded[1]?.role).toBe('assistant')
+    expect(loaded[1]?.content).toBe('Hi there!')
   })
 
   test('returns empty array for unknown session', () => {
@@ -43,18 +49,14 @@ describe('ConversationStore', () => {
   })
 
   test('appends to existing session', () => {
-    store.appendMessages('s1', [
-      { role: 'user', content: 'first' },
-    ])
+    store.appendMessages('s1', [{ role: 'user', content: 'first' }])
 
-    store.appendMessages('s1', [
-      { role: 'assistant', content: 'second' },
-    ])
+    store.appendMessages('s1', [{ role: 'assistant', content: 'second' }])
 
     const loaded = store.loadMessages('s1')
     expect(loaded).toHaveLength(2)
-    expect(loaded[0]!.content).toBe('first')
-    expect(loaded[1]!.content).toBe('second')
+    expect(loaded[0]?.content).toBe('first')
+    expect(loaded[1]?.content).toBe('second')
   })
 
   test('preserves tool_calls and tool_call_id', () => {
@@ -62,9 +64,7 @@ describe('ConversationStore', () => {
       {
         role: 'assistant',
         content: '',
-        tool_calls: [
-          { id: 'tc1', name: 'read_file', arguments: { path: '/foo' } },
-        ],
+        tool_calls: [{ id: 'tc1', name: 'read_file', arguments: { path: '/foo' } }],
       },
       {
         role: 'tool',
@@ -76,15 +76,13 @@ describe('ConversationStore', () => {
     store.appendMessages('s2', messages)
     const loaded = store.loadMessages('s2')
 
-    expect(loaded[0]!.tool_calls).toHaveLength(1)
-    expect(loaded[0]!.tool_calls![0]!.name).toBe('read_file')
-    expect(loaded[1]!.tool_call_id).toBe('tc1')
+    expect(loaded[0]?.tool_calls).toHaveLength(1)
+    expect(loaded[0]?.tool_calls?.[0]?.name).toBe('read_file')
+    expect(loaded[1]?.tool_call_id).toBe('tc1')
   })
 
   test('deleteSession removes session and messages', () => {
-    store.appendMessages('del-me', [
-      { role: 'user', content: 'temp' },
-    ])
+    store.appendMessages('del-me', [{ role: 'user', content: 'temp' }])
 
     const deleted = store.deleteSession('del-me')
     expect(deleted).toBe(true)
@@ -102,28 +100,24 @@ describe('ConversationStore', () => {
       { role: 'user', content: 'a' },
       { role: 'assistant', content: 'b' },
     ])
-    store.appendMessages('discord:s2', [
-      { role: 'user', content: 'x' },
-    ])
+    store.appendMessages('discord:s2', [{ role: 'user', content: 'x' }])
 
     const sessions = store.listSessions()
     expect(sessions).toHaveLength(2)
 
-    const s1 = sessions.find(s => s.id === 'cli:s1')
+    const s1 = sessions.find((s) => s.id === 'cli:s1')
     expect(s1).toBeDefined()
-    expect(s1!.channel).toBe('cli')
-    expect(s1!.messageCount).toBe(2)
+    expect(s1?.channel).toBe('cli')
+    expect(s1?.messageCount).toBe(2)
 
-    const s2 = sessions.find(s => s.id === 'discord:s2')
+    const s2 = sessions.find((s) => s.id === 'discord:s2')
     expect(s2).toBeDefined()
-    expect(s2!.channel).toBe('discord')
-    expect(s2!.messageCount).toBe(1)
+    expect(s2?.channel).toBe('discord')
+    expect(s2?.messageCount).toBe(1)
   })
 
   test('compact removes old sessions', async () => {
-    store.appendMessages('old-session', [
-      { role: 'user', content: 'ancient' },
-    ])
+    store.appendMessages('old-session', [{ role: 'user', content: 'ancient' }])
 
     // Wait 2ms so the session's last_active_at is strictly before Date.now()
     await Bun.sleep(2)
@@ -151,7 +145,7 @@ describe('ConversationStore', () => {
     const remaining = store.loadMessages('big-session')
     expect(remaining).toHaveLength(5)
     // Should keep the newest (highest ID) messages
-    expect(remaining[0]!.content).toBe('message 15')
+    expect(remaining[0]?.content).toBe('message 15')
   })
 
   test('ignores empty message arrays', () => {

@@ -1,12 +1,12 @@
+import { log } from '../util/logger'
 import {
   gatherBranch,
-  gatherStatus,
+  gatherLastCommitAge,
   gatherRecentCommits,
   gatherStashCount,
-  gatherLastCommitAge,
+  gatherStatus,
   isGitRepo,
 } from './gather'
-import { log } from '../util/logger'
 
 export interface StandupReport {
   /** Formatted context string for injection into agent system prompt */
@@ -83,7 +83,7 @@ export async function gatherStandup(workspaceDir: string): Promise<StandupReport
         for (const f of staged) fileLines.push(`  + ${f} (staged)`)
         for (const f of modified) fileLines.push(`  M ${f}`)
         for (const f of untracked) fileLines.push(`  ? ${f}`)
-        sections.push('```\n' + fileLines.join('\n') + '\n```')
+        sections.push(`\`\`\`\n${fileLines.join('\n')}\n\`\`\``)
       }
     }
   }

@@ -1,8 +1,16 @@
-import type { Tool, ToolResult } from '../types'
-import type { MemoryManager, SearchResult, MemoryCategory } from '../../memory'
+import type { MemoryCategory, MemoryManager, SearchResult } from '../../memory'
 import { log } from '../../util/logger'
+import type { Tool, ToolResult } from '../types'
 
-const VALID_CATEGORIES = ['general', 'fact', 'preference', 'decision', 'project', 'entity', 'conversation'] as const
+const VALID_CATEGORIES = [
+  'general',
+  'fact',
+  'preference',
+  'decision',
+  'project',
+  'entity',
+  'conversation',
+] as const
 
 /**
  * Create memory tools with access to a MemoryManager instance.
@@ -26,7 +34,8 @@ export function createMemoryTools(memory: MemoryManager): {
         properties: {
           query: {
             type: 'string',
-            description: 'The search query - can be a question, keywords, or natural language description',
+            description:
+              'The search query - can be a question, keywords, or natural language description',
           },
           limit: {
             type: 'number',
@@ -34,11 +43,13 @@ export function createMemoryTools(memory: MemoryManager): {
           },
           category: {
             type: 'string',
-            description: 'Filter by category: general, fact, preference, decision, project, entity, conversation',
+            description:
+              'Filter by category: general, fact, preference, decision, project, entity, conversation',
           },
           since: {
             type: 'string',
-            description: 'Only include memories created after this date (ISO format, e.g., "2025-01-15" or "3 days ago")',
+            description:
+              'Only include memories created after this date (ISO format, e.g., "2025-01-15" or "3 days ago")',
           },
         },
         required: ['query'],
@@ -52,9 +63,10 @@ export function createMemoryTools(memory: MemoryManager): {
       const since = params.since as string | undefined
 
       try {
-        const categories = category && VALID_CATEGORIES.includes(category as MemoryCategory)
-          ? [category as MemoryCategory]
-          : undefined
+        const categories =
+          category && VALID_CATEGORIES.includes(category as MemoryCategory)
+            ? [category as MemoryCategory]
+            : undefined
         const sinceTs = since ? parseTimeExpression(since) : undefined
 
         const results = await memory.searchFiltered(query, {
@@ -89,7 +101,8 @@ export function createMemoryTools(memory: MemoryManager): {
   const memoryGetTool: Tool = {
     definition: {
       name: 'memory_get',
-      description: 'Retrieve a specific memory by its exact key. Returns value, category, source, and timestamps.',
+      description:
+        'Retrieve a specific memory by its exact key. Returns value, category, source, and timestamps.',
       parameters: {
         type: 'object',
         properties: {
@@ -156,7 +169,8 @@ export function createMemoryTools(memory: MemoryManager): {
           },
           category: {
             type: 'string',
-            description: 'Memory category: fact, preference, decision, project, entity, or general (default: general)',
+            description:
+              'Memory category: fact, preference, decision, project, entity, or general (default: general)',
           },
         },
         required: ['key', 'value'],
@@ -196,7 +210,8 @@ export function createMemoryTools(memory: MemoryManager): {
   const memoryDeleteTool: Tool = {
     definition: {
       name: 'memory_delete',
-      description: 'Delete a memory by its exact key. Use this to remove outdated or incorrect information.',
+      description:
+        'Delete a memory by its exact key. Use this to remove outdated or incorrect information.',
       parameters: {
         type: 'object',
         properties: {
@@ -240,7 +255,8 @@ export function createMemoryTools(memory: MemoryManager): {
   const memoryListTool: Tool = {
     definition: {
       name: 'memory_list',
-      description: 'List stored memories with their keys, categories, and previews. Supports filtering by category and source.',
+      description:
+        'List stored memories with their keys, categories, and previews. Supports filtering by category and source.',
       parameters: {
         type: 'object',
         properties: {
@@ -254,11 +270,13 @@ export function createMemoryTools(memory: MemoryManager): {
           },
           category: {
             type: 'string',
-            description: 'Filter by category: general, fact, preference, decision, project, entity, conversation',
+            description:
+              'Filter by category: general, fact, preference, decision, project, entity, conversation',
           },
           source: {
             type: 'string',
-            description: 'Filter by source: manual (user-created), auto (auto-extracted), conversation',
+            description:
+              'Filter by source: manual (user-created), auto (auto-extracted), conversation',
           },
         },
         required: [],
@@ -278,14 +296,15 @@ export function createMemoryTools(memory: MemoryManager): {
         if (items.length === 0) {
           return {
             success: true,
-            output: total === 0
-              ? 'No memories stored yet.'
-              : `No memories matching filters at offset ${offset} (${total} total).`,
+            output:
+              total === 0
+                ? 'No memories stored yet.'
+                : `No memories matching filters at offset ${offset} (${total} total).`,
           }
         }
 
         const lines = items.map((m, i) => {
-          const preview = m.value.length > 100 ? m.value.slice(0, 100) + '...' : m.value
+          const preview = m.value.length > 100 ? `${m.value.slice(0, 100)}...` : m.value
           const date = new Date(m.updatedAt).toISOString().slice(0, 10)
           return `${offset + i + 1}. [${m.key}] (${m.category}, ${m.source}, ${date})\n   ${preview}`
         })
@@ -293,7 +312,9 @@ export function createMemoryTools(memory: MemoryManager): {
         const filterDesc = [
           category ? `category=${category}` : '',
           source ? `source=${source}` : '',
-        ].filter(Boolean).join(', ')
+        ]
+          .filter(Boolean)
+          .join(', ')
 
         const header = `Memories ${offset + 1}-${offset + items.length} of ${total}${filterDesc ? ` (${filterDesc})` : ''}:`
         return {
@@ -321,7 +342,8 @@ export function createMemoryTools(memory: MemoryManager): {
         properties: {
           since: {
             type: 'string',
-            description: 'Start of time range (ISO date like "2025-01-15", or relative like "7 days ago", "last week", "this month")',
+            description:
+              'Start of time range (ISO date like "2025-01-15", or relative like "7 days ago", "last week", "this month")',
           },
           until: {
             type: 'string',
@@ -333,7 +355,8 @@ export function createMemoryTools(memory: MemoryManager): {
           },
           category: {
             type: 'string',
-            description: 'Filter by category: general, fact, preference, decision, project, entity, conversation',
+            description:
+              'Filter by category: general, fact, preference, decision, project, entity, conversation',
           },
           limit: {
             type: 'number',
@@ -366,9 +389,10 @@ export function createMemoryTools(memory: MemoryManager): {
 
         if (query) {
           // Semantic search within time range
-          const categories = category && VALID_CATEGORIES.includes(category as MemoryCategory)
-            ? [category as MemoryCategory]
-            : undefined
+          const categories =
+            category && VALID_CATEGORIES.includes(category as MemoryCategory)
+              ? [category as MemoryCategory]
+              : undefined
           results = await memory.searchFiltered(query, {
             limit,
             categories,
@@ -381,7 +405,7 @@ export function createMemoryTools(memory: MemoryManager): {
 
           // Apply category filter
           if (category && VALID_CATEGORIES.includes(category as MemoryCategory)) {
-            results = results.filter(r => r.memory.category === category)
+            results = results.filter((r) => r.memory.category === category)
           }
         }
 
@@ -410,7 +434,14 @@ export function createMemoryTools(memory: MemoryManager): {
     },
   }
 
-  return { memorySearchTool, memoryGetTool, memorySetTool, memoryDeleteTool, memoryListTool, memoryRecallTool }
+  return {
+    memorySearchTool,
+    memoryGetTool,
+    memorySetTool,
+    memoryDeleteTool,
+    memoryListTool,
+    memoryRecallTool,
+  }
 }
 
 /**
@@ -421,7 +452,7 @@ function parseTimeExpression(expr: string): number | undefined {
 
   // Try ISO date first
   const isoDate = new Date(expr)
-  if (!isNaN(isoDate.getTime())) {
+  if (!Number.isNaN(isoDate.getTime())) {
     return isoDate.getTime()
   }
 
@@ -468,7 +499,7 @@ function formatSearchResults(results: SearchResult[]): string {
     .map((r, i) => {
       const score = r.score.toFixed(3)
       const value = r.memory.value
-      const preview = value.length > 200 ? value.slice(0, 200) + '...' : value
+      const preview = value.length > 200 ? `${value.slice(0, 200)}...` : value
       const imageNote = r.memory.imagePath ? ` [has image]` : ''
       const cat = r.memory.category !== 'general' ? ` ${r.memory.category}` : ''
       const date = new Date(r.memory.createdAt).toISOString().slice(0, 10)
@@ -484,7 +515,7 @@ function formatTemporalResults(results: SearchResult[]): string {
   return results
     .map((r, i) => {
       const value = r.memory.value
-      const preview = value.length > 200 ? value.slice(0, 200) + '...' : value
+      const preview = value.length > 200 ? `${value.slice(0, 200)}...` : value
       const created = new Date(r.memory.createdAt).toISOString().slice(0, 16).replace('T', ' ')
       const cat = r.memory.category
       const source = r.memory.source

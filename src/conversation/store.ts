@@ -63,19 +63,21 @@ export class ConversationStore {
   }
 
   loadMessages(sessionId: string): ChatMessage[] {
-    const rows = this.db.query(`
+    const rows = this.db
+      .query(`
       SELECT role, content, tool_calls, tool_call_id
       FROM messages
       WHERE session_id = ?
       ORDER BY id ASC
-    `).all(sessionId) as Array<{
+    `)
+      .all(sessionId) as Array<{
       role: string
       content: string
       tool_calls: string | null
       tool_call_id: string | null
     }>
 
-    return rows.map(row => {
+    return rows.map((row) => {
       const msg: ChatMessage = {
         role: row.role as ChatMessage['role'],
         content: JSON.parse(row.content),
@@ -97,11 +99,14 @@ export class ConversationStore {
     const channel = sessionId.split(':')[0] ?? 'unknown'
 
     this.db.transaction(() => {
-      this.db.run(`
+      this.db.run(
+        `
         INSERT INTO sessions (id, channel, created_at, last_active_at)
         VALUES (?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET last_active_at = excluded.last_active_at
-      `, [sessionId, channel, now, now])
+      `,
+        [sessionId, channel, now, now],
+      )
 
       const stmt = this.db.prepare(`
         INSERT INTO messages (session_id, role, content, tool_calls, tool_call_id, created_at)
@@ -115,25 +120,22 @@ export class ConversationStore {
           JSON.stringify(msg.content),
           msg.tool_calls ? JSON.stringify(msg.tool_calls) : null,
           msg.tool_call_id ?? null,
-          now
+          now,
         )
       }
     })()
   }
 
   loadSummary(sessionId: string): string | undefined {
-    const row = this.db.query(
-      'SELECT summary FROM sessions WHERE id = ?'
-    ).get(sessionId) as { summary: string | null } | null
+    const row = this.db.query('SELECT summary FROM sessions WHERE id = ?').get(sessionId) as {
+      summary: string | null
+    } | null
 
     return row?.summary ?? undefined
   }
 
   updateSummary(sessionId: string, summary: string): void {
-    this.db.run(
-      'UPDATE sessions SET summary = ? WHERE id = ?',
-      [summary, sessionId]
-    )
+    this.db.run('UPDATE sessions SET summary = ? WHERE id = ?', [summary, sessionId])
   }
 
   deleteSession(sessionId: string): boolean {
@@ -151,9 +153,9 @@ export class ConversationStore {
 
     this.db.transaction(() => {
       // Delete expired sessions
-      const expired = this.db.query(
-        'SELECT id FROM sessions WHERE last_active_at < ?'
-      ).all(cutoff) as Array<{ id: string }>
+      const expired = this.db
+        .query('SELECT id FROM sessions WHERE last_active_at < ?')
+        .all(cutoff) as Array<{ id: string }>
 
       for (const { id } of expired) {
         const msgResult = this.db.run('DELETE FROM messages WHERE session_id = ?', [id])
@@ -163,16 +165,19 @@ export class ConversationStore {
       }
 
       // Trim sessions that exceed max messages (keep newest)
-      const oversized = this.db.query(`
+      const oversized = this.db
+        .query(`
         SELECT session_id, COUNT(*) as count
         FROM messages
         GROUP BY session_id
         HAVING count > ?
-      `).all(options.maxMessages) as Array<{ session_id: string; count: number }>
+      `)
+        .all(options.maxMessages) as Array<{ session_id: string; count: number }>
 
       for (const { session_id, count } of oversized) {
         const excess = count - options.maxMessages
-        const result = this.db.run(`
+        const result = this.db.run(
+          `
           DELETE FROM messages
           WHERE id IN (
             SELECT id FROM messages
@@ -180,25 +185,32 @@ export class ConversationStore {
             ORDER BY id ASC
             LIMIT ?
           )
-        `, [session_id, excess])
+        `,
+          [session_id, excess],
+        )
         messagesDeleted += result.changes
       }
     })()
 
     if (sessionsDeleted > 0 || messagesDeleted > 0) {
-      log.info('conversation', `Compacted: ${sessionsDeleted} sessions, ${messagesDeleted} messages removed`)
+      log.info(
+        'conversation',
+        `Compacted: ${sessionsDeleted} sessions, ${messagesDeleted} messages removed`,
+      )
     }
 
     return { sessionsDeleted, messagesDeleted }
   }
 
   listSessions(): SessionInfo[] {
-    const rows = this.db.query(`
+    const rows = this.db
+      .query(`
       SELECT s.id, s.channel, s.created_at, s.last_active_at,
         (SELECT COUNT(*) FROM messages m WHERE m.session_id = s.id) as message_count
       FROM sessions s
       ORDER BY s.last_active_at DESC
-    `).all() as Array<{
+    `)
+      .all() as Array<{
       id: string
       channel: string
       created_at: number
@@ -206,7 +218,7 @@ export class ConversationStore {
       message_count: number
     }>
 
-    return rows.map(row => ({
+    return rows.map((row) => ({
       id: row.id,
       channel: row.channel,
       messageCount: row.message_count,

@@ -1,6 +1,6 @@
 export type EmbeddingInput =
   | { type: 'text'; text: string }
-  | { type: 'image'; image: string }  // base64 data URL or file path
+  | { type: 'image'; image: string } // base64 data URL or file path
   | { type: 'multimodal'; text: string; image: string }
 
 export interface EmbeddingProvider {
@@ -18,6 +18,6 @@ export interface EmbeddingProviderConfig {
   apiKey?: string
   model?: string
   dimensions?: number
-  multimodal?: boolean  // For llamacpp with mmproj
-  baseUrl?: string      // Custom base URL for OpenAI-compatible APIs
+  multimodal?: boolean // For llamacpp with mmproj
+  baseUrl?: string // Custom base URL for OpenAI-compatible APIs
 }

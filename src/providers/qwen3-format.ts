@@ -1,5 +1,5 @@
-import type { ChatMessage, ContentPart } from './types'
 import { formatToolCall, formatToolResponse } from '../tools/format'
+import type { ChatMessage, ContentPart } from './types'
 
 type FormattedContent = string | ContentPart[]
 type FormattedMessage = { role: string; content: FormattedContent }
@@ -47,7 +47,7 @@ export function formatMessagesForQwen3(messages: ChatMessage[]): FormattedMessag
       // Group consecutive tool results into a single user message
       const responseParts: string[] = []
 
-      while (i < messages.length && messages[i]!.role === 'tool') {
+      while (i < messages.length && messages[i]?.role === 'tool') {
         const toolMsg = messages[i]!
         const textContent = getTextContent(toolMsg.content)
 

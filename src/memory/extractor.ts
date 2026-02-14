@@ -1,8 +1,7 @@
-import type { ChatMessage } from '../providers/types'
-import type { LLMProvider } from '../providers/types'
-import type { MemoryCategory } from './indexer'
+import type { ChatMessage, LLMProvider } from '../providers/types'
 import { getTextContent } from '../providers/types'
 import { log } from '../util/logger'
+import type { MemoryCategory } from './indexer'
 
 export interface ExtractionResult {
   key: string
@@ -58,16 +57,16 @@ Conversation:
 export async function extractMemories(
   messages: ChatMessage[],
   provider: LLMProvider,
-  config: Partial<ExtractorConfig> = {}
+  config: Partial<ExtractorConfig> = {},
 ): Promise<ExtractionResult[]> {
   const { minMessages, maxExtractions } = { ...DEFAULT_CONFIG, ...config }
 
   // Only extract if there's enough conversation to be meaningful
-  const userMessages = messages.filter(m => m.role === 'user')
+  const userMessages = messages.filter((m) => m.role === 'user')
   if (userMessages.length < minMessages) return []
 
   // Skip if the conversation is mostly tool calls (agent is working, not conversing)
-  const toolMessages = messages.filter(m => m.role === 'tool')
+  const toolMessages = messages.filter((m) => m.role === 'tool')
   if (toolMessages.length > messages.length * 0.7) return []
 
   // Build a condensed view of the conversation (skip tool call details)
@@ -108,14 +107,14 @@ function condenseForExtraction(messages: ChatMessage[]): string {
 
     // For assistant messages with tool calls, note the tools used but skip details
     if (msg.role === 'assistant' && msg.tool_calls && msg.tool_calls.length > 0) {
-      const toolNames = msg.tool_calls.map(tc => tc.name).join(', ')
+      const toolNames = msg.tool_calls.map((tc) => tc.name).join(', ')
       // Include any thinking/text the assistant produced alongside tool calls
       if (text.trim()) {
         lines.push(`Assistant: ${text.slice(0, 200)}`)
       }
       lines.push(`[Used tools: ${toolNames}]`)
       // Skip memory_set calls — those are already stored
-      const hasMemorySet = msg.tool_calls.some(tc => tc.name === 'memory_set')
+      const hasMemorySet = msg.tool_calls.some((tc) => tc.name === 'memory_set')
       if (hasMemorySet) {
         lines.push('[Already stored memories via memory_set]')
       }
@@ -124,7 +123,7 @@ function condenseForExtraction(messages: ChatMessage[]): string {
 
     const label = msg.role === 'user' ? 'User' : 'Assistant'
     // Cap individual messages to avoid blowing up the extraction prompt
-    const trimmed = text.length > 500 ? text.slice(0, 500) + '...' : text
+    const trimmed = text.length > 500 ? `${text.slice(0, 500)}...` : text
     lines.push(`${label}: ${trimmed}`)
   }
 

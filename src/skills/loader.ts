@@ -1,8 +1,8 @@
 import { readdir, readFile, stat } from 'fs/promises'
-import { join, basename } from 'path'
-import type { Skill } from './types'
-import { parseSkillMarkdown, extractSkillName, extractSkillDescription } from './parser'
+import { join } from 'path'
 import { log } from '../util/logger'
+import { extractSkillDescription, extractSkillName, parseSkillMarkdown } from './parser'
+import type { Skill } from './types'
 
 const SKILL_FILENAME = 'SKILL.md'
 

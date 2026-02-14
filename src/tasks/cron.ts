@@ -14,12 +14,28 @@
 // - Step: star-slash-15, 1-30/5
 
 const DAY_NAMES: Record<string, number> = {
-  SUN: 0, MON: 1, TUE: 2, WED: 3, THU: 4, FRI: 5, SAT: 6,
+  SUN: 0,
+  MON: 1,
+  TUE: 2,
+  WED: 3,
+  THU: 4,
+  FRI: 5,
+  SAT: 6,
 }
 
 const MONTH_NAMES: Record<string, number> = {
-  JAN: 1, FEB: 2, MAR: 3, APR: 4, MAY: 5, JUN: 6,
-  JUL: 7, AUG: 8, SEP: 9, OCT: 10, NOV: 11, DEC: 12,
+  JAN: 1,
+  FEB: 2,
+  MAR: 3,
+  APR: 4,
+  MAY: 5,
+  JUN: 6,
+  JUL: 7,
+  AUG: 8,
+  SEP: 9,
+  OCT: 10,
+  NOV: 11,
+  DEC: 12,
 }
 
 export interface CronSchedule {
@@ -104,7 +120,10 @@ export function nextOccurrence(schedule: CronSchedule, after: Date): Date {
     if (!schedule.months.has(next.getMonth() + 1)) {
       next.setMonth(next.getMonth() + 1, 1)
       next.setHours(0, 0, 0, 0)
-    } else if (!schedule.daysOfMonth.has(next.getDate()) || !schedule.daysOfWeek.has(next.getDay())) {
+    } else if (
+      !schedule.daysOfMonth.has(next.getDate()) ||
+      !schedule.daysOfWeek.has(next.getDay())
+    ) {
       next.setDate(next.getDate() + 1)
       next.setHours(0, 0, 0, 0)
     } else if (!schedule.hours.has(next.getHours())) {
@@ -127,13 +146,17 @@ export function formatSchedule(schedule: CronSchedule): string {
     const time = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`
 
     if (schedule.daysOfWeek.size === 7) return `daily at ${time}`
-    if (schedule.daysOfWeek.size === 5 && !schedule.daysOfWeek.has(0) && !schedule.daysOfWeek.has(6)) {
+    if (
+      schedule.daysOfWeek.size === 5 &&
+      !schedule.daysOfWeek.has(0) &&
+      !schedule.daysOfWeek.has(6)
+    ) {
       return `weekdays at ${time}`
     }
 
-    const dayNames = [...schedule.daysOfWeek].sort().map(d =>
-      Object.entries(DAY_NAMES).find(([_, v]) => v === d)?.[0] ?? String(d)
-    )
+    const dayNames = [...schedule.daysOfWeek]
+      .sort()
+      .map((d) => Object.entries(DAY_NAMES).find(([_, v]) => v === d)?.[0] ?? String(d))
     return `${time} on ${dayNames.join(', ')}`
   }
 

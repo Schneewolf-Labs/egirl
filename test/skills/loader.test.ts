@@ -1,6 +1,6 @@
-import { describe, test, expect } from 'bun:test'
+import { describe, expect, test } from 'bun:test'
 import { join } from 'path'
-import { loadSkillsFromDirectory, loadSkillsFromDirectories } from '../../src/skills/loader'
+import { loadSkillsFromDirectories, loadSkillsFromDirectory } from '../../src/skills/loader'
 
 const BUNDLED_DIR = join(import.meta.dir, '..', '..', 'src', 'skills', 'bundled')
 
@@ -10,22 +10,22 @@ describe('loadSkillsFromDirectory', () => {
 
     expect(skills.length).toBeGreaterThanOrEqual(2)
 
-    const names = skills.map(s => s.name)
+    const names = skills.map((s) => s.name)
     expect(names).toContain('Code Review')
     expect(names).toContain('Research')
   })
 
   test('loaded skills have expected fields', async () => {
     const skills = await loadSkillsFromDirectory(BUNDLED_DIR)
-    const codeReview = skills.find(s => s.name === 'Code Review')
+    const codeReview = skills.find((s) => s.name === 'Code Review')
 
     expect(codeReview).toBeDefined()
-    expect(codeReview!.description).toBeTruthy()
-    expect(codeReview!.content).toContain('## Instructions')
-    expect(codeReview!.metadata.egirl?.complexity).toBe('remote')
-    expect(codeReview!.metadata.openclaw?.emoji).toBe('\uD83D\uDD0D')
-    expect(codeReview!.baseDir).toBe(join(BUNDLED_DIR, 'code-review'))
-    expect(codeReview!.enabled).toBe(true)
+    expect(codeReview?.description).toBeTruthy()
+    expect(codeReview?.content).toContain('## Instructions')
+    expect(codeReview?.metadata.egirl?.complexity).toBe('remote')
+    expect(codeReview?.metadata.openclaw?.emoji).toBe('\uD83D\uDD0D')
+    expect(codeReview?.baseDir).toBe(join(BUNDLED_DIR, 'code-review'))
+    expect(codeReview?.enabled).toBe(true)
   })
 
   test('returns empty array for nonexistent directory', async () => {
@@ -39,15 +39,12 @@ describe('loadSkillsFromDirectories', () => {
     // Loading the same directory twice should deduplicate
     const skills = await loadSkillsFromDirectories([BUNDLED_DIR, BUNDLED_DIR])
 
-    const codeReviewCount = skills.filter(s => s.name === 'Code Review').length
+    const codeReviewCount = skills.filter((s) => s.name === 'Code Review').length
     expect(codeReviewCount).toBe(1)
   })
 
   test('skips nonexistent directories without failing', async () => {
-    const skills = await loadSkillsFromDirectories([
-      '/tmp/does-not-exist',
-      BUNDLED_DIR,
-    ])
+    const skills = await loadSkillsFromDirectories(['/tmp/does-not-exist', BUNDLED_DIR])
 
     expect(skills.length).toBeGreaterThanOrEqual(2)
   })

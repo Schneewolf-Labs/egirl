@@ -1,5 +1,5 @@
-import { describe, test, expect } from 'bun:test'
-import { parseTarget, type TargetRef } from '../../src/browser/targeting'
+import { describe, expect, test } from 'bun:test'
+import { parseTarget } from '../../src/browser/targeting'
 
 describe('parseTarget', () => {
   describe('role/name format', () => {

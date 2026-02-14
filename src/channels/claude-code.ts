@@ -1,4 +1,8 @@
-import { query, type Options as ClaudeAgentOptions, type PermissionResult } from '@anthropic-ai/claude-agent-sdk'
+import {
+  type Options as ClaudeAgentOptions,
+  type PermissionResult,
+  query,
+} from '@anthropic-ai/claude-agent-sdk'
 import * as readline from 'readline'
 import type { LLMProvider } from '../providers/types'
 import { log } from '../util/logger'
@@ -28,11 +32,7 @@ export class ClaudeCodeChannel {
   private conversationLog: string[] = []
   private emit: (line: string) => void
 
-  constructor(
-    localProvider: LLMProvider,
-    config: ClaudeCodeConfig,
-    emit?: (line: string) => void
-  ) {
+  constructor(localProvider: LLMProvider, config: ClaudeCodeConfig, emit?: (line: string) => void) {
     this.localProvider = localProvider
     this.config = config
     this.emit = emit ?? ((line) => console.log(line))
@@ -76,7 +76,9 @@ export class ClaudeCodeChannel {
           const result = await this.runTask(trimmed)
           console.log(`\n--- Result ---`)
           console.log(result.result)
-          console.log(`[${result.turns} turns | $${result.costUsd.toFixed(4)} | ${(result.durationMs / 1000).toFixed(1)}s]\n`)
+          console.log(
+            `[${result.turns} turns | $${result.costUsd.toFixed(4)} | ${(result.durationMs / 1000).toFixed(1)}s]\n`,
+          )
         } catch (error) {
           const msg = error instanceof Error ? error.message : String(error)
           console.error(`\nError: ${msg}\n`)
@@ -133,12 +135,17 @@ export class ClaudeCodeChannel {
               this.handleAssistantMessage(message)
               break
 
-            case 'result':
-              const resultMsg = message as { result?: string; num_turns?: number; total_cost_usd?: number }
+            case 'result': {
+              const resultMsg = message as {
+                result?: string
+                num_turns?: number
+                total_cost_usd?: number
+              }
               finalResult = resultMsg.result ?? ''
               turns = resultMsg.num_turns ?? turns
               totalCost = resultMsg.total_cost_usd ?? totalCost
               break
+            }
           }
         }
 
@@ -171,9 +178,8 @@ export class ClaudeCodeChannel {
   private async handleToolRequest(
     toolName: string,
     input: Record<string, unknown>,
-    originalTask: string
+    originalTask: string,
   ): Promise<PermissionResult> {
-
     // Handle AskUserQuestion - Claude is asking for clarification
     if (toolName === 'AskUserQuestion') {
       return this.handleAskUserQuestion(input, originalTask)
@@ -188,14 +194,15 @@ export class ClaudeCodeChannel {
    */
   private async handleAskUserQuestion(
     input: Record<string, unknown>,
-    originalTask: string
+    originalTask: string,
   ): Promise<{ behavior: 'allow'; updatedInput: Record<string, unknown> }> {
-    const questions = input.questions as Array<{
-      question: string
-      header: string
-      options: Array<{ label: string; description: string }>
-      multiSelect?: boolean
-    }> ?? []
+    const questions =
+      (input.questions as Array<{
+        question: string
+        header: string
+        options: Array<{ label: string; description: string }>
+        multiSelect?: boolean
+      }>) ?? []
 
     const answers: Record<string, string> = {}
 
@@ -224,9 +231,8 @@ export class ClaudeCodeChannel {
   private async handlePermissionRequest(
     toolName: string,
     input: Record<string, unknown>,
-    originalTask: string
+    originalTask: string,
   ): Promise<PermissionResult> {
-
     // Format the permission request for display
     const requestSummary = this.formatToolRequest(toolName, input)
     this.emit(`[cc:permission] ${toolName}: ${requestSummary}`)
@@ -250,7 +256,11 @@ export class ClaudeCodeChannel {
    */
   private async answerQuestionWithLocalModel(
     originalTask: string,
-    question: { question: string; options: Array<{ label: string; description: string }>; multiSelect?: boolean }
+    question: {
+      question: string
+      options: Array<{ label: string; description: string }>
+      multiSelect?: boolean
+    },
   ): Promise<string> {
     const optionsList = question.options
       .map((opt, i) => `${i + 1}. ${opt.label}: ${opt.description}`)
@@ -304,7 +314,7 @@ export class ClaudeCodeChannel {
   private async decidePermissionWithLocalModel(
     originalTask: string,
     toolName: string,
-    input: Record<string, unknown>
+    input: Record<string, unknown>,
   ): Promise<{ allow: boolean; reason: string }> {
     const recentContext = this.conversationLog.slice(-10).join('\n')
     const inputSummary = this.formatToolRequest(toolName, input)
@@ -316,7 +326,7 @@ export class ClaudeCodeChannel {
       'Guidelines:',
       '- ALLOW if the action is reasonable for the task and not destructive',
       '- ALLOW reading files, running safe commands (ls, cat, grep, git status, npm test, etc.)',
-      '- ALLOW writing/editing files if it\'s part of the task',
+      "- ALLOW writing/editing files if it's part of the task",
       '- DENY destructive commands (rm -rf, drop database, etc.) unless explicitly requested',
       '- DENY accessing sensitive files (/etc/passwd, .env with secrets, ssh keys) unless needed',
       '- DENY network requests to unknown hosts unless part of the task',
@@ -372,16 +382,16 @@ export class ClaudeCodeChannel {
   private formatToolRequest(toolName: string, input: Record<string, unknown>): string {
     switch (toolName) {
       case 'Bash':
-        return input.command as string ?? JSON.stringify(input)
+        return (input.command as string) ?? JSON.stringify(input)
       case 'Read':
-        return input.file_path as string ?? JSON.stringify(input)
+        return (input.file_path as string) ?? JSON.stringify(input)
       case 'Write':
       case 'Edit':
-        return input.file_path as string ?? JSON.stringify(input)
+        return (input.file_path as string) ?? JSON.stringify(input)
       case 'Glob':
-        return input.pattern as string ?? JSON.stringify(input)
+        return (input.pattern as string) ?? JSON.stringify(input)
       case 'Grep':
-        return input.pattern as string ?? JSON.stringify(input)
+        return (input.pattern as string) ?? JSON.stringify(input)
       default:
         return JSON.stringify(input).slice(0, 100)
     }
@@ -391,7 +401,11 @@ export class ClaudeCodeChannel {
    * Handle assistant messages for logging
    */
   private handleAssistantMessage(message: unknown): void {
-    const msg = message as { message?: { content?: string | Array<{ type: string; text?: string; name?: string; input?: unknown }> } }
+    const msg = message as {
+      message?: {
+        content?: string | Array<{ type: string; text?: string; name?: string; input?: unknown }>
+      }
+    }
     const content = msg.message?.content
 
     if (!content) return
@@ -427,7 +441,7 @@ export class ClaudeCodeChannel {
 export function createClaudeCodeChannel(
   localProvider: LLMProvider,
   config: ClaudeCodeConfig,
-  emit?: (line: string) => void
+  emit?: (line: string) => void,
 ): ClaudeCodeChannel {
   return new ClaudeCodeChannel(localProvider, config, emit)
 }

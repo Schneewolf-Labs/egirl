@@ -22,7 +22,7 @@ export interface IndexedMemory {
   category: MemoryCategory
   source: MemorySource
   sessionId?: string
-  imagePath?: string  // Path to stored image file
+  imagePath?: string // Path to stored image file
   embedding?: Float32Array
   createdAt: number
   updatedAt: number
@@ -102,8 +102,8 @@ export class MemoryIndexer {
 
   private migrate(): void {
     // Check if new columns exist, add them if not
-    const columns = this.db.query("PRAGMA table_info(memories)").all() as Array<{ name: string }>
-    const columnNames = new Set(columns.map(c => c.name))
+    const columns = this.db.query('PRAGMA table_info(memories)').all() as Array<{ name: string }>
+    const columnNames = new Set(columns.map((c) => c.name))
 
     if (!columnNames.has('category')) {
       this.db.run("ALTER TABLE memories ADD COLUMN category TEXT NOT NULL DEFAULT 'general'")
@@ -114,7 +114,7 @@ export class MemoryIndexer {
       log.info('memory', 'Migrated: added source column')
     }
     if (!columnNames.has('session_id')) {
-      this.db.run("ALTER TABLE memories ADD COLUMN session_id TEXT")
+      this.db.run('ALTER TABLE memories ADD COLUMN session_id TEXT')
       log.info('memory', 'Migrated: added session_id column')
     }
   }
@@ -129,7 +129,7 @@ export class MemoryIndexer {
       sessionId?: string
       imagePath?: string
       embedding?: Float32Array
-    } = {}
+    } = {},
   ): void {
     const now = Date.now()
     const {
@@ -165,15 +165,17 @@ export class MemoryIndexer {
       imagePath ?? null,
       embedding ? Buffer.from(embedding.buffer) : null,
       now,
-      now
+      now,
     )
   }
 
   get(key: string): IndexedMemory | null {
-    const row = this.db.query(`
+    const row = this.db
+      .query(`
       SELECT id, key, value, content_type, category, source, session_id, image_path, embedding, created_at, updated_at
       FROM memories WHERE key = ?
-    `).get(key) as MemoryRow | null
+    `)
+      .get(key) as MemoryRow | null
 
     if (!row) return null
     return rowToMemory(row)
@@ -183,11 +185,13 @@ export class MemoryIndexer {
    * Get all memories with embeddings for vector search
    */
   getAllWithEmbeddings(): IndexedMemory[] {
-    const rows = this.db.query(`
+    const rows = this.db
+      .query(`
       SELECT id, key, value, content_type, category, source, session_id, image_path, embedding, created_at, updated_at
       FROM memories
       WHERE embedding IS NOT NULL
-    `).all() as MemoryRow[]
+    `)
+      .all() as MemoryRow[]
 
     return rows.map(rowToMemory)
   }
@@ -196,19 +200,22 @@ export class MemoryIndexer {
    * Get memories by content type
    */
   getByContentType(contentType: ContentType, limit = 100): IndexedMemory[] {
-    const rows = this.db.query(`
+    const rows = this.db
+      .query(`
       SELECT id, key, value, content_type, category, source, session_id, image_path, embedding, created_at, updated_at
       FROM memories
       WHERE content_type = ?
       ORDER BY updated_at DESC
       LIMIT ?
-    `).all(contentType, limit) as MemoryRow[]
+    `)
+      .all(contentType, limit) as MemoryRow[]
 
     return rows.map(rowToMemory)
   }
 
   searchFTS(query: string, limit = 10): IndexedMemory[] {
-    const rows = this.db.query(`
+    const rows = this.db
+      .query(`
       SELECT m.id, m.key, m.value, m.content_type, m.category, m.source, m.session_id,
              m.image_path, m.created_at, m.updated_at
       FROM memories m
@@ -216,7 +223,8 @@ export class MemoryIndexer {
       WHERE memories_fts MATCH ?
       ORDER BY rank
       LIMIT ?
-    `).all(query, limit) as MemoryRow[]
+    `)
+      .all(query, limit) as MemoryRow[]
 
     return rows.map(rowToMemory)
   }
@@ -224,9 +232,18 @@ export class MemoryIndexer {
   list(
     limit = 100,
     offset = 0,
-    filters?: { category?: MemoryCategory; source?: MemorySource; since?: number; until?: number }
-  ): Array<{ key: string; value: string; contentType: ContentType; category: MemoryCategory; source: MemorySource; createdAt: number; updatedAt: number }> {
-    let sql = 'SELECT key, value, content_type, category, source, created_at, updated_at FROM memories WHERE 1=1'
+    filters?: { category?: MemoryCategory; source?: MemorySource; since?: number; until?: number },
+  ): Array<{
+    key: string
+    value: string
+    contentType: ContentType
+    category: MemoryCategory
+    source: MemorySource
+    createdAt: number
+    updatedAt: number
+  }> {
+    let sql =
+      'SELECT key, value, content_type, category, source, created_at, updated_at FROM memories WHERE 1=1'
     const params: (string | number)[] = []
 
     if (filters?.category) {
@@ -259,7 +276,7 @@ export class MemoryIndexer {
       updated_at: number
     }>
 
-    return rows.map(row => ({
+    return rows.map((row) => ({
       key: row.key,
       value: row.value,
       contentType: row.content_type as ContentType,
@@ -271,26 +288,30 @@ export class MemoryIndexer {
   }
 
   getByCategory(category: MemoryCategory, limit = 100): IndexedMemory[] {
-    const rows = this.db.query(`
+    const rows = this.db
+      .query(`
       SELECT id, key, value, content_type, category, source, session_id, image_path, embedding, created_at, updated_at
       FROM memories
       WHERE category = ?
       ORDER BY updated_at DESC
       LIMIT ?
-    `).all(category, limit) as MemoryRow[]
+    `)
+      .all(category, limit) as MemoryRow[]
 
     return rows.map(rowToMemory)
   }
 
   getByTimeRange(since: number, until?: number, limit = 100): IndexedMemory[] {
     const untilTs = until ?? Date.now()
-    const rows = this.db.query(`
+    const rows = this.db
+      .query(`
       SELECT id, key, value, content_type, category, source, session_id, image_path, embedding, created_at, updated_at
       FROM memories
       WHERE created_at >= ? AND created_at <= ?
       ORDER BY created_at DESC
       LIMIT ?
-    `).all(since, untilTs, limit) as MemoryRow[]
+    `)
+      .all(since, untilTs, limit) as MemoryRow[]
 
     return rows.map(rowToMemory)
   }

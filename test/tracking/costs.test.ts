@@ -1,16 +1,16 @@
-import { describe, test, expect } from 'bun:test'
+import { describe, expect, test } from 'bun:test'
 import { calculateCost, formatCost, MODEL_COSTS } from '../../src/tracking/costs'
 
 describe('MODEL_COSTS', () => {
   test('has entries for known models', () => {
     expect(MODEL_COSTS['gpt-4o']).toBeDefined()
     expect(MODEL_COSTS['claude-sonnet-4-20250514']).toBeDefined()
-    expect(MODEL_COSTS['local']).toBeDefined()
+    expect(MODEL_COSTS.local).toBeDefined()
   })
 
   test('local model is free', () => {
-    expect(MODEL_COSTS['local'].input).toBe(0)
-    expect(MODEL_COSTS['local'].output).toBe(0)
+    expect(MODEL_COSTS.local.input).toBe(0)
+    expect(MODEL_COSTS.local.output).toBe(0)
   })
 })
 

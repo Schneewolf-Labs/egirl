@@ -12,15 +12,11 @@ export const MODEL_COSTS: Record<string, { input: number; output: number }> = {
   'gpt-4-turbo': { input: 10.0, output: 30.0 },
 
   // Local (free)
-  'local': { input: 0, output: 0 },
+  local: { input: 0, output: 0 },
 }
 
-export function calculateCost(
-  model: string,
-  inputTokens: number,
-  outputTokens: number
-): number {
-  const costs = MODEL_COSTS[model] ?? MODEL_COSTS['local'] ?? { input: 0, output: 0 }
+export function calculateCost(model: string, inputTokens: number, outputTokens: number): number {
+  const costs = MODEL_COSTS[model] ?? MODEL_COSTS.local ?? { input: 0, output: 0 }
 
   const inputCost = (inputTokens / 1_000_000) * costs.input
   const outputCost = (outputTokens / 1_000_000) * costs.output

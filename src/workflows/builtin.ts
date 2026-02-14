@@ -2,7 +2,8 @@ import type { WorkflowDefinition } from './types'
 
 export const pullTestFixWorkflow: WorkflowDefinition = {
   name: 'pull-test-fix',
-  description: 'Pull latest changes, run tests, and if they fail delegate to code_agent for analysis and fixing. Re-runs tests after fix.',
+  description:
+    'Pull latest changes, run tests, and if they fail delegate to code_agent for analysis and fixing. Re-runs tests after fix.',
   params: {
     branch: { type: 'string', description: 'Branch to pull from', default: 'main' },
     test_command: { type: 'string', description: 'Command to run tests', default: 'bun test' },
@@ -62,7 +63,8 @@ export const commitPushWorkflow: WorkflowDefinition = {
 
 export const pullTestCommitPushWorkflow: WorkflowDefinition = {
   name: 'pull-test-commit-push',
-  description: 'Full pipeline: pull latest, run tests, fix failures if any, commit changes, and push.',
+  description:
+    'Full pipeline: pull latest, run tests, fix failures if any, commit changes, and push.',
   params: {
     branch: { type: 'string', description: 'Branch name', default: 'main' },
     test_command: { type: 'string', description: 'Command to run tests', default: 'bun test' },
@@ -110,7 +112,8 @@ export const pullTestCommitPushWorkflow: WorkflowDefinition = {
 
 export const testFixWorkflow: WorkflowDefinition = {
   name: 'test-fix',
-  description: 'Run tests, and if they fail delegate to code_agent to analyze and fix. Re-runs tests to verify.',
+  description:
+    'Run tests, and if they fail delegate to code_agent to analyze and fix. Re-runs tests to verify.',
   params: {
     test_command: { type: 'string', description: 'Command to run tests', default: 'bun test' },
   },

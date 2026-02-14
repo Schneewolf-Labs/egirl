@@ -1,10 +1,10 @@
+import type { RuntimeConfig } from '../config'
 import type { ChatMessage } from '../providers/types'
 import { getTextContent } from '../providers/types'
-import type { RuntimeConfig } from '../config'
 import type { Skill } from '../skills/types'
-import { analyzeMessageHeuristics, estimateComplexity } from './heuristics'
-import { createRoutingRules, applyRules, type RuleContext } from './rules'
 import { log } from '../util/logger'
+import { analyzeMessageHeuristics, estimateComplexity } from './heuristics'
+import { applyRules, createRoutingRules, type RuleContext } from './rules'
 
 export interface RoutingDecision {
   target: 'local' | 'remote'
@@ -107,7 +107,10 @@ export class Router {
 
     // Check if we have a remote provider
     if (finalTarget === 'remote' && !this.config.remote.anthropic && !this.config.remote.openai) {
-      log.warn('routing', 'Remote model requested but no remote provider configured, falling back to local')
+      log.warn(
+        'routing',
+        'Remote model requested but no remote provider configured, falling back to local',
+      )
       finalTarget = 'local'
       finalReason = 'no_remote_provider'
       finalConfidence = 0.5
@@ -129,7 +132,10 @@ export class Router {
       decision.provider = `llamacpp/${this.config.local.model}`
     }
 
-    log.debug('routing', `Routed to ${decision.target}: ${decision.reason} (confidence: ${decision.confidence})`)
+    log.debug(
+      'routing',
+      `Routed to ${decision.target}: ${decision.reason} (confidence: ${decision.confidence})`,
+    )
 
     return decision
   }
@@ -160,7 +166,7 @@ export class Router {
 
     const detected: string[] = []
     for (const [tool, hints] of Object.entries(toolHints)) {
-      if (available.includes(tool) && hints.some(h => lower.includes(h))) {
+      if (available.includes(tool) && hints.some((h) => lower.includes(h))) {
         detected.push(tool)
       }
     }
@@ -174,18 +180,30 @@ export class Router {
       return 'memory_op'
     }
 
-    if (lower.includes('write code') || lower.includes('implement') ||
-        lower.includes('create a function') || lower.includes('```')) {
+    if (
+      lower.includes('write code') ||
+      lower.includes('implement') ||
+      lower.includes('create a function') ||
+      lower.includes('```')
+    ) {
       return 'code_generation'
     }
 
-    if (lower.includes('read file') || lower.includes('execute') ||
-        lower.includes('run command') || lower.includes('search for')) {
+    if (
+      lower.includes('read file') ||
+      lower.includes('execute') ||
+      lower.includes('run command') ||
+      lower.includes('search for')
+    ) {
       return 'tool_use'
     }
 
-    if (lower.includes('explain') || lower.includes('analyze') ||
-        lower.includes('why') || lower.includes('how does')) {
+    if (
+      lower.includes('explain') ||
+      lower.includes('analyze') ||
+      lower.includes('why') ||
+      lower.includes('how does')
+    ) {
       return 'reasoning'
     }
 
@@ -201,7 +219,7 @@ export class Router {
       type: this.detectTaskType(content),
       complexity: estimateComplexity(content),
       estimatedTokens: this.estimateTokens(messages),
-      skillsInvolved: matched.map(s => s.name),
+      skillsInvolved: matched.map((s) => s.name),
     }
   }
 
@@ -215,7 +233,7 @@ export class Router {
       const nameLower = skill.name.toLowerCase()
       // Match against skill name (split into words for flexible matching)
       const nameWords = nameLower.split(/[\s-]+/)
-      const isNameMatch = nameWords.some(word => word.length > 2 && lower.includes(word))
+      const isNameMatch = nameWords.some((word) => word.length > 2 && lower.includes(word))
 
       if (isNameMatch) {
         matched.push(skill)
@@ -224,7 +242,7 @@ export class Router {
 
       // Match against escalation triggers from metadata
       const triggers = skill.metadata.egirl?.escalationTriggers ?? []
-      const isTriggerMatch = triggers.some(t => lower.includes(t.toLowerCase()))
+      const isTriggerMatch = triggers.some((t) => lower.includes(t.toLowerCase()))
       if (isTriggerMatch) {
         matched.push(skill)
       }

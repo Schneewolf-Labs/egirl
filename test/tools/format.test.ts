@@ -1,11 +1,11 @@
-import { describe, test, expect } from 'bun:test'
+import { describe, expect, test } from 'bun:test'
 import {
-  parseToolCalls,
+  buildToolsSection,
   formatToolCall,
   formatToolResponse,
   formatToolResponses,
-  buildToolsSection,
   hasToolCalls,
+  parseToolCalls,
 } from '../../src/tools/format'
 
 describe('parseToolCalls', () => {
@@ -73,7 +73,9 @@ describe('parseToolCalls', () => {
 describe('formatToolCall', () => {
   test('formats tool call correctly', () => {
     const result = formatToolCall('read_file', { path: '/etc/hosts' })
-    expect(result).toBe('<tool_call>\n{"name":"read_file","arguments":{"path":"/etc/hosts"}}\n</tool_call>')
+    expect(result).toBe(
+      '<tool_call>\n{"name":"read_file","arguments":{"path":"/etc/hosts"}}\n</tool_call>',
+    )
   })
 })
 

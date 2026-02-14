@@ -80,7 +80,8 @@ async function captureScreenshot(params: ScreenshotParams): Promise<string> {
 export const screenshotTool: Tool = {
   definition: {
     name: 'screenshot',
-    description: 'Capture a screenshot of the current display. Returns the image for visual analysis.',
+    description:
+      'Capture a screenshot of the current display. Returns the image for visual analysis.',
     parameters: {
       type: 'object',
       properties: {

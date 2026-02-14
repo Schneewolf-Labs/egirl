@@ -24,7 +24,7 @@ export class Qwen3VLEmbeddings implements EmbeddingProvider {
 
   async embedBatch(inputs: EmbeddingInput[]): Promise<Float32Array[]> {
     // Convert to the format expected by the Python service
-    const formattedInputs = inputs.map(input => {
+    const formattedInputs = inputs.map((input) => {
       if (input.type === 'text') {
         return { text: input.text }
       } else if (input.type === 'image') {
@@ -49,6 +49,6 @@ export class Qwen3VLEmbeddings implements EmbeddingProvider {
     }
 
     const data = (await response.json()) as { embeddings: number[][] }
-    return data.embeddings.map(e => new Float32Array(e))
+    return data.embeddings.map((e) => new Float32Array(e))
   }
 }

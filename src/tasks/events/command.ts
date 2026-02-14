@@ -1,5 +1,5 @@
 import { log } from '../../util/logger'
-import type { EventSource, EventPayload } from '../types'
+import type { EventPayload, EventSource } from '../types'
 
 export interface CommandEventConfig {
   command: string
@@ -31,7 +31,7 @@ export function createCommandSource(config: CommandEventConfig, cwd: string): Ev
       const exitCode = await proc.exited
 
       let shouldTrigger = false
-      let data: Record<string, unknown> = {
+      const data: Record<string, unknown> = {
         command: config.command,
         stdout,
         exitCode,
@@ -74,9 +74,9 @@ export function createCommandSource(config: CommandEventConfig, cwd: string): Ev
     start(onTrigger) {
       callback = onTrigger
       // Initial run to set baseline
-      poll().catch(err => log.warn('tasks', `Initial command poll failed: ${err}`))
+      poll().catch((err) => log.warn('tasks', `Initial command poll failed: ${err}`))
       timer = setInterval(() => {
-        poll().catch(err => log.warn('tasks', `Command poll failed: ${err}`))
+        poll().catch((err) => log.warn('tasks', `Command poll failed: ${err}`))
       }, pollMs)
       log.debug('tasks', `Command source started: ${config.command} (${pollMs}ms, ${diffMode})`)
     },
@@ -97,6 +97,6 @@ async function hashString(input: string): Promise<string> {
   const data = new TextEncoder().encode(input)
   const hash = await crypto.subtle.digest('SHA-256', data)
   return Array.from(new Uint8Array(hash))
-    .map(b => b.toString(16).padStart(2, '0'))
+    .map((b) => b.toString(16).padStart(2, '0'))
     .join('')
 }

@@ -11,7 +11,12 @@ export class OpenAIEmbeddings implements EmbeddingProvider {
   private model: string
   private baseUrl: string
 
-  constructor(apiKey: string, model = 'text-embedding-3-small', dimensions = 1536, baseUrl = 'https://api.openai.com/v1') {
+  constructor(
+    apiKey: string,
+    model = 'text-embedding-3-small',
+    dimensions = 1536,
+    baseUrl = 'https://api.openai.com/v1',
+  ) {
     this.apiKey = apiKey
     this.model = model
     this.dimensions = dimensions
@@ -46,7 +51,7 @@ export class OpenAIEmbeddings implements EmbeddingProvider {
   }
 
   async embedBatch(inputs: EmbeddingInput[]): Promise<Float32Array[]> {
-    const texts = inputs.map(input => {
+    const texts = inputs.map((input) => {
       if (input.type !== 'text') {
         throw new Error('OpenAIEmbeddings only supports text input')
       }
@@ -70,6 +75,6 @@ export class OpenAIEmbeddings implements EmbeddingProvider {
     }
 
     const data = (await response.json()) as { data: Array<{ embedding: number[] }> }
-    return data.data.map(d => new Float32Array(d.embedding))
+    return data.data.map((d) => new Float32Array(d.embedding))
   }
 }

@@ -1,12 +1,17 @@
-export { type Channel, type ChannelFactory } from './types'
-export { CLIChannel, createCLIChannel } from './cli'
-export { ClaudeCodeChannel, createClaudeCodeChannel, type ClaudeCodeConfig, type TaskResult } from './claude-code'
 export {
-  DiscordChannel,
+  ClaudeCodeChannel,
+  type ClaudeCodeConfig,
+  createClaudeCodeChannel,
+  type TaskResult,
+} from './claude-code'
+export { CLIChannel, createCLIChannel } from './cli'
+export {
   createDiscordChannel,
+  DiscordChannel,
   type DiscordConfig,
+  type InteractionHandler,
   type ReactionEvent,
   type ReactionHandler,
-  type InteractionHandler,
 } from './discord'
-export { XMPPChannel, createXMPPChannel, type XMPPConfig } from './xmpp'
+export type { Channel, ChannelFactory } from './types'
+export { createXMPPChannel, XMPPChannel, type XMPPConfig } from './xmpp'

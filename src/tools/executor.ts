@@ -1,8 +1,8 @@
-import type { Tool, ToolResult, ToolDefinition } from './types'
 import type { ToolCall } from '../providers/types'
 import type { SafetyConfig } from '../safety'
 import { checkToolCall, getAuditLogPath, logToolExecution } from '../safety'
 import { log } from '../util/logger'
+import type { Tool, ToolDefinition, ToolResult } from './types'
 
 export type ConfirmCallback = (toolName: string, args: Record<string, unknown>) => Promise<boolean>
 
@@ -35,14 +35,18 @@ export class ToolExecutor {
   }
 
   getDefinitions(): ToolDefinition[] {
-    return Array.from(this.tools.values()).map(t => t.definition)
+    return Array.from(this.tools.values()).map((t) => t.definition)
   }
 
   private auditLogPath(): string | undefined {
     return this.safety ? getAuditLogPath(this.safety) : undefined
   }
 
-  private audit(toolName: string, args: Record<string, unknown>, result: { success: boolean; blocked?: boolean; reason?: string }): void {
+  private audit(
+    toolName: string,
+    args: Record<string, unknown>,
+    result: { success: boolean; blocked?: boolean; reason?: string },
+  ): void {
     const logPath = this.auditLogPath()
     if (logPath) {
       logToolExecution(toolName, args, result, logPath)
@@ -67,12 +71,20 @@ export class ToolExecutor {
         if (check.needsConfirmation && this.confirmCallback) {
           const confirmed = await this.confirmCallback(call.name, call.arguments)
           if (!confirmed) {
-            this.audit(call.name, call.arguments, { success: false, blocked: true, reason: 'User denied confirmation' })
+            this.audit(call.name, call.arguments, {
+              success: false,
+              blocked: true,
+              reason: 'User denied confirmation',
+            })
             return { success: false, output: 'Tool execution denied by user.' }
           }
           // Confirmed — fall through to execute
         } else {
-          this.audit(call.name, call.arguments, { success: false, blocked: true, reason: check.reason })
+          this.audit(call.name, call.arguments, {
+            success: false,
+            blocked: true,
+            reason: check.reason,
+          })
           log.warn('safety', `Blocked tool call: ${call.name}`, { reason: check.reason })
           return { success: false, output: `Safety check failed: ${check.reason}` }
         }

@@ -1,7 +1,7 @@
-import { describe, test, expect, beforeEach, afterEach } from 'bun:test'
-import { mkdtempSync, writeFileSync, rmSync, existsSync } from 'fs'
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import { mkdtempSync, rmSync } from 'fs'
+import { homedir, tmpdir } from 'os'
 import { join } from 'path'
-import { tmpdir, homedir } from 'os'
 
 // We test loadConfig indirectly by setting up temp directories and env vars
 // Since loadConfig searches for egirl.toml in specific locations, we mock via cwd

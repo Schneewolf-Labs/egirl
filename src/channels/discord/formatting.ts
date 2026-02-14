@@ -1,9 +1,9 @@
 import type { ToolCall } from '../../providers/types'
 
 export function formatToolCallsMarkdown(calls: ToolCall[]): string {
-  const lines = calls.map(call => {
+  const lines = calls.map((call) => {
     const args = Object.entries(call.arguments)
-    if (args.length === 0) return call.name + '()'
+    if (args.length === 0) return `${call.name}()`
     if (args.length === 1) {
       const [key, val] = args[0]!
       const valStr = typeof val === 'string' ? val : JSON.stringify(val)
@@ -18,7 +18,7 @@ export function truncateResult(output: string, maxLen: number): string {
   const trimmed = output.trim()
   if (!trimmed) return ''
   if (trimmed.length <= maxLen) return trimmed
-  return trimmed.substring(0, maxLen) + '...'
+  return `${trimmed.substring(0, maxLen)}...`
 }
 
 export function splitMessage(content: string, maxLength: number): string[] {

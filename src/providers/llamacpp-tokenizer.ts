@@ -1,5 +1,5 @@
-import type { Tokenizer } from './types'
 import { log } from '../util/logger'
+import type { Tokenizer } from './types'
 
 const TOKENIZE_TIMEOUT_MS = 5_000
 const MAX_CACHED_CONTENT_LENGTH = 100_000
@@ -32,7 +32,10 @@ export class LlamaCppTokenizer implements Tokenizer {
       })
 
       if (!response.ok) {
-        log.debug('tokenizer', `tokenize endpoint returned ${response.status}, falling back to estimate`)
+        log.debug(
+          'tokenizer',
+          `tokenize endpoint returned ${response.status}, falling back to estimate`,
+        )
         return Math.ceil(text.length / 3.5)
       }
 

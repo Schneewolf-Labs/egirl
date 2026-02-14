@@ -1,19 +1,19 @@
-import { describe, test, expect, beforeAll, afterAll } from 'bun:test'
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
+import { execSync } from 'child_process'
+import { mkdir, rm, writeFile } from 'fs/promises'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { writeFile, mkdir, rm } from 'fs/promises'
-import { execSync } from 'child_process'
 import {
   gatherBranch,
-  gatherStatus,
+  gatherLastCommitAge,
   gatherRecentCommits,
   gatherStashCount,
-  gatherLastCommitAge,
+  gatherStatus,
   isGitRepo,
 } from '../../src/standup/gather'
 
 describe('standup gather', () => {
-  const testDir = join(tmpdir(), 'egirl-standup-test-' + Date.now())
+  const testDir = join(tmpdir(), `egirl-standup-test-${Date.now()}`)
 
   function exec(cmd: string): string {
     return execSync(cmd, { cwd: testDir, encoding: 'utf-8' })
@@ -40,7 +40,7 @@ describe('standup gather', () => {
   })
 
   test('isGitRepo returns false for non-git dirs', async () => {
-    const noGitDir = join(tmpdir(), 'egirl-nogit-' + Date.now())
+    const noGitDir = join(tmpdir(), `egirl-nogit-${Date.now()}`)
     await mkdir(noGitDir, { recursive: true })
     expect(await isGitRepo(noGitDir)).toBe(false)
     await rm(noGitDir, { recursive: true, force: true })
@@ -49,16 +49,16 @@ describe('standup gather', () => {
   test('gatherBranch returns current branch', async () => {
     const branch = await gatherBranch(testDir)
     expect(branch).toBeDefined()
-    expect(branch!.current).toBe('master')
-    expect(branch!.tracking).toBeUndefined()
+    expect(branch?.current).toBe('master')
+    expect(branch?.tracking).toBeUndefined()
   })
 
   test('gatherStatus shows clean tree', async () => {
     const status = await gatherStatus(testDir)
     expect(status).toBeDefined()
-    expect(status!.staged).toHaveLength(0)
-    expect(status!.modified).toHaveLength(0)
-    expect(status!.untracked).toHaveLength(0)
+    expect(status?.staged).toHaveLength(0)
+    expect(status?.modified).toHaveLength(0)
+    expect(status?.untracked).toHaveLength(0)
   })
 
   test('gatherStatus detects modified files', async () => {
@@ -66,7 +66,7 @@ describe('standup gather', () => {
 
     const status = await gatherStatus(testDir)
     expect(status).toBeDefined()
-    expect(status!.modified).toContain('hello.txt')
+    expect(status?.modified).toContain('hello.txt')
 
     exec('git checkout -- hello.txt')
   })
@@ -76,7 +76,7 @@ describe('standup gather', () => {
 
     const status = await gatherStatus(testDir)
     expect(status).toBeDefined()
-    expect(status!.untracked).toContain('new-file.txt')
+    expect(status?.untracked).toContain('new-file.txt')
 
     exec('rm new-file.txt')
   })
@@ -87,7 +87,7 @@ describe('standup gather', () => {
 
     const status = await gatherStatus(testDir)
     expect(status).toBeDefined()
-    expect(status!.staged).toContain('hello.txt')
+    expect(status?.staged).toContain('hello.txt')
 
     exec('git reset HEAD hello.txt')
     exec('git checkout -- hello.txt')
@@ -96,16 +96,16 @@ describe('standup gather', () => {
   test('gatherRecentCommits returns commits', async () => {
     const commits = await gatherRecentCommits(testDir)
     expect(commits.length).toBeGreaterThanOrEqual(2)
-    expect(commits[0]!.message).toBe('Add second file')
-    expect(commits[1]!.message).toBe('Initial commit')
-    expect(commits[0]!.hash).toBeTruthy()
-    expect(commits[0]!.date).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+    expect(commits[0]?.message).toBe('Add second file')
+    expect(commits[1]?.message).toBe('Initial commit')
+    expect(commits[0]?.hash).toBeTruthy()
+    expect(commits[0]?.date).toMatch(/^\d{4}-\d{2}-\d{2}$/)
   })
 
   test('gatherRecentCommits respects count', async () => {
     const commits = await gatherRecentCommits(testDir, 1)
     expect(commits).toHaveLength(1)
-    expect(commits[0]!.message).toBe('Add second file')
+    expect(commits[0]?.message).toBe('Add second file')
   })
 
   test('gatherStashCount returns 0 with no stashes', async () => {

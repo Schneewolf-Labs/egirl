@@ -22,7 +22,7 @@ export interface SkillMetadata {
 export interface Skill {
   name: string
   description: string
-  content: string  // Full SKILL.md content after frontmatter
+  content: string // Full SKILL.md content after frontmatter
   metadata: SkillMetadata
   baseDir: string
   enabled: boolean

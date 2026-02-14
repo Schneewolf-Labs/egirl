@@ -1,5 +1,5 @@
 import { readFile } from 'fs/promises'
-import { resolve, isAbsolute } from 'path'
+import { isAbsolute, resolve } from 'path'
 import type { Tool, ToolResult } from '../types'
 
 export const readTool: Tool = {
@@ -43,9 +43,7 @@ export const readTool: Tool = {
 
         return {
           success: true,
-          output: selectedLines
-            .map((line, i) => `${start + i + 1}: ${line}`)
-            .join('\n'),
+          output: selectedLines.map((line, i) => `${start + i + 1}: ${line}`).join('\n'),
         }
       }
 

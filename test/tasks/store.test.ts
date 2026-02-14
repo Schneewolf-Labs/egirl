@@ -1,8 +1,8 @@
-import { describe, test, expect, beforeEach, afterEach } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import { unlinkSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { unlinkSync } from 'fs'
-import { TaskStore, createTaskStore } from '../../src/tasks/store'
+import { createTaskStore, type TaskStore } from '../../src/tasks/store'
 import type { NewTask } from '../../src/tasks/types'
 
 let store: TaskStore
@@ -23,15 +23,24 @@ function makeTask(overrides: Partial<NewTask> = {}): NewTask {
 }
 
 beforeEach(() => {
-  dbPath = join(tmpdir(), `egirl-test-tasks-${Date.now()}-${Math.random().toString(36).slice(2)}.db`)
+  dbPath = join(
+    tmpdir(),
+    `egirl-test-tasks-${Date.now()}-${Math.random().toString(36).slice(2)}.db`,
+  )
   store = createTaskStore(dbPath)
 })
 
 afterEach(() => {
   store.close()
-  try { unlinkSync(dbPath) } catch {}
-  try { unlinkSync(dbPath + '-wal') } catch {}
-  try { unlinkSync(dbPath + '-shm') } catch {}
+  try {
+    unlinkSync(dbPath)
+  } catch {}
+  try {
+    unlinkSync(`${dbPath}-wal`)
+  } catch {}
+  try {
+    unlinkSync(`${dbPath}-shm`)
+  } catch {}
 })
 
 describe('TaskStore', () => {
@@ -43,14 +52,16 @@ describe('TaskStore', () => {
 
     const fetched = store.get(task.id)
     expect(fetched).toBeDefined()
-    expect(fetched!.name).toBe('test-task')
+    expect(fetched?.name).toBe('test-task')
   })
 
   test('stores new fields: cronExpression, businessHours, dependsOn', () => {
-    const task = store.create(makeTask({
-      cronExpression: '0 9 * * MON-FRI',
-      businessHours: '9-17 Mon-Fri',
-    }))
+    const task = store.create(
+      makeTask({
+        cronExpression: '0 9 * * MON-FRI',
+        businessHours: '9-17 Mon-Fri',
+      }),
+    )
 
     const fetched = store.get(task.id)!
     expect(fetched.cronExpression).toBe('0 9 * * MON-FRI')
@@ -73,7 +84,7 @@ describe('TaskStore', () => {
 
     const dependents = store.getDependents(parent.id)
     expect(dependents).toHaveLength(2)
-    expect(dependents.map(d => d.name).sort()).toEqual(['child-1', 'child-2'])
+    expect(dependents.map((d) => d.name).sort()).toEqual(['child-1', 'child-2'])
   })
 
   test('updates lastErrorKind', () => {
@@ -95,7 +106,7 @@ describe('TaskStore', () => {
 
     const runs = store.getRecentRuns(task.id)
     expect(runs).toHaveLength(1)
-    expect(runs[0]!.errorKind).toBe('rate_limit')
+    expect(runs[0]?.errorKind).toBe('rate_limit')
   })
 
   test('getLastSuccessfulRun returns the most recent success', () => {
@@ -113,7 +124,7 @@ describe('TaskStore', () => {
 
     const lastSuccess = store.getLastSuccessfulRun(task.id)
     expect(lastSuccess).toBeDefined()
-    expect(lastSuccess!.result).toBe('third')
+    expect(lastSuccess?.result).toBe('third')
   })
 
   test('agent-created tasks start as proposed', () => {
@@ -127,6 +138,6 @@ describe('TaskStore', () => {
     store = createTaskStore(dbPath)
 
     const task = store.create(makeTask({ cronExpression: '0 9 * * *' }))
-    expect(store.get(task.id)!.cronExpression).toBe('0 9 * * *')
+    expect(store.get(task.id)?.cronExpression).toBe('0 9 * * *')
   })
 })

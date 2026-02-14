@@ -1,5 +1,5 @@
+import type { BrowserManager, PageSnapshot } from '../../browser'
 import type { Tool, ToolResult } from '../types'
-import { BrowserManager, type PageSnapshot } from '../../browser'
 
 function formatSnapshot(snap: PageSnapshot): string {
   return `URL: ${snap.url}\nTitle: ${snap.title}\n\n${snap.content}`
@@ -69,7 +69,8 @@ export function createBrowserTools(manager: BrowserManager): {
         properties: {
           target: {
             type: 'string',
-            description: 'Element target ref (e.g. "button/Submit", "link/Home", "text:Click here")',
+            description:
+              'Element target ref (e.g. "button/Submit", "link/Home", "text:Click here")',
           },
         },
         required: ['target'],
@@ -102,7 +103,8 @@ export function createBrowserTools(manager: BrowserManager): {
         properties: {
           target: {
             type: 'string',
-            description: 'Element target ref (e.g. "textbox/Email", "label:Password", "placeholder:Search...")',
+            description:
+              'Element target ref (e.g. "textbox/Email", "label:Password", "placeholder:Search...")',
           },
           value: {
             type: 'string',
@@ -130,7 +132,8 @@ export function createBrowserTools(manager: BrowserManager): {
   const browserSnapshotTool: Tool = {
     definition: {
       name: 'browser_snapshot',
-      description: 'Get a text snapshot of the current page content, including visible text and interactive elements.',
+      description:
+        'Get a text snapshot of the current page content, including visible text and interactive elements.',
       parameters: {
         type: 'object',
         properties: {},
@@ -151,7 +154,8 @@ export function createBrowserTools(manager: BrowserManager): {
   const browserScreenshotTool: Tool = {
     definition: {
       name: 'browser_screenshot',
-      description: 'Take a screenshot of the current browser page. Returns the image for visual analysis.',
+      description:
+        'Take a screenshot of the current browser page. Returns the image for visual analysis.',
       parameters: {
         type: 'object',
         properties: {},
@@ -228,9 +232,7 @@ export function createBrowserTools(manager: BrowserManager): {
       const checked = (params.checked as boolean | undefined) ?? true
 
       try {
-        const snap = checked
-          ? await manager.check(target)
-          : await manager.uncheck(target)
+        const snap = checked ? await manager.check(target) : await manager.uncheck(target)
         return { success: true, output: formatSnapshot(snap) }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
@@ -277,7 +279,8 @@ export function createBrowserTools(manager: BrowserManager): {
         properties: {
           target: {
             type: 'string',
-            description: 'Element target ref to wait for (e.g. "heading/Results", "text:Loading complete")',
+            description:
+              'Element target ref to wait for (e.g. "heading/Results", "text:Loading complete")',
           },
           timeout: {
             type: 'number',
@@ -305,7 +308,8 @@ export function createBrowserTools(manager: BrowserManager): {
   const browserEvalTool: Tool = {
     definition: {
       name: 'browser_eval',
-      description: 'Evaluate a JavaScript expression in the browser page context. Use sparingly — prefer accessibility targeting for interactions.',
+      description:
+        'Evaluate a JavaScript expression in the browser page context. Use sparingly — prefer accessibility targeting for interactions.',
       parameters: {
         type: 'object',
         properties: {
@@ -335,7 +339,8 @@ export function createBrowserTools(manager: BrowserManager): {
   const browserCloseTool: Tool = {
     definition: {
       name: 'browser_close',
-      description: 'Close the browser. The browser will be relaunched automatically on the next browser action.',
+      description:
+        'Close the browser. The browser will be relaunched automatically on the next browser action.',
       parameters: {
         type: 'object',
         properties: {},

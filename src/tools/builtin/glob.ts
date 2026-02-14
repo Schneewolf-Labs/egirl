@@ -1,4 +1,4 @@
-import { resolve, isAbsolute } from 'path'
+import { isAbsolute, resolve } from 'path'
 import type { Tool, ToolResult } from '../types'
 
 export const globTool: Tool = {
@@ -25,9 +25,7 @@ export const globTool: Tool = {
     const pattern = params.pattern as string
     const dir = params.dir as string | undefined
 
-    const workingDir = dir
-      ? (isAbsolute(dir) ? dir : resolve(cwd, dir))
-      : cwd
+    const workingDir = dir ? (isAbsolute(dir) ? dir : resolve(cwd, dir)) : cwd
 
     try {
       const glob = new Bun.Glob(pattern)

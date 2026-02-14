@@ -1,11 +1,12 @@
 import { readFile, writeFile } from 'fs/promises'
-import { resolve, isAbsolute } from 'path'
+import { isAbsolute, resolve } from 'path'
 import type { Tool, ToolResult } from '../types'
 
 export const editTool: Tool = {
   definition: {
     name: 'edit_file',
-    description: 'Edit a file by replacing a specific text pattern with new text. The old_text must match exactly.',
+    description:
+      'Edit a file by replacing a specific text pattern with new text. The old_text must match exactly.',
     parameters: {
       type: 'object',
       properties: {

@@ -1,7 +1,7 @@
-import type { Tool, ToolResult } from '../tools/types'
 import type { ToolExecutor } from '../tools/executor'
-import type { WorkflowDefinition, WorkflowStep } from './types'
+import type { Tool, ToolResult } from '../tools/types'
 import { executeWorkflow } from './engine'
+import type { WorkflowDefinition, WorkflowStep } from './types'
 
 /**
  * Create the run_workflow tool.
@@ -9,9 +9,9 @@ import { executeWorkflow } from './engine'
  */
 export function createWorkflowTool(
   toolExecutor: ToolExecutor,
-  workflows: WorkflowDefinition[]
+  workflows: WorkflowDefinition[],
 ): Tool {
-  const workflowMap = new Map(workflows.map(w => [w.name, w]))
+  const workflowMap = new Map(workflows.map((w) => [w.name, w]))
 
   return {
     definition: {
@@ -37,9 +37,19 @@ export function createWorkflowTool(
               properties: {
                 name: { type: 'string', description: 'Step name' },
                 tool: { type: 'string', description: 'Tool to execute' },
-                params: { type: 'object', description: 'Tool parameters (supports {{params.x}} and {{steps.x.output}} interpolation)' },
-                continue_on_error: { type: 'boolean', description: 'Continue workflow on failure (default: false)' },
-                if: { type: 'string', description: 'Condition: "always", "step_name.failed", "step_name.succeeded"' },
+                params: {
+                  type: 'object',
+                  description:
+                    'Tool parameters (supports {{params.x}} and {{steps.x.output}} interpolation)',
+                },
+                continue_on_error: {
+                  type: 'boolean',
+                  description: 'Continue workflow on failure (default: false)',
+                },
+                if: {
+                  type: 'string',
+                  description: 'Condition: "always", "step_name.failed", "step_name.succeeded"',
+                },
                 retry: { type: 'number', description: 'Retry count on failure' },
               },
               required: ['name', 'tool', 'params'],
@@ -89,7 +99,7 @@ function listWorkflows(workflows: WorkflowDefinition[]): ToolResult {
       lines.push(...paramDescs)
     }
 
-    const stepNames = wf.steps.map(s => s.name).join(' → ')
+    const stepNames = wf.steps.map((s) => s.name).join(' → ')
     lines.push(`  Steps: ${stepNames}`)
     lines.push('')
   }
@@ -101,7 +111,7 @@ async function runWorkflow(
   params: Record<string, unknown>,
   workflowMap: Map<string, WorkflowDefinition>,
   toolExecutor: ToolExecutor,
-  cwd: string
+  cwd: string,
 ): Promise<ToolResult> {
   const workflowName = params.workflow as string | undefined
   const inlineSteps = params.steps as WorkflowStep[] | undefined
@@ -155,9 +165,11 @@ async function runWorkflow(
 }
 
 function buildDescription(workflows: WorkflowDefinition[]): string {
-  const names = workflows.map(w => w.name).join(', ')
-  return `Run a multi-step workflow that chains tool calls sequentially. ` +
+  const names = workflows.map((w) => w.name).join(', ')
+  return (
+    `Run a multi-step workflow that chains tool calls sequentially. ` +
     `Use action "list" to see available workflows, or "run" with a workflow name or inline steps. ` +
     `Built-in workflows: ${names}. ` +
     `Steps can reference previous results via {{steps.step_name.output}} and params via {{params.x}}.`
+  )
 }

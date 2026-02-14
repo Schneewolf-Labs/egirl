@@ -1,7 +1,7 @@
 import type { ToolCall } from '../providers/types'
-import type { ToolResult } from '../tools/types'
 import type { RoutingDecision } from '../routing'
 import type { EscalationDecision } from '../routing/escalation'
+import type { ToolResult } from '../tools/types'
 
 /**
  * Event handler for agent loop transparency.

@@ -1,17 +1,17 @@
-import { log } from '../util/logger'
-import { gatherStandup } from '../standup'
-import { retrieveForContext } from '../memory/retrieval'
-import { AgentLoop } from '../agent/loop'
 import type { AgentLoopDeps } from '../agent/loop'
+import { AgentLoop } from '../agent/loop'
 import type { RuntimeConfig } from '../config'
-import type { Router } from '../routing'
-import type { ToolExecutor } from '../tools'
-import type { LLMProvider } from '../providers/types'
 import type { MemoryManager } from '../memory'
-import type { TaskStore } from './store'
-import type { TaskRunner } from './runner'
-import type { TasksConfig } from './types'
+import { retrieveForContext } from '../memory/retrieval'
+import type { LLMProvider } from '../providers/types'
+import type { Router } from '../routing'
+import { gatherStandup } from '../standup'
+import type { ToolExecutor } from '../tools'
+import { log } from '../util/logger'
 import { formatInterval } from './parse-interval'
+import type { TaskRunner } from './runner'
+import type { TaskStore } from './store'
+import type { TasksConfig } from './types'
 
 const DISCOVERY_PROMPT = `Based on the workspace and memory context below, is there any useful background work worth proposing?
 
@@ -30,7 +30,7 @@ Rules:
 - Each proposal needs a clear reason why it's useful
 - If nothing is worth proposing, just say "No useful work to propose" and stop`
 
-const MAX_PROPOSALS_PER_RUN = 3
+const _MAX_PROPOSALS_PER_RUN = 3
 
 export interface DiscoveryDeps {
   config: RuntimeConfig
@@ -101,9 +101,10 @@ export class Discovery {
 
       // Get active tasks for context
       const activeTasks = this.deps.store.list({ status: 'active' })
-      const tasksSummary = activeTasks.length > 0
-        ? `Active tasks:\n${activeTasks.map(t => `- ${t.name}: ${t.description}`).join('\n')}`
-        : 'No active background tasks.'
+      const tasksSummary =
+        activeTasks.length > 0
+          ? `Active tasks:\n${activeTasks.map((t) => `- ${t.name}: ${t.description}`).join('\n')}`
+          : 'No active background tasks.'
 
       // Proactive memory retrieval
       const contextParts: string[] = []
