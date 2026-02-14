@@ -30,9 +30,17 @@ export class ConversationStore {
         id TEXT PRIMARY KEY,
         channel TEXT NOT NULL,
         created_at INTEGER NOT NULL,
-        last_active_at INTEGER NOT NULL
+        last_active_at INTEGER NOT NULL,
+        summary TEXT
       )
     `)
+
+    // Migration: add summary column if it doesn't exist (for existing databases)
+    try {
+      this.db.run('ALTER TABLE sessions ADD COLUMN summary TEXT')
+    } catch {
+      // Column already exists — ignore
+    }
 
     this.db.run(`
       CREATE TABLE IF NOT EXISTS messages (
@@ -111,6 +119,21 @@ export class ConversationStore {
         )
       }
     })()
+  }
+
+  loadSummary(sessionId: string): string | undefined {
+    const row = this.db.query(
+      'SELECT summary FROM sessions WHERE id = ?'
+    ).get(sessionId) as { summary: string | null } | null
+
+    return row?.summary ?? undefined
+  }
+
+  updateSummary(sessionId: string, summary: string): void {
+    this.db.run(
+      'UPDATE sessions SET summary = ? WHERE id = ?',
+      [summary, sessionId]
+    )
   }
 
   deleteSession(sessionId: string): boolean {

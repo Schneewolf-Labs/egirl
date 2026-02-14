@@ -64,6 +64,7 @@ const defaultToml: EgirlConfig = {
     max_age_days: 30,
     max_messages: 1000,
     compact_on_startup: true,
+    context_compaction: true,
   },
   skills: {
     dirs: ['~/.egirl/skills', '{workspace}/skills'],
@@ -114,6 +115,7 @@ export function loadConfig(): RuntimeConfig {
       maxAgeDays: toml.conversation?.max_age_days ?? 30,
       maxMessages: toml.conversation?.max_messages ?? 1000,
       compactOnStartup: toml.conversation?.compact_on_startup ?? true,
+      contextCompaction: toml.conversation?.context_compaction ?? true,
     },
     channels: {},
     safety: {

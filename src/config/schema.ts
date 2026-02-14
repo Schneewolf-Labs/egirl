@@ -58,6 +58,7 @@ export const EgirlConfigSchema = Type.Object({
     max_age_days: Type.Number({ default: 30 }),
     max_messages: Type.Number({ default: 1000 }),
     compact_on_startup: Type.Boolean({ default: true }),
+    context_compaction: Type.Boolean({ default: true }),
   })),
 
   memory: Type.Optional(Type.Object({
@@ -162,6 +163,7 @@ export interface RuntimeConfig {
     maxAgeDays: number
     maxMessages: number
     compactOnStartup: boolean
+    contextCompaction: boolean
   }
   memory: {
     proactiveRetrieval: boolean
