@@ -102,6 +102,49 @@ Optional. Required only when running `bun run start api`.
 | `port` | number | `3000` | Port for the HTTP API server |
 | `host` | string | `127.0.0.1` | Bind address. Use `0.0.0.0` to listen on all interfaces |
 
+### `[safety]`
+
+Master switch and per-feature toggles for the safety layer. See [docs/safety.md](safety.md) for the full guide.
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `enabled` | bool | `true` | Master switch for all safety features |
+
+#### `[safety.command_filter]`
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `enabled` | bool | `true` | Block dangerous shell commands (`rm -rf /`, fork bombs, etc.) |
+| `blocked_patterns` | string[] | `[]` | Additional regex patterns appended to the built-in blocklist |
+
+#### `[safety.path_sandbox]`
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `enabled` | bool | `false` | Restrict file operations to allowed directories |
+| `allowed_paths` | string[] | `[]` | Directories file ops are restricted to. Supports `{workspace}` and `~` |
+
+#### `[safety.sensitive_files]`
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `enabled` | bool | `true` | Block access to sensitive files (`.env`, SSH keys, credentials) |
+| `patterns` | string[] | `[]` | Additional regex patterns appended to the built-in list |
+
+#### `[safety.audit_log]`
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `enabled` | bool | `true` | Log all tool calls (including blocked ones) to a JSONL file |
+| `path` | string | — | Path to the audit log file. Supports `{workspace}` |
+
+#### `[safety.confirmation]`
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `enabled` | bool | `false` | Require confirmation before executing destructive tools |
+| `tools` | string[] | `["execute_command", "write_file", "edit_file"]` | Tools that require confirmation |
+
 ### `[skills]`
 
 | Key | Type | Default | Description |
@@ -173,6 +216,25 @@ allowed_jids = ["alice@example.com"]
 [channels.api]
 port = 3000
 host = "127.0.0.1"
+
+[safety]
+enabled = true
+
+[safety.command_filter]
+enabled = true
+
+[safety.sensitive_files]
+enabled = true
+
+[safety.audit_log]
+enabled = true
+path = "{workspace}/audit.log"
+
+[safety.path_sandbox]
+enabled = false
+
+[safety.confirmation]
+enabled = false
 
 [skills]
 dirs = ["~/.egirl/skills", "{workspace}/skills"]
