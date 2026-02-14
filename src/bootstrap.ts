@@ -6,6 +6,8 @@ import { createDefaultToolExecutor, type ToolExecutor, type CodeAgentConfig } fr
 import { createMemoryManager, Qwen3VLEmbeddings, type MemoryManager } from './memory'
 import { createConversationStore, type ConversationStore } from './conversation'
 import { createStatsTracker, type StatsTracker } from './tracking'
+import { createSkillManager } from './skills'
+import type { Skill } from './skills/types'
 import { log } from './util/logger'
 
 /**
@@ -20,6 +22,7 @@ export interface AppServices {
   router: Router
   toolExecutor: ToolExecutor
   stats: StatsTracker
+  skills: Skill[]
 }
 
 /**
@@ -95,9 +98,28 @@ export function getCodeAgentConfig(config: RuntimeConfig): CodeAgentConfig | und
 }
 
 /**
+ * Load skills from configured directories.
+ */
+async function loadSkills(config: RuntimeConfig): Promise<Skill[]> {
+  const skillManager = createSkillManager()
+
+  try {
+    await skillManager.loadFromDirectories(config.skills.dirs)
+    const enabled = skillManager.getEnabled()
+    if (enabled.length > 0) {
+      log.info('main', `Skills loaded: ${enabled.map(s => s.name).join(', ')}`)
+    }
+    return enabled
+  } catch (error) {
+    log.warn('main', 'Failed to load skills:', error)
+    return []
+  }
+}
+
+/**
  * Bootstrap all shared services from config.
  */
-export function createAppServices(config: RuntimeConfig): AppServices {
+export async function createAppServices(config: RuntimeConfig): Promise<AppServices> {
   const providers = createProviderRegistry(config)
 
   log.info('main', `Local provider: ${providers.local.name}`)
@@ -107,9 +129,10 @@ export function createAppServices(config: RuntimeConfig): AppServices {
 
   const memory = createMemory(config)
   const conversations = createConversations(config)
-  const router = createRouter(config)
+  const skills = await loadSkills(config)
+  const router = createRouter(config, skills)
   const toolExecutor = createDefaultToolExecutor(memory, getCodeAgentConfig(config))
   const stats = createStatsTracker()
 
-  return { config, providers, memory, conversations, router, toolExecutor, stats }
+  return { config, providers, memory, conversations, router, toolExecutor, stats, skills }
 }

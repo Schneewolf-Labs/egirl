@@ -2,11 +2,12 @@ import type { ChatMessage, ChatResponse, LLMProvider, ToolCall, ToolDefinition, 
 import { ContextSizeError } from '../providers/types'
 import type { RuntimeConfig } from '../config'
 import type { ToolExecutor, ToolResult } from '../tools'
+import type { Skill } from '../skills/types'
 import type { AgentEventHandler } from './events'
 import type { ConversationStore } from '../conversation'
 import type { MemoryManager } from '../memory'
 import { Router, shouldRetryWithRemote, analyzeResponseForEscalation } from '../routing'
-import { createAgentContext, addMessage, type AgentContext } from './context'
+import { createAgentContext, addMessage, type AgentContext, type SystemPromptOptions } from './context'
 import { fitToContextWindow } from './context-window'
 import { retrieveForContext } from '../memory/retrieval'
 import { createLlamaCppTokenizer } from '../providers/llamacpp-tokenizer'
@@ -41,6 +42,7 @@ export interface AgentLoopDeps {
   sessionId: string
   memory?: MemoryManager
   conversationStore?: ConversationStore
+  skills?: Skill[]
 }
 
 export class AgentLoop {
@@ -54,6 +56,7 @@ export class AgentLoop {
   private tokenizer: Tokenizer
   private conversationStore: ConversationStore | null
   private persistedIndex: number = 0
+  private promptOptions: SystemPromptOptions
 
   constructor(deps: AgentLoopDeps) {
     this.config = deps.config
@@ -63,7 +66,8 @@ export class AgentLoop {
     this.remoteProvider = deps.remoteProvider
     this.memory = deps.memory ?? null
     this.conversationStore = deps.conversationStore ?? null
-    this.context = createAgentContext(deps.config, deps.sessionId)
+    this.promptOptions = { skills: deps.skills }
+    this.context = createAgentContext(deps.config, deps.sessionId, this.promptOptions)
     this.tokenizer = createLlamaCppTokenizer(deps.config.local.endpoint)
 
     // Load conversation history from store
@@ -406,7 +410,7 @@ export class AgentLoop {
   }
 
   clearContext(): void {
-    this.context = createAgentContext(this.config, this.context.sessionId)
+    this.context = createAgentContext(this.config, this.context.sessionId, this.promptOptions)
     this.persistedIndex = 0
   }
 

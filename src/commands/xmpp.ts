@@ -13,7 +13,7 @@ export async function runXMPP(config: RuntimeConfig, args: string[]): Promise<vo
     process.exit(1)
   }
 
-  const { providers, router, toolExecutor } = createAppServices(config)
+  const { providers, router, toolExecutor, skills } = await createAppServices(config)
 
   const agent = createAgentLoop({
     config,
@@ -22,6 +22,7 @@ export async function runXMPP(config: RuntimeConfig, args: string[]): Promise<vo
     localProvider: providers.local,
     remoteProvider: providers.remote,
     sessionId: 'xmpp:default',
+    skills,
   })
 
   const xmpp = createXMPPChannel(agent, config.channels.xmpp)
