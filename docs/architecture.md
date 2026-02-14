@@ -7,11 +7,11 @@ This document describes how egirl's components fit together, the data flow throu
 ```
 ┌──────────────────────────────────────────────────┐
 │                    Channels                       │
-│  ┌─────────┐  ┌──────────┐  ┌─────────────────┐  │
-│  │   CLI   │  │ Discord  │  │  Claude Code     │  │
-│  └────┬────┘  └────┬─────┘  └───────┬─────────┘  │
-│       │            │                │             │
-│       └────────────┼────────────────┘             │
+│  ┌─────┐ ┌────────┐ ┌────────────┐ ┌──────┐ ┌───┐│
+│  │ CLI │ │Discord │ │Claude Code │ │ XMPP │ │API││
+│  └──┬──┘ └───┬────┘ └─────┬──────┘ └──┬───┘ └─┬─┘│
+│     │        │            │           │       │   │
+│     └────────┼────────────┼───────────┼───────┘   │
 │                    │                              │
 │              ┌─────▼─────┐                        │
 │              │ Agent Loop │                        │
@@ -45,11 +45,13 @@ A message from the user follows this path:
 
 ### 1. Channel receives input
 
-The channel (CLI, Discord, or Claude Code) receives raw user input. Each channel is a thin adapter that converts its interface into a call to `AgentLoop.run()`.
+The channel (CLI, Discord, Claude Code, XMPP, or API) receives raw user input. Each channel is a thin adapter that converts its interface into a call to `AgentLoop.run()`.
 
 - **CLI** (`src/channels/cli.ts`): readline-based interactive terminal. Supports single-message mode via `-m`.
 - **Discord** (`src/channels/discord.ts`): discord.js bot responding to DMs and @mentions. Filters by `allowed_channels` and `allowed_users`.
 - **Claude Code** (`src/channels/claude-code.ts`): bridges to Claude Code via `@anthropic-ai/claude-agent-sdk`. Uses the local model to handle tool permissions and answer clarifying questions.
+- **XMPP** (`src/channels/xmpp.ts`): XMPP/Jabber chat via `@xmpp/client`. Connects to a Prosody (or other XMPP) server. Filters by `allowed_jids`.
+- **API** (`src/api/server.ts`): HTTP REST server (Bun built-in) exposing chat, tools, memory, and stats endpoints.
 
 ### 2. Agent loop processes the message
 
@@ -129,7 +131,7 @@ src/index.ts (entry point)
 ├── memory/          → creates MemoryManager (SQLite + embeddings)
 ├── tracking/        → creates StatsTracker for usage metrics
 ├── agent/           → creates AgentLoop (orchestrates everything above)
-└── channels/        → creates channel (CLI/Discord/Claude Code)
+└── channels/        → creates channel (CLI/Discord/Claude Code/XMPP/API)
 ```
 
 Dependencies flow downward. The agent loop depends on the router, tools, and providers. Channels depend on the agent loop. Nothing depends on channels — they are leaf nodes.
@@ -192,7 +194,8 @@ egirl/
 │   ├── channels/
 │   │   ├── cli.ts            # Terminal interface
 │   │   ├── discord.ts        # Discord bot
-│   │   └── claude-code.ts    # Claude Code bridge
+│   │   ├── claude-code.ts    # Claude Code bridge
+│   │   └── xmpp.ts           # XMPP/Jabber chat
 │   ├── config/
 │   │   ├── schema.ts         # TypeBox schema for egirl.toml
 │   │   ├── index.ts          # Config loading + validation
@@ -223,7 +226,7 @@ egirl/
 │   │   ├── executor.ts       # ToolExecutor registry + execution
 │   │   ├── format.ts         # Qwen3 <tool_call> parsing
 │   │   ├── loader.ts         # Tool loading
-│   │   └── builtin/          # 7 built-in tools
+│   │   └── builtin/          # 10 built-in tools
 │   ├── tracking/
 │   │   ├── stats.ts          # Request/token/cost tracking
 │   │   └── costs.ts          # Model pricing lookup
@@ -244,7 +247,7 @@ egirl/
 
 ### Why no channel abstraction?
 
-There are only three channels and they share nothing meaningful. CLI uses readline, Discord uses discord.js events, Claude Code uses the agent SDK stream. A shared interface would add indirection without reducing code.
+Channels share a minimal `Channel` interface (`start()` / `stop()`) but no deep abstraction. CLI uses readline, Discord uses discord.js events, Claude Code uses the agent SDK stream, XMPP uses stanza events, and the API server uses HTTP request handlers. Each transport is different enough that a shared abstraction would add indirection without reducing code.
 
 ### Why Qwen3 native format for tool calls?
 

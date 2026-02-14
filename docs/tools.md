@@ -1,6 +1,6 @@
 # Built-in Tools Reference
 
-egirl ships with 7 built-in tools that the agent can invoke during conversations. Tools are registered in the `ToolExecutor` at startup and described in the system prompt so the model knows how to use them.
+egirl ships with 10 built-in tools that the agent can invoke during conversations. Tools are registered in the `ToolExecutor` at startup and described in the system prompt so the model knows how to use them.
 
 ## Tool Architecture
 
@@ -250,6 +250,58 @@ Capture a screenshot of the current display.
 **Example:**
 ```json
 {"name": "screenshot", "arguments": {"region": {"x": 0, "y": 0, "width": 1920, "height": 1080}}}
+```
+
+---
+
+## web_research
+
+Fetch a URL and return its text content. Useful for reading web pages, documentation, and API responses.
+
+**Source:** `src/tools/builtin/web-research.ts`
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `url` | string | Yes | The URL to fetch (must start with `http://` or `https://`) |
+| `timeout` | number | No | Request timeout in milliseconds (default: 15000) |
+
+**Behavior:**
+- Validates that the URL starts with `http://` or `https://`
+- Follows redirects automatically
+- HTML responses are stripped of tags and converted to plain text (scripts, styles removed)
+- JSON responses are pretty-printed for readability
+- Content exceeding 50,000 characters is truncated
+- On timeout, returns an error with the elapsed time
+
+**Example:**
+```json
+{"name": "web_research", "arguments": {"url": "https://example.com/api/docs", "timeout": 10000}}
+```
+
+---
+
+## code_agent
+
+Delegate a coding task to an autonomous code agent (Claude Code) via the `@anthropic-ai/claude-agent-sdk`.
+
+**Source:** `src/tools/builtin/code-agent.ts`
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `task` | string | Yes | A clear description of the coding task to perform |
+| `working_dir` | string | No | Working directory for the task (defaults to configured workspace) |
+
+**Behavior:**
+- Launches a Claude Code session using the Agent SDK's `query()` function
+- The code agent has full filesystem and command execution access
+- Permission mode, model, and max turns are configured in `[channels.claude_code]` in `egirl.toml`
+- Default timeout is 5 minutes; the session is aborted if exceeded
+- Returns the agent's final result with metadata (turns, cost, duration, session ID)
+- If the agent completes without producing a result, returns `success: false`
+
+**Example:**
+```json
+{"name": "code_agent", "arguments": {"task": "Refactor the routing module to extract heuristics into a separate file"}}
 ```
 
 ---

@@ -4,7 +4,7 @@ Evaluation of private, secure, self-hosted protocols for egirl beyond Discord an
 
 ## Current State
 
-egirl has four channels: Discord, CLI, HTTP API, and Claude Code. All share the same `AgentLoop.run()` interface — adding a new channel means writing a class that accepts an `AgentLoop`, handles inbound messages, calls `agent.run()`, and formats the response back.
+egirl has five channels: Discord, CLI, HTTP API, XMPP, and Claude Code. All share the same `AgentLoop.run()` interface — adding a new channel means writing a class that accepts an `AgentLoop`, handles inbound messages, calls `agent.run()`, and formats the response back. The XMPP channel (`src/channels/xmpp.ts`) was added following the recommendation below — it connects to an XMPP server via `@xmpp/client`, listens for chat stanzas, and replies with the agent's response. JID-based access control is supported via `allowed_jids`.
 
 ## Evaluation Criteria
 
