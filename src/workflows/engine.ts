@@ -18,15 +18,18 @@ export function interpolate(value: unknown, ctx: StepContext): unknown {
       const parts = trimmed.split('.')
 
       if (parts[0] === 'params' && parts.length === 2) {
-        const val = ctx.params[parts[1]]
+        const key = parts[1]!
+        const val = ctx.params[key]
         return val !== undefined ? String(val) : ''
       }
 
       if (parts[0] === 'steps' && parts.length === 3) {
-        const stepResult = ctx.steps[parts[1]]
+        const stepName = parts[1]!
+        const field = parts[2]!
+        const stepResult = ctx.steps[stepName]
         if (!stepResult) return ''
-        if (parts[2] === 'output') return stepResult.output
-        if (parts[2] === 'success') return String(stepResult.success)
+        if (field === 'output') return stepResult.output
+        if (field === 'success') return String(stepResult.success)
         return ''
       }
 

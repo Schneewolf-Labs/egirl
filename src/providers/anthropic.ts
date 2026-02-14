@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
-import type { LLMProvider, ChatRequest, ChatResponse, ToolCall, ChatMessage } from './types'
+import type { LLMProvider, ChatRequest, ChatResponse, ToolCall, ChatMessage, ContentPart } from './types'
+import { getTextContent } from './types'
 
 export class AnthropicProvider implements LLMProvider {
   readonly name: string
@@ -90,6 +91,21 @@ export class AnthropicProvider implements LLMProvider {
 }
 
 /**
+ * Convert internal ContentPart[] to Anthropic content blocks.
+ */
+function toAnthropicContent(parts: ContentPart[]): Anthropic.Messages.ContentBlockParam[] {
+  return parts.map((part): Anthropic.Messages.ContentBlockParam => {
+    if (part.type === 'text') {
+      return { type: 'text', text: part.text }
+    }
+    return {
+      type: 'image',
+      source: { type: 'url', url: part.image_url.url },
+    }
+  })
+}
+
+/**
  * Convert internal ChatMessage array to Anthropic API format.
  * Handles system prompt extraction, tool_use blocks on assistant messages,
  * and merging consecutive tool results into a single user message.
@@ -106,16 +122,22 @@ export function prepareAnthropicMessages(messages: ChatMessage[]): {
     const msg = messages[i]!
 
     if (msg.role === 'system') {
-      systemPrompt = (systemPrompt ? systemPrompt + '\n\n' : '') + msg.content
+      const text = getTextContent(msg.content)
+      systemPrompt = (systemPrompt ? systemPrompt + '\n\n' : '') + text
       i++
     } else if (msg.role === 'user') {
-      anthropicMessages.push({ role: 'user', content: msg.content })
+      if (typeof msg.content === 'string') {
+        anthropicMessages.push({ role: 'user', content: msg.content })
+      } else {
+        anthropicMessages.push({ role: 'user', content: toAnthropicContent(msg.content) })
+      }
       i++
     } else if (msg.role === 'assistant') {
+      const text = getTextContent(msg.content)
       if (msg.tool_calls && msg.tool_calls.length > 0) {
         const content: Anthropic.Messages.ContentBlockParam[] = []
-        if (msg.content) {
-          content.push({ type: 'text', text: msg.content })
+        if (text) {
+          content.push({ type: 'text', text })
         }
         for (const tc of msg.tool_calls) {
           content.push({
@@ -127,7 +149,7 @@ export function prepareAnthropicMessages(messages: ChatMessage[]): {
         }
         anthropicMessages.push({ role: 'assistant', content })
       } else {
-        anthropicMessages.push({ role: 'assistant', content: msg.content })
+        anthropicMessages.push({ role: 'assistant', content: text })
       }
       i++
     } else if (msg.role === 'tool') {
@@ -138,7 +160,7 @@ export function prepareAnthropicMessages(messages: ChatMessage[]): {
         toolResults.push({
           type: 'tool_result',
           tool_use_id: toolMsg.tool_call_id!,
-          content: toolMsg.content,
+          content: getTextContent(toolMsg.content),
         })
         i++
       }

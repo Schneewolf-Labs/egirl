@@ -1,4 +1,4 @@
-import { query, type ClaudeAgentOptions } from '@anthropic-ai/claude-agent-sdk'
+import { query, type Options as ClaudeAgentOptions, type PermissionResult } from '@anthropic-ai/claude-agent-sdk'
 import * as readline from 'readline'
 import type { LLMProvider } from '../providers/types'
 import { log } from '../util/logger'
@@ -98,15 +98,17 @@ export class ClaudeCodeChannel {
     let totalCost = 0
     let finalResult = ''
 
+    const isBypass = this.config.permissionMode === 'bypassPermissions'
     const options: ClaudeAgentOptions = {
-      permissionMode: this.config.permissionMode === 'bypassPermissions' ? 'bypassPermissions' : 'default',
-      model: this.config.claudeModel as 'claude-sonnet-4-20250514' | undefined,
+      permissionMode: isBypass ? 'bypassPermissions' : 'default',
+      ...(isBypass && { allowDangerouslySkipPermissions: true }),
+      model: this.config.claudeModel,
       maxTurns: this.config.maxTurns,
       cwd: this.config.workingDir,
-      resumeSessionId,
+      resume: resumeSessionId,
 
       // Handle tool permissions and questions with local model
-      canUseTool: async (toolName: string, input: Record<string, unknown>) => {
+      canUseTool: async (toolName, input) => {
         return this.handleToolRequest(toolName, input, prompt)
       },
     }
@@ -170,7 +172,7 @@ export class ClaudeCodeChannel {
     toolName: string,
     input: Record<string, unknown>,
     originalTask: string
-  ): Promise<{ behavior: 'allow' | 'deny'; updatedInput?: Record<string, unknown>; message?: string }> {
+  ): Promise<PermissionResult> {
 
     // Handle AskUserQuestion - Claude is asking for clarification
     if (toolName === 'AskUserQuestion') {
@@ -223,7 +225,7 @@ export class ClaudeCodeChannel {
     toolName: string,
     input: Record<string, unknown>,
     originalTask: string
-  ): Promise<{ behavior: 'allow' | 'deny'; updatedInput?: Record<string, unknown>; message?: string }> {
+  ): Promise<PermissionResult> {
 
     // Format the permission request for display
     const requestSummary = this.formatToolRequest(toolName, input)

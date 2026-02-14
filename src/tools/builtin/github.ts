@@ -25,7 +25,7 @@ async function ghFetch(
       'Content-Type': 'application/json',
       'User-Agent': 'egirl-agent/1.0',
     },
-    ...(options.body && { body: JSON.stringify(options.body) }),
+    ...(options.body != null ? { body: JSON.stringify(options.body) } : {}),
   })
 
   const data = await response.json()
