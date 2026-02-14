@@ -14,6 +14,11 @@ export {
   createMemoryTools,
   createCodeAgentTool,
   type CodeAgentConfig,
+  gitStatusTool,
+  gitDiffTool,
+  gitLogTool,
+  gitCommitTool,
+  gitShowTool,
 } from './builtin'
 
 import { createToolExecutor } from './executor'
@@ -31,6 +36,11 @@ import {
   createMemoryTools,
   createCodeAgentTool,
   type CodeAgentConfig,
+  gitStatusTool,
+  gitDiffTool,
+  gitLogTool,
+  gitCommitTool,
+  gitShowTool,
 } from './builtin'
 
 /**
@@ -50,6 +60,11 @@ export function createDefaultToolExecutor(memory?: MemoryManager, codeAgent?: Co
     globTool,
     screenshotTool,
     webResearchTool,
+    gitStatusTool,
+    gitDiffTool,
+    gitLogTool,
+    gitCommitTool,
+    gitShowTool,
   ])
 
   // Memory tools (functional if MemoryManager provided)
