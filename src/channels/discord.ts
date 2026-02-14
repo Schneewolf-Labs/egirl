@@ -15,6 +15,7 @@ import type { AgentLoop } from '../agent'
 import type { AgentEventHandler } from '../agent/events'
 import type { ToolCall } from '../providers/types'
 import type { ToolResult } from '../tools/types'
+import type { Channel } from './types'
 import { log } from '../util/logger'
 
 export interface DiscordConfig {
@@ -98,7 +99,8 @@ function buildToolCallPrefix(state: DiscordEventState): string {
   return `\`\`\`\n${lines.join('\n')}\n\`\`\`\n`
 }
 
-export class DiscordChannel {
+export class DiscordChannel implements Channel {
+  readonly name = 'discord'
   private client: Client
   private agent: AgentLoop
   private config: DiscordConfig

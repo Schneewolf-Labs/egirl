@@ -5,7 +5,7 @@ import { createProviderRegistry } from './providers'
 import { createRouter } from './routing'
 import { createDefaultToolExecutor, type CodeAgentConfig } from './tools'
 import { createAgentLoop } from './agent'
-import { createCLIChannel, createClaudeCodeChannel, createDiscordChannel, type ClaudeCodeConfig } from './channels'
+import { createCLIChannel, createClaudeCodeChannel, createDiscordChannel, createXMPPChannel, type ClaudeCodeConfig } from './channels'
 import { createStatsTracker } from './tracking'
 import { createMemoryManager, Qwen3VLEmbeddings, type MemoryManager } from './memory'
 import { createAPIServer } from './api'
@@ -91,6 +91,10 @@ async function main() {
 
     case 'discord':
       await runDiscord(config, args.slice(1))
+      break
+
+    case 'xmpp':
+      await runXMPP(config, args.slice(1))
       break
 
     case 'api':
@@ -358,6 +362,52 @@ async function runDiscord(config: RuntimeConfig, args: string[]) {
   log.info('main', 'Discord bot running. Press Ctrl+C to stop.')
 }
 
+async function runXMPP(config: RuntimeConfig, args: string[]) {
+  if (args.includes('--quiet') || args.includes('-q')) {
+    log.setLevel('error')
+  } else if (args.includes('--verbose') || args.includes('-v') || args.includes('--debug') || args.includes('-d')) {
+    log.setLevel('debug')
+  }
+
+  if (!config.channels.xmpp) {
+    console.error('Error: XMPP not configured. Add XMPP_USERNAME and XMPP_PASSWORD to .env and configure channels.xmpp in egirl.toml')
+    process.exit(1)
+  }
+
+  const providers = createProviderRegistry(config)
+
+  log.info('main', `Local provider: ${providers.local.name}`)
+  if (providers.remote) {
+    log.info('main', `Remote provider: ${providers.remote.name}`)
+  }
+
+  const memory = createMemory(config)
+  const router = createRouter(config)
+  const toolExecutor = createDefaultToolExecutor(memory, getCodeAgentConfig(config))
+  const agent = createAgentLoop(
+    config,
+    router,
+    toolExecutor,
+    providers.local,
+    providers.remote
+  )
+
+  const xmpp = createXMPPChannel(agent, config.channels.xmpp)
+
+  const shutdown = async () => {
+    log.info('main', 'Shutting down...')
+    await xmpp.stop()
+    process.exit(0)
+  }
+
+  process.on('SIGINT', shutdown)
+  process.on('SIGTERM', shutdown)
+
+  await xmpp.start()
+
+  log.info('main', 'XMPP bot running. Press Ctrl+C to stop.')
+}
+
 async function runAPI(config: RuntimeConfig, args: string[]) {
   // Set log level from args
   if (args.includes('--quiet') || args.includes('-q')) {
@@ -432,6 +482,7 @@ Usage:
 Commands:
   cli            Start interactive CLI (default)
   discord        Start Discord bot
+  xmpp           Start XMPP bot
   api            Start HTTP API server
   claude-code    Bridge to Claude Code with local model supervision (alias: cc)
   status         Show current configuration and status
@@ -444,6 +495,11 @@ Options for cli:
   -q, --quiet    Only show errors
 
 Options for discord:
+  -v, --verbose  Enable verbose/debug logging
+  -d, --debug    Alias for --verbose
+  -q, --quiet    Only show errors
+
+Options for xmpp:
   -v, --verbose  Enable verbose/debug logging
   -d, --debug    Alias for --verbose
   -q, --quiet    Only show errors
@@ -467,6 +523,7 @@ Examples:
   bun run start                        # Production start
   bun run cli                          # Direct CLI mode
   bun run start discord                # Start Discord bot
+  bun run start xmpp                   # Start XMPP bot
   bun run start api                    # Start HTTP API on :3000
   bun run start api --port 8080        # Start HTTP API on :8080
   bun run start claude-code            # Claude Code bridge (interactive)

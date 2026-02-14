@@ -6,6 +6,16 @@ import type { RuntimeConfig, EgirlConfig } from './schema'
 
 export { type EgirlConfig, type RuntimeConfig } from './schema'
 
+function getDomain(service: string): string {
+  try {
+    const url = new URL(service)
+    return url.hostname
+  } catch {
+    // Fallback: strip protocol and port
+    return service.replace(/^[a-z]+:\/\//, '').split(':')[0]!.split('/')[0]!
+  }
+}
+
 function expandPath(path: string, workspaceDir?: string): string {
   let result = path.replace(/^~/, homedir())
 
@@ -134,6 +144,22 @@ export function loadConfig(): RuntimeConfig {
       model: cc.model,
       workingDir: cc.working_dir ? expandPath(cc.working_dir, workspacePath) : process.cwd(),
       maxTurns: cc.max_turns,
+    }
+  }
+
+  const xmppUsername = process.env.XMPP_USERNAME
+  const xmppPassword = process.env.XMPP_PASSWORD
+
+  if (xmppUsername && xmppPassword && toml.channels?.xmpp) {
+    const xmppConf = toml.channels.xmpp
+    const service = xmppConf.service ?? 'xmpp://localhost:5222'
+    config.channels.xmpp = {
+      service,
+      domain: xmppConf.domain ?? getDomain(service),
+      username: xmppUsername,
+      password: xmppPassword,
+      resource: xmppConf.resource,
+      allowedJids: xmppConf.allowed_jids ?? [],
     }
   }
 
