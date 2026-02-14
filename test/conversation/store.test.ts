@@ -120,13 +120,15 @@ describe('ConversationStore', () => {
     expect(s2!.messageCount).toBe(1)
   })
 
-  test('compact removes old sessions', () => {
-    // Create a session and manually backdate it
+  test('compact removes old sessions', async () => {
     store.appendMessages('old-session', [
       { role: 'user', content: 'ancient' },
     ])
 
-    // Compact with maxAgeDays=0 should remove everything
+    // Wait 2ms so the session's last_active_at is strictly before Date.now()
+    await Bun.sleep(2)
+
+    // Compact with maxAgeDays=0 → cutoff = Date.now(), which is now after the session
     const result = store.compact({ maxAgeDays: 0, maxMessages: 1000 })
     expect(result.sessionsDeleted).toBe(1)
     expect(result.messagesDeleted).toBe(1)
