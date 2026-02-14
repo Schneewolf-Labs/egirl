@@ -44,9 +44,9 @@ describe('analyzeResponseForEscalation', () => {
     }
   })
 
-  test('detects error patterns in code output', () => {
+  test('detects error patterns in prose (not inside code blocks)', () => {
     const response = makeResponse({
-      content: 'Here is the code:\n```\nerror: something failed\n```',
+      content: 'The error: something failed in the system.',
     })
     const result = analyzeResponseForEscalation(response, 0.4)
     expect(result.shouldEscalate).toBe(true)
@@ -54,12 +54,12 @@ describe('analyzeResponseForEscalation', () => {
     expect(result.confidence).toBe(0.4)
   })
 
-  test('does not escalate for error patterns without code blocks', () => {
+  test('does not escalate for error patterns inside code blocks', () => {
     const response = makeResponse({
-      content: 'The error: something failed in the system but that is expected.',
+      content: 'Here is the output:\n```\nerror: something failed\n```\nThis looks correct.',
     })
     const result = analyzeResponseForEscalation(response, 0.4)
-    // No code blocks so error pattern doesn't trigger
+    // Error is inside a code block, should not trigger escalation
     expect(result.reason).not.toBe('potential_code_errors')
   })
 

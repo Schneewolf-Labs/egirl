@@ -55,6 +55,17 @@ export interface Tokenizer {
  * Thrown when the prompt exceeds the provider's context window.
  * Contains the actual token counts from the server for retry logic.
  */
+/**
+ * Extract text from string or ContentPart[] message content.
+ */
+export function getTextContent(content: string | ContentPart[]): string {
+  if (typeof content === 'string') return content
+  return content
+    .filter((part): part is TextContent => part.type === 'text')
+    .map(part => part.text)
+    .join('\n')
+}
+
 export class ContextSizeError extends Error {
   readonly promptTokens: number
   readonly contextSize: number
