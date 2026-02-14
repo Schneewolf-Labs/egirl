@@ -1,19 +1,12 @@
-import { mkdir, writeFile, access, readFile } from 'fs/promises'
-import { join, dirname } from 'path'
+import { access, mkdir, readFile, writeFile } from 'fs/promises'
+import { dirname, join } from 'path'
 import { fileURLToPath } from 'url'
 import { log } from '../util/logger'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const TEMPLATES_DIR = join(__dirname, 'templates')
 
-const WORKSPACE_FILES = [
-  'AGENTS.md',
-  'SOUL.md',
-  'TOOLS.md',
-  'IDENTITY.md',
-  'USER.md',
-  'MEMORY.md',
-]
+const WORKSPACE_FILES = ['AGENTS.md', 'SOUL.md', 'TOOLS.md', 'IDENTITY.md', 'USER.md', 'MEMORY.md']
 
 async function fileExists(path: string): Promise<boolean> {
   try {

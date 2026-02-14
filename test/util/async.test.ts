@@ -1,5 +1,5 @@
-import { describe, test, expect } from 'bun:test'
-import { delay, retry, timeout, AsyncQueue } from '../../src/util/async'
+import { describe, expect, test } from 'bun:test'
+import { AsyncQueue, delay, retry, timeout } from '../../src/util/async'
 
 describe('delay', () => {
   test('resolves after specified time', async () => {
@@ -24,7 +24,7 @@ describe('retry', () => {
         if (attempt < 3) throw new Error('fail')
         return 'success'
       },
-      { maxAttempts: 3, delayMs: 10 }
+      { maxAttempts: 3, delayMs: 10 },
     )
     expect(result).toBe('success')
     expect(attempt).toBe(3)
@@ -38,7 +38,7 @@ describe('retry', () => {
           attempt++
           throw new Error('always fails')
         },
-        { maxAttempts: 3, delayMs: 10 }
+        { maxAttempts: 3, delayMs: 10 },
       )
       // Should not reach here
       expect(true).toBe(false)
@@ -52,12 +52,14 @@ describe('retry', () => {
     const errors: number[] = []
     try {
       await retry(
-        async () => { throw new Error('fail') },
+        async () => {
+          throw new Error('fail')
+        },
         {
           maxAttempts: 3,
           delayMs: 10,
           onError: (_err, attempt) => errors.push(attempt),
-        }
+        },
       )
     } catch {
       // expected
@@ -73,19 +75,13 @@ describe('retry', () => {
 
 describe('timeout', () => {
   test('resolves when promise completes in time', async () => {
-    const result = await timeout(
-      Promise.resolve('done'),
-      1000
-    )
+    const result = await timeout(Promise.resolve('done'), 1000)
     expect(result).toBe('done')
   })
 
   test('rejects when promise exceeds timeout', async () => {
     try {
-      await timeout(
-        new Promise(resolve => setTimeout(resolve, 500)),
-        10
-      )
+      await timeout(new Promise((resolve) => setTimeout(resolve, 500)), 10)
       expect(true).toBe(false)
     } catch (error) {
       expect((error as Error).message).toContain('timed out')
@@ -94,11 +90,7 @@ describe('timeout', () => {
 
   test('uses custom error message', async () => {
     try {
-      await timeout(
-        new Promise(resolve => setTimeout(resolve, 500)),
-        10,
-        'Custom timeout'
-      )
+      await timeout(new Promise((resolve) => setTimeout(resolve, 500)), 10, 'Custom timeout')
       expect(true).toBe(false)
     } catch (error) {
       expect((error as Error).message).toBe('Custom timeout')

@@ -1,16 +1,18 @@
-import type { RuntimeConfig } from '../config'
 import { createAgentLoop } from '../agent'
-import { createXMPPChannel } from '../channels'
 import { createAppServices } from '../bootstrap'
+import { createXMPPChannel } from '../channels'
+import type { RuntimeConfig } from '../config'
+import { gatherStandup } from '../standup'
 import { applyLogLevel } from '../util/args'
 import { log } from '../util/logger'
-import { gatherStandup } from '../standup'
 
 export async function runXMPP(config: RuntimeConfig, args: string[]): Promise<void> {
   applyLogLevel(args)
 
   if (!config.channels.xmpp) {
-    console.error('Error: XMPP not configured. Add XMPP_USERNAME and XMPP_PASSWORD to .env and configure channels.xmpp in egirl.toml')
+    console.error(
+      'Error: XMPP not configured. Add XMPP_USERNAME and XMPP_PASSWORD to .env and configure channels.xmpp in egirl.toml',
+    )
     process.exit(1)
   }
 

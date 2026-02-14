@@ -20,17 +20,11 @@ const UNCERTAINTY_PATTERNS = [
   /this is complex/i,
 ]
 
-const ERROR_PATTERNS = [
-  /error:/i,
-  /failed to/i,
-  /cannot parse/i,
-  /invalid/i,
-  /syntax error/i,
-]
+const ERROR_PATTERNS = [/error:/i, /failed to/i, /cannot parse/i, /invalid/i, /syntax error/i]
 
 export function analyzeResponseForEscalation(
   response: ChatResponse,
-  threshold: number
+  threshold: number,
 ): EscalationDecision {
   // If confidence is provided and below threshold, escalate
   if (response.confidence !== undefined && response.confidence < threshold) {
@@ -48,7 +42,7 @@ export function analyzeResponseForEscalation(
   const prose = content.replace(/```[\s\S]*?```/g, '').replace(/`[^`]+`/g, '')
 
   // Check for uncertainty patterns in the model's prose
-  const hasUncertainty = UNCERTAINTY_PATTERNS.some(p => p.test(prose))
+  const hasUncertainty = UNCERTAINTY_PATTERNS.some((p) => p.test(prose))
   if (hasUncertainty) {
     return {
       shouldEscalate: true,
@@ -58,7 +52,7 @@ export function analyzeResponseForEscalation(
   }
 
   // Check for error patterns in the model's prose (not in quoted code)
-  const hasErrors = ERROR_PATTERNS.some(p => p.test(prose))
+  const hasErrors = ERROR_PATTERNS.some((p) => p.test(prose))
   if (hasErrors) {
     return {
       shouldEscalate: true,
@@ -82,10 +76,7 @@ export function analyzeResponseForEscalation(
   }
 }
 
-export function shouldRetryWithRemote(
-  localResponse: ChatResponse,
-  threshold: number
-): boolean {
+export function shouldRetryWithRemote(localResponse: ChatResponse, threshold: number): boolean {
   const decision = analyzeResponseForEscalation(localResponse, threshold)
   return decision.shouldEscalate
 }

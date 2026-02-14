@@ -1,12 +1,11 @@
-import { describe, test, expect } from 'bun:test'
-import type { ChatMessage } from '../../src/providers/types'
-
+import { describe, expect, test } from 'bun:test'
 /**
  * Test the LlamaCppProvider.formatMessages logic by importing a testable
  * extraction. Since formatMessages is a private method, we test via the
  * exported helper: formatMessagesForQwen3.
  */
 import { formatMessagesForQwen3 } from '../../src/providers/qwen3-format'
+import type { ChatMessage } from '../../src/providers/types'
 
 describe('formatMessagesForQwen3', () => {
   test('reconstructs tool call XML in assistant messages', () => {
@@ -15,9 +14,7 @@ describe('formatMessagesForQwen3', () => {
       {
         role: 'assistant',
         content: 'Let me read that file.',
-        tool_calls: [
-          { id: 'call_0', name: 'read_file', arguments: { path: '/etc/hosts' } },
-        ],
+        tool_calls: [{ id: 'call_0', name: 'read_file', arguments: { path: '/etc/hosts' } }],
       },
       { role: 'tool', content: '127.0.0.1 localhost', tool_call_id: 'call_0' },
     ]
@@ -25,13 +22,13 @@ describe('formatMessagesForQwen3', () => {
     const formatted = formatMessagesForQwen3(messages)
 
     // Assistant message should include reconstructed <tool_call> XML
-    const assistantMsg = formatted.find(m => m.role === 'assistant')
+    const assistantMsg = formatted.find((m) => m.role === 'assistant')
     expect(assistantMsg).toBeDefined()
-    expect(assistantMsg!.content).toContain('<tool_call>')
-    expect(assistantMsg!.content).toContain('read_file')
-    expect(assistantMsg!.content).toContain('/etc/hosts')
-    expect(assistantMsg!.content).toContain('</tool_call>')
-    expect(assistantMsg!.content).toContain('Let me read that file.')
+    expect(assistantMsg?.content).toContain('<tool_call>')
+    expect(assistantMsg?.content).toContain('read_file')
+    expect(assistantMsg?.content).toContain('/etc/hosts')
+    expect(assistantMsg?.content).toContain('</tool_call>')
+    expect(assistantMsg?.content).toContain('Let me read that file.')
   })
 
   test('reconstructs multiple tool calls in assistant messages', () => {
@@ -48,7 +45,7 @@ describe('formatMessagesForQwen3', () => {
 
     const formatted = formatMessagesForQwen3(messages)
 
-    const content = formatted[0]!.content as string
+    const content = formatted[0]?.content as string
     const openTags = (content.match(/<tool_call>/g) || []).length
     const closeTags = (content.match(/<\/tool_call>/g) || []).length
     expect(openTags).toBe(2)
@@ -150,25 +147,25 @@ describe('formatMessagesForQwen3', () => {
     expect(formatted).toHaveLength(6)
 
     // First assistant should have glob_files tool call
-    expect(formatted[1]!.content).toContain('glob_files')
-    expect(formatted[1]!.content).toContain('<tool_call>')
+    expect(formatted[1]?.content).toContain('glob_files')
+    expect(formatted[1]?.content).toContain('<tool_call>')
 
     // First tool response
-    expect(formatted[2]!.role).toBe('user')
-    expect(formatted[2]!.content).toContain('a.txt\nb.txt')
+    expect(formatted[2]?.role).toBe('user')
+    expect(formatted[2]?.content).toContain('a.txt\nb.txt')
 
     // Second assistant should have both read_file tool calls
-    const secondAssistant = formatted[3]!.content as string
+    const secondAssistant = formatted[3]?.content as string
     expect((secondAssistant.match(/<tool_call>/g) || []).length).toBe(2)
 
     // Second tool response should group both results
-    expect(formatted[4]!.role).toBe('user')
-    const toolResponses = formatted[4]!.content as string
+    expect(formatted[4]?.role).toBe('user')
+    const toolResponses = formatted[4]?.content as string
     expect((toolResponses.match(/<tool_response>/g) || []).length).toBe(2)
     expect(toolResponses).toContain('aaa')
     expect(toolResponses).toContain('bbb')
 
     // Final assistant response is plain
-    expect(formatted[5]!.content).toBe('Found a.txt with "aaa" and b.txt with "bbb".')
+    expect(formatted[5]?.content).toBe('Found a.txt with "aaa" and b.txt with "bbb".')
   })
 })

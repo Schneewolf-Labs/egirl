@@ -1,6 +1,6 @@
+import { type ClaudeCodeConfig, createClaudeCodeChannel } from '../channels'
 import type { RuntimeConfig } from '../config'
 import { createProviderRegistry } from '../providers'
-import { createClaudeCodeChannel, type ClaudeCodeConfig } from '../channels'
 import { applyLogLevel } from '../util/args'
 
 export async function runClaudeCode(config: RuntimeConfig, args: string[]): Promise<void> {
@@ -29,7 +29,9 @@ export async function runClaudeCode(config: RuntimeConfig, args: string[]): Prom
     try {
       const result = await channel.runTask(prompt)
       console.log(`\n${result.result}`)
-      console.log(`\n[${result.turns} turns | $${result.costUsd.toFixed(4)} | ${(result.durationMs / 1000).toFixed(1)}s]`)
+      console.log(
+        `\n[${result.turns} turns | $${result.costUsd.toFixed(4)} | ${(result.durationMs / 1000).toFixed(1)}s]`,
+      )
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       console.error(`Error: ${message}`)
@@ -49,12 +51,15 @@ export async function runClaudeCode(config: RuntimeConfig, args: string[]): Prom
     }
 
     const promptIdx = args.indexOf('-m', resumeIndex + 2)
-    const followUp = promptIdx !== -1 ? (args[promptIdx + 1] ?? 'Continue.') : 'Continue the previous task.'
+    const followUp =
+      promptIdx !== -1 ? (args[promptIdx + 1] ?? 'Continue.') : 'Continue the previous task.'
 
     try {
       const result = await channel.resumeSession(sessionId, followUp)
       console.log(`\n${result.result}`)
-      console.log(`\n[${result.turns} turns | $${result.costUsd.toFixed(4)} | ${(result.durationMs / 1000).toFixed(1)}s]`)
+      console.log(
+        `\n[${result.turns} turns | $${result.costUsd.toFixed(4)} | ${(result.durationMs / 1000).toFixed(1)}s]`,
+      )
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       console.error(`Error: ${message}`)

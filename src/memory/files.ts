@@ -1,5 +1,5 @@
-import { readFile, writeFile, appendFile, mkdir, copyFile } from 'fs/promises'
-import { join, dirname, extname } from 'path'
+import { appendFile, copyFile, mkdir, readFile, writeFile } from 'fs/promises'
+import { extname, join } from 'path'
 import { log } from '../util/logger'
 
 export interface MemoryEntry {
@@ -61,11 +61,7 @@ export class MemoryFiles {
   /**
    * Store an image and return the path
    */
-  async storeImage(
-    imageData: string | Buffer,
-    key: string,
-    extension = '.png'
-  ): Promise<string> {
+  async storeImage(imageData: string | Buffer, key: string, extension = '.png'): Promise<string> {
     await mkdir(this.imagesDir, { recursive: true })
 
     // Generate filename from key and timestamp

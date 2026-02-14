@@ -1,28 +1,34 @@
-import { describe, test, expect, mock } from 'bun:test'
-import { summarizeMessages, formatSummaryMessage } from '../../src/agent/context-summarizer'
-import type { ChatMessage, LLMProvider, ChatRequest, ChatResponse } from '../../src/providers/types'
+import { describe, expect, mock, test } from 'bun:test'
+import { formatSummaryMessage, summarizeMessages } from '../../src/agent/context-summarizer'
+import type { ChatMessage, ChatRequest, ChatResponse, LLMProvider } from '../../src/providers/types'
 
 function createMockProvider(response: string): LLMProvider {
   return {
     name: 'mock',
-    chat: mock(async (_req: ChatRequest): Promise<ChatResponse> => ({
-      content: response,
-      usage: { input_tokens: 100, output_tokens: 50 },
-      model: 'mock-model',
-    })),
+    chat: mock(
+      async (_req: ChatRequest): Promise<ChatResponse> => ({
+        content: response,
+        usage: { input_tokens: 100, output_tokens: 50 },
+        model: 'mock-model',
+      }),
+    ),
   }
 }
 
 function createFailingProvider(): LLMProvider {
   return {
     name: 'mock-failing',
-    chat: mock(async () => { throw new Error('Connection refused') }),
+    chat: mock(async () => {
+      throw new Error('Connection refused')
+    }),
   }
 }
 
 describe('summarizeMessages', () => {
   test('generates summary from conversation messages', async () => {
-    const provider = createMockProvider('- User asked to read test.txt\n- File contained config values')
+    const provider = createMockProvider(
+      '- User asked to read test.txt\n- File contained config values',
+    )
     const messages: ChatMessage[] = [
       { role: 'user', content: 'Read test.txt for me' },
       {
@@ -31,7 +37,10 @@ describe('summarizeMessages', () => {
         tool_calls: [{ id: 'call_0', name: 'read_file', arguments: { path: 'test.txt' } }],
       },
       { role: 'tool', content: 'port=8080\nhost=localhost', tool_call_id: 'call_0' },
-      { role: 'assistant', content: 'The file contains config values: port=8080 and host=localhost.' },
+      {
+        role: 'assistant',
+        content: 'The file contains config values: port=8080 and host=localhost.',
+      },
     ]
 
     const summary = await summarizeMessages(messages, provider)
@@ -42,7 +51,9 @@ describe('summarizeMessages', () => {
   })
 
   test('merges with existing summary when provided', async () => {
-    const provider = createMockProvider('- Previously discussed auth setup\n- Now working on file reading')
+    const provider = createMockProvider(
+      '- Previously discussed auth setup\n- Now working on file reading',
+    )
     const existingSummary = '- User set up authentication system'
     const messages: ChatMessage[] = [
       { role: 'user', content: 'Now read the config file' },
@@ -58,7 +69,9 @@ describe('summarizeMessages', () => {
     // Verify the prompt included the existing summary
     const chatCall = (provider.chat as ReturnType<typeof mock>).mock.calls[0]
     const userMessage = chatCall[0].messages[1]
-    expect(typeof userMessage.content === 'string' && userMessage.content).toContain('existing summary')
+    expect(typeof userMessage.content === 'string' && userMessage.content).toContain(
+      'existing summary',
+    )
   })
 
   test('returns empty string for empty messages', async () => {
@@ -91,9 +104,7 @@ describe('summarizeMessages', () => {
   test('falls back with existing summary preserved', async () => {
     const provider = createFailingProvider()
     const existing = '- Previously discussed database schema'
-    const messages: ChatMessage[] = [
-      { role: 'user', content: 'Now add the migration' },
-    ]
+    const messages: ChatMessage[] = [{ role: 'user', content: 'Now add the migration' }]
 
     const summary = await summarizeMessages(messages, provider, existing)
 
@@ -120,7 +131,10 @@ describe('summarizeMessages', () => {
     const provider = createMockProvider('- User asked about API keys')
     const messages: ChatMessage[] = [
       { role: 'system', content: 'You are a helpful assistant' },
-      { role: 'system', content: '[Recalled memories relevant to this message:\n- API key is stored in .env]' },
+      {
+        role: 'system',
+        content: '[Recalled memories relevant to this message:\n- API key is stored in .env]',
+      },
       { role: 'user', content: 'Where is my API key?' },
     ]
 

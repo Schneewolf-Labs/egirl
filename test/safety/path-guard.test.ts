@@ -1,5 +1,9 @@
-import { describe, test, expect } from 'bun:test'
-import { isPathAllowed, isSensitivePath, getDefaultSensitivePatterns } from '../../src/safety/path-guard'
+import { describe, expect, test } from 'bun:test'
+import {
+  getDefaultSensitivePatterns,
+  isPathAllowed,
+  isSensitivePath,
+} from '../../src/safety/path-guard'
 
 describe('path-guard', () => {
   describe('isPathAllowed', () => {

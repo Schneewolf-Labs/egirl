@@ -1,6 +1,6 @@
-import { describe, test, expect } from 'bun:test'
-import { createRoutingRules, applyRules, type RuleContext } from '../../src/routing/rules'
+import { describe, expect, test } from 'bun:test'
 import type { RuntimeConfig } from '../../src/config'
+import { applyRules, createRoutingRules, type RuleContext } from '../../src/routing/rules'
 
 const baseConfig: RuntimeConfig = {
   workspace: { path: '/tmp/test' },
@@ -31,39 +31,39 @@ describe('createRoutingRules', () => {
 
   test('includes always-local rules', () => {
     const rules = createRoutingRules(baseConfig)
-    const localRules = rules.filter(r => r.name.startsWith('always_local_'))
+    const localRules = rules.filter((r) => r.name.startsWith('always_local_'))
     expect(localRules).toHaveLength(2)
-    expect(localRules.map(r => r.name)).toContain('always_local_memory_search')
-    expect(localRules.map(r => r.name)).toContain('always_local_memory_get')
+    expect(localRules.map((r) => r.name)).toContain('always_local_memory_search')
+    expect(localRules.map((r) => r.name)).toContain('always_local_memory_get')
   })
 
   test('includes always-remote rules', () => {
     const rules = createRoutingRules(baseConfig)
-    const remoteRules = rules.filter(r => r.name.startsWith('always_remote_'))
+    const remoteRules = rules.filter((r) => r.name.startsWith('always_remote_'))
     expect(remoteRules).toHaveLength(2)
-    expect(remoteRules.map(r => r.name)).toContain('always_remote_code_generation')
-    expect(remoteRules.map(r => r.name)).toContain('always_remote_code_review')
+    expect(remoteRules.map((r) => r.name)).toContain('always_remote_code_generation')
+    expect(remoteRules.map((r) => r.name)).toContain('always_remote_code_review')
   })
 
   test('includes complexity-based rules', () => {
     const rules = createRoutingRules(baseConfig)
-    const names = rules.map(r => r.name)
+    const names = rules.map((r) => r.name)
     expect(names).toContain('trivial_local')
     expect(names).toContain('complex_remote')
   })
 
   test('includes large context rule', () => {
     const rules = createRoutingRules(baseConfig)
-    const names = rules.map(r => r.name)
+    const names = rules.map((r) => r.name)
     expect(names).toContain('large_context_remote')
   })
 
   test('includes default fallback rule', () => {
     const rules = createRoutingRules(baseConfig)
-    const defaultRule = rules.find(r => r.name === 'default')
+    const defaultRule = rules.find((r) => r.name === 'default')
     expect(defaultRule).toBeDefined()
-    expect(defaultRule!.priority).toBe(0)
-    expect(defaultRule!.target).toBe('local')
+    expect(defaultRule?.priority).toBe(0)
+    expect(defaultRule?.target).toBe('local')
   })
 })
 
@@ -142,7 +142,7 @@ describe('applyRules', () => {
       routing: { ...baseConfig.routing, default: 'remote' },
     }
     const remoteRules = createRoutingRules(remoteDefaultConfig)
-    const defaultRule = remoteRules.find(r => r.name === 'default')
-    expect(defaultRule!.target).toBe('remote')
+    const defaultRule = remoteRules.find((r) => r.name === 'default')
+    expect(defaultRule?.target).toBe('remote')
   })
 })

@@ -1,6 +1,6 @@
 import type { ToolExecutor } from '../tools/executor'
-import type { WorkflowDefinition, WorkflowStep, StepResult, WorkflowResult } from './types'
 import { log } from '../util/logger'
+import type { StepResult, WorkflowDefinition, WorkflowResult, WorkflowStep } from './types'
 
 interface StepContext {
   params: Record<string, unknown>
@@ -38,7 +38,7 @@ export function interpolate(value: unknown, ctx: StepContext): unknown {
   }
 
   if (Array.isArray(value)) {
-    return value.map(item => interpolate(item, ctx))
+    return value.map((item) => interpolate(item, ctx))
   }
 
   if (value !== null && typeof value === 'object') {
@@ -64,7 +64,7 @@ export function interpolate(value: unknown, ctx: StepContext): unknown {
 function shouldRunStep(
   step: WorkflowStep,
   stepResults: Record<string, StepResult>,
-  isWorkflowFailed: boolean
+  isWorkflowFailed: boolean,
 ): boolean {
   const condition = step.if
 
@@ -98,7 +98,7 @@ export async function executeWorkflow(
   definition: WorkflowDefinition,
   params: Record<string, unknown>,
   toolExecutor: ToolExecutor,
-  cwd: string
+  cwd: string,
 ): Promise<WorkflowResult> {
   const resolvedParams = resolveParams(definition, params)
   const ctx: StepContext = { params: resolvedParams, steps: {} }
@@ -132,7 +132,7 @@ export async function executeWorkflow(
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       const toolResult = await toolExecutor.execute(
         { id: `wf_${step.name}_${attempt}`, name: step.tool, arguments: interpolatedParams },
-        cwd
+        cwd,
       )
 
       result = {
@@ -146,7 +146,10 @@ export async function executeWorkflow(
       if (toolResult.success) break
 
       if (attempt < maxAttempts) {
-        log.info('workflow', `Step ${step.name} failed (attempt ${attempt}/${maxAttempts}), retrying`)
+        log.info(
+          'workflow',
+          `Step ${step.name} failed (attempt ${attempt}/${maxAttempts}), retrying`,
+        )
       }
     }
 
@@ -154,8 +157,8 @@ export async function executeWorkflow(
     ctx.steps[step.name] = result!
     stepResults.push(result!)
 
-    if (!result!.success) {
-      log.info('workflow', `Step ${step.name} failed: ${result!.output.slice(0, 200)}`)
+    if (!result?.success) {
+      log.info('workflow', `Step ${step.name} failed: ${result?.output.slice(0, 200)}`)
       if (!step.continue_on_error) {
         isWorkflowFailed = true
       }
@@ -179,7 +182,7 @@ export async function executeWorkflow(
 
 function resolveParams(
   definition: WorkflowDefinition,
-  provided: Record<string, unknown>
+  provided: Record<string, unknown>,
 ): Record<string, unknown> {
   const resolved: Record<string, unknown> = { ...provided }
 

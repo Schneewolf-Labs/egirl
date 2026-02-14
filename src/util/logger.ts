@@ -9,10 +9,10 @@ interface LogEntry {
 }
 
 const LEVEL_COLORS: Record<LogLevel, string> = {
-  debug: '\x1b[90m',  // gray
-  info: '\x1b[36m',   // cyan
-  warn: '\x1b[33m',   // yellow
-  error: '\x1b[31m',  // red
+  debug: '\x1b[90m', // gray
+  info: '\x1b[36m', // cyan
+  warn: '\x1b[33m', // yellow
+  error: '\x1b[31m', // red
 }
 
 const RESET = '\x1b[0m'
@@ -43,9 +43,8 @@ class Logger {
     let msg = `${color}[${time}] ${levelPad}${RESET} [${entry.category}] ${entry.message}`
 
     if (entry.data !== undefined) {
-      const dataStr = typeof entry.data === 'string'
-        ? entry.data
-        : JSON.stringify(entry.data, null, 2)
+      const dataStr =
+        typeof entry.data === 'string' ? entry.data : JSON.stringify(entry.data, null, 2)
       msg += `\n${dataStr}`
     }
 
@@ -91,11 +90,11 @@ class Logger {
     let filtered = this.entries
 
     if (filter?.level) {
-      filtered = filtered.filter(e => e.level === filter.level)
+      filtered = filtered.filter((e) => e.level === filter.level)
     }
 
     if (filter?.category) {
-      filtered = filtered.filter(e => e.category === filter.category)
+      filtered = filtered.filter((e) => e.category === filter.category)
     }
 
     if (filter?.limit) {

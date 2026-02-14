@@ -1,24 +1,42 @@
-export { MemoryFiles, createMemoryFiles, type MemoryEntry } from './files'
-export { MemoryIndexer, createMemoryIndexer, type IndexedMemory, type ContentType, type MemoryCategory, type MemorySource } from './indexer'
-export { MemorySearch, createMemorySearch, type SearchResult, type SearchOptions } from './search'
-export { retrieveForContext, type RetrievalConfig } from './retrieval'
-export { extractMemories, type ExtractionResult } from './extractor'
+import { join } from 'path'
+import { log } from '../util/logger'
+import type { EmbeddingInput, EmbeddingProvider } from './embeddings/index'
+import { createMemoryFiles, type MemoryFiles } from './files'
+import {
+  type ContentType,
+  createMemoryIndexer,
+  type MemoryCategory,
+  type MemoryIndexer,
+  type MemorySource,
+} from './indexer'
+import {
+  createMemorySearch,
+  type MemorySearch,
+  type SearchOptions,
+  type SearchResult,
+} from './search'
+
 export {
   createEmbeddingProvider,
-  Qwen3VLEmbeddings,
+  type EmbeddingInput,
+  type EmbeddingProvider,
+  type EmbeddingProviderType,
   LlamaCppEmbeddings,
   OpenAIEmbeddings,
-  type EmbeddingProvider,
-  type EmbeddingInput,
-  type EmbeddingProviderType,
+  Qwen3VLEmbeddings,
 } from './embeddings/index'
-
-import { join } from 'path'
-import { createMemoryFiles, type MemoryFiles } from './files'
-import { createMemoryIndexer, type MemoryIndexer, type ContentType, type MemoryCategory, type MemorySource } from './indexer'
-import { createMemorySearch, type MemorySearch, type SearchResult, type SearchOptions } from './search'
-import { type EmbeddingProvider, type EmbeddingInput } from './embeddings/index'
-import { log } from '../util/logger'
+export { type ExtractionResult, extractMemories } from './extractor'
+export { createMemoryFiles, type MemoryEntry, MemoryFiles } from './files'
+export {
+  type ContentType,
+  createMemoryIndexer,
+  type IndexedMemory,
+  type MemoryCategory,
+  MemoryIndexer,
+  type MemorySource,
+} from './indexer'
+export { type RetrievalConfig, retrieveForContext } from './retrieval'
+export { createMemorySearch, MemorySearch, type SearchOptions, type SearchResult } from './search'
 
 export interface MemoryManagerConfig {
   workspaceDir: string
@@ -36,10 +54,7 @@ export class MemoryManager {
     const { workspaceDir, embeddings, embeddingDimensions } = config
 
     this.files = createMemoryFiles(workspaceDir)
-    this.indexer = createMemoryIndexer(
-      join(workspaceDir, 'memory.db'),
-      embeddingDimensions
-    )
+    this.indexer = createMemoryIndexer(join(workspaceDir, 'memory.db'), embeddingDimensions)
     this.embeddings = embeddings ?? null
     this.search = createMemorySearch(this.indexer, embeddings)
   }
@@ -50,7 +65,7 @@ export class MemoryManager {
   async set(
     key: string,
     value: string,
-    options?: { category?: MemoryCategory; source?: MemorySource; sessionId?: string }
+    options?: { category?: MemoryCategory; source?: MemorySource; sessionId?: string },
   ): Promise<void> {
     let embedding: Float32Array | undefined
 
@@ -70,8 +85,13 @@ export class MemoryManager {
       source: options?.source,
       sessionId: options?.sessionId,
     })
-    await this.files.appendToDailyLog(`SET ${key} [${options?.category ?? 'general'}]: ${value.slice(0, 100)}...`)
-    log.debug('memory', `Set memory: ${key} (category=${options?.category ?? 'general'}, source=${options?.source ?? 'manual'})`)
+    await this.files.appendToDailyLog(
+      `SET ${key} [${options?.category ?? 'general'}]: ${value.slice(0, 100)}...`,
+    )
+    log.debug(
+      'memory',
+      `Set memory: ${key} (category=${options?.category ?? 'general'}, source=${options?.source ?? 'manual'})`,
+    )
   }
 
   /**
@@ -108,11 +128,7 @@ export class MemoryManager {
   /**
    * Store a multimodal memory (text + image)
    */
-  async setMultimodal(
-    key: string,
-    text: string,
-    imageData: string
-  ): Promise<void> {
+  async setMultimodal(key: string, text: string, imageData: string): Promise<void> {
     const imagePath = await this.files.storeImage(imageData, key)
 
     let embedding: Float32Array | undefined
@@ -138,7 +154,14 @@ export class MemoryManager {
   /**
    * Get a memory by key
    */
-  get(key: string): { value: string; category: MemoryCategory; source: MemorySource; imagePath?: string; createdAt: number; updatedAt: number } | null {
+  get(key: string): {
+    value: string
+    category: MemoryCategory
+    source: MemorySource
+    imagePath?: string
+    createdAt: number
+    updatedAt: number
+  } | null {
     const memory = this.indexer.get(key)
     if (!memory) return null
 
@@ -217,7 +240,7 @@ export class MemoryManager {
     const memories = this.indexer.getByContentType('image', limit)
     const multimodal = this.indexer.getByContentType('multimodal', limit)
 
-    return [...memories, ...multimodal].map(m => ({
+    return [...memories, ...multimodal].map((m) => ({
       key: m.key,
       value: m.value,
       imagePath: m.imagePath,
@@ -230,8 +253,16 @@ export class MemoryManager {
   list(
     limit = 100,
     offset = 0,
-    filters?: { category?: MemoryCategory; source?: MemorySource; since?: number; until?: number }
-  ): Array<{ key: string; value: string; contentType: string; category: MemoryCategory; source: MemorySource; createdAt: number; updatedAt: number }> {
+    filters?: { category?: MemoryCategory; source?: MemorySource; since?: number; until?: number },
+  ): Array<{
+    key: string
+    value: string
+    contentType: string
+    category: MemoryCategory
+    source: MemorySource
+    createdAt: number
+    updatedAt: number
+  }> {
     return this.indexer.list(limit, offset, filters)
   }
 
@@ -240,7 +271,7 @@ export class MemoryManager {
    */
   async searchFiltered(
     query: string,
-    options?: { limit?: number; categories?: MemoryCategory[]; since?: number; until?: number }
+    options?: { limit?: number; categories?: MemoryCategory[]; since?: number; until?: number },
   ): Promise<SearchResult[]> {
     return this.search.searchHybrid(query, {
       limit: options?.limit,
@@ -255,7 +286,7 @@ export class MemoryManager {
    */
   getByCategory(category: MemoryCategory, limit = 100): SearchResult[] {
     const memories = this.indexer.getByCategory(category, limit)
-    return memories.map(m => ({ memory: m, score: 1, matchType: 'hybrid' as const }))
+    return memories.map((m) => ({ memory: m, score: 1, matchType: 'hybrid' as const }))
   }
 
   /**
@@ -263,7 +294,7 @@ export class MemoryManager {
    */
   getByTimeRange(since: number, until?: number, limit = 100): SearchResult[] {
     const memories = this.indexer.getByTimeRange(since, until, limit)
-    return memories.map(m => ({ memory: m, score: 1, matchType: 'hybrid' as const }))
+    return memories.map((m) => ({ memory: m, score: 1, matchType: 'hybrid' as const }))
   }
 
   /**

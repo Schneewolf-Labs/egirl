@@ -1,5 +1,12 @@
 import Anthropic from '@anthropic-ai/sdk'
-import type { LLMProvider, ChatRequest, ChatResponse, ToolCall, ChatMessage, ContentPart } from './types'
+import type {
+  ChatMessage,
+  ChatRequest,
+  ChatResponse,
+  ContentPart,
+  LLMProvider,
+  ToolCall,
+} from './types'
 import { getTextContent } from './types'
 
 export class AnthropicProvider implements LLMProvider {
@@ -25,7 +32,7 @@ export class AnthropicProvider implements LLMProvider {
     }
 
     if (req.tools && req.tools.length > 0) {
-      params.tools = req.tools.map(t => ({
+      params.tools = req.tools.map((t) => ({
         name: t.name,
         description: t.description,
         input_schema: t.parameters as Anthropic.Messages.Tool['input_schema'],
@@ -43,7 +50,7 @@ export class AnthropicProvider implements LLMProvider {
 
   private async chatStream(
     params: Anthropic.Messages.MessageCreateParamsNonStreaming,
-    onToken: (token: string) => void
+    onToken: (token: string) => void,
   ): Promise<ChatResponse> {
     const stream = this.client.messages.stream(params)
 
@@ -123,7 +130,7 @@ export function prepareAnthropicMessages(messages: ChatMessage[]): {
 
     if (msg.role === 'system') {
       const text = getTextContent(msg.content)
-      systemPrompt = (systemPrompt ? systemPrompt + '\n\n' : '') + text
+      systemPrompt = (systemPrompt ? `${systemPrompt}\n\n` : '') + text
       i++
     } else if (msg.role === 'user') {
       if (typeof msg.content === 'string') {
@@ -155,7 +162,7 @@ export function prepareAnthropicMessages(messages: ChatMessage[]): {
     } else if (msg.role === 'tool') {
       // Group consecutive tool results into a single user message
       const toolResults: Anthropic.Messages.ToolResultBlockParam[] = []
-      while (i < messages.length && messages[i]!.role === 'tool') {
+      while (i < messages.length && messages[i]?.role === 'tool') {
         const toolMsg = messages[i]!
         toolResults.push({
           type: 'tool_result',

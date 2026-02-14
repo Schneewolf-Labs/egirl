@@ -40,9 +40,12 @@ export class MessageBatcher {
     const existing = this.timers.get(channelId)
     if (existing) clearTimeout(existing)
 
-    this.timers.set(channelId, setTimeout(() => {
-      this.flush(channelId)
-    }, this.windowMs))
+    this.timers.set(
+      channelId,
+      setTimeout(() => {
+        this.flush(channelId)
+      }, this.windowMs),
+    )
   }
 
   /** Flush a channel's buffer immediately and cancel its timer */
@@ -93,9 +96,7 @@ export async function evaluateRelevance(
   messages: BufferedMessage[],
   botName: string,
 ): Promise<RelevanceDecision> {
-  const formatted = messages
-    .map(m => `[${m.author}]: ${m.content}`)
-    .join('\n')
+  const formatted = messages.map((m) => `[${m.author}]: ${m.content}`).join('\n')
 
   const prompt = `You are ${botName}, an AI assistant passively monitoring a Discord channel. Review these recent messages and decide if you should jump in.
 
@@ -144,9 +145,7 @@ Should you respond? Reply with exactly "RESPOND: yes" or "RESPOND: no" followed 
  * for the agent loop to respond to.
  */
 export function formatBatchForAgent(messages: BufferedMessage[]): string {
-  const lines = messages
-    .map(m => `${m.author}: ${m.content}`)
-    .join('\n')
+  const lines = messages.map((m) => `${m.author}: ${m.content}`).join('\n')
 
   return `[The following conversation happened in a channel you're monitoring. You weren't directly addressed, but based on context you may have something useful to contribute. Respond naturally as if joining the conversation — be concise and add value, don't repeat what's been said.]\n\n${lines}`
 }

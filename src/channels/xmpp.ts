@@ -1,39 +1,41 @@
-import { client, xml, type Client as XMPPClient } from '@xmpp/client'
+import { client, type Client as XMPPClient, xml } from '@xmpp/client'
 import type { Element } from '@xmpp/xml'
 import type { AgentLoop } from '../agent'
 import type { AgentEventHandler } from '../agent/events'
 import type { ToolCall } from '../providers/types'
 import type { ToolResult } from '../tools/types'
-import type { Channel } from './types'
 import { log } from '../util/logger'
+import type { Channel } from './types'
 
 export interface XMPPConfig {
-  service: string        // e.g. "xmpp://chat.example.com:5222" or "xmpps://..." for TLS
-  domain: string         // XMPP domain (e.g. "example.com")
+  service: string // e.g. "xmpp://chat.example.com:5222" or "xmpps://..." for TLS
+  domain: string // XMPP domain (e.g. "example.com")
   username: string
   password: string
-  resource?: string      // XMPP resource (default: "egirl")
-  allowedJids: string[]  // Bare JIDs allowed to message (empty = allow all)
+  resource?: string // XMPP resource (default: "egirl")
+  allowedJids: string[] // Bare JIDs allowed to message (empty = allow all)
 }
 
 function formatToolCallsPlain(calls: ToolCall[]): string {
-  return calls.map(call => {
-    const args = Object.entries(call.arguments)
-    if (args.length === 0) return `${call.name}()`
-    if (args.length === 1) {
-      const [key, val] = args[0]!
-      const valStr = typeof val === 'string' ? val : JSON.stringify(val)
-      if (valStr.length < 60) return `${call.name}(${key}: ${valStr})`
-    }
-    return `${call.name}(${JSON.stringify(call.arguments)})`
-  }).join('\n')
+  return calls
+    .map((call) => {
+      const args = Object.entries(call.arguments)
+      if (args.length === 0) return `${call.name}()`
+      if (args.length === 1) {
+        const [key, val] = args[0]!
+        const valStr = typeof val === 'string' ? val : JSON.stringify(val)
+        if (valStr.length < 60) return `${call.name}(${key}: ${valStr})`
+      }
+      return `${call.name}(${JSON.stringify(call.arguments)})`
+    })
+    .join('\n')
 }
 
 function truncateResult(output: string, maxLen: number): string {
   const trimmed = output.trim()
   if (!trimmed) return ''
   if (trimmed.length <= maxLen) return trimmed
-  return trimmed.substring(0, maxLen) + '...'
+  return `${trimmed.substring(0, maxLen)}...`
 }
 
 interface XMPPEventState {
@@ -51,11 +53,11 @@ function createXMPPEventHandler(): { handler: AgentEventHandler; state: XMPPEven
     },
 
     onToolCallComplete(_callId: string, name: string, result: ToolResult) {
-      const entry = state.entries.find(e => e.call.startsWith(name) && !e.result)
+      const entry = state.entries.find((e) => e.call.startsWith(name) && !e.result)
       if (entry) {
         const status = result.success ? 'ok' : 'err'
         const preview = truncateResult(result.output, 150)
-        entry.result = `  -> ${status}${preview ? ': ' + preview : ''}`
+        entry.result = `  -> ${status}${preview ? `: ${preview}` : ''}`
       }
     },
   }
@@ -65,11 +67,11 @@ function createXMPPEventHandler(): { handler: AgentEventHandler; state: XMPPEven
 
 function buildToolCallPrefix(state: XMPPEventState): string {
   if (state.entries.length === 0) return ''
-  const lines = state.entries.map(e => {
+  const lines = state.entries.map((e) => {
     if (e.result) return `${e.call}\n${e.result}`
     return e.call
   })
-  return lines.join('\n') + '\n\n'
+  return `${lines.join('\n')}\n\n`
 }
 
 function bareJid(fullJid: string): string {
@@ -153,7 +155,10 @@ export class XMPPChannel implements Channel {
 
       await this.sendMessage(from, fullResponse)
 
-      log.debug('xmpp', `Responded via ${response.provider}${response.escalated ? ' (escalated)' : ''}`)
+      log.debug(
+        'xmpp',
+        `Responded via ${response.provider}${response.escalated ? ' (escalated)' : ''}`,
+      )
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error)
       log.error('xmpp', 'Error processing message:', error)
@@ -162,11 +167,7 @@ export class XMPPChannel implements Channel {
   }
 
   private async sendMessage(to: string, body: string): Promise<void> {
-    const message = xml(
-      'message',
-      { type: 'chat', to },
-      xml('body', {}, body),
-    )
+    const message = xml('message', { type: 'chat', to }, xml('body', {}, body))
     await this.xmpp.send(message)
   }
 

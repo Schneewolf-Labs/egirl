@@ -1,14 +1,14 @@
 import type { AgentLoop } from '../agent'
-import type { ToolExecutor } from '../tools'
-import type { MemoryManager } from '../memory'
+import type { BrowserManager } from '../browser'
 import type { RuntimeConfig } from '../config'
+import type { MemoryManager } from '../memory'
 import type { ProviderRegistry } from '../providers'
+import type { ToolExecutor } from '../tools'
 import type { StatsTracker } from '../tracking/stats'
-import { createRoutes, type RouteDeps } from './routes'
+import { log } from '../util/logger'
 import { createBrowserRoutes } from './browser-routes'
 import { buildOpenAPISpec } from './openapi'
-import { log } from '../util/logger'
-import type { BrowserManager } from '../browser'
+import { createRoutes, type RouteDeps } from './routes'
 
 export interface APIServerConfig {
   port: number
@@ -51,7 +51,7 @@ export class APIServer {
           this.routes.set(path, new Map())
         }
         for (const [method, handler] of methods) {
-          this.routes.get(path)!.set(method, handler)
+          this.routes.get(path)?.set(method, handler)
         }
       }
     }

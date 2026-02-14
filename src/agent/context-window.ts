@@ -1,15 +1,15 @@
-import type { ChatMessage, ContentPart, ToolDefinition, Tokenizer } from '../providers/types'
+import type { ChatMessage, Tokenizer, ToolDefinition } from '../providers/types'
 import { log } from '../util/logger'
 
 export interface ContextWindowConfig {
   contextLength: number
-  reserveForOutput?: number       // tokens to reserve for model response (default 2048)
-  maxToolResultTokens?: number    // max tokens per individual tool result (default 8000)
+  reserveForOutput?: number // tokens to reserve for model response (default 2048)
+  maxToolResultTokens?: number // max tokens per individual tool result (default 8000)
 }
 
 export interface FitResult {
   messages: ChatMessage[]
-  droppedMessages: ChatMessage[]  // messages that were trimmed from the front
+  droppedMessages: ChatMessage[] // messages that were trimmed from the front
   wasTrimmed: boolean
 }
 
@@ -49,7 +49,7 @@ async function countMessageTokens(message: ChatMessage, tokenizer?: Tokenizer): 
       if (part.type === 'text') {
         tokens += await countStringTokens(part.text, tokenizer)
       } else if (part.type === 'image_url') {
-        tokens += 1000  // rough estimate for vision tokens
+        tokens += 1000 // rough estimate for vision tokens
       }
     }
   }
@@ -58,7 +58,7 @@ async function countMessageTokens(message: ChatMessage, tokenizer?: Tokenizer): 
     for (const call of message.tool_calls) {
       const callText = `${call.name}\n${JSON.stringify(call.arguments)}`
       tokens += await countStringTokens(callText, tokenizer)
-      tokens += 15  // id + structural overhead
+      tokens += 15 // id + structural overhead
     }
   }
 
@@ -72,12 +72,18 @@ async function countMessageTokens(message: ChatMessage, tokenizer?: Tokenizer): 
 /**
  * Count tokens for tool definitions (serialized into the prompt by the chat template).
  */
-async function countToolDefinitionTokens(tools: ToolDefinition[], tokenizer?: Tokenizer): Promise<number> {
+async function countToolDefinitionTokens(
+  tools: ToolDefinition[],
+  tokenizer?: Tokenizer,
+): Promise<number> {
   if (tools.length === 0) return 0
 
   // Tokenize the full JSON representation — this is close to what the template serializes
   const toolsJson = JSON.stringify(
-    tools.map(t => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.parameters } }))
+    tools.map((t) => ({
+      type: 'function',
+      function: { name: t.name, description: t.description, parameters: t.parameters },
+    })),
   )
   const contentTokens = await countStringTokens(toolsJson, tokenizer)
   // Add overhead for template wrapping around the tools block
@@ -128,7 +134,7 @@ export function estimateMessageTokens(message: ChatMessage): number {
 async function truncateToolResult(
   message: ChatMessage,
   maxTokens: number,
-  tokenizer?: Tokenizer
+  tokenizer?: Tokenizer,
 ): Promise<ChatMessage> {
   if (message.role !== 'tool' || typeof message.content !== 'string') {
     return message
@@ -153,7 +159,7 @@ async function truncateToolResult(
 
   return {
     ...message,
-    content: message.content.slice(0, maxChars) + '\n\n[Output truncated to fit context window]',
+    content: `${message.content.slice(0, maxChars)}\n\n[Output truncated to fit context window]`,
   }
 }
 
@@ -228,39 +234,33 @@ export async function fitToContextWindow(
   messages: ChatMessage[],
   tools: ToolDefinition[],
   config: ContextWindowConfig,
-  tokenizer?: Tokenizer
+  tokenizer?: Tokenizer,
 ): Promise<FitResult> {
-  const {
-    contextLength,
-    reserveForOutput = 2048,
-    maxToolResultTokens = 8000,
-  } = config
+  const { contextLength, reserveForOutput = 2048, maxToolResultTokens = 8000 } = config
 
-  const systemTokens = await countStringTokens(systemPrompt, tokenizer) + 4
+  const systemTokens = (await countStringTokens(systemPrompt, tokenizer)) + 4
   const toolDefTokens = await countToolDefinitionTokens(tools, tokenizer)
   const budget = contextLength - reserveForOutput - systemTokens - toolDefTokens
 
   if (budget <= 0) {
     log.warn(
       'context-window',
-      `System prompt (~${systemTokens}t) + tools (~${toolDefTokens}t) + reserve (${reserveForOutput}t) exceeds context (${contextLength}t)`
+      `System prompt (~${systemTokens}t) + tools (~${toolDefTokens}t) + reserve (${reserveForOutput}t) exceeds context (${contextLength}t)`,
     )
-    const lastUser = [...messages].reverse().find(m => m.role === 'user')
+    const lastUser = [...messages].reverse().find((m) => m.role === 'user')
     const fallback = lastUser ? [lastUser] : messages.slice(-1)
     return { messages: fallback, droppedMessages: messages, wasTrimmed: true }
   }
 
   // Truncate oversized tool results (in parallel)
   const processed = await Promise.all(
-    messages.map(msg =>
-      msg.role === 'tool' ? truncateToolResult(msg, maxToolResultTokens, tokenizer) : msg
-    )
+    messages.map((msg) =>
+      msg.role === 'tool' ? truncateToolResult(msg, maxToolResultTokens, tokenizer) : msg,
+    ),
   )
 
   // Count tokens for all messages (in parallel)
-  const tokenCounts = await Promise.all(
-    processed.map(msg => countMessageTokens(msg, tokenizer))
-  )
+  const tokenCounts = await Promise.all(processed.map((msg) => countMessageTokens(msg, tokenizer)))
   const totalTokens = tokenCounts.reduce((sum, t) => sum + t, 0)
 
   // Everything fits — no trimming needed
@@ -270,7 +270,7 @@ export async function fitToContextWindow(
 
   log.info(
     'context-window',
-    `Trimming context: ~${totalTokens + systemTokens + toolDefTokens}t vs ${contextLength}t limit`
+    `Trimming context: ~${totalTokens + systemTokens + toolDefTokens}t vs ${contextLength}t limit`,
   )
 
   const truncationNoticeTokens = 30
@@ -303,14 +303,14 @@ export async function fitToContextWindow(
 
   // If we somehow fit nothing, include at least the last user message
   if (result.length === 0) {
-    const lastUser = [...processed].reverse().find(m => m.role === 'user')
+    const lastUser = [...processed].reverse().find((m) => m.role === 'user')
     if (lastUser) {
       result.push(lastUser)
     }
   }
 
   // Collect the dropped messages (original messages that didn't make it into result)
-  const keptStartIdx = fittedGroups.length > 0 ? fittedGroups[0]!.startIdx : messages.length
+  const keptStartIdx = fittedGroups.length > 0 ? fittedGroups[0]?.startIdx : messages.length
   const dropped = messages.slice(0, keptStartIdx)
 
   const droppedCount = messages.length - result.length

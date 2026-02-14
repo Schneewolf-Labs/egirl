@@ -1,6 +1,6 @@
-import { query, type Options as ClaudeAgentOptions } from '@anthropic-ai/claude-agent-sdk'
-import type { Tool, ToolResult } from '../types'
+import { type Options as ClaudeAgentOptions, query } from '@anthropic-ai/claude-agent-sdk'
 import { log } from '../../util/logger'
+import type { Tool, ToolResult } from '../types'
 
 /** Default timeout: 5 minutes */
 const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000
@@ -27,7 +27,7 @@ export function createCodeAgentTool(config: CodeAgentConfig): Tool {
         'Use this for complex tasks that require multi-file edits, refactoring,',
         'debugging, running tests, or any task that benefits from deep codebase',
         'exploration. The agent has full access to the filesystem and can run commands.',
-        'Provide a clear, specific task description. Returns the agent\'s final result.',
+        "Provide a clear, specific task description. Returns the agent's final result.",
       ].join(' '),
       parameters: {
         type: 'object',
@@ -49,7 +49,10 @@ export function createCodeAgentTool(config: CodeAgentConfig): Tool {
       const task = params.task as string
       const workingDir = (params.working_dir as string) ?? config.workingDir ?? cwd
 
-      log.info('code-agent', `Starting task: ${task.substring(0, 100)}${task.length > 100 ? '...' : ''}`)
+      log.info(
+        'code-agent',
+        `Starting task: ${task.substring(0, 100)}${task.length > 100 ? '...' : ''}`,
+      )
       log.debug('code-agent', `Working dir: ${workingDir}`)
 
       const startTime = Date.now()
@@ -88,7 +91,11 @@ export function createCodeAgentTool(config: CodeAgentConfig): Tool {
             }
 
             case 'result': {
-              const resultMsg = message as { result?: string; num_turns?: number; total_cost_usd?: number }
+              const resultMsg = message as {
+                result?: string
+                num_turns?: number
+                total_cost_usd?: number
+              }
               finalResult = resultMsg.result ?? ''
               sdkTurns = resultMsg.num_turns
               totalCost = resultMsg.total_cost_usd ?? totalCost
@@ -109,7 +116,9 @@ export function createCodeAgentTool(config: CodeAgentConfig): Tool {
         const isTimeout = error instanceof DOMException && error.name === 'AbortError'
         const msg = isTimeout
           ? `Code agent timed out after ${(timeoutMs / 1000).toFixed(0)}s`
-          : error instanceof Error ? error.message : String(error)
+          : error instanceof Error
+            ? error.message
+            : String(error)
         log.error('code-agent', `Task failed: ${msg}`)
         return {
           success: false,
@@ -122,7 +131,10 @@ export function createCodeAgentTool(config: CodeAgentConfig): Tool {
       const durationMs = Date.now() - startTime
       const durationSec = (durationMs / 1000).toFixed(1)
 
-      log.info('code-agent', `Completed in ${durationSec}s | ${turns} turns | $${totalCost.toFixed(4)}`)
+      log.info(
+        'code-agent',
+        `Completed in ${durationSec}s | ${turns} turns | $${totalCost.toFixed(4)}`,
+      )
 
       if (!finalResult) {
         return {

@@ -36,7 +36,7 @@ function truncate(text: string, max = MAX_OUTPUT): string {
   if (text.length <= max) return text
   const half = Math.floor(max / 2)
   const omitted = text.length - max
-  return text.slice(0, half) + `\n\n... (${omitted} characters omitted) ...\n\n` + text.slice(-half)
+  return `${text.slice(0, half)}\n\n... (${omitted} characters omitted) ...\n\n${text.slice(-half)}`
 }
 
 /**
@@ -46,10 +46,15 @@ function detectRepo(cwd: string): Promise<{ owner: string; repo: string } | unde
   return new Promise((res) => {
     const proc = spawn('git', ['remote', 'get-url', 'origin'], { cwd })
     let stdout = ''
-    proc.stdout.on('data', (d) => { stdout += d.toString() })
+    proc.stdout.on('data', (d) => {
+      stdout += d.toString()
+    })
     proc.on('error', () => res(undefined))
     proc.on('close', (code) => {
-      if (code !== 0) { res(undefined); return }
+      if (code !== 0) {
+        res(undefined)
+        return
+      }
       const url = stdout.trim()
       // Handle SSH: git@github.com:owner/repo.git
       const sshMatch = url.match(/github\.com[:/]([^/]+)\/([^/.]+)/)
@@ -101,7 +106,8 @@ function createGhPrList(config: GitHubConfig): Tool {
   return {
     definition: {
       name: 'gh_pr_list',
-      description: 'List pull requests for a GitHub repository. Returns title, number, author, branch, and status.',
+      description:
+        'List pull requests for a GitHub repository. Returns title, number, author, branch, and status.',
       parameters: {
         type: 'object',
         properties: {
@@ -122,7 +128,10 @@ function createGhPrList(config: GitHubConfig): Tool {
             type: 'number',
             description: 'Max results to return (default: 10, max: 30)',
           },
-          owner: { type: 'string', description: 'Repository owner (auto-detected from git remote)' },
+          owner: {
+            type: 'string',
+            description: 'Repository owner (auto-detected from git remote)',
+          },
           repo: { type: 'string', description: 'Repository name (auto-detected from git remote)' },
         },
         required: [],
@@ -147,9 +156,15 @@ function createGhPrList(config: GitHubConfig): Tool {
       if (status !== 200) return { success: false, output: apiError(status, data) }
 
       const prs = data as Array<{
-        number: number; title: string; state: string
-        user: { login: string }; head: { ref: string }; base: { ref: string }
-        draft: boolean; created_at: string; updated_at: string
+        number: number
+        title: string
+        state: string
+        user: { login: string }
+        head: { ref: string }
+        base: { ref: string }
+        draft: boolean
+        created_at: string
+        updated_at: string
       }>
 
       if (prs.length === 0) return { success: true, output: 'No pull requests found' }
@@ -168,12 +183,16 @@ function createGhPrView(config: GitHubConfig): Tool {
   return {
     definition: {
       name: 'gh_pr_view',
-      description: 'View detailed information about a pull request: title, description, reviews, check status, and file changes.',
+      description:
+        'View detailed information about a pull request: title, description, reviews, check status, and file changes.',
       parameters: {
         type: 'object',
         properties: {
           number: { type: 'number', description: 'PR number' },
-          owner: { type: 'string', description: 'Repository owner (auto-detected from git remote)' },
+          owner: {
+            type: 'string',
+            description: 'Repository owner (auto-detected from git remote)',
+          },
           repo: { type: 'string', description: 'Repository name (auto-detected from git remote)' },
         },
         required: ['number'],
@@ -193,15 +212,26 @@ function createGhPrView(config: GitHubConfig): Tool {
         ghFetch(`/repos/${owner}/${repo}/pulls/${num}/files?per_page=50`, config.token),
       ])
 
-      if (prRes.status !== 200) return { success: false, output: apiError(prRes.status, prRes.data) }
+      if (prRes.status !== 200)
+        return { success: false, output: apiError(prRes.status, prRes.data) }
 
       const pr = prRes.data as {
-        number: number; title: string; state: string; draft: boolean
-        body: string | null; user: { login: string }
-        head: { ref: string; sha: string }; base: { ref: string }
-        merged: boolean; mergeable: boolean | null; mergeable_state: string
-        additions: number; deletions: number; changed_files: number
-        created_at: string; updated_at: string
+        number: number
+        title: string
+        state: string
+        draft: boolean
+        body: string | null
+        user: { login: string }
+        head: { ref: string; sha: string }
+        base: { ref: string }
+        merged: boolean
+        mergeable: boolean | null
+        mergeable_state: string
+        additions: number
+        deletions: number
+        changed_files: number
+        created_at: string
+        updated_at: string
         labels: Array<{ name: string }>
         assignees: Array<{ login: string }>
         requested_reviewers: Array<{ login: string }>
@@ -214,9 +244,11 @@ function createGhPrView(config: GitHubConfig): Tool {
       parts.push(`#${pr.number} ${pr.title} [${statusTag}]`)
       parts.push(`${pr.head.ref} → ${pr.base.ref} | @${pr.user.login}`)
 
-      if (pr.labels.length) parts.push(`labels: ${pr.labels.map(l => l.name).join(', ')}`)
-      if (pr.assignees.length) parts.push(`assignees: ${pr.assignees.map(a => a.login).join(', ')}`)
-      if (pr.requested_reviewers.length) parts.push(`reviewers requested: ${pr.requested_reviewers.map(r => r.login).join(', ')}`)
+      if (pr.labels.length) parts.push(`labels: ${pr.labels.map((l) => l.name).join(', ')}`)
+      if (pr.assignees.length)
+        parts.push(`assignees: ${pr.assignees.map((a) => a.login).join(', ')}`)
+      if (pr.requested_reviewers.length)
+        parts.push(`reviewers requested: ${pr.requested_reviewers.map((r) => r.login).join(', ')}`)
 
       parts.push(`+${pr.additions} -${pr.deletions} across ${pr.changed_files} files`)
       if (pr.mergeable !== null) parts.push(`mergeable: ${pr.mergeable} (${pr.mergeable_state})`)
@@ -230,9 +262,12 @@ function createGhPrView(config: GitHubConfig): Tool {
       // Reviews
       if (reviewsRes.status === 200) {
         const reviews = reviewsRes.data as Array<{
-          user: { login: string }; state: string; body: string | null; submitted_at: string
+          user: { login: string }
+          state: string
+          body: string | null
+          submitted_at: string
         }>
-        const meaningful = reviews.filter(r => r.state !== 'PENDING')
+        const meaningful = reviews.filter((r) => r.state !== 'PENDING')
         if (meaningful.length) {
           parts.push('\n--- reviews ---')
           for (const r of meaningful.slice(-10)) {
@@ -245,12 +280,17 @@ function createGhPrView(config: GitHubConfig): Tool {
       // Files
       if (filesRes.status === 200) {
         const files = filesRes.data as Array<{
-          filename: string; status: string; additions: number; deletions: number
+          filename: string
+          status: string
+          additions: number
+          deletions: number
         }>
         if (files.length) {
           parts.push('\n--- files ---')
           for (const f of files) {
-            parts.push(`${f.status.charAt(0).toUpperCase()} ${f.filename} (+${f.additions} -${f.deletions})`)
+            parts.push(
+              `${f.status.charAt(0).toUpperCase()} ${f.filename} (+${f.additions} -${f.deletions})`,
+            )
           }
         }
       }
@@ -264,7 +304,8 @@ function createGhPrCreate(config: GitHubConfig): Tool {
   return {
     definition: {
       name: 'gh_pr_create',
-      description: 'Create a new pull request. The head branch must already be pushed to the remote.',
+      description:
+        'Create a new pull request. The head branch must already be pushed to the remote.',
       parameters: {
         type: 'object',
         properties: {
@@ -273,7 +314,10 @@ function createGhPrCreate(config: GitHubConfig): Tool {
           base: { type: 'string', description: 'Base branch to merge into (default: main)' },
           body: { type: 'string', description: 'PR description body' },
           draft: { type: 'boolean', description: 'Create as draft PR (default: false)' },
-          owner: { type: 'string', description: 'Repository owner (auto-detected from git remote)' },
+          owner: {
+            type: 'string',
+            description: 'Repository owner (auto-detected from git remote)',
+          },
           repo: { type: 'string', description: 'Repository name (auto-detected from git remote)' },
         },
         required: ['title', 'head'],
@@ -309,7 +353,8 @@ function createGhPrReview(config: GitHubConfig): Tool {
   return {
     definition: {
       name: 'gh_pr_review',
-      description: 'Submit a review on a pull request. Can approve, request changes, or leave a comment.',
+      description:
+        'Submit a review on a pull request. Can approve, request changes, or leave a comment.',
       parameters: {
         type: 'object',
         properties: {
@@ -319,8 +364,14 @@ function createGhPrReview(config: GitHubConfig): Tool {
             enum: ['APPROVE', 'REQUEST_CHANGES', 'COMMENT'],
             description: 'Review action',
           },
-          body: { type: 'string', description: 'Review comment body (required for REQUEST_CHANGES and COMMENT)' },
-          owner: { type: 'string', description: 'Repository owner (auto-detected from git remote)' },
+          body: {
+            type: 'string',
+            description: 'Review comment body (required for REQUEST_CHANGES and COMMENT)',
+          },
+          owner: {
+            type: 'string',
+            description: 'Repository owner (auto-detected from git remote)',
+          },
           repo: { type: 'string', description: 'Repository name (auto-detected from git remote)' },
         },
         required: ['number', 'event'],
@@ -340,10 +391,14 @@ function createGhPrReview(config: GitHubConfig): Tool {
         return { success: false, output: `Review body is required for ${event}` }
       }
 
-      const { status, data } = await ghFetch(`/repos/${owner}/${repo}/pulls/${num}/reviews`, config.token, {
-        method: 'POST',
-        body: { event, body: body || '' },
-      })
+      const { status, data } = await ghFetch(
+        `/repos/${owner}/${repo}/pulls/${num}/reviews`,
+        config.token,
+        {
+          method: 'POST',
+          body: { event, body: body || '' },
+        },
+      )
 
       if (status !== 200) return { success: false, output: apiError(status, data) }
 
@@ -362,7 +417,10 @@ function createGhPrComment(config: GitHubConfig): Tool {
         properties: {
           number: { type: 'number', description: 'PR number' },
           body: { type: 'string', description: 'Comment text' },
-          owner: { type: 'string', description: 'Repository owner (auto-detected from git remote)' },
+          owner: {
+            type: 'string',
+            description: 'Repository owner (auto-detected from git remote)',
+          },
           repo: { type: 'string', description: 'Repository name (auto-detected from git remote)' },
         },
         required: ['number', 'body'],
@@ -378,10 +436,14 @@ function createGhPrComment(config: GitHubConfig): Tool {
       const body = params.body as string
 
       // PRs use the issues API for regular comments
-      const { status, data } = await ghFetch(`/repos/${owner}/${repo}/issues/${num}/comments`, config.token, {
-        method: 'POST',
-        body: { body },
-      })
+      const { status, data } = await ghFetch(
+        `/repos/${owner}/${repo}/issues/${num}/comments`,
+        config.token,
+        {
+          method: 'POST',
+          body: { body },
+        },
+      )
 
       if (status !== 201) return { success: false, output: apiError(status, data) }
 
@@ -396,7 +458,8 @@ function createGhIssueList(config: GitHubConfig): Tool {
   return {
     definition: {
       name: 'gh_issue_list',
-      description: 'List issues for a GitHub repository. Returns title, number, author, labels, and status.',
+      description:
+        'List issues for a GitHub repository. Returns title, number, author, labels, and status.',
       parameters: {
         type: 'object',
         properties: {
@@ -422,7 +485,10 @@ function createGhIssueList(config: GitHubConfig): Tool {
             type: 'number',
             description: 'Max results to return (default: 10, max: 30)',
           },
-          owner: { type: 'string', description: 'Repository owner (auto-detected from git remote)' },
+          owner: {
+            type: 'string',
+            description: 'Repository owner (auto-detected from git remote)',
+          },
           repo: { type: 'string', description: 'Repository name (auto-detected from git remote)' },
         },
         required: [],
@@ -441,27 +507,42 @@ function createGhIssueList(config: GitHubConfig): Tool {
       const assignee = params.assignee as string | undefined
 
       const query = new URLSearchParams({
-        state, sort, per_page: String(limit), direction: 'desc',
+        state,
+        sort,
+        per_page: String(limit),
+        direction: 'desc',
       })
       if (labels) query.set('labels', labels)
       if (assignee) query.set('assignee', assignee)
 
-      const { status, data } = await ghFetch(`/repos/${owner}/${repo}/issues?${query}`, config.token)
+      const { status, data } = await ghFetch(
+        `/repos/${owner}/${repo}/issues?${query}`,
+        config.token,
+      )
       if (status !== 200) return { success: false, output: apiError(status, data) }
 
-      const issues = (data as Array<{
-        number: number; title: string; state: string
-        user: { login: string }; labels: Array<{ name: string }>
-        assignees: Array<{ login: string }>
-        comments: number; created_at: string; updated_at: string
-        pull_request?: unknown
-      }>).filter(i => !i.pull_request) // Exclude PRs from issue list
+      const issues = (
+        data as Array<{
+          number: number
+          title: string
+          state: string
+          user: { login: string }
+          labels: Array<{ name: string }>
+          assignees: Array<{ login: string }>
+          comments: number
+          created_at: string
+          updated_at: string
+          pull_request?: unknown
+        }>
+      ).filter((i) => !i.pull_request) // Exclude PRs from issue list
 
       if (issues.length === 0) return { success: true, output: 'No issues found' }
 
       const lines = issues.map((i) => {
-        const labelStr = i.labels.length ? ` [${i.labels.map(l => l.name).join(', ')}]` : ''
-        const assigneeStr = i.assignees.length ? ` → ${i.assignees.map(a => a.login).join(', ')}` : ''
+        const labelStr = i.labels.length ? ` [${i.labels.map((l) => l.name).join(', ')}]` : ''
+        const assigneeStr = i.assignees.length
+          ? ` → ${i.assignees.map((a) => a.login).join(', ')}`
+          : ''
         return `#${i.number} ${i.title}${labelStr}\n  @${i.user.login}${assigneeStr} | ${i.comments} comments | ${i.updated_at.slice(0, 10)}`
       })
 
@@ -474,12 +555,16 @@ function createGhIssueView(config: GitHubConfig): Tool {
   return {
     definition: {
       name: 'gh_issue_view',
-      description: 'View detailed information about a GitHub issue, including its body and recent comments.',
+      description:
+        'View detailed information about a GitHub issue, including its body and recent comments.',
       parameters: {
         type: 'object',
         properties: {
           number: { type: 'number', description: 'Issue number' },
-          owner: { type: 'string', description: 'Repository owner (auto-detected from git remote)' },
+          owner: {
+            type: 'string',
+            description: 'Repository owner (auto-detected from git remote)',
+          },
           repo: { type: 'string', description: 'Repository name (auto-detected from git remote)' },
         },
         required: ['number'],
@@ -498,24 +583,33 @@ function createGhIssueView(config: GitHubConfig): Tool {
         ghFetch(`/repos/${owner}/${repo}/issues/${num}/comments?per_page=20`, config.token),
       ])
 
-      if (issueRes.status !== 200) return { success: false, output: apiError(issueRes.status, issueRes.data) }
+      if (issueRes.status !== 200)
+        return { success: false, output: apiError(issueRes.status, issueRes.data) }
 
       const issue = issueRes.data as {
-        number: number; title: string; state: string
-        body: string | null; user: { login: string }
+        number: number
+        title: string
+        state: string
+        body: string | null
+        user: { login: string }
         labels: Array<{ name: string }>
         assignees: Array<{ login: string }>
         milestone: { title: string } | null
-        comments: number; created_at: string; updated_at: string
+        comments: number
+        created_at: string
+        updated_at: string
       }
 
       const parts: string[] = []
 
       // Header
       parts.push(`#${issue.number} ${issue.title} [${issue.state}]`)
-      parts.push(`@${issue.user.login} | created ${issue.created_at.slice(0, 10)} | updated ${issue.updated_at.slice(0, 10)}`)
-      if (issue.labels.length) parts.push(`labels: ${issue.labels.map(l => l.name).join(', ')}`)
-      if (issue.assignees.length) parts.push(`assignees: ${issue.assignees.map(a => a.login).join(', ')}`)
+      parts.push(
+        `@${issue.user.login} | created ${issue.created_at.slice(0, 10)} | updated ${issue.updated_at.slice(0, 10)}`,
+      )
+      if (issue.labels.length) parts.push(`labels: ${issue.labels.map((l) => l.name).join(', ')}`)
+      if (issue.assignees.length)
+        parts.push(`assignees: ${issue.assignees.map((a) => a.login).join(', ')}`)
       if (issue.milestone) parts.push(`milestone: ${issue.milestone.title}`)
 
       // Body
@@ -527,12 +621,18 @@ function createGhIssueView(config: GitHubConfig): Tool {
       // Comments
       if (commentsRes.status === 200) {
         const comments = commentsRes.data as Array<{
-          user: { login: string }; body: string; created_at: string
+          user: { login: string }
+          body: string
+          created_at: string
         }>
         if (comments.length) {
-          parts.push(`\n--- comments (${comments.length}${issue.comments > 20 ? ` of ${issue.comments}` : ''}) ---`)
+          parts.push(
+            `\n--- comments (${comments.length}${issue.comments > 20 ? ` of ${issue.comments}` : ''}) ---`,
+          )
           for (const c of comments) {
-            parts.push(`@${c.user.login} (${c.created_at.slice(0, 10)}):\n${truncate(c.body.trim(), 500)}`)
+            parts.push(
+              `@${c.user.login} (${c.created_at.slice(0, 10)}):\n${truncate(c.body.trim(), 500)}`,
+            )
           }
         }
       }
@@ -552,7 +652,10 @@ function createGhIssueComment(config: GitHubConfig): Tool {
         properties: {
           number: { type: 'number', description: 'Issue number' },
           body: { type: 'string', description: 'Comment text' },
-          owner: { type: 'string', description: 'Repository owner (auto-detected from git remote)' },
+          owner: {
+            type: 'string',
+            description: 'Repository owner (auto-detected from git remote)',
+          },
           repo: { type: 'string', description: 'Repository name (auto-detected from git remote)' },
         },
         required: ['number', 'body'],
@@ -566,10 +669,14 @@ function createGhIssueComment(config: GitHubConfig): Tool {
       const { owner, repo } = resolved
       const num = params.number as number
 
-      const { status, data } = await ghFetch(`/repos/${owner}/${repo}/issues/${num}/comments`, config.token, {
-        method: 'POST',
-        body: { body: params.body as string },
-      })
+      const { status, data } = await ghFetch(
+        `/repos/${owner}/${repo}/issues/${num}/comments`,
+        config.token,
+        {
+          method: 'POST',
+          body: { body: params.body as string },
+        },
+      )
 
       if (status !== 201) return { success: false, output: apiError(status, data) }
 
@@ -599,7 +706,10 @@ function createGhIssueUpdate(config: GitHubConfig): Tool {
             items: { type: 'string' },
             description: 'Replace all assignees with this list',
           },
-          owner: { type: 'string', description: 'Repository owner (auto-detected from git remote)' },
+          owner: {
+            type: 'string',
+            description: 'Repository owner (auto-detected from git remote)',
+          },
           repo: { type: 'string', description: 'Repository name (auto-detected from git remote)' },
         },
         required: ['number'],
@@ -620,18 +730,28 @@ function createGhIssueUpdate(config: GitHubConfig): Tool {
       if (params.assignees !== undefined) body.assignees = params.assignees
 
       if (Object.keys(body).length === 0) {
-        return { success: false, output: 'No updates specified. Provide at least one of: state, title, labels, assignees' }
+        return {
+          success: false,
+          output: 'No updates specified. Provide at least one of: state, title, labels, assignees',
+        }
       }
 
-      const { status, data } = await ghFetch(`/repos/${owner}/${repo}/issues/${num}`, config.token, {
-        method: 'PATCH',
-        body,
-      })
+      const { status, data } = await ghFetch(
+        `/repos/${owner}/${repo}/issues/${num}`,
+        config.token,
+        {
+          method: 'PATCH',
+          body,
+        },
+      )
 
       if (status !== 200) return { success: false, output: apiError(status, data) }
 
       const issue = data as { number: number; title: string; state: string }
-      return { success: true, output: `Updated issue #${issue.number}: ${issue.title} [${issue.state}]` }
+      return {
+        success: true,
+        output: `Updated issue #${issue.number}: ${issue.title} [${issue.state}]`,
+      }
     },
   }
 }
@@ -642,7 +762,8 @@ function createGhCiStatus(config: GitHubConfig): Tool {
   return {
     definition: {
       name: 'gh_ci_status',
-      description: 'Check CI/workflow status for a git ref (branch, tag, or commit SHA). Shows check runs and their conclusions.',
+      description:
+        'Check CI/workflow status for a git ref (branch, tag, or commit SHA). Shows check runs and their conclusions.',
       parameters: {
         type: 'object',
         properties: {
@@ -650,7 +771,10 @@ function createGhCiStatus(config: GitHubConfig): Tool {
             type: 'string',
             description: 'Git ref to check (branch name, tag, or SHA). Defaults to HEAD branch.',
           },
-          owner: { type: 'string', description: 'Repository owner (auto-detected from git remote)' },
+          owner: {
+            type: 'string',
+            description: 'Repository owner (auto-detected from git remote)',
+          },
           repo: { type: 'string', description: 'Repository name (auto-detected from git remote)' },
         },
         required: [],
@@ -670,7 +794,9 @@ function createGhCiStatus(config: GitHubConfig): Tool {
         const detected = await new Promise<string | undefined>((res) => {
           const proc = spawn('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd })
           let out = ''
-          proc.stdout.on('data', (d) => { out += d.toString() })
+          proc.stdout.on('data', (d) => {
+            out += d.toString()
+          })
           proc.on('error', () => res(undefined))
           proc.on('close', (code) => res(code === 0 ? out.trim() : undefined))
         })
@@ -680,7 +806,10 @@ function createGhCiStatus(config: GitHubConfig): Tool {
       // Get combined status (legacy status API)
       const [statusRes, checksRes] = await Promise.all([
         ghFetch(`/repos/${owner}/${repo}/commits/${resolvedRef}/status`, config.token),
-        ghFetch(`/repos/${owner}/${repo}/commits/${resolvedRef}/check-runs?per_page=50`, config.token),
+        ghFetch(
+          `/repos/${owner}/${repo}/commits/${resolvedRef}/check-runs?per_page=50`,
+          config.token,
+        ),
       ])
 
       const parts: string[] = [`CI status for ${resolvedRef}:`]
@@ -689,7 +818,12 @@ function createGhCiStatus(config: GitHubConfig): Tool {
       if (statusRes.status === 200) {
         const combined = statusRes.data as {
           state: string
-          statuses: Array<{ context: string; state: string; description: string | null; target_url: string | null }>
+          statuses: Array<{
+            context: string
+            state: string
+            description: string | null
+            target_url: string | null
+          }>
         }
         if (combined.statuses.length) {
           parts.push(`\ncommit status: ${combined.state}`)
@@ -705,18 +839,23 @@ function createGhCiStatus(config: GitHubConfig): Tool {
         const checks = checksRes.data as {
           total_count: number
           check_runs: Array<{
-            name: string; status: string; conclusion: string | null
-            started_at: string | null; completed_at: string | null
+            name: string
+            status: string
+            conclusion: string | null
+            started_at: string | null
+            completed_at: string | null
             html_url: string | null
           }>
         }
 
         if (checks.check_runs.length) {
-          const completed = checks.check_runs.filter(c => c.status === 'completed')
-          const inProgress = checks.check_runs.filter(c => c.status === 'in_progress')
-          const queued = checks.check_runs.filter(c => c.status === 'queued')
+          const completed = checks.check_runs.filter((c) => c.status === 'completed')
+          const inProgress = checks.check_runs.filter((c) => c.status === 'in_progress')
+          const queued = checks.check_runs.filter((c) => c.status === 'queued')
 
-          parts.push(`\ncheck runs: ${checks.total_count} total (${completed.length} completed, ${inProgress.length} running, ${queued.length} queued)`)
+          parts.push(
+            `\ncheck runs: ${checks.total_count} total (${completed.length} completed, ${inProgress.length} running, ${queued.length} queued)`,
+          )
 
           for (const c of checks.check_runs) {
             const status = c.conclusion ?? c.status
@@ -744,13 +883,17 @@ function createGhBranchCreate(config: GitHubConfig): Tool {
   return {
     definition: {
       name: 'gh_branch_create',
-      description: 'Create a new branch on the GitHub remote from a given ref (branch, tag, or SHA).',
+      description:
+        'Create a new branch on the GitHub remote from a given ref (branch, tag, or SHA).',
       parameters: {
         type: 'object',
         properties: {
           branch: { type: 'string', description: 'Name for the new branch' },
           from: { type: 'string', description: 'Source ref to branch from (default: main)' },
-          owner: { type: 'string', description: 'Repository owner (auto-detected from git remote)' },
+          owner: {
+            type: 'string',
+            description: 'Repository owner (auto-detected from git remote)',
+          },
           repo: { type: 'string', description: 'Repository name (auto-detected from git remote)' },
         },
         required: ['branch'],
@@ -770,17 +913,23 @@ function createGhBranchCreate(config: GitHubConfig): Tool {
 
       let sha: string
       if (refRes.status === 200) {
-        sha = ((refRes.data as { object: { sha: string } }).object.sha)
+        sha = (refRes.data as { object: { sha: string } }).object.sha
       } else {
         // Try as a tag
         const tagRes = await ghFetch(`/repos/${owner}/${repo}/git/ref/tags/${from}`, config.token)
         if (tagRes.status === 200) {
-          sha = ((tagRes.data as { object: { sha: string } }).object.sha)
+          sha = (tagRes.data as { object: { sha: string } }).object.sha
         } else {
           // Try as a raw SHA
-          const commitRes = await ghFetch(`/repos/${owner}/${repo}/git/commits/${from}`, config.token)
+          const commitRes = await ghFetch(
+            `/repos/${owner}/${repo}/git/commits/${from}`,
+            config.token,
+          )
           if (commitRes.status !== 200) {
-            return { success: false, output: `Could not resolve ref '${from}': ${apiError(refRes.status, refRes.data)}` }
+            return {
+              success: false,
+              output: `Could not resolve ref '${from}': ${apiError(refRes.status, refRes.data)}`,
+            }
           }
           sha = (commitRes.data as { sha: string }).sha
         }
@@ -793,7 +942,10 @@ function createGhBranchCreate(config: GitHubConfig): Tool {
 
       if (status !== 201) return { success: false, output: apiError(status, data) }
 
-      return { success: true, output: `Created branch '${branch}' from ${from} (${sha.slice(0, 7)})` }
+      return {
+        success: true,
+        output: `Created branch '${branch}' from ${from} (${sha.slice(0, 7)})`,
+      }
     },
   }
 }

@@ -1,15 +1,15 @@
 import { Database } from 'bun:sqlite'
 import { log } from '../util/logger'
+import type { TaskErrorKind } from './error-classify'
 import type {
-  Task,
   NewTask,
-  TaskRun,
   RunResult,
-  TaskProposal,
+  Task,
   TaskFilter,
+  TaskProposal,
+  TaskRun,
   TaskStatus,
 } from './types'
-import type { TaskErrorKind } from './error-classify'
 
 function generateId(): string {
   return crypto.randomUUID().slice(0, 8)
@@ -165,8 +165,8 @@ export class TaskStore {
   }
 
   private migrate(): void {
-    const columns = this.db.query("PRAGMA table_info(tasks)").all() as Array<{ name: string }>
-    const columnNames = new Set(columns.map(c => c.name))
+    const columns = this.db.query('PRAGMA table_info(tasks)').all() as Array<{ name: string }>
+    const columnNames = new Set(columns.map((c) => c.name))
 
     const migrations: Array<[string, string]> = [
       ['cron_expression', 'ALTER TABLE tasks ADD COLUMN cron_expression TEXT'],
@@ -183,8 +183,10 @@ export class TaskStore {
     }
 
     // Migrate task_runs table
-    const runColumns = this.db.query("PRAGMA table_info(task_runs)").all() as Array<{ name: string }>
-    const runColumnNames = new Set(runColumns.map(c => c.name))
+    const runColumns = this.db.query('PRAGMA table_info(task_runs)').all() as Array<{
+      name: string
+    }>
+    const runColumnNames = new Set(runColumns.map((c) => c.name))
     if (!runColumnNames.has('error_kind')) {
       this.db.run('ALTER TABLE task_runs ADD COLUMN error_kind TEXT')
       log.debug('tasks', 'Migrated: added column error_kind to task_runs')
@@ -197,7 +199,11 @@ export class TaskStore {
     const status: TaskStatus = input.createdBy === 'agent' ? 'proposed' : 'active'
 
     let nextRunAt: number | undefined
-    if (input.kind === 'scheduled' && (input.intervalMs || input.cronExpression) && status === 'active') {
+    if (
+      input.kind === 'scheduled' &&
+      (input.intervalMs || input.cronExpression) &&
+      status === 'active'
+    ) {
       // nextRunAt is calculated by the runner after creation when it calls activateTask
       nextRunAt = input.intervalMs ? now + input.intervalMs : now
     }
@@ -205,7 +211,8 @@ export class TaskStore {
       nextRunAt = now
     }
 
-    this.db.run(`
+    this.db.run(
+      `
       INSERT INTO tasks (
         id, name, description, kind, status, prompt, workflow,
         memory_context, memory_category, interval_ms,
@@ -214,37 +221,42 @@ export class TaskStore {
         max_runs, notify, channel, channel_target, created_by,
         created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [
-      id,
-      input.name,
-      input.description,
-      input.kind,
-      status,
-      input.prompt,
-      input.workflow ? JSON.stringify(input.workflow) : null,
-      input.memoryContext ? JSON.stringify(input.memoryContext) : null,
-      input.memoryCategory ?? null,
-      input.intervalMs ?? null,
-      input.cronExpression ?? null,
-      input.businessHours ?? null,
-      input.dependsOn ?? null,
-      input.eventSource ?? null,
-      input.eventConfig ? JSON.stringify(input.eventConfig) : null,
-      nextRunAt ?? null,
-      input.maxRuns ?? null,
-      input.notify ?? 'on_change',
-      input.channel,
-      input.channelTarget,
-      input.createdBy,
-      now,
-      now,
-    ])
+    `,
+      [
+        id,
+        input.name,
+        input.description,
+        input.kind,
+        status,
+        input.prompt,
+        input.workflow ? JSON.stringify(input.workflow) : null,
+        input.memoryContext ? JSON.stringify(input.memoryContext) : null,
+        input.memoryCategory ?? null,
+        input.intervalMs ?? null,
+        input.cronExpression ?? null,
+        input.businessHours ?? null,
+        input.dependsOn ?? null,
+        input.eventSource ?? null,
+        input.eventConfig ? JSON.stringify(input.eventConfig) : null,
+        nextRunAt ?? null,
+        input.maxRuns ?? null,
+        input.notify ?? 'on_change',
+        input.channel,
+        input.channelTarget,
+        input.createdBy,
+        now,
+        now,
+      ],
+    )
 
     return this.get(id)!
   }
 
   get(id: string): Task | undefined {
-    const row = this.db.query('SELECT * FROM tasks WHERE id = ?').get(id) as Record<string, unknown> | null
+    const row = this.db.query('SELECT * FROM tasks WHERE id = ?').get(id) as Record<
+      string,
+      unknown
+    > | null
     return row ? rowToTask(row) : undefined
   }
 
@@ -300,7 +312,10 @@ export class TaskStore {
     values.push(Date.now())
     values.push(id)
 
-    this.db.run(`UPDATE tasks SET ${sets.join(', ')} WHERE id = ?`, values as (string | number | null)[])
+    this.db.run(
+      `UPDATE tasks SET ${sets.join(', ')} WHERE id = ?`,
+      values as (string | number | null)[],
+    )
   }
 
   delete(id: string): boolean {
@@ -327,47 +342,55 @@ export class TaskStore {
     }
 
     if (conditions.length > 0) {
-      sql += ' WHERE ' + conditions.join(' AND ')
+      sql += ` WHERE ${conditions.join(' AND ')}`
     }
     sql += ' ORDER BY created_at DESC'
 
-    const rows = this.db.query(sql).all(...values as (string | number | null)[]) as Array<Record<string, unknown>>
+    const rows = this.db.query(sql).all(...(values as (string | number | null)[])) as Array<
+      Record<string, unknown>
+    >
     return rows.map(rowToTask)
   }
 
   activeCount(): number {
-    const row = this.db.query(
-      "SELECT COUNT(*) as count FROM tasks WHERE status = 'active'"
-    ).get() as { count: number }
+    const row = this.db
+      .query("SELECT COUNT(*) as count FROM tasks WHERE status = 'active'")
+      .get() as { count: number }
     return row.count
   }
 
   getDueTasks(now: number): Task[] {
-    const rows = this.db.query(`
+    const rows = this.db
+      .query(`
       SELECT * FROM tasks
       WHERE status = 'active'
         AND kind IN ('scheduled', 'oneshot')
         AND next_run_at IS NOT NULL
         AND next_run_at <= ?
       ORDER BY next_run_at ASC
-    `).all(now) as Array<Record<string, unknown>>
+    `)
+      .all(now) as Array<Record<string, unknown>>
     return rows.map(rowToTask)
   }
 
   getEventTasks(): Task[] {
-    const rows = this.db.query(`
+    const rows = this.db
+      .query(`
       SELECT * FROM tasks
       WHERE status = 'active' AND kind = 'event'
-    `).all() as Array<Record<string, unknown>>
+    `)
+      .all() as Array<Record<string, unknown>>
     return rows.map(rowToTask)
   }
 
   /** Get tasks that depend on a given task ID */
   getDependents(taskId: string): Task[] {
-    const rows = this.db.query(`
+    const rows = this.db
+      .query(`
       SELECT * FROM tasks
       WHERE depends_on = ? AND status = 'active'
-    `).all(taskId) as Array<Record<string, unknown>>
+    `)
+      .all(taskId) as Array<Record<string, unknown>>
     return rows.map(rowToTask)
   }
 
@@ -377,10 +400,13 @@ export class TaskStore {
     const id = generateId()
     const now = Date.now()
 
-    this.db.run(`
+    this.db.run(
+      `
       INSERT INTO task_runs (id, task_id, started_at, status, trigger_info)
       VALUES (?, ?, ?, 'running', ?)
-    `, [id, taskId, now, triggerInfo ? JSON.stringify(triggerInfo) : null])
+    `,
+      [id, taskId, now, triggerInfo ? JSON.stringify(triggerInfo) : null],
+    )
 
     return {
       id,
@@ -397,39 +423,46 @@ export class TaskStore {
   }
 
   completeRun(runId: string, result: RunResult): void {
-    this.db.run(`
+    this.db.run(
+      `
       UPDATE task_runs
       SET status = ?, result = ?, error = ?, error_kind = ?, tokens_used = ?, completed_at = ?
       WHERE id = ?
-    `, [
-      result.status,
-      result.result ?? null,
-      result.error ?? null,
-      result.errorKind ?? null,
-      result.tokensUsed ?? 0,
-      Date.now(),
-      runId,
-    ])
+    `,
+      [
+        result.status,
+        result.result ?? null,
+        result.error ?? null,
+        result.errorKind ?? null,
+        result.tokensUsed ?? 0,
+        Date.now(),
+        runId,
+      ],
+    )
   }
 
   getRecentRuns(taskId: string, limit = 10): TaskRun[] {
-    const rows = this.db.query(`
+    const rows = this.db
+      .query(`
       SELECT * FROM task_runs
       WHERE task_id = ?
       ORDER BY started_at DESC
       LIMIT ?
-    `).all(taskId, limit) as Array<Record<string, unknown>>
+    `)
+      .all(taskId, limit) as Array<Record<string, unknown>>
     return rows.map(rowToRun)
   }
 
   /** Get the most recent successful run for a task */
   getLastSuccessfulRun(taskId: string): TaskRun | undefined {
-    const row = this.db.query(`
+    const row = this.db
+      .query(`
       SELECT * FROM task_runs
       WHERE task_id = ? AND status = 'success'
       ORDER BY started_at DESC
       LIMIT 1
-    `).get(taskId) as Record<string, unknown> | null
+    `)
+      .get(taskId) as Record<string, unknown> | null
     return row ? rowToRun(row) : undefined
   }
 
@@ -444,10 +477,13 @@ export class TaskStore {
     const id = generateId()
     const now = Date.now()
 
-    this.db.run(`
+    this.db.run(
+      `
       INSERT INTO task_proposals (id, task_id, message_id, channel, channel_target, status, created_at)
       VALUES (?, ?, ?, ?, ?, 'pending', ?)
-    `, [id, taskId, messageId ?? null, channel, target, now])
+    `,
+      [id, taskId, messageId ?? null, channel, target, now],
+    )
 
     return {
       id,
@@ -462,27 +498,30 @@ export class TaskStore {
   }
 
   getProposalByMessage(messageId: string): TaskProposal | undefined {
-    const row = this.db.query(
-      'SELECT * FROM task_proposals WHERE message_id = ?'
-    ).get(messageId) as Record<string, unknown> | null
+    const row = this.db
+      .query('SELECT * FROM task_proposals WHERE message_id = ?')
+      .get(messageId) as Record<string, unknown> | null
     return row ? rowToProposal(row) : undefined
   }
 
   updateProposal(id: string, changes: { status: string; rejectedAt?: number }): void {
-    this.db.run(
-      'UPDATE task_proposals SET status = ?, rejected_at = ? WHERE id = ?',
-      [changes.status, changes.rejectedAt ?? null, id]
-    )
+    this.db.run('UPDATE task_proposals SET status = ?, rejected_at = ? WHERE id = ?', [
+      changes.status,
+      changes.rejectedAt ?? null,
+      id,
+    ])
   }
 
   wasRecentlyRejected(name: string, withinMs: number): boolean {
     const cutoff = Date.now() - withinMs
-    const row = this.db.query(`
+    const row = this.db
+      .query(`
       SELECT 1 FROM task_proposals p
       JOIN tasks t ON p.task_id = t.id
       WHERE t.name = ? AND p.status = 'rejected' AND p.rejected_at > ?
       LIMIT 1
-    `).get(name, cutoff)
+    `)
+      .get(name, cutoff)
     return row !== null
   }
 
@@ -496,14 +535,11 @@ export class TaskStore {
     this.db.transaction(() => {
       const runResult = this.db.run(
         'DELETE FROM task_runs WHERE completed_at IS NOT NULL AND completed_at < ?',
-        [cutoff]
+        [cutoff],
       )
       runsDeleted = runResult.changes
 
-      const propResult = this.db.run(
-        'DELETE FROM task_proposals WHERE created_at < ?',
-        [cutoff]
-      )
+      const propResult = this.db.run('DELETE FROM task_proposals WHERE created_at < ?', [cutoff])
       proposalsDeleted = propResult.changes
     })()
 

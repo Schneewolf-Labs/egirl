@@ -1,6 +1,6 @@
-import { describe, test, expect } from 'bun:test'
-import { createBrowserTools } from '../../src/tools/builtin/browser'
+import { describe, expect, test } from 'bun:test'
 import { BrowserManager } from '../../src/browser'
+import { createBrowserTools } from '../../src/tools/builtin/browser'
 
 describe('browser tools', () => {
   // Use a fresh manager for structure tests — no browser is launched
@@ -108,7 +108,7 @@ describe('browser tools', () => {
     test('navigate handles missing browser gracefully', async () => {
       const result = await tools.browserNavigateTool.execute(
         { url: 'http://localhost:99999' },
-        '/tmp'
+        '/tmp',
       )
       expect(result.success).toBe(false)
       expect(result.output).toBeTruthy()

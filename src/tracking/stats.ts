@@ -12,7 +12,7 @@ export interface UsageStats {
   remoteInputTokens: number
   remoteOutputTokens: number
   totalCost: number
-  savedCost: number  // Estimated savings from using local
+  savedCost: number // Estimated savings from using local
 }
 
 export class StatsTracker {
@@ -38,7 +38,7 @@ export class StatsTracker {
     model: string,
     inputTokens: number,
     outputTokens: number,
-    escalated: boolean
+    escalated: boolean,
   ): void {
     this.stats.totalRequests++
     this.stats.totalInputTokens += inputTokens
@@ -72,9 +72,8 @@ export class StatsTracker {
 
   formatSummary(): string {
     const s = this.stats
-    const localPct = s.totalRequests > 0
-      ? ((s.localRequests / s.totalRequests) * 100).toFixed(1)
-      : '0'
+    const localPct =
+      s.totalRequests > 0 ? ((s.localRequests / s.totalRequests) * 100).toFixed(1) : '0'
 
     return `
 Usage Statistics:

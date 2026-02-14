@@ -1,4 +1,4 @@
-import { describe, test, expect } from 'bun:test'
+import { describe, expect, test } from 'bun:test'
 import { webResearchTool } from '../../src/tools/builtin/web-research'
 
 describe('web_research tool', () => {
@@ -27,7 +27,7 @@ describe('web_research tool', () => {
     // This will fail to connect but should pass URL validation
     const result = await webResearchTool.execute(
       { url: 'http://localhost:99999/nonexistent', timeout: 1000 },
-      '/tmp'
+      '/tmp',
     )
 
     // Should fail with a network error, not a URL validation error
@@ -38,7 +38,7 @@ describe('web_research tool', () => {
   test('accepts https:// URLs', async () => {
     const result = await webResearchTool.execute(
       { url: 'https://localhost:99999/nonexistent', timeout: 1000 },
-      '/tmp'
+      '/tmp',
     )
 
     expect(result.success).toBe(false)
@@ -48,7 +48,7 @@ describe('web_research tool', () => {
   test('handles connection errors gracefully', async () => {
     const result = await webResearchTool.execute(
       { url: 'http://192.0.2.1:1', timeout: 2000 },
-      '/tmp'
+      '/tmp',
     )
 
     expect(result.success).toBe(false)
@@ -57,10 +57,7 @@ describe('web_research tool', () => {
 
   test('never throws — always returns ToolResult', async () => {
     // Even with garbage input, should return a result, not throw
-    const result = await webResearchTool.execute(
-      { url: 'not-a-url' },
-      '/tmp'
-    )
+    const result = await webResearchTool.execute({ url: 'not-a-url' }, '/tmp')
 
     expect(result).toHaveProperty('success')
     expect(result).toHaveProperty('output')

@@ -1,39 +1,43 @@
-import type { RuntimeConfig } from '../config'
-import { createAgentLoop, type AgentFactory } from '../agent'
-import { createDiscordChannel } from '../channels'
+import { type AgentFactory, createAgentLoop } from '../agent'
 import { createAppServices } from '../bootstrap'
-import { createTaskRunner, createDiscovery } from '../tasks'
+import { createDiscordChannel } from '../channels'
+import type { RuntimeConfig } from '../config'
+import { gatherStandup } from '../standup'
+import { createDiscovery, createTaskRunner } from '../tasks'
 import { createTaskTools } from '../tools/builtin/tasks'
 import { applyLogLevel } from '../util/args'
 import { log } from '../util/logger'
-import { gatherStandup } from '../standup'
 
 export async function runDiscord(config: RuntimeConfig, args: string[]): Promise<void> {
   applyLogLevel(args)
 
   if (!config.channels.discord) {
-    console.error('Error: Discord not configured. Add DISCORD_TOKEN to .env and configure channels.discord in egirl.toml')
+    console.error(
+      'Error: Discord not configured. Add DISCORD_TOKEN to .env and configure channels.discord in egirl.toml',
+    )
     process.exit(1)
   }
 
-  const { providers, memory, conversations, taskStore, router, toolExecutor, skills } = await createAppServices(config)
+  const { providers, memory, conversations, taskStore, router, toolExecutor, skills } =
+    await createAppServices(config)
 
   // Gather workspace standup for agent context
   const standup = await gatherStandup(config.workspace.path)
 
   // Create agent factory for per-session loops
-  const agentFactory: AgentFactory = (sessionId: string) => createAgentLoop({
-    config,
-    router,
-    toolExecutor,
-    localProvider: providers.local,
-    remoteProvider: providers.remote,
-    sessionId,
-    memory,
-    conversationStore: conversations,
-    skills,
-    additionalContext: standup.context || undefined,
-  })
+  const agentFactory: AgentFactory = (sessionId: string) =>
+    createAgentLoop({
+      config,
+      router,
+      toolExecutor,
+      localProvider: providers.local,
+      remoteProvider: providers.remote,
+      sessionId,
+      memory,
+      conversationStore: conversations,
+      skills,
+      additionalContext: standup.context || undefined,
+    })
 
   const discord = createDiscordChannel(agentFactory, config.channels.discord, providers.local)
 
@@ -58,13 +62,11 @@ export async function runDiscord(config: RuntimeConfig, args: string[]): Promise
     })
 
     // Register task tools on the shared tool executor
-    const defaultTarget = config.channels.discord!.allowedChannels[0] ?? 'dm'
-    const taskTools = createTaskTools(
-      taskStore,
-      taskRunner,
-      config.tasks.maxActiveTasks,
-      () => ({ channel: 'discord', channelTarget: defaultTarget }),
-    )
+    const defaultTarget = config.channels.discord?.allowedChannels[0] ?? 'dm'
+    const taskTools = createTaskTools(taskStore, taskRunner, config.tasks.maxActiveTasks, () => ({
+      channel: 'discord',
+      channelTarget: defaultTarget,
+    }))
     toolExecutor.registerAll([
       taskTools.taskAddTool,
       taskTools.taskProposeTool,
@@ -85,7 +87,7 @@ export async function runDiscord(config: RuntimeConfig, args: string[]): Promise
       if (event.emoji === '✅') {
         taskStore.update(proposal.taskId, { status: 'active' as const })
         taskStore.updateProposal(proposal.id, { status: 'approved' })
-        taskRunner!.activateTask(proposal.taskId)
+        taskRunner?.activateTask(proposal.taskId)
         log.info('tasks', `Task ${proposal.taskId} approved via reaction`)
       }
       if (event.emoji === '❌') {

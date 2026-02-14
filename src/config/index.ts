@@ -1,10 +1,10 @@
-import { parse } from 'smol-toml'
-import { readFileSync, existsSync, mkdirSync } from 'fs'
-import { resolve } from 'path'
+import { existsSync, mkdirSync, readFileSync } from 'fs'
 import { homedir } from 'os'
-import type { RuntimeConfig, EgirlConfig } from './schema'
+import { resolve } from 'path'
+import { parse } from 'smol-toml'
+import type { EgirlConfig, RuntimeConfig } from './schema'
 
-export { type EgirlConfig, type RuntimeConfig } from './schema'
+export type { EgirlConfig, RuntimeConfig } from './schema'
 
 function getDomain(service: string): string {
   try {
@@ -12,7 +12,12 @@ function getDomain(service: string): string {
     return url.hostname
   } catch {
     // Fallback: strip protocol and port
-    return service.replace(/^[a-z]+:\/\//, '').split(':')[0]!.split('/')[0]!
+    return (
+      service
+        .replace(/^[a-z]+:\/\//, '')
+        .split(':')[0]
+        ?.split('/')[0] ?? service
+    )
   }
 }
 
@@ -106,7 +111,8 @@ export function loadConfig(): RuntimeConfig {
     remote: {},
     routing: {
       default: toml.routing?.default ?? defaultToml.routing.default,
-      escalationThreshold: toml.routing?.escalation_threshold ?? defaultToml.routing.escalation_threshold,
+      escalationThreshold:
+        toml.routing?.escalation_threshold ?? defaultToml.routing.escalation_threshold,
       alwaysLocal: toml.routing?.always_local ?? defaultToml.routing.always_local,
       alwaysRemote: toml.routing?.always_remote ?? defaultToml.routing.always_remote,
     },
@@ -126,7 +132,9 @@ export function loadConfig(): RuntimeConfig {
       },
       pathSandbox: {
         enabled: toml.safety?.path_sandbox?.enabled ?? false,
-        allowedPaths: (toml.safety?.path_sandbox?.allowed_paths ?? []).map(p => expandPath(p, workspacePath)),
+        allowedPaths: (toml.safety?.path_sandbox?.allowed_paths ?? []).map((p) =>
+          expandPath(p, workspacePath),
+        ),
       },
       sensitiveFiles: {
         enabled: toml.safety?.sensitive_files?.enabled ?? true,
@@ -162,7 +170,7 @@ export function loadConfig(): RuntimeConfig {
       idleThresholdMs: toml.tasks?.idle_threshold_ms ?? 600000,
     },
     skills: {
-      dirs: (toml.skills?.dirs ?? defaultToml.skills.dirs).map(d => expandPath(d, workspacePath)),
+      dirs: (toml.skills?.dirs ?? defaultToml.skills.dirs).map((d) => expandPath(d, workspacePath)),
     },
   }
 

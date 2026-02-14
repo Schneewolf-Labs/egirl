@@ -1,5 +1,5 @@
-import { describe, test, expect } from 'bun:test'
-import { isCommandBlocked, getDefaultBlockedPatterns } from '../../src/safety/command-filter'
+import { describe, expect, test } from 'bun:test'
+import { getDefaultBlockedPatterns, isCommandBlocked } from '../../src/safety/command-filter'
 
 const patterns = getDefaultBlockedPatterns()
 

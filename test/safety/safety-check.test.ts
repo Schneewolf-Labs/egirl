@@ -1,4 +1,4 @@
-import { describe, test, expect } from 'bun:test'
+import { describe, expect, test } from 'bun:test'
 import { checkToolCall, getDefaultSafetyConfig, type SafetyConfig } from '../../src/safety'
 
 const cwd = '/home/user/project'
@@ -46,13 +46,23 @@ describe('checkToolCall', () => {
     const config = makeConfig({
       pathSandbox: { enabled: true, allowedPaths: ['/home/user/project'] },
     })
-    const result = checkToolCall('write_file', { path: '/home/user/project/src/file.ts', content: 'x' }, cwd, config)
+    const result = checkToolCall(
+      'write_file',
+      { path: '/home/user/project/src/file.ts', content: 'x' },
+      cwd,
+      config,
+    )
     expect(result.allowed).toBe(true)
   })
 
   test('no path restriction when sandbox disabled (default)', () => {
     const config = makeConfig()
-    const result = checkToolCall('write_file', { path: '/anywhere/file.txt', content: 'x' }, cwd, config)
+    const result = checkToolCall(
+      'write_file',
+      { path: '/anywhere/file.txt', content: 'x' },
+      cwd,
+      config,
+    )
     expect(result.allowed).toBe(true)
   })
 
@@ -70,7 +80,10 @@ describe('checkToolCall', () => {
 
   test('allows sensitive files when sensitive_files disabled', () => {
     const config = makeConfig({
-      sensitiveFiles: { enabled: false, patterns: getDefaultSafetyConfig().sensitiveFiles.patterns },
+      sensitiveFiles: {
+        enabled: false,
+        patterns: getDefaultSafetyConfig().sensitiveFiles.patterns,
+      },
     })
     const result = checkToolCall('read_file', { path: '.env' }, cwd, config)
     expect(result.allowed).toBe(true)

@@ -1,6 +1,6 @@
-import { describe, test, expect } from 'bun:test'
-import { analyzeMessageHeuristics, estimateComplexity } from '../../src/routing/heuristics'
+import { describe, expect, test } from 'bun:test'
 import type { ChatMessage } from '../../src/providers/types'
+import { analyzeMessageHeuristics, estimateComplexity } from '../../src/routing/heuristics'
 
 describe('analyzeMessageHeuristics', () => {
   test('returns low confidence for empty messages', () => {
@@ -10,18 +10,14 @@ describe('analyzeMessageHeuristics', () => {
   })
 
   test('returns low confidence when last message is not user', () => {
-    const messages: ChatMessage[] = [
-      { role: 'assistant', content: 'Hello there!' },
-    ]
+    const messages: ChatMessage[] = [{ role: 'assistant', content: 'Hello there!' }]
     const result = analyzeMessageHeuristics(messages)
     expect(result.shouldEscalate).toBe(false)
     expect(result.confidence).toBe(0.5)
   })
 
   test('detects simple greetings', () => {
-    const messages: ChatMessage[] = [
-      { role: 'user', content: 'hello' },
-    ]
+    const messages: ChatMessage[] = [{ role: 'user', content: 'hello' }]
     const result = analyzeMessageHeuristics(messages)
     expect(result.shouldEscalate).toBe(false)
     expect(result.reason).toBe('simple_greeting')
@@ -29,18 +25,14 @@ describe('analyzeMessageHeuristics', () => {
   })
 
   test('detects hi as greeting', () => {
-    const messages: ChatMessage[] = [
-      { role: 'user', content: 'hi' },
-    ]
+    const messages: ChatMessage[] = [{ role: 'user', content: 'hi' }]
     const result = analyzeMessageHeuristics(messages)
     expect(result.shouldEscalate).toBe(false)
     expect(result.reason).toBe('simple_greeting')
   })
 
   test('escalates for code generation keywords', () => {
-    const messages: ChatMessage[] = [
-      { role: 'user', content: 'write code to sort an array' },
-    ]
+    const messages: ChatMessage[] = [{ role: 'user', content: 'write code to sort an array' }]
     const result = analyzeMessageHeuristics(messages)
     expect(result.shouldEscalate).toBe(true)
     expect(result.reason).toBe('code_generation')
@@ -67,7 +59,11 @@ describe('analyzeMessageHeuristics', () => {
 
   test('escalates for complex reasoning with enough words', () => {
     const messages: ChatMessage[] = [
-      { role: 'user', content: 'explain in detail how the garbage collector works in V8 and what are the implications for performance in a production environment' },
+      {
+        role: 'user',
+        content:
+          'explain in detail how the garbage collector works in V8 and what are the implications for performance in a production environment',
+      },
     ]
     const result = analyzeMessageHeuristics(messages)
     expect(result.shouldEscalate).toBe(true)
@@ -76,18 +72,14 @@ describe('analyzeMessageHeuristics', () => {
   })
 
   test('does not escalate for short reasoning keywords', () => {
-    const messages: ChatMessage[] = [
-      { role: 'user', content: 'analyze this' },
-    ]
+    const messages: ChatMessage[] = [{ role: 'user', content: 'analyze this' }]
     const result = analyzeMessageHeuristics(messages)
     // "analyze" is a reasoning keyword but word count <= 10
     expect(result.reason).not.toBe('complex_reasoning')
   })
 
   test('keeps tool use patterns local', () => {
-    const messages: ChatMessage[] = [
-      { role: 'user', content: 'read the file at /etc/hosts' },
-    ]
+    const messages: ChatMessage[] = [{ role: 'user', content: 'read the file at /etc/hosts' }]
     const result = analyzeMessageHeuristics(messages)
     expect(result.shouldEscalate).toBe(false)
     expect(result.reason).toBe('tool_use')
@@ -114,7 +106,10 @@ describe('analyzeMessageHeuristics', () => {
 
   test('escalates for code blocks', () => {
     const messages: ChatMessage[] = [
-      { role: 'user', content: 'What does this do?\n```js\nconst x = [1,2,3].map(n => n * 2)\n```' },
+      {
+        role: 'user',
+        content: 'What does this do?\n```js\nconst x = [1,2,3].map(n => n * 2)\n```',
+      },
     ]
     const result = analyzeMessageHeuristics(messages)
     expect(result.shouldEscalate).toBe(true)
@@ -124,9 +119,7 @@ describe('analyzeMessageHeuristics', () => {
 
   test('escalates for very long messages', () => {
     const longContent = Array(101).fill('word').join(' ')
-    const messages: ChatMessage[] = [
-      { role: 'user', content: longContent },
-    ]
+    const messages: ChatMessage[] = [{ role: 'user', content: longContent }]
     const result = analyzeMessageHeuristics(messages)
     expect(result.shouldEscalate).toBe(true)
     expect(result.reason).toBe('long_context')

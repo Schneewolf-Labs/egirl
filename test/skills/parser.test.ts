@@ -1,5 +1,9 @@
-import { describe, test, expect } from 'bun:test'
-import { parseSkillMarkdown, extractSkillName, extractSkillDescription } from '../../src/skills/parser'
+import { describe, expect, test } from 'bun:test'
+import {
+  extractSkillDescription,
+  extractSkillName,
+  parseSkillMarkdown,
+} from '../../src/skills/parser'
 
 describe('parseSkillMarkdown', () => {
   test('parses frontmatter and content', () => {
@@ -121,7 +125,9 @@ describe('extractSkillName', () => {
 
 describe('extractSkillDescription', () => {
   test('extracts first paragraph after heading', () => {
-    const desc = extractSkillDescription('# Code Review\n\nReview code changes for quality and bugs.')
+    const desc = extractSkillDescription(
+      '# Code Review\n\nReview code changes for quality and bugs.',
+    )
     expect(desc).toBe('Review code changes for quality and bugs.')
   })
 

@@ -1,6 +1,6 @@
 export {
+  type CompactResult,
   ConversationStore,
   createConversationStore,
   type SessionInfo,
-  type CompactResult,
 } from './store'

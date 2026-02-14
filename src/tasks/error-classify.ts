@@ -4,12 +4,12 @@
  */
 
 export type TaskErrorKind =
-  | 'rate_limit'   // 429, quota exceeded → backoff and retry
-  | 'auth'         // 401/403, invalid key → pause, needs user intervention
-  | 'timeout'      // task timed out → retry once with longer timeout
+  | 'rate_limit' // 429, quota exceeded → backoff and retry
+  | 'auth' // 401/403, invalid key → pause, needs user intervention
+  | 'timeout' // task timed out → retry once with longer timeout
   | 'context_overflow' // too many tokens → not retryable for this input
-  | 'transient'    // 5xx, network errors → retry with backoff
-  | 'unknown'      // unclassified → use default retry policy
+  | 'transient' // 5xx, network errors → retry with backoff
+  | 'unknown' // unclassified → use default retry policy
 
 interface ErrorPatterns {
   rateLimit: RegExp[]
@@ -41,13 +41,7 @@ const PATTERNS: ErrorPatterns = {
     /token.*expired/i,
     /invalid token/i,
   ],
-  timeout: [
-    /timed? ?out/i,
-    /deadline exceeded/i,
-    /aborted/i,
-    /ETIMEDOUT/,
-    /ECONNRESET/,
-  ],
+  timeout: [/timed? ?out/i, /deadline exceeded/i, /aborted/i, /ETIMEDOUT/, /ECONNRESET/],
   contextOverflow: [
     /context[_ ]?(?:length|window|limit)/i,
     /too many tokens/i,
@@ -105,25 +99,24 @@ export function getRetryPolicy(kind: TaskErrorKind, consecutiveFailures: number)
       return {
         shouldRetry: true,
         shouldPause: false,
-        backoffMs: Math.min(
-          60 * 60 * 1000,
-          60 * 1000 * Math.pow(5, Math.min(consecutiveFailures, 3)),
-        ),
+        backoffMs: Math.min(60 * 60 * 1000, 60 * 1000 * 5 ** Math.min(consecutiveFailures, 3)),
         reason: 'rate limited — backing off',
       }
 
     case 'transient':
       // Exponential backoff: 30s, 60s, 5min, 15min, then pause
       if (consecutiveFailures >= 5) {
-        return { shouldRetry: false, shouldPause: true, backoffMs: 0, reason: 'too many transient failures' }
+        return {
+          shouldRetry: false,
+          shouldPause: true,
+          backoffMs: 0,
+          reason: 'too many transient failures',
+        }
       }
       return {
         shouldRetry: true,
         shouldPause: false,
-        backoffMs: Math.min(
-          15 * 60 * 1000,
-          30 * 1000 * Math.pow(2, consecutiveFailures),
-        ),
+        backoffMs: Math.min(15 * 60 * 1000, 30 * 1000 * 2 ** consecutiveFailures),
         reason: 'transient error — retrying',
       }
 
@@ -141,21 +134,36 @@ export function getRetryPolicy(kind: TaskErrorKind, consecutiveFailures: number)
 
     case 'auth':
       // Don't retry — needs user intervention
-      return { shouldRetry: false, shouldPause: true, backoffMs: 0, reason: 'auth error — needs user action' }
+      return {
+        shouldRetry: false,
+        shouldPause: true,
+        backoffMs: 0,
+        reason: 'auth error — needs user action',
+      }
 
     case 'context_overflow':
       // Don't retry — input too large for this task
-      return { shouldRetry: false, shouldPause: true, backoffMs: 0, reason: 'context overflow — task prompt too large' }
+      return {
+        shouldRetry: false,
+        shouldPause: true,
+        backoffMs: 0,
+        reason: 'context overflow — task prompt too large',
+      }
 
     case 'unknown':
       // Default: 2 retries with 1min backoff, then pause
       if (consecutiveFailures >= 3) {
-        return { shouldRetry: false, shouldPause: true, backoffMs: 0, reason: 'too many unknown failures' }
+        return {
+          shouldRetry: false,
+          shouldPause: true,
+          backoffMs: 0,
+          reason: 'too many unknown failures',
+        }
       }
       return {
         shouldRetry: true,
         shouldPause: false,
-        backoffMs: 60 * 1000 * Math.pow(2, consecutiveFailures),
+        backoffMs: 60 * 1000 * 2 ** consecutiveFailures,
         reason: 'unknown error — retrying',
       }
   }

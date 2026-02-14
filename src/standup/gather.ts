@@ -15,7 +15,9 @@ function runGit(args: string[], cwd: string, timeout = 10000): Promise<string | 
       proc.kill('SIGTERM')
     }, timeout)
 
-    proc.stdout.on('data', (d) => { stdout += d.toString() })
+    proc.stdout.on('data', (d) => {
+      stdout += d.toString()
+    })
 
     proc.on('error', () => {
       clearTimeout(timer)
@@ -49,7 +51,7 @@ export async function gatherBranch(cwd: string): Promise<GitBranchInfo | undefin
   // Get tracking branch info
   const tracking = await runGit(
     ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}'],
-    cwd
+    cwd,
   )
 
   let ahead = 0
@@ -58,7 +60,7 @@ export async function gatherBranch(cwd: string): Promise<GitBranchInfo | undefin
   if (tracking) {
     const counts = await runGit(
       ['rev-list', '--left-right', '--count', `HEAD...${tracking.trim()}`],
-      cwd
+      cwd,
     )
     if (counts) {
       const parts = counts.trim().split(/\s+/)
@@ -113,16 +115,17 @@ export interface RecentCommit {
 }
 
 export async function gatherRecentCommits(cwd: string, count = 10): Promise<RecentCommit[]> {
-  const output = await runGit(
-    ['log', `--format=%h\t%ad\t%s`, '--date=short', `-n${count}`],
-    cwd
-  )
+  const output = await runGit(['log', `--format=%h\t%ad\t%s`, '--date=short', `-n${count}`], cwd)
   if (!output) return []
 
-  return output.trim().split('\n').filter(Boolean).map((line) => {
-    const [hash, date, ...rest] = line.split('\t')
-    return { hash: hash ?? '', date: date ?? '', message: rest.join('\t') }
-  })
+  return output
+    .trim()
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => {
+      const [hash, date, ...rest] = line.split('\t')
+      return { hash: hash ?? '', date: date ?? '', message: rest.join('\t') }
+    })
 }
 
 export async function gatherStashCount(cwd: string): Promise<number> {

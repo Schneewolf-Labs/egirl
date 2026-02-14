@@ -1,6 +1,6 @@
-import { describe, test, expect } from 'bun:test'
-import { analyzeResponseForEscalation, shouldRetryWithRemote } from '../../src/routing/escalation'
+import { describe, expect, test } from 'bun:test'
 import type { ChatResponse } from '../../src/providers/types'
+import { analyzeResponseForEscalation, shouldRetryWithRemote } from '../../src/routing/escalation'
 
 function makeResponse(overrides: Partial<ChatResponse> = {}): ChatResponse {
   return {
@@ -30,7 +30,7 @@ describe('analyzeResponseForEscalation', () => {
     const patterns = [
       "I'm not sure about this",
       "I don't know the answer",
-      "I cannot help with that",
+      'I cannot help with that',
       "I'm unable to determine",
       "I'm having trouble parsing",
     ]

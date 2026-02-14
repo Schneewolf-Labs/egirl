@@ -1,12 +1,12 @@
-import type { RuntimeConfig } from '../config'
 import { createAgentLoop } from '../agent'
-import { createCLIChannel } from '../channels'
 import { createAppServices } from '../bootstrap'
-import { createTaskRunner, createDiscovery } from '../tasks'
+import { createCLIChannel } from '../channels'
+import type { RuntimeConfig } from '../config'
+import { gatherStandup } from '../standup'
+import { createDiscovery, createTaskRunner } from '../tasks'
 import { createTaskTools } from '../tools/builtin/tasks'
 import { applyLogLevel } from '../util/args'
 import { log } from '../util/logger'
-import { gatherStandup } from '../standup'
 
 export async function runCLI(config: RuntimeConfig, args: string[]): Promise<void> {
   applyLogLevel(args)
@@ -15,7 +15,8 @@ export async function runCLI(config: RuntimeConfig, args: string[]): Promise<voi
   const messageIndex = args.indexOf('-m')
   const singleMessage = messageIndex !== -1 ? args[messageIndex + 1] : null
 
-  const { providers, memory, conversations, taskStore, router, toolExecutor, stats, skills } = await createAppServices(config)
+  const { providers, memory, conversations, taskStore, router, toolExecutor, stats, skills } =
+    await createAppServices(config)
 
   // Gather workspace standup for agent context
   const standup = await gatherStandup(config.workspace.path)
@@ -45,7 +46,7 @@ export async function runCLI(config: RuntimeConfig, args: string[]): Promise<voi
         response.provider,
         response.usage.input_tokens,
         response.usage.output_tokens,
-        response.escalated
+        response.escalated,
       )
 
       console.log(response.content)
@@ -81,12 +82,10 @@ export async function runCLI(config: RuntimeConfig, args: string[]): Promise<voi
     })
 
     // Register task tools on the shared tool executor
-    const taskTools = createTaskTools(
-      taskStore,
-      taskRunner,
-      config.tasks.maxActiveTasks,
-      () => ({ channel: 'cli', channelTarget: 'stdout' }),
-    )
+    const taskTools = createTaskTools(taskStore, taskRunner, config.tasks.maxActiveTasks, () => ({
+      channel: 'cli',
+      channelTarget: 'stdout',
+    }))
     toolExecutor.registerAll([
       taskTools.taskAddTool,
       taskTools.taskProposeTool,

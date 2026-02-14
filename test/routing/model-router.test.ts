@@ -1,7 +1,7 @@
-import { describe, test, expect } from 'bun:test'
-import { createRouter } from '../../src/routing'
-import type { ChatMessage } from '../../src/providers/types'
+import { describe, expect, test } from 'bun:test'
 import type { RuntimeConfig } from '../../src/config'
+import type { ChatMessage } from '../../src/providers/types'
+import { createRouter } from '../../src/routing'
 
 describe('Router', () => {
   const baseConfig: RuntimeConfig = {
@@ -37,9 +37,7 @@ describe('Router', () => {
   const localOnlyRouter = createRouter(baseConfig)
 
   test('routes simple greetings to local', () => {
-    const messages: ChatMessage[] = [
-      { role: 'user', content: 'Hello' },
-    ]
+    const messages: ChatMessage[] = [{ role: 'user', content: 'Hello' }]
 
     const decision = router.route(messages)
     expect(decision.target).toBe('local')
@@ -55,9 +53,7 @@ describe('Router', () => {
   })
 
   test('analyzes task complexity', () => {
-    const messages: ChatMessage[] = [
-      { role: 'user', content: 'Hi' },
-    ]
+    const messages: ChatMessage[] = [{ role: 'user', content: 'Hi' }]
 
     const analysis = router.analyzeTask(messages)
     expect(analysis.complexity).toBe('trivial')
@@ -93,20 +89,20 @@ describe('Router', () => {
   })
 
   test('skill-based routing overrides default for matched skills', () => {
-    const skills = [{
-      name: 'Code Review',
-      description: 'Review code changes',
-      content: '# Code Review\n\nInstructions...',
-      metadata: { egirl: { complexity: 'remote' as const } },
-      baseDir: '/tmp/skills/code-review',
-      enabled: true,
-    }]
+    const skills = [
+      {
+        name: 'Code Review',
+        description: 'Review code changes',
+        content: '# Code Review\n\nInstructions...',
+        metadata: { egirl: { complexity: 'remote' as const } },
+        baseDir: '/tmp/skills/code-review',
+        enabled: true,
+      },
+    ]
 
     const routerWithSkills = createRouter(configWithRemote, skills)
 
-    const messages: ChatMessage[] = [
-      { role: 'user', content: 'Can you review this change?' },
-    ]
+    const messages: ChatMessage[] = [{ role: 'user', content: 'Can you review this change?' }]
 
     const decision = routerWithSkills.route(messages)
     expect(decision.target).toBe('remote')
@@ -114,14 +110,16 @@ describe('Router', () => {
   })
 
   test('handles ContentPart[] messages without crashing', () => {
-    const skills = [{
-      name: 'Code Review',
-      description: 'Review code changes',
-      content: '# Code Review',
-      metadata: { egirl: { complexity: 'remote' as const } },
-      baseDir: '/tmp/skills/code-review',
-      enabled: true,
-    }]
+    const skills = [
+      {
+        name: 'Code Review',
+        description: 'Review code changes',
+        content: '# Code Review',
+        metadata: { egirl: { complexity: 'remote' as const } },
+        baseDir: '/tmp/skills/code-review',
+        enabled: true,
+      },
+    ]
 
     const routerWithSkills = createRouter(configWithRemote, skills)
 
@@ -141,19 +139,21 @@ describe('Router', () => {
   })
 
   test('matches skills via escalation triggers', () => {
-    const skills = [{
-      name: 'Research',
-      description: 'Research topics',
-      content: '# Research',
-      metadata: {
-        egirl: {
-          complexity: 'remote' as const,
-          escalationTriggers: ['investigate', 'look up'],
+    const skills = [
+      {
+        name: 'Research',
+        description: 'Research topics',
+        content: '# Research',
+        metadata: {
+          egirl: {
+            complexity: 'remote' as const,
+            escalationTriggers: ['investigate', 'look up'],
+          },
         },
+        baseDir: '/tmp/skills/research',
+        enabled: true,
       },
-      baseDir: '/tmp/skills/research',
-      enabled: true,
-    }]
+    ]
 
     const routerWithSkills = createRouter(configWithRemote, skills)
 

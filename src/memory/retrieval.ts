@@ -1,11 +1,11 @@
+import { log } from '../util/logger'
 import type { MemoryManager } from './index'
 import type { SearchResult } from './search'
-import { log } from '../util/logger'
 
 export interface RetrievalConfig {
-  scoreThreshold: number   // Minimum score to include (default 0.35)
-  maxResults: number       // Max memories to inject (default 5)
-  maxTokensBudget: number  // Rough char budget for injected context (default 2000)
+  scoreThreshold: number // Minimum score to include (default 0.35)
+  maxResults: number // Max memories to inject (default 5)
+  maxTokensBudget: number // Rough char budget for injected context (default 2000)
 }
 
 const DEFAULT_CONFIG: RetrievalConfig = {
@@ -28,7 +28,7 @@ const DEFAULT_CONFIG: RetrievalConfig = {
 export async function retrieveForContext(
   query: string,
   memory: MemoryManager,
-  config: Partial<RetrievalConfig> = {}
+  config: Partial<RetrievalConfig> = {},
 ): Promise<string | undefined> {
   const { scoreThreshold, maxResults, maxTokensBudget } = {
     ...DEFAULT_CONFIG,
@@ -47,7 +47,7 @@ export async function retrieveForContext(
   }
 
   // Filter by score threshold
-  const relevant = results.filter(r => r.score >= scoreThreshold)
+  const relevant = results.filter((r) => r.score >= scoreThreshold)
 
   if (relevant.length === 0) return undefined
 
@@ -57,7 +57,7 @@ export async function retrieveForContext(
 
   for (const r of relevant) {
     const value = r.memory.value
-    const preview = value.length > 300 ? value.slice(0, 300) + '...' : value
+    const preview = value.length > 300 ? `${value.slice(0, 300)}...` : value
     const age = formatAge(r.memory.createdAt)
     const cat = r.memory.category !== 'general' ? `${r.memory.category}, ` : ''
     const line = `- [${r.memory.key}] (${cat}${age}): ${preview}`

@@ -1,7 +1,7 @@
-import { watch, type FSWatcher } from 'fs'
+import { type FSWatcher, watch } from 'fs'
 import { resolve } from 'path'
 import { log } from '../../util/logger'
-import type { EventSource, EventPayload } from '../types'
+import type { EventPayload, EventSource } from '../types'
 
 export interface FileWatchConfig {
   paths: string[]
@@ -40,9 +40,7 @@ export function createFileWatcher(config: FileWatchConfig, cwd: string): EventSo
 
     callback({
       source: 'file',
-      summary: files.length === 1
-        ? `file changed: ${files[0]}`
-        : `${files.length} files changed`,
+      summary: files.length === 1 ? `file changed: ${files[0]}` : `${files.length} files changed`,
       data: { files },
     })
   }

@@ -1,7 +1,7 @@
-import { describe, test, expect, beforeEach, afterEach } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { mkdtempSync, rmSync } from 'fs'
-import { join } from 'path'
 import { tmpdir } from 'os'
+import { join } from 'path'
 import { MemoryIndexer } from '../../src/memory/indexer'
 
 describe('MemoryIndexer — categories and time ranges', () => {
@@ -27,8 +27,8 @@ describe('MemoryIndexer — categories and time ranges', () => {
 
     const mem = indexer.get('pref')
     expect(mem).not.toBeNull()
-    expect(mem!.category).toBe('preference')
-    expect(mem!.source).toBe('manual')
+    expect(mem?.category).toBe('preference')
+    expect(mem?.source).toBe('manual')
   })
 
   test('stores and retrieves session_id', () => {
@@ -40,15 +40,15 @@ describe('MemoryIndexer — categories and time ranges', () => {
 
     const mem = indexer.get('sess-mem')
     expect(mem).not.toBeNull()
-    expect(mem!.sessionId).toBe('discord:123')
+    expect(mem?.sessionId).toBe('discord:123')
   })
 
   test('defaults category to general and source to manual', () => {
     indexer.set('plain', 'no category specified')
 
     const mem = indexer.get('plain')
-    expect(mem!.category).toBe('general')
-    expect(mem!.source).toBe('manual')
+    expect(mem?.category).toBe('general')
+    expect(mem?.source).toBe('manual')
   })
 
   test('getByCategory returns only matching category', () => {
@@ -58,7 +58,7 @@ describe('MemoryIndexer — categories and time ranges', () => {
 
     const facts = indexer.getByCategory('fact')
     expect(facts.length).toBe(2)
-    expect(facts.every(m => m.category === 'fact')).toBe(true)
+    expect(facts.every((m) => m.category === 'fact')).toBe(true)
   })
 
   test('getByTimeRange returns memories within range', () => {
@@ -84,7 +84,7 @@ describe('MemoryIndexer — categories and time ranges', () => {
 
     const facts = indexer.list(100, 0, { category: 'fact' })
     expect(facts.length).toBe(2)
-    expect(facts.every(m => m.category === 'fact')).toBe(true)
+    expect(facts.every((m) => m.category === 'fact')).toBe(true)
   })
 
   test('list with source filter', () => {
@@ -93,7 +93,7 @@ describe('MemoryIndexer — categories and time ranges', () => {
 
     const autos = indexer.list(100, 0, { source: 'auto' })
     expect(autos.length).toBe(1)
-    expect(autos[0]!.source).toBe('auto')
+    expect(autos[0]?.source).toBe('auto')
   })
 
   test('list with time range filter', () => {
@@ -118,8 +118,8 @@ describe('MemoryIndexer — categories and time ranges', () => {
     })
 
     const mem = indexer.get('migrated')
-    expect(mem!.category).toBe('decision')
-    expect(mem!.source).toBe('auto')
-    expect(mem!.sessionId).toBe('test:session')
+    expect(mem?.category).toBe('decision')
+    expect(mem?.source).toBe('auto')
+    expect(mem?.sessionId).toBe('test:session')
   })
 })

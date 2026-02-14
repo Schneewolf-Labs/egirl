@@ -18,7 +18,7 @@ export interface ToolCall {
 export interface ToolDefinition {
   name: string
   description: string
-  parameters: Record<string, unknown>  // JSON Schema
+  parameters: Record<string, unknown> // JSON Schema
 }
 
 export interface ChatRequest {
@@ -34,7 +34,7 @@ export interface ChatResponse {
   content: string
   tool_calls?: ToolCall[]
   usage: { input_tokens: number; output_tokens: number }
-  confidence?: number  // local model only, 0-1
+  confidence?: number // local model only, 0-1
   model: string
 }
 
@@ -58,7 +58,7 @@ export function getTextContent(content: string | ContentPart[]): string {
   if (typeof content === 'string') return content
   return content
     .filter((part): part is TextContent => part.type === 'text')
-    .map(part => part.text)
+    .map((part) => part.text)
     .join('\n')
 }
 

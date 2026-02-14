@@ -1,6 +1,6 @@
-import { describe, test, expect } from 'bun:test'
-import { retrieveForContext } from '../../src/memory/retrieval'
+import { describe, expect, test } from 'bun:test'
 import type { MemoryManager } from '../../src/memory'
+import { retrieveForContext } from '../../src/memory/retrieval'
 import type { SearchResult } from '../../src/memory/search'
 
 /** Create a fake MemoryManager with canned search results */
@@ -27,9 +27,7 @@ function makeResult(key: string, value: string, score: number): SearchResult {
 
 describe('retrieveForContext', () => {
   test('returns undefined when no results match threshold', async () => {
-    const memory = mockMemory([
-      makeResult('low-score', 'not relevant', 0.1),
-    ])
+    const memory = mockMemory([makeResult('low-score', 'not relevant', 0.1)])
 
     const result = await retrieveForContext('test query', memory, {
       scoreThreshold: 0.35,
@@ -97,9 +95,7 @@ describe('retrieveForContext', () => {
   })
 
   test('returns undefined for very short queries', async () => {
-    const memory = mockMemory([
-      makeResult('whatever', 'content', 0.9),
-    ])
+    const memory = mockMemory([makeResult('whatever', 'content', 0.9)])
 
     const result = await retrieveForContext('hi', memory)
     expect(result).toBeUndefined()
@@ -114,7 +110,9 @@ describe('retrieveForContext', () => {
 
   test('handles search errors gracefully', async () => {
     const memory = {
-      searchHybrid: async () => { throw new Error('connection refused') },
+      searchHybrid: async () => {
+        throw new Error('connection refused')
+      },
     } as unknown as MemoryManager
 
     const result = await retrieveForContext('test query', memory)
@@ -123,15 +121,13 @@ describe('retrieveForContext', () => {
 
   test('truncates long memory values in output', async () => {
     const longValue = 'a'.repeat(500)
-    const memory = mockMemory([
-      makeResult('long-mem', longValue, 0.9),
-    ])
+    const memory = mockMemory([makeResult('long-mem', longValue, 0.9)])
 
     const result = await retrieveForContext('query', memory)
 
     expect(result).toBeDefined()
     expect(result).toContain('...')
     // Value should be capped at 300 chars + "..."
-    expect(result!.length).toBeLessThan(500)
+    expect(result?.length).toBeLessThan(500)
   })
 })

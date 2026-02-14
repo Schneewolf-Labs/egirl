@@ -1,5 +1,5 @@
-import type { ToolDefinition } from './types'
 import type { ChatMessage, ToolCall } from '../providers/types'
+import type { ToolDefinition } from './types'
 
 /**
  * Qwen3 tool calling format utilities.
@@ -46,11 +46,9 @@ export function formatToolDefinition(tool: ToolDefinition): object {
 export function buildToolsSection(tools: ToolDefinition[] | undefined): string {
   if (!tools || tools.length === 0) return ''
 
-  const definitions = tools
-    .map(t => JSON.stringify(formatToolDefinition(t)))
-    .join('\n')
+  const definitions = tools.map((t) => JSON.stringify(formatToolDefinition(t))).join('\n')
 
-  return '\n\n' + TOOLS_INSTRUCTION.replace('{definitions}', definitions)
+  return `\n\n${TOOLS_INSTRUCTION.replace('{definitions}', definitions)}`
 }
 
 /**
@@ -58,7 +56,9 @@ export function buildToolsSection(tools: ToolDefinition[] | undefined): string {
  * Tries the original first; only attempts single-quote fixup if the original fails.
  * The fixup only replaces quotes used as JSON structural delimiters, not those inside strings.
  */
-function tryParseToolCallJson(jsonStr: string): { name: string; arguments?: Record<string, unknown> } | undefined {
+function tryParseToolCallJson(
+  jsonStr: string,
+): { name: string; arguments?: Record<string, unknown> } | undefined {
   // Try original JSON first
   try {
     const parsed = JSON.parse(jsonStr)
@@ -97,7 +97,7 @@ export function parseToolCalls(content: string): { content: string; toolCalls: T
   // Reset regex state
   TOOL_CALL_REGEX.lastIndex = 0
 
-  let match
+  let match: RegExpExecArray | null
   while ((match = TOOL_CALL_REGEX.exec(content)) !== null) {
     const jsonStr = match[1]
     if (!jsonStr) continue

@@ -1,11 +1,10 @@
-import type { Tool, ToolResult } from '../types'
-import type { TaskStore } from '../../tasks/store'
+import { formatSchedule, parseScheduleExpression } from '../../tasks/cron'
+import { formatInterval, parseInterval } from '../../tasks/parse-interval'
 import type { TaskRunner } from '../../tasks/runner'
-import type { NewTask, TaskKind, TaskNotify, EventSourceType } from '../../tasks/types'
-import { parseInterval, formatInterval } from '../../tasks/parse-interval'
-import { parseScheduleExpression, formatSchedule } from '../../tasks/cron'
 import { parseBusinessHours } from '../../tasks/schedule'
-import { log } from '../../util/logger'
+import type { TaskStore } from '../../tasks/store'
+import type { EventSourceType, NewTask, TaskKind, TaskNotify } from '../../tasks/types'
+import type { Tool, ToolResult } from '../types'
 
 interface TaskToolContext {
   channel: string
@@ -45,21 +44,51 @@ Options:
       parameters: {
         type: 'object',
         properties: {
-          name: { type: 'string', description: 'Short identifier for the task (e.g., "watch-ci-main")' },
+          name: {
+            type: 'string',
+            description: 'Short identifier for the task (e.g., "watch-ci-main")',
+          },
           description: { type: 'string', description: 'What this task does' },
           prompt: { type: 'string', description: 'The agent prompt to execute each run' },
           kind: { type: 'string', description: 'Task type: scheduled, event, or oneshot' },
-          interval: { type: 'string', description: 'Run interval: "30m", "2h", "1d" (scheduled only)' },
-          cron: { type: 'string', description: 'Cron expression or time: "0 9 * * MON-FRI", "09:00", "17:30 Mon-Fri" (scheduled only)' },
-          business_hours: { type: 'string', description: 'Restrict runs to hours: "9-17 Mon-Fri", "8-22", "business" (default business hours)' },
-          depends_on: { type: 'string', description: 'Task ID this task depends on — runs after that task completes' },
-          event_source: { type: 'string', description: 'Event source: file, webhook, github, command (event only)' },
+          interval: {
+            type: 'string',
+            description: 'Run interval: "30m", "2h", "1d" (scheduled only)',
+          },
+          cron: {
+            type: 'string',
+            description:
+              'Cron expression or time: "0 9 * * MON-FRI", "09:00", "17:30 Mon-Fri" (scheduled only)',
+          },
+          business_hours: {
+            type: 'string',
+            description:
+              'Restrict runs to hours: "9-17 Mon-Fri", "8-22", "business" (default business hours)',
+          },
+          depends_on: {
+            type: 'string',
+            description: 'Task ID this task depends on — runs after that task completes',
+          },
+          event_source: {
+            type: 'string',
+            description: 'Event source: file, webhook, github, command (event only)',
+          },
           event_config: { type: 'object', description: 'Source-specific config (event only)' },
-          workflow: { type: 'object', description: 'Workflow definition for deterministic execution (optional)' },
-          notify: { type: 'string', description: 'Notification mode: always, on_change, on_failure, never (default: on_change)' },
+          workflow: {
+            type: 'object',
+            description: 'Workflow definition for deterministic execution (optional)',
+          },
+          notify: {
+            type: 'string',
+            description:
+              'Notification mode: always, on_change, on_failure, never (default: on_change)',
+          },
           max_runs: { type: 'number', description: 'Maximum number of runs (null = unlimited)' },
           memory_context: { type: 'array', description: 'Memory keys to pre-load before each run' },
-          memory_category: { type: 'string', description: 'Category filter for proactive memory retrieval' },
+          memory_category: {
+            type: 'string',
+            description: 'Category filter for proactive memory retrieval',
+          },
         },
         required: ['name', 'description', 'prompt', 'kind'],
       },
@@ -68,12 +97,18 @@ Options:
     async execute(params: Record<string, unknown>): Promise<ToolResult> {
       const kind = params.kind as TaskKind
       if (!['scheduled', 'event', 'oneshot'].includes(kind)) {
-        return { success: false, output: `Invalid kind: ${kind}. Must be scheduled, event, or oneshot.` }
+        return {
+          success: false,
+          output: `Invalid kind: ${kind}. Must be scheduled, event, or oneshot.`,
+        }
       }
 
       // Check active task limit
       if (store.activeCount() >= maxActiveTasks) {
-        return { success: false, output: `Cannot create task: active task limit reached (${maxActiveTasks}). Pause or cancel existing tasks first.` }
+        return {
+          success: false,
+          output: `Cannot create task: active task limit reached (${maxActiveTasks}). Pause or cancel existing tasks first.`,
+        }
       }
 
       // Parse schedule — cron or interval
@@ -87,21 +122,34 @@ Options:
         if (cron) {
           const parsed = parseScheduleExpression(cron)
           if (!parsed) {
-            return { success: false, output: `Could not parse cron/time expression: "${cron}". Try "0 9 * * MON-FRI", "09:00", or "17:30 Mon-Fri".` }
+            return {
+              success: false,
+              output: `Could not parse cron/time expression: "${cron}". Try "0 9 * * MON-FRI", "09:00", or "17:30 Mon-Fri".`,
+            }
           }
           cronExpression = cron
         } else if (interval) {
           intervalMs = parseInterval(interval)
           if (!intervalMs) {
-            return { success: false, output: `Could not parse interval: "${interval}". Try "30m", "2h", "1d".` }
+            return {
+              success: false,
+              output: `Could not parse interval: "${interval}". Try "30m", "2h", "1d".`,
+            }
           }
         } else {
-          return { success: false, output: 'Scheduled tasks require either interval (e.g., "30m") or cron (e.g., "0 9 * * MON-FRI").' }
+          return {
+            success: false,
+            output:
+              'Scheduled tasks require either interval (e.g., "30m") or cron (e.g., "0 9 * * MON-FRI").',
+          }
         }
       }
 
       if (kind === 'event' && !params.event_source) {
-        return { success: false, output: 'Event tasks require event_source (file, webhook, github, command).' }
+        return {
+          success: false,
+          output: 'Event tasks require event_source (file, webhook, github, command).',
+        }
       }
 
       // Validate business_hours
@@ -109,7 +157,10 @@ Options:
       if (businessHoursStr) {
         const parsed = parseBusinessHours(businessHoursStr)
         if (!parsed) {
-          return { success: false, output: `Could not parse business_hours: "${businessHoursStr}". Try "9-17 Mon-Fri", "8-22", or "business".` }
+          return {
+            success: false,
+            output: `Could not parse business_hours: "${businessHoursStr}". Try "9-17 Mon-Fri", "8-22", or "business".`,
+          }
         }
       }
 
@@ -173,7 +224,8 @@ Options:
   const taskProposeTool: Tool = {
     definition: {
       name: 'task_propose',
-      description: 'Propose a background task for user approval. The task stays inactive until approved. Use when you notice an opportunity for useful background work.',
+      description:
+        'Propose a background task for user approval. The task stays inactive until approved. Use when you notice an opportunity for useful background work.',
       parameters: {
         type: 'object',
         properties: {
@@ -200,11 +252,17 @@ Options:
 
       // Check cooldown — don't re-propose recently rejected tasks
       if (store.wasRecentlyRejected(name, 24 * 60 * 60 * 1000)) {
-        return { success: false, output: `Task "${name}" was rejected in the last 24h. Not re-proposing.` }
+        return {
+          success: false,
+          output: `Task "${name}" was rejected in the last 24h. Not re-proposing.`,
+        }
       }
 
       if (store.activeCount() >= maxActiveTasks) {
-        return { success: false, output: `Cannot propose task: active task limit reached (${maxActiveTasks}).` }
+        return {
+          success: false,
+          output: `Cannot propose task: active task limit reached (${maxActiveTasks}).`,
+        }
       }
 
       let intervalMs: number | undefined
@@ -276,7 +334,7 @@ Options:
         return { success: true, output: filter ? `No ${filter.status} tasks.` : 'No tasks.' }
       }
 
-      const lines = tasks.map(t => {
+      const lines = tasks.map((t) => {
         const parts = [`- **${t.name}** (${t.id}) [${t.status}] — ${t.description}`]
         if (t.kind === 'scheduled' && t.intervalMs) {
           parts.push(`  Schedule: every ${formatInterval(t.intervalMs)}`)
@@ -297,7 +355,9 @@ Options:
         }
         parts.push(`  Runs: ${t.runCount}${t.maxRuns ? `/${t.maxRuns}` : ''} | Notify: ${t.notify}`)
         if (t.consecutiveFailures > 0) {
-          parts.push(`  Failures: ${t.consecutiveFailures} consecutive${t.lastErrorKind ? ` (${t.lastErrorKind})` : ''}`)
+          parts.push(
+            `  Failures: ${t.consecutiveFailures} consecutive${t.lastErrorKind ? ` (${t.lastErrorKind})` : ''}`,
+          )
         }
         if (t.lastRunAt) {
           const ago = Math.round((Date.now() - t.lastRunAt) / 1000)
@@ -327,7 +387,8 @@ Options:
       const id = params.id as string
       const task = store.get(id)
       if (!task) return { success: false, output: `Task ${id} not found.` }
-      if (task.status !== 'active') return { success: false, output: `Task ${id} is not active (status: ${task.status}).` }
+      if (task.status !== 'active')
+        return { success: false, output: `Task ${id} is not active (status: ${task.status}).` }
 
       store.update(id, { status: 'paused' })
       runner.deactivateTask(id)
@@ -352,11 +413,15 @@ Options:
       const id = params.id as string
       const task = store.get(id)
       if (!task) return { success: false, output: `Task ${id} not found.` }
-      if (task.status !== 'paused') return { success: false, output: `Task ${id} is not paused (status: ${task.status}).` }
+      if (task.status !== 'paused')
+        return { success: false, output: `Task ${id} is not paused (status: ${task.status}).` }
 
       store.update(id, { status: 'active', consecutiveFailures: 0, lastErrorKind: undefined })
       runner.activateTask(id)
-      return { success: true, output: `Resumed task "${task.name}" (${id}). Failure counter reset.` }
+      return {
+        success: true,
+        output: `Resumed task "${task.name}" (${id}). Failure counter reset.`,
+      }
     },
   }
 
@@ -408,9 +473,10 @@ Options:
 
         return {
           success: run.status === 'success',
-          output: run.status === 'success'
-            ? `Task "${task.name}" completed:\n${run.result ?? '(no output)'}`
-            : `Task "${task.name}" failed (${run.errorKind ?? 'unknown'}): ${run.error ?? 'unknown error'}`,
+          output:
+            run.status === 'success'
+              ? `Task "${task.name}" completed:\n${run.result ?? '(no output)'}`
+              : `Task "${task.name}" failed (${run.errorKind ?? 'unknown'}): ${run.error ?? 'unknown error'}`,
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err)
@@ -444,8 +510,10 @@ Options:
         return { success: true, output: `No runs yet for task "${task.name}".` }
       }
 
-      const lines = runs.map(r => {
-        const duration = r.completedAt ? `${Math.round((r.completedAt - r.startedAt) / 1000)}s` : 'running'
+      const lines = runs.map((r) => {
+        const duration = r.completedAt
+          ? `${Math.round((r.completedAt - r.startedAt) / 1000)}s`
+          : 'running'
         const time = new Date(r.startedAt).toISOString()
         let line = `- [${r.status}] ${time} (${duration})`
         if (r.tokensUsed) line += ` ${r.tokensUsed} tokens`

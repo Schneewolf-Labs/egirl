@@ -16,7 +16,10 @@ function htmlToText(html: string): string {
   text = text.replace(/<noscript[\s\S]*?<\/noscript>/gi, '')
 
   // Replace common block elements with newlines
-  text = text.replace(/<\/?(p|div|br|hr|h[1-6]|li|tr|blockquote|pre|section|article|header|footer|nav|main)[\s>][^>]*>/gi, '\n')
+  text = text.replace(
+    /<\/?(p|div|br|hr|h[1-6]|li|tr|blockquote|pre|section|article|header|footer|nav|main)[\s>][^>]*>/gi,
+    '\n',
+  )
   text = text.replace(/<br\s*\/?>/gi, '\n')
 
   // Remove all remaining HTML tags
@@ -43,7 +46,8 @@ function htmlToText(html: string): string {
 export const webResearchTool: Tool = {
   definition: {
     name: 'web_research',
-    description: 'Fetch a URL and return its text content. Useful for reading web pages, documentation, API responses, and other online resources.',
+    description:
+      'Fetch a URL and return its text content. Useful for reading web pages, documentation, API responses, and other online resources.',
     parameters: {
       type: 'object',
       properties: {
@@ -79,7 +83,7 @@ export const webResearchTool: Tool = {
         signal: controller.signal,
         headers: {
           'User-Agent': 'egirl-agent/1.0',
-          'Accept': 'text/html, application/json, text/plain, */*',
+          Accept: 'text/html, application/json, text/plain, */*',
         },
         redirect: 'follow',
       })
@@ -113,7 +117,7 @@ export const webResearchTool: Tool = {
 
       // Truncate if too long
       if (content.length > MAX_CONTENT_LENGTH) {
-        content = content.slice(0, MAX_CONTENT_LENGTH) + `\n\n[Truncated — content exceeded ${MAX_CONTENT_LENGTH} characters]`
+        content = `${content.slice(0, MAX_CONTENT_LENGTH)}\n\n[Truncated — content exceeded ${MAX_CONTENT_LENGTH} characters]`
       }
 
       return {

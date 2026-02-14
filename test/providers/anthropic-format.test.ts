@@ -1,6 +1,4 @@
-import { describe, test, expect } from 'bun:test'
-import type { ChatMessage } from '../../src/providers/types'
-
+import { describe, expect, test } from 'bun:test'
 /**
  * Test Anthropic message preparation by instantiating the provider with a
  * dummy key and calling prepareMessages via a test helper.
@@ -9,6 +7,7 @@ import type { ChatMessage } from '../../src/providers/types'
  * prepareAnthropicMessages which is exported for testing.
  */
 import { prepareAnthropicMessages } from '../../src/providers/anthropic'
+import type { ChatMessage } from '../../src/providers/types'
 
 describe('prepareAnthropicMessages', () => {
   test('merges consecutive tool results into single user message', () => {
@@ -36,10 +35,10 @@ describe('prepareAnthropicMessages', () => {
     // Content should be an array with both tool_result blocks
     const content = userMsg.content as Array<{ type: string; tool_use_id?: string }>
     expect(content).toHaveLength(2)
-    expect(content[0]!.type).toBe('tool_result')
-    expect(content[0]!.tool_use_id).toBe('call_0')
-    expect(content[1]!.type).toBe('tool_result')
-    expect(content[1]!.tool_use_id).toBe('call_1')
+    expect(content[0]?.type).toBe('tool_result')
+    expect(content[0]?.tool_use_id).toBe('call_0')
+    expect(content[1]?.type).toBe('tool_result')
+    expect(content[1]?.tool_use_id).toBe('call_1')
   })
 
   test('single tool result still works', () => {
@@ -47,9 +46,7 @@ describe('prepareAnthropicMessages', () => {
       {
         role: 'assistant',
         content: '',
-        tool_calls: [
-          { id: 'call_0', name: 'exec', arguments: { cmd: 'ls' } },
-        ],
+        tool_calls: [{ id: 'call_0', name: 'exec', arguments: { cmd: 'ls' } }],
       },
       { role: 'tool', content: 'file1.txt', tool_call_id: 'call_0' },
     ]
@@ -57,10 +54,10 @@ describe('prepareAnthropicMessages', () => {
     const { messages: prepared } = prepareAnthropicMessages(messages)
 
     expect(prepared).toHaveLength(2)
-    const content = prepared[1]!.content as Array<{ type: string; tool_use_id?: string }>
+    const content = prepared[1]?.content as Array<{ type: string; tool_use_id?: string }>
     expect(content).toHaveLength(1)
-    expect(content[0]!.type).toBe('tool_result')
-    expect(content[0]!.tool_use_id).toBe('call_0')
+    expect(content[0]?.type).toBe('tool_result')
+    expect(content[0]?.tool_use_id).toBe('call_0')
   })
 
   test('extracts system prompt', () => {
@@ -73,7 +70,7 @@ describe('prepareAnthropicMessages', () => {
 
     expect(systemPrompt).toBe('You are egirl.')
     expect(prepared).toHaveLength(1)
-    expect(prepared[0]!.role).toBe('user')
+    expect(prepared[0]?.role).toBe('user')
   })
 
   test('handles multiturn tool use conversation', () => {
@@ -104,15 +101,15 @@ describe('prepareAnthropicMessages', () => {
     expect(prepared).toHaveLength(6)
 
     // Check alternation: user, assistant, user, assistant, user, assistant
-    expect(prepared[0]!.role).toBe('user')
-    expect(prepared[1]!.role).toBe('assistant')
-    expect(prepared[2]!.role).toBe('user')
-    expect(prepared[3]!.role).toBe('assistant')
-    expect(prepared[4]!.role).toBe('user')
-    expect(prepared[5]!.role).toBe('assistant')
+    expect(prepared[0]?.role).toBe('user')
+    expect(prepared[1]?.role).toBe('assistant')
+    expect(prepared[2]?.role).toBe('user')
+    expect(prepared[3]?.role).toBe('assistant')
+    expect(prepared[4]?.role).toBe('user')
+    expect(prepared[5]?.role).toBe('assistant')
 
     // Second tool response should have 2 results merged
-    const secondToolResponse = prepared[4]!.content as Array<{ type: string }>
+    const secondToolResponse = prepared[4]?.content as Array<{ type: string }>
     expect(secondToolResponse).toHaveLength(2)
   })
 })

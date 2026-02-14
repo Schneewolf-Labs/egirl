@@ -1,5 +1,12 @@
 import OpenAI from 'openai'
-import type { LLMProvider, ChatRequest, ChatResponse, ToolCall, ChatMessage, ContentPart } from './types'
+import type {
+  ChatMessage,
+  ChatRequest,
+  ChatResponse,
+  ContentPart,
+  LLMProvider,
+  ToolCall,
+} from './types'
 import { getTextContent } from './types'
 
 function toOpenAIContent(parts: ContentPart[]): OpenAI.Chat.ChatCompletionContentPart[] {
@@ -33,7 +40,7 @@ export class OpenAIProvider implements LLMProvider {
     }
 
     if (req.tools && req.tools.length > 0) {
-      params.tools = req.tools.map(t => ({
+      params.tools = req.tools.map((t) => ({
         type: 'function',
         function: {
           name: t.name,
@@ -50,7 +57,7 @@ export class OpenAIProvider implements LLMProvider {
     const response = await this.client.chat.completions.create(params)
 
     const choice = response.choices[0]
-    const tool_calls: ToolCall[] | undefined = choice?.message?.tool_calls?.map(tc => ({
+    const tool_calls: ToolCall[] | undefined = choice?.message?.tool_calls?.map((tc) => ({
       id: tc.id,
       name: tc.function.name,
       arguments: JSON.parse(tc.function.arguments),
@@ -69,7 +76,7 @@ export class OpenAIProvider implements LLMProvider {
 
   private async chatStream(
     params: OpenAI.Chat.ChatCompletionCreateParamsNonStreaming,
-    onToken: (token: string) => void
+    onToken: (token: string) => void,
   ): Promise<ChatResponse> {
     const stream = await this.client.chat.completions.create({
       ...params,
@@ -116,13 +123,14 @@ export class OpenAIProvider implements LLMProvider {
       }
     }
 
-    const tool_calls: ToolCall[] | undefined = toolCallAccumulator.size > 0
-      ? Array.from(toolCallAccumulator.values()).map(tc => ({
-          id: tc.id,
-          name: tc.name,
-          arguments: JSON.parse(tc.arguments),
-        }))
-      : undefined
+    const tool_calls: ToolCall[] | undefined =
+      toolCallAccumulator.size > 0
+        ? Array.from(toolCallAccumulator.values()).map((tc) => ({
+            id: tc.id,
+            name: tc.name,
+            arguments: JSON.parse(tc.arguments),
+          }))
+        : undefined
 
     return {
       content,
@@ -136,7 +144,7 @@ export class OpenAIProvider implements LLMProvider {
   }
 
   private prepareMessages(messages: ChatMessage[]): OpenAI.Chat.ChatCompletionMessageParam[] {
-    return messages.map(msg => {
+    return messages.map((msg) => {
       if (msg.role === 'system') {
         return { role: 'system' as const, content: getTextContent(msg.content) }
       } else if (msg.role === 'user') {
@@ -153,7 +161,7 @@ export class OpenAIProvider implements LLMProvider {
           return {
             role: 'assistant' as const,
             content: text || null,
-            tool_calls: msg.tool_calls.map(tc => ({
+            tool_calls: msg.tool_calls.map((tc) => ({
               id: tc.id,
               type: 'function' as const,
               function: {

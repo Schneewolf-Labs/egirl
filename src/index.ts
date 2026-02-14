@@ -1,15 +1,14 @@
 #!/usr/bin/env bun
 
-import { loadConfig, type RuntimeConfig } from './config'
-import { bootstrapWorkspace } from './workspace/bootstrap'
-import { log } from './util/logger'
-
+import { runAPI } from './commands/api'
+import { runClaudeCode } from './commands/claude-code'
 import { runCLI } from './commands/cli'
 import { runDiscord } from './commands/discord'
-import { runXMPP } from './commands/xmpp'
-import { runClaudeCode } from './commands/claude-code'
-import { runAPI } from './commands/api'
 import { showStatus } from './commands/status'
+import { runXMPP } from './commands/xmpp'
+import { loadConfig, type RuntimeConfig } from './config'
+import { log } from './util/logger'
+import { bootstrapWorkspace } from './workspace/bootstrap'
 
 async function main() {
   const args = process.argv.slice(2)

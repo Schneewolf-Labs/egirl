@@ -39,14 +39,16 @@ function formatMessagesForSummary(messages: ChatMessage[]): string {
         break
       case 'assistant':
         if (msg.tool_calls && msg.tool_calls.length > 0) {
-          const toolNames = msg.tool_calls.map(c => `${c.name}(${JSON.stringify(c.arguments)})`).join(', ')
-          lines.push(`Assistant: ${text ? text + ' ' : ''}[Called: ${toolNames}]`)
+          const toolNames = msg.tool_calls
+            .map((c) => `${c.name}(${JSON.stringify(c.arguments)})`)
+            .join(', ')
+          lines.push(`Assistant: ${text ? `${text} ` : ''}[Called: ${toolNames}]`)
         } else {
           lines.push(`Assistant: ${text}`)
         }
         break
       case 'tool': {
-        const truncated = text.length > 500 ? text.slice(0, 500) + '...' : text
+        const truncated = text.length > 500 ? `${text.slice(0, 500)}...` : text
         lines.push(`Tool result (${msg.tool_call_id ?? 'unknown'}): ${truncated}`)
         break
       }
@@ -71,7 +73,7 @@ function formatMessagesForSummary(messages: ChatMessage[]): string {
 export async function summarizeMessages(
   messages: ChatMessage[],
   provider: LLMProvider,
-  existingSummary?: string
+  existingSummary?: string,
 ): Promise<string> {
   if (messages.length === 0) return existingSummary ?? ''
 
@@ -79,9 +81,10 @@ export async function summarizeMessages(
   if (!transcript.trim()) return existingSummary ?? ''
 
   // Truncate if the transcript is too long — we need it to fit in context
-  const truncatedTranscript = transcript.length > MAX_INPUT_CHARS
-    ? transcript.slice(0, MAX_INPUT_CHARS) + '\n\n[...transcript truncated for summarization]'
-    : transcript
+  const truncatedTranscript =
+    transcript.length > MAX_INPUT_CHARS
+      ? `${transcript.slice(0, MAX_INPUT_CHARS)}\n\n[...transcript truncated for summarization]`
+      : transcript
 
   const userPrompt = existingSummary
     ? `Here is the existing conversation summary:\n\n${existingSummary}\n\n---\n\nHere are new messages being compacted:\n\n${truncatedTranscript}\n\n---\n\nProduce an updated summary that merges the existing summary with the new information. Keep it concise.`
@@ -103,7 +106,10 @@ export async function summarizeMessages(
       return fallbackSummary(messages, existingSummary)
     }
 
-    log.info('context-summarizer', `Generated summary (${summary.length} chars) from ${messages.length} messages`)
+    log.info(
+      'context-summarizer',
+      `Generated summary (${summary.length} chars) from ${messages.length} messages`,
+    )
     return summary
   } catch (error) {
     log.warn('context-summarizer', 'Summary generation failed, using fallback:', error)
@@ -124,16 +130,16 @@ function fallbackSummary(messages: ChatMessage[], existingSummary?: string): str
   }
 
   const userMessages = messages
-    .filter(m => m.role === 'user')
-    .map(m => {
+    .filter((m) => m.role === 'user')
+    .map((m) => {
       const text = getTextContent(m.content)
-      return text.length > 200 ? text.slice(0, 200) + '...' : text
+      return text.length > 200 ? `${text.slice(0, 200)}...` : text
     })
     .filter(Boolean)
 
   const toolCalls = messages
-    .filter(m => m.role === 'assistant' && m.tool_calls)
-    .flatMap(m => m.tool_calls!.map(c => c.name))
+    .filter((m) => m.role === 'assistant' && m.tool_calls)
+    .flatMap((m) => m.tool_calls?.map((c) => c.name))
 
   if (userMessages.length > 0) {
     parts.push('User messages:')

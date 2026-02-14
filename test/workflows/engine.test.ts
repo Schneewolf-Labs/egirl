@@ -1,12 +1,12 @@
-import { describe, test, expect } from 'bun:test'
-import { executeWorkflow, interpolate } from '../../src/workflows/engine'
-import type { WorkflowDefinition, StepResult } from '../../src/workflows/types'
-import type { ToolExecutor } from '../../src/tools/executor'
+import { describe, expect, test } from 'bun:test'
 import type { ToolCall } from '../../src/providers/types'
+import type { ToolExecutor } from '../../src/tools/executor'
 import type { ToolResult } from '../../src/tools/types'
+import { executeWorkflow, interpolate } from '../../src/workflows/engine'
+import type { WorkflowDefinition } from '../../src/workflows/types'
 
 /** Create a mock ToolExecutor that returns predefined results per tool name */
-function mockExecutor(results: Record<string, ToolResult>): ToolExecutor {
+function _mockExecutor(results: Record<string, ToolResult>): ToolExecutor {
   return {
     execute(call: ToolCall, _cwd: string): Promise<ToolResult> {
       const result = results[call.name]
@@ -19,7 +19,10 @@ function mockExecutor(results: Record<string, ToolResult>): ToolExecutor {
 }
 
 /** Mock executor that records calls and returns results in sequence */
-function recordingExecutor(resultSequence: ToolResult[]): { executor: ToolExecutor; calls: ToolCall[] } {
+function recordingExecutor(resultSequence: ToolResult[]): {
+  executor: ToolExecutor
+  calls: ToolCall[]
+} {
   const calls: ToolCall[] = []
   let index = 0
   const executor = {
@@ -43,7 +46,13 @@ describe('interpolate', () => {
     const ctx = {
       params: {},
       steps: {
-        test: { step: 'test', tool: 'exec', success: false, output: 'FAIL: 3 errors', skipped: false },
+        test: {
+          step: 'test',
+          tool: 'exec',
+          success: false,
+          output: 'FAIL: 3 errors',
+          skipped: false,
+        },
       },
     }
     expect(interpolate('Fix these: {{steps.test.output}}', ctx)).toBe('Fix these: FAIL: 3 errors')
@@ -156,7 +165,12 @@ describe('executeWorkflow', () => {
       name: 'test-fix',
       description: 'test',
       steps: [
-        { name: 'test', tool: 'execute_command', params: { command: 'bun test' }, continue_on_error: true },
+        {
+          name: 'test',
+          tool: 'execute_command',
+          params: { command: 'bun test' },
+          continue_on_error: true,
+        },
         { name: 'fix', tool: 'code_agent', params: { task: 'fix' }, if: 'test.failed' },
       ],
     }
@@ -178,7 +192,12 @@ describe('executeWorkflow', () => {
       name: 'test-fix',
       description: 'test',
       steps: [
-        { name: 'test', tool: 'execute_command', params: { command: 'bun test' }, continue_on_error: true },
+        {
+          name: 'test',
+          tool: 'execute_command',
+          params: { command: 'bun test' },
+          continue_on_error: true,
+        },
         { name: 'fix', tool: 'code_agent', params: { task: 'fix' }, if: 'test.failed' },
         { name: 'commit', tool: 'git_commit', params: { message: 'done' } },
       ],
@@ -247,14 +266,10 @@ describe('executeWorkflow', () => {
       params: {
         branch: { type: 'string', description: 'branch', default: 'main' },
       },
-      steps: [
-        { name: 'step1', tool: 'tool_a', params: { cmd: 'git pull {{params.branch}}' } },
-      ],
+      steps: [{ name: 'step1', tool: 'tool_a', params: { cmd: 'git pull {{params.branch}}' } }],
     }
 
-    const { executor, calls } = recordingExecutor([
-      { success: true, output: 'ok' },
-    ])
+    const { executor, calls } = recordingExecutor([{ success: true, output: 'ok' }])
 
     await executeWorkflow(workflow, {}, executor, '/tmp')
 
@@ -265,9 +280,7 @@ describe('executeWorkflow', () => {
     const workflow: WorkflowDefinition = {
       name: 'test-wf',
       description: 'test',
-      steps: [
-        { name: 'flaky', tool: 'tool_a', params: {}, retry: 2 },
-      ],
+      steps: [{ name: 'flaky', tool: 'tool_a', params: {}, retry: 2 }],
     }
 
     const { executor, calls } = recordingExecutor([
@@ -325,9 +338,24 @@ describe('executeWorkflow', () => {
       description: 'test scenario',
       steps: [
         { name: 'pull', tool: 'execute_command', params: { command: 'git pull' } },
-        { name: 'test', tool: 'execute_command', params: { command: 'bun test' }, continue_on_error: true },
-        { name: 'fix', tool: 'code_agent', params: { task: 'fix: {{steps.test.output}}' }, if: 'test.failed' },
-        { name: 'retest', tool: 'execute_command', params: { command: 'bun test' }, if: 'test.failed' },
+        {
+          name: 'test',
+          tool: 'execute_command',
+          params: { command: 'bun test' },
+          continue_on_error: true,
+        },
+        {
+          name: 'fix',
+          tool: 'code_agent',
+          params: { task: 'fix: {{steps.test.output}}' },
+          if: 'test.failed',
+        },
+        {
+          name: 'retest',
+          tool: 'execute_command',
+          params: { command: 'bun test' },
+          if: 'test.failed',
+        },
         { name: 'commit', tool: 'git_commit', params: { message: 'update' } },
         { name: 'push', tool: 'execute_command', params: { command: 'git push' } },
       ],
@@ -355,9 +383,24 @@ describe('executeWorkflow', () => {
       description: 'test scenario',
       steps: [
         { name: 'pull', tool: 'execute_command', params: { command: 'git pull' } },
-        { name: 'test', tool: 'execute_command', params: { command: 'bun test' }, continue_on_error: true },
-        { name: 'fix', tool: 'code_agent', params: { task: 'fix: {{steps.test.output}}' }, if: 'test.failed' },
-        { name: 'retest', tool: 'execute_command', params: { command: 'bun test' }, if: 'test.failed' },
+        {
+          name: 'test',
+          tool: 'execute_command',
+          params: { command: 'bun test' },
+          continue_on_error: true,
+        },
+        {
+          name: 'fix',
+          tool: 'code_agent',
+          params: { task: 'fix: {{steps.test.output}}' },
+          if: 'test.failed',
+        },
+        {
+          name: 'retest',
+          tool: 'execute_command',
+          params: { command: 'bun test' },
+          if: 'test.failed',
+        },
         { name: 'commit', tool: 'git_commit', params: { message: 'update' } },
         { name: 'push', tool: 'execute_command', params: { command: 'git push' } },
       ],

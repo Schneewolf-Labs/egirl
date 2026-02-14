@@ -19,11 +19,10 @@ export function buildOpenAPISpec(host: string, port: number): OpenAPISpec {
     info: {
       title: 'egirl API',
       version: '0.1.0',
-      description: 'HTTP API for the egirl local-first AI agent. Send messages, manage memory, execute tools, and check system status.',
+      description:
+        'HTTP API for the egirl local-first AI agent. Send messages, manage memory, execute tools, and check system status.',
     },
-    servers: [
-      { url: `http://${host}:${port}`, description: 'Local server' },
-    ],
+    servers: [{ url: `http://${host}:${port}`, description: 'Local server' }],
     paths: {
       '/health': {
         get: {
@@ -33,7 +32,9 @@ export function buildOpenAPISpec(host: string, port: number): OpenAPISpec {
           responses: {
             '200': {
               description: 'Server is running',
-              content: { 'application/json': { schema: { $ref: '#/components/schemas/HealthResponse' } } },
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/HealthResponse' } },
+              },
             },
           },
         },
@@ -55,20 +56,27 @@ export function buildOpenAPISpec(host: string, port: number): OpenAPISpec {
         post: {
           operationId: 'chat',
           summary: 'Send a message to the agent',
-          description: 'Sends a user message through the agent loop. The agent may use tools, escalate to a remote provider, and return a final response.',
+          description:
+            'Sends a user message through the agent loop. The agent may use tools, escalate to a remote provider, and return a final response.',
           tags: ['Chat'],
           requestBody: {
             required: true,
-            content: { 'application/json': { schema: { $ref: '#/components/schemas/ChatRequest' } } },
+            content: {
+              'application/json': { schema: { $ref: '#/components/schemas/ChatRequest' } },
+            },
           },
           responses: {
             '200': {
               description: 'Agent response',
-              content: { 'application/json': { schema: { $ref: '#/components/schemas/ChatResponse' } } },
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ChatResponse' } },
+              },
             },
             '400': {
               description: 'Invalid request',
-              content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } },
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } },
+              },
             },
           },
         },
@@ -81,7 +89,9 @@ export function buildOpenAPISpec(host: string, port: number): OpenAPISpec {
           responses: {
             '200': {
               description: 'List of tool definitions',
-              content: { 'application/json': { schema: { $ref: '#/components/schemas/ToolListResponse' } } },
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ToolListResponse' } },
+              },
             },
           },
         },
@@ -92,20 +102,34 @@ export function buildOpenAPISpec(host: string, port: number): OpenAPISpec {
           summary: 'Execute a tool directly',
           tags: ['Tools'],
           parameters: [
-            { name: 'name', in: 'path', required: true, schema: { type: 'string' }, description: 'Tool name' },
+            {
+              name: 'name',
+              in: 'path',
+              required: true,
+              schema: { type: 'string' },
+              description: 'Tool name',
+            },
           ],
           requestBody: {
             required: true,
-            content: { 'application/json': { schema: { $ref: '#/components/schemas/ToolExecuteRequest' } } },
+            content: {
+              'application/json': { schema: { $ref: '#/components/schemas/ToolExecuteRequest' } },
+            },
           },
           responses: {
             '200': {
               description: 'Tool execution result',
-              content: { 'application/json': { schema: { $ref: '#/components/schemas/ToolExecuteResponse' } } },
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ToolExecuteResponse' },
+                },
+              },
             },
             '404': {
               description: 'Tool not found',
-              content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } },
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } },
+              },
             },
           },
         },
@@ -116,20 +140,32 @@ export function buildOpenAPISpec(host: string, port: number): OpenAPISpec {
           summary: 'Get a memory by key',
           tags: ['Memory'],
           parameters: [
-            { name: 'key', in: 'path', required: true, schema: { type: 'string' }, description: 'Memory key' },
+            {
+              name: 'key',
+              in: 'path',
+              required: true,
+              schema: { type: 'string' },
+              description: 'Memory key',
+            },
           ],
           responses: {
             '200': {
               description: 'Memory value',
-              content: { 'application/json': { schema: { $ref: '#/components/schemas/MemoryResponse' } } },
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/MemoryResponse' } },
+              },
             },
             '404': {
               description: 'Memory not found',
-              content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } },
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } },
+              },
             },
             '503': {
               description: 'Memory system not initialized',
-              content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } },
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } },
+              },
             },
           },
         },
@@ -138,20 +174,32 @@ export function buildOpenAPISpec(host: string, port: number): OpenAPISpec {
           summary: 'Store a memory',
           tags: ['Memory'],
           parameters: [
-            { name: 'key', in: 'path', required: true, schema: { type: 'string' }, description: 'Memory key' },
+            {
+              name: 'key',
+              in: 'path',
+              required: true,
+              schema: { type: 'string' },
+              description: 'Memory key',
+            },
           ],
           requestBody: {
             required: true,
-            content: { 'application/json': { schema: { $ref: '#/components/schemas/MemorySetRequest' } } },
+            content: {
+              'application/json': { schema: { $ref: '#/components/schemas/MemorySetRequest' } },
+            },
           },
           responses: {
             '200': {
               description: 'Memory stored',
-              content: { 'application/json': { schema: { $ref: '#/components/schemas/SuccessResponse' } } },
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/SuccessResponse' } },
+              },
             },
             '503': {
               description: 'Memory system not initialized',
-              content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } },
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } },
+              },
             },
           },
         },
@@ -160,16 +208,28 @@ export function buildOpenAPISpec(host: string, port: number): OpenAPISpec {
           summary: 'Delete a memory',
           tags: ['Memory'],
           parameters: [
-            { name: 'key', in: 'path', required: true, schema: { type: 'string' }, description: 'Memory key' },
+            {
+              name: 'key',
+              in: 'path',
+              required: true,
+              schema: { type: 'string' },
+              description: 'Memory key',
+            },
           ],
           responses: {
             '200': {
               description: 'Deletion result',
-              content: { 'application/json': { schema: { $ref: '#/components/schemas/MemoryDeleteResponse' } } },
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/MemoryDeleteResponse' },
+                },
+              },
             },
             '503': {
               description: 'Memory system not initialized',
-              content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } },
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } },
+              },
             },
           },
         },
@@ -181,16 +241,24 @@ export function buildOpenAPISpec(host: string, port: number): OpenAPISpec {
           tags: ['Memory'],
           requestBody: {
             required: true,
-            content: { 'application/json': { schema: { $ref: '#/components/schemas/MemorySearchRequest' } } },
+            content: {
+              'application/json': { schema: { $ref: '#/components/schemas/MemorySearchRequest' } },
+            },
           },
           responses: {
             '200': {
               description: 'Search results',
-              content: { 'application/json': { schema: { $ref: '#/components/schemas/MemorySearchResponse' } } },
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/MemorySearchResponse' },
+                },
+              },
             },
             '503': {
               description: 'Memory system not initialized',
-              content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } },
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } },
+              },
             },
           },
         },
@@ -199,12 +267,15 @@ export function buildOpenAPISpec(host: string, port: number): OpenAPISpec {
         get: {
           operationId: 'getStatus',
           summary: 'System status',
-          description: 'Returns current configuration, provider status, and session usage statistics.',
+          description:
+            'Returns current configuration, provider status, and session usage statistics.',
           tags: ['System'],
           responses: {
             '200': {
               description: 'System status',
-              content: { 'application/json': { schema: { $ref: '#/components/schemas/StatusResponse' } } },
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/StatusResponse' } },
+              },
             },
           },
         },
@@ -239,7 +310,11 @@ export function buildOpenAPISpec(host: string, port: number): OpenAPISpec {
           required: ['message'],
           properties: {
             message: { type: 'string', description: 'User message to send to the agent' },
-            max_turns: { type: 'integer', description: 'Maximum agent turns (default 10)', default: 10 },
+            max_turns: {
+              type: 'integer',
+              description: 'Maximum agent turns (default 10)',
+              default: 10,
+            },
           },
         },
         ChatResponse: {
@@ -248,7 +323,10 @@ export function buildOpenAPISpec(host: string, port: number): OpenAPISpec {
           properties: {
             content: { type: 'string', description: 'Agent response text' },
             target: { type: 'string', enum: ['local', 'remote'] },
-            provider: { type: 'string', description: 'Provider name used (e.g. llamacpp/qwen3-vl-32b)' },
+            provider: {
+              type: 'string',
+              description: 'Provider name used (e.g. llamacpp/qwen3-vl-32b)',
+            },
             usage: {
               type: 'object',
               properties: {
@@ -256,7 +334,10 @@ export function buildOpenAPISpec(host: string, port: number): OpenAPISpec {
                 output_tokens: { type: 'integer' },
               },
             },
-            escalated: { type: 'boolean', description: 'Whether the request was escalated to a remote provider' },
+            escalated: {
+              type: 'boolean',
+              description: 'Whether the request was escalated to a remote provider',
+            },
             turns: { type: 'integer', description: 'Number of agent loop turns used' },
           },
         },
@@ -319,7 +400,12 @@ export function buildOpenAPISpec(host: string, port: number): OpenAPISpec {
           required: ['query'],
           properties: {
             query: { type: 'string', description: 'Search query' },
-            mode: { type: 'string', enum: ['text', 'semantic', 'hybrid'], default: 'hybrid', description: 'Search mode' },
+            mode: {
+              type: 'string',
+              enum: ['text', 'semantic', 'hybrid'],
+              default: 'hybrid',
+              description: 'Search mode',
+            },
             limit: { type: 'integer', default: 10, description: 'Maximum number of results' },
           },
         },

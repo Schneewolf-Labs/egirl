@@ -1,5 +1,5 @@
-import { describe, test, expect } from 'bun:test'
-import { StatsTracker, createStatsTracker } from '../../src/tracking/stats'
+import { describe, expect, test } from 'bun:test'
+import { createStatsTracker, StatsTracker } from '../../src/tracking/stats'
 
 describe('StatsTracker', () => {
   test('starts with zero stats', () => {

@@ -1,9 +1,9 @@
-import { isCommandBlocked, getDefaultBlockedPatterns, compilePatterns } from './command-filter'
-import { isPathAllowed, isSensitivePath, getDefaultSensitivePatterns } from './path-guard'
-import { appendAuditLog, type AuditEntry } from './audit-log'
+import { type AuditEntry, appendAuditLog } from './audit-log'
+import { getDefaultBlockedPatterns, isCommandBlocked } from './command-filter'
+import { getDefaultSensitivePatterns, isPathAllowed, isSensitivePath } from './path-guard'
 
-export { type AuditEntry } from './audit-log'
-export { getDefaultBlockedPatterns, compilePatterns } from './command-filter'
+export type { AuditEntry } from './audit-log'
+export { compilePatterns, getDefaultBlockedPatterns } from './command-filter'
 export { getDefaultSensitivePatterns } from './path-guard'
 
 export interface SafetyConfig {

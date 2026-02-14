@@ -49,12 +49,12 @@ export function createBrowserRoutes(
     if (!routes.has(path)) {
       routes.set(path, new Map())
     }
-    routes.get(path)!.set(method, handler)
+    routes.get(path)?.set(method, handler)
   }
 
   // POST /v1/browser/navigate
   route('POST', '/v1/browser/navigate', async (req) => {
-    const body = await parseBody(req) as { url?: string } | null
+    const body = (await parseBody(req)) as { url?: string } | null
     if (!body?.url) {
       return error('Missing required field: url')
     }
@@ -75,7 +75,7 @@ export function createBrowserRoutes(
 
   // POST /v1/browser/click
   route('POST', '/v1/browser/click', async (req) => {
-    const body = await parseBody(req) as { target?: string } | null
+    const body = (await parseBody(req)) as { target?: string } | null
     if (!body?.target) {
       return error('Missing required field: target')
     }
@@ -92,7 +92,7 @@ export function createBrowserRoutes(
 
   // POST /v1/browser/fill
   route('POST', '/v1/browser/fill', async (req) => {
-    const body = await parseBody(req) as { target?: string; value?: string } | null
+    const body = (await parseBody(req)) as { target?: string; value?: string } | null
     if (!body?.target) {
       return error('Missing required field: target')
     }
@@ -112,7 +112,7 @@ export function createBrowserRoutes(
 
   // POST /v1/browser/select
   route('POST', '/v1/browser/select', async (req) => {
-    const body = await parseBody(req) as { target?: string; value?: string } | null
+    const body = (await parseBody(req)) as { target?: string; value?: string } | null
     if (!body?.target) {
       return error('Missing required field: target')
     }
@@ -132,7 +132,7 @@ export function createBrowserRoutes(
 
   // POST /v1/browser/check
   route('POST', '/v1/browser/check', async (req) => {
-    const body = await parseBody(req) as { target?: string; checked?: boolean } | null
+    const body = (await parseBody(req)) as { target?: string; checked?: boolean } | null
     if (!body?.target) {
       return error('Missing required field: target')
     }
@@ -140,9 +140,7 @@ export function createBrowserRoutes(
     const checked = body.checked ?? true
 
     try {
-      const snap = checked
-        ? await manager.check(body.target)
-        : await manager.uncheck(body.target)
+      const snap = checked ? await manager.check(body.target) : await manager.uncheck(body.target)
       return json({ success: true, ...snap })
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
@@ -153,7 +151,7 @@ export function createBrowserRoutes(
 
   // POST /v1/browser/hover
   route('POST', '/v1/browser/hover', async (req) => {
-    const body = await parseBody(req) as { target?: string } | null
+    const body = (await parseBody(req)) as { target?: string } | null
     if (!body?.target) {
       return error('Missing required field: target')
     }
@@ -170,7 +168,7 @@ export function createBrowserRoutes(
 
   // POST /v1/browser/wait
   route('POST', '/v1/browser/wait', async (req) => {
-    const body = await parseBody(req) as { target?: string; timeout?: number } | null
+    const body = (await parseBody(req)) as { target?: string; timeout?: number } | null
     if (!body?.target) {
       return error('Missing required field: target')
     }
@@ -187,7 +185,7 @@ export function createBrowserRoutes(
 
   // POST /v1/browser/eval
   route('POST', '/v1/browser/eval', async (req) => {
-    const body = await parseBody(req) as { expression?: string } | null
+    const body = (await parseBody(req)) as { expression?: string } | null
     if (!body?.expression) {
       return error('Missing required field: expression')
     }

@@ -1,12 +1,12 @@
-import { describe, test, expect } from 'bun:test'
-import { createDefaultToolExecutor } from '../../src/tools'
+import { describe, expect, test } from 'bun:test'
+import { mkdir, rm, writeFile } from 'fs/promises'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { writeFile, mkdir, rm } from 'fs/promises'
+import { createDefaultToolExecutor } from '../../src/tools'
 
 describe('ToolExecutor', () => {
   const executor = createDefaultToolExecutor()
-  const testDir = join(tmpdir(), 'egirl-test-' + Date.now())
+  const testDir = join(tmpdir(), `egirl-test-${Date.now()}`)
 
   test('has builtin tools registered', () => {
     const tools = executor.listTools()
@@ -22,7 +22,7 @@ describe('ToolExecutor', () => {
 
     const result = await executor.execute(
       { id: 'call_1', name: 'write_file', arguments: { path: 'test.txt', content: 'hello world' } },
-      testDir
+      testDir,
     )
 
     expect(result.success).toBe(true)
@@ -37,7 +37,7 @@ describe('ToolExecutor', () => {
 
     const result = await executor.execute(
       { id: 'call_1', name: 'read_file', arguments: { path: 'read-test.txt' } },
-      testDir
+      testDir,
     )
 
     expect(result.success).toBe(true)
@@ -49,7 +49,7 @@ describe('ToolExecutor', () => {
   test('handles unknown tool gracefully', async () => {
     const result = await executor.execute(
       { id: 'call_1', name: 'nonexistent_tool', arguments: {} },
-      testDir
+      testDir,
     )
 
     expect(result.success).toBe(false)
@@ -61,7 +61,7 @@ describe('ToolExecutor', () => {
 
     const result = await executor.execute(
       { id: 'call_1', name: 'execute_command', arguments: { command: 'echo "hello"' } },
-      testDir
+      testDir,
     )
 
     expect(result.success).toBe(true)

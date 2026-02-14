@@ -1,13 +1,13 @@
-import { describe, test, expect, beforeAll, afterAll } from 'bun:test'
-import { createDefaultToolExecutor } from '../../src/tools'
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
+import { execSync } from 'child_process'
+import { mkdir, rm, writeFile } from 'fs/promises'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { writeFile, mkdir, rm } from 'fs/promises'
-import { execSync } from 'child_process'
+import { createDefaultToolExecutor } from '../../src/tools'
 
 describe('git tools', () => {
   const executor = createDefaultToolExecutor()
-  const testDir = join(tmpdir(), 'egirl-git-test-' + Date.now())
+  const testDir = join(tmpdir(), `egirl-git-test-${Date.now()}`)
 
   function exec(cmd: string): string {
     return execSync(cmd, { cwd: testDir, encoding: 'utf-8' })
@@ -39,7 +39,7 @@ describe('git tools', () => {
   test('git_status shows clean tree', async () => {
     const result = await executor.execute(
       { id: 'call_1', name: 'git_status', arguments: {} },
-      testDir
+      testDir,
     )
     expect(result.success).toBe(true)
     expect(result.output).toContain('clean working tree')
@@ -50,7 +50,7 @@ describe('git tools', () => {
 
     const result = await executor.execute(
       { id: 'call_1', name: 'git_status', arguments: {} },
-      testDir
+      testDir,
     )
     expect(result.success).toBe(true)
     expect(result.output).toContain('modified')
@@ -65,7 +65,7 @@ describe('git tools', () => {
 
     const result = await executor.execute(
       { id: 'call_1', name: 'git_status', arguments: {} },
-      testDir
+      testDir,
     )
     expect(result.success).toBe(true)
     expect(result.output).toContain('untracked')
@@ -80,7 +80,7 @@ describe('git tools', () => {
 
     const result = await executor.execute(
       { id: 'call_1', name: 'git_diff', arguments: {} },
-      testDir
+      testDir,
     )
     expect(result.success).toBe(true)
     expect(result.output).toContain('hello.txt')
@@ -95,7 +95,7 @@ describe('git tools', () => {
 
     const result = await executor.execute(
       { id: 'call_1', name: 'git_diff', arguments: { staged: true } },
-      testDir
+      testDir,
     )
     expect(result.success).toBe(true)
     expect(result.output).toContain('hello.txt')
@@ -107,17 +107,14 @@ describe('git tools', () => {
   test('git_diff with no changes', async () => {
     const result = await executor.execute(
       { id: 'call_1', name: 'git_diff', arguments: {} },
-      testDir
+      testDir,
     )
     expect(result.success).toBe(true)
     expect(result.output).toContain('No differences')
   })
 
   test('git_log shows commits', async () => {
-    const result = await executor.execute(
-      { id: 'call_1', name: 'git_log', arguments: {} },
-      testDir
-    )
+    const result = await executor.execute({ id: 'call_1', name: 'git_log', arguments: {} }, testDir)
     expect(result.success).toBe(true)
     expect(result.output).toContain('Initial commit')
   })
@@ -125,7 +122,7 @@ describe('git tools', () => {
   test('git_log oneline format', async () => {
     const result = await executor.execute(
       { id: 'call_1', name: 'git_log', arguments: { oneline: true } },
-      testDir
+      testDir,
     )
     expect(result.success).toBe(true)
     expect(result.output).toContain('Initial commit')
@@ -137,8 +134,12 @@ describe('git tools', () => {
     await writeFile(join(testDir, 'commit-test.txt'), 'commit me\n')
 
     const result = await executor.execute(
-      { id: 'call_1', name: 'git_commit', arguments: { message: 'Add commit-test file', files: ['commit-test.txt'] } },
-      testDir
+      {
+        id: 'call_1',
+        name: 'git_commit',
+        arguments: { message: 'Add commit-test file', files: ['commit-test.txt'] },
+      },
+      testDir,
     )
     expect(result.success).toBe(true)
     expect(result.output).toContain('Add commit-test file')
@@ -147,7 +148,7 @@ describe('git tools', () => {
   test('git_commit rejects empty message', async () => {
     const result = await executor.execute(
       { id: 'call_1', name: 'git_commit', arguments: { message: '' } },
-      testDir
+      testDir,
     )
     expect(result.success).toBe(false)
     expect(result.output).toContain('empty')
@@ -156,7 +157,7 @@ describe('git tools', () => {
   test('git_commit with nothing staged', async () => {
     const result = await executor.execute(
       { id: 'call_1', name: 'git_commit', arguments: { message: 'Empty commit' } },
-      testDir
+      testDir,
     )
     expect(result.success).toBe(false)
     expect(result.output).toContain('Nothing staged')
@@ -165,7 +166,7 @@ describe('git tools', () => {
   test('git_show shows latest commit', async () => {
     const result = await executor.execute(
       { id: 'call_1', name: 'git_show', arguments: {} },
-      testDir
+      testDir,
     )
     expect(result.success).toBe(true)
     expect(result.output).toContain('Add commit-test file')
@@ -175,19 +176,19 @@ describe('git tools', () => {
   test('git_show with specific ref', async () => {
     const result = await executor.execute(
       { id: 'call_1', name: 'git_show', arguments: { ref: 'HEAD~1' } },
-      testDir
+      testDir,
     )
     expect(result.success).toBe(true)
     expect(result.output).toContain('Initial commit')
   })
 
   test('git_status fails outside git repo', async () => {
-    const noGitDir = join(tmpdir(), 'egirl-nogit-' + Date.now())
+    const noGitDir = join(tmpdir(), `egirl-nogit-${Date.now()}`)
     await mkdir(noGitDir, { recursive: true })
 
     const result = await executor.execute(
       { id: 'call_1', name: 'git_status', arguments: {} },
-      noGitDir
+      noGitDir,
     )
     expect(result.success).toBe(false)
     expect(result.output).toContain('Not a git repository')

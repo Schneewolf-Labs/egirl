@@ -1,6 +1,6 @@
-import { chromium, type Browser, type BrowserContext, type Page } from 'playwright'
-import { resolveTarget } from './targeting'
+import { type Browser, type BrowserContext, chromium, type Page } from 'playwright'
 import { log } from '../util/logger'
+import { resolveTarget } from './targeting'
 
 export interface BrowserConfig {
   headless?: boolean
@@ -40,7 +40,7 @@ export class BrowserManager {
   }
 
   get isOpen(): boolean {
-    return this.browser !== undefined && this.browser.isConnected()
+    return this.browser?.isConnected() ?? false
   }
 
   private async ensurePage(): Promise<Page> {
@@ -55,7 +55,11 @@ export class BrowserManager {
     }
 
     if (!this.page || this.page.isClosed()) {
-      this.page = await this.context!.newPage()
+      this.page = await this.context?.newPage()
+    }
+
+    if (!this.page) {
+      throw new Error('Failed to create browser page')
     }
 
     return this.page
@@ -132,13 +136,17 @@ export class BrowserManager {
     })
 
     // Collapse excessive whitespace
-    const cleaned = content.replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim()
+    const cleaned = content
+      .replace(/[ \t]+/g, ' ')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim()
 
     // Truncate if very long
     const maxLength = 50000
-    const truncated = cleaned.length > maxLength
-      ? cleaned.slice(0, maxLength) + `\n\n[Truncated — content exceeded ${maxLength} characters]`
-      : cleaned
+    const truncated =
+      cleaned.length > maxLength
+        ? `${cleaned.slice(0, maxLength)}\n\n[Truncated — content exceeded ${maxLength} characters]`
+        : cleaned
 
     return { url, title, content: truncated }
   }

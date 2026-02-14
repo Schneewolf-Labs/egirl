@@ -1,10 +1,10 @@
-import { describe, test, expect, beforeEach, afterEach } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { mkdtempSync, rmSync } from 'fs'
-import { join } from 'path'
 import { tmpdir } from 'os'
+import { join } from 'path'
+import type { EmbeddingInput, EmbeddingProvider } from '../../src/memory/embeddings'
 import { MemoryIndexer } from '../../src/memory/indexer'
 import { MemorySearch } from '../../src/memory/search'
-import type { EmbeddingProvider, EmbeddingInput } from '../../src/memory/embeddings'
 
 // Minimal mock embedding provider that returns predictable vectors
 function createMockEmbeddingProvider(dimensions = 4): EmbeddingProvider {
@@ -35,7 +35,7 @@ function createMockEmbeddingProvider(dimensions = 4): EmbeddingProvider {
     },
 
     async embedBatch(inputs: EmbeddingInput[]): Promise<Float32Array[]> {
-      return Promise.all(inputs.map(input => this.embed(input)))
+      return Promise.all(inputs.map((input) => this.embed(input)))
     },
   }
 }
@@ -67,7 +67,7 @@ describe('MemorySearch', () => {
       const results = await search.searchText('world')
 
       expect(results.length).toBe(2)
-      expect(results.every(r => r.matchType === 'fts')).toBe(true)
+      expect(results.every((r) => r.matchType === 'fts')).toBe(true)
     })
 
     test('returns empty for no matches', async () => {
@@ -120,8 +120,8 @@ describe('MemorySearch', () => {
 
       expect(results.length).toBe(3)
       // First result should be the exact match
-      expect(results[0]!.memory.key).toBe('similar')
-      expect(results[0]!.score).toBeCloseTo(1.0, 4)
+      expect(results[0]?.memory.key).toBe('similar')
+      expect(results[0]?.score).toBeCloseTo(1.0, 4)
     })
 
     test('returns results sorted by similarity', async () => {
@@ -136,7 +136,7 @@ describe('MemorySearch', () => {
 
       // Should be sorted by descending similarity
       for (let i = 1; i < results.length; i++) {
-        expect(results[i - 1]!.score).toBeGreaterThanOrEqual(results[i]!.score)
+        expect(results[i - 1]?.score).toBeGreaterThanOrEqual(results[i]?.score)
       }
     })
   })
@@ -149,7 +149,7 @@ describe('MemorySearch', () => {
       const results = await search.searchSemantic('semantic')
 
       expect(results.length).toBe(1)
-      expect(results[0]!.matchType).toBe('fts')
+      expect(results[0]?.matchType).toBe('fts')
     })
 
     test('uses embeddings when available', async () => {
@@ -160,7 +160,7 @@ describe('MemorySearch', () => {
       const results = await search.searchSemantic('hello')
 
       expect(results.length).toBeGreaterThanOrEqual(1)
-      expect(results[0]!.matchType).toBe('vector')
+      expect(results[0]?.matchType).toBe('vector')
     })
   })
 
@@ -174,7 +174,7 @@ describe('MemorySearch', () => {
       const results = await search.searchHybrid('typescript')
 
       expect(results.length).toBeGreaterThanOrEqual(1)
-      expect(results[0]!.matchType).toBe('hybrid')
+      expect(results[0]?.matchType).toBe('hybrid')
     })
 
     test('works without embeddings (FTS only)', async () => {
@@ -184,7 +184,7 @@ describe('MemorySearch', () => {
       const results = await search.searchHybrid('hybrid')
 
       expect(results.length).toBe(1)
-      expect(results[0]!.matchType).toBe('hybrid')
+      expect(results[0]?.matchType).toBe('hybrid')
     })
 
     test('deduplicates results by key', async () => {
@@ -195,7 +195,7 @@ describe('MemorySearch', () => {
       const results = await search.searchHybrid('unique')
 
       // Should not have duplicate keys
-      const keys = results.map(r => r.memory.key)
+      const keys = results.map((r) => r.memory.key)
       expect(new Set(keys).size).toBe(keys.length)
     })
 
@@ -230,9 +230,9 @@ describe('MemorySearch', () => {
       const results = await search.findSimilar('source')
 
       // Should not include the source item itself
-      expect(results.every(r => r.memory.key !== 'source')).toBe(true)
+      expect(results.every((r) => r.memory.key !== 'source')).toBe(true)
       // The similar item should rank first
-      expect(results[0]!.memory.key).toBe('similar')
+      expect(results[0]?.memory.key).toBe('similar')
     })
 
     test('throws when key not found', async () => {

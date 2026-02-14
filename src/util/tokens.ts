@@ -23,5 +23,5 @@ export function truncateToTokenLimit(text: string, maxTokens: number): string {
   const estimatedChars = maxTokens * 4
   if (text.length <= estimatedChars) return text
 
-  return text.slice(0, estimatedChars - 3) + '...'
+  return `${text.slice(0, estimatedChars - 3)}...`
 }

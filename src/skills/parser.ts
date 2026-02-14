@@ -1,6 +1,6 @@
 import YAML from 'yaml'
-import type { SkillMetadata } from './types'
 import { log } from '../util/logger'
+import type { SkillMetadata } from './types'
 
 interface ParsedSkill {
   metadata: SkillMetadata
@@ -40,7 +40,7 @@ export function parseSkillMarkdown(markdown: string): ParsedSkill {
 export function extractSkillName(content: string): string {
   // Look for first heading
   const headingMatch = content.match(/^#\s+(.+)$/m)
-  if (headingMatch && headingMatch[1]) {
+  if (headingMatch?.[1]) {
     return headingMatch[1].trim()
   }
 

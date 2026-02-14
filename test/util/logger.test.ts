@@ -1,4 +1,4 @@
-import { describe, test, expect, beforeEach } from 'bun:test'
+import { beforeEach, describe, expect, test } from 'bun:test'
 
 // We need a fresh Logger instance per test, so import the class indirectly
 // The module exports a singleton `log`, so we'll test through it after resetting
@@ -29,10 +29,10 @@ describe('Logger', () => {
     const entries = log.getEntries({ category })
 
     expect(entries.length).toBe(4)
-    expect(entries[0]!.level).toBe('debug')
-    expect(entries[1]!.level).toBe('info')
-    expect(entries[2]!.level).toBe('warn')
-    expect(entries[3]!.level).toBe('error')
+    expect(entries[0]?.level).toBe('debug')
+    expect(entries[1]?.level).toBe('info')
+    expect(entries[2]?.level).toBe('warn')
+    expect(entries[3]?.level).toBe('error')
   })
 
   test('stores message content and category', () => {
@@ -42,8 +42,8 @@ describe('Logger', () => {
 
     const entries = log.getEntries({ category })
     expect(entries.length).toBe(1)
-    expect(entries[0]!.message).toBe('hello world')
-    expect(entries[0]!.category).toBe(category)
+    expect(entries[0]?.message).toBe('hello world')
+    expect(entries[0]?.category).toBe(category)
   })
 
   test('stores optional data', () => {
@@ -53,7 +53,7 @@ describe('Logger', () => {
     log.info(category, 'with data', data)
 
     const entries = log.getEntries({ category })
-    expect(entries[0]!.data).toEqual(data)
+    expect(entries[0]?.data).toEqual(data)
   })
 
   test('filters entries by level', () => {
@@ -66,11 +66,11 @@ describe('Logger', () => {
 
     const warnings = log.getEntries({ category, level: 'warn' })
     expect(warnings.length).toBe(1)
-    expect(warnings[0]!.message).toBe('warn')
+    expect(warnings[0]?.message).toBe('warn')
 
     const errors = log.getEntries({ category, level: 'error' })
     expect(errors.length).toBe(1)
-    expect(errors[0]!.message).toBe('error')
+    expect(errors[0]?.message).toBe('error')
   })
 
   test('limits number of returned entries', () => {
@@ -83,8 +83,8 @@ describe('Logger', () => {
     const limited = log.getEntries({ category, limit: 3 })
     expect(limited.length).toBe(3)
     // limit returns last N entries
-    expect(limited[0]!.message).toBe('message 7')
-    expect(limited[2]!.message).toBe('message 9')
+    expect(limited[0]?.message).toBe('message 7')
+    expect(limited[2]?.message).toBe('message 9')
   })
 
   test('entries have timestamps', () => {
@@ -94,8 +94,8 @@ describe('Logger', () => {
     log.info(category, 'timed')
 
     const entries = log.getEntries({ category })
-    expect(entries[0]!.timestamp).toBeInstanceOf(Date)
-    expect(entries[0]!.timestamp.getTime()).toBeGreaterThanOrEqual(before.getTime())
+    expect(entries[0]?.timestamp).toBeInstanceOf(Date)
+    expect(entries[0]?.timestamp.getTime()).toBeGreaterThanOrEqual(before.getTime())
   })
 
   test('combined category and level filtering', () => {
@@ -109,6 +109,6 @@ describe('Logger', () => {
 
     const cat1Errors = log.getEntries({ category: cat1, level: 'error' })
     expect(cat1Errors.length).toBe(1)
-    expect(cat1Errors[0]!.message).toBe('error in cat1')
+    expect(cat1Errors[0]?.message).toBe('error in cat1')
   })
 })

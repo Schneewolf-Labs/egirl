@@ -1,18 +1,18 @@
 import type { RuntimeConfig } from '../config'
+import { compilePatterns, getDefaultBlockedPatterns } from './command-filter'
 import type { SafetyConfig } from './index'
-import { getDefaultBlockedPatterns, compilePatterns } from './command-filter'
 import { getDefaultSensitivePatterns } from './path-guard'
 
 export function buildSafetyConfig(config: RuntimeConfig): SafetyConfig {
   const safety = config.safety
 
-  const userBlockedPatterns = safety.commandFilter.blockedPatterns.length > 0
-    ? compilePatterns(safety.commandFilter.blockedPatterns)
-    : []
+  const userBlockedPatterns =
+    safety.commandFilter.blockedPatterns.length > 0
+      ? compilePatterns(safety.commandFilter.blockedPatterns)
+      : []
 
-  const userSensitivePatterns = safety.sensitiveFiles.patterns.length > 0
-    ? compilePatterns(safety.sensitiveFiles.patterns)
-    : []
+  const userSensitivePatterns =
+    safety.sensitiveFiles.patterns.length > 0 ? compilePatterns(safety.sensitiveFiles.patterns) : []
 
   return {
     enabled: safety.enabled,

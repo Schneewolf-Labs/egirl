@@ -1,35 +1,35 @@
-import { describe, test, expect } from 'bun:test'
+import { describe, expect, test } from 'bun:test'
+import { parseScheduleExpression } from '../../src/tasks/cron'
 import {
-  parseBusinessHours,
+  calculateNextRun,
   isWithinBusinessHours,
   nextBusinessHoursStart,
-  calculateNextRun,
+  parseBusinessHours,
 } from '../../src/tasks/schedule'
-import { parseScheduleExpression } from '../../src/tasks/cron'
 
 describe('parseBusinessHours', () => {
   test('parses simple range', () => {
     const bh = parseBusinessHours('9-17')
     expect(bh).toBeDefined()
-    expect(bh!.start).toBe(9)
-    expect(bh!.end).toBe(17)
-    expect(bh!.days).toEqual([1, 2, 3, 4, 5])
+    expect(bh?.start).toBe(9)
+    expect(bh?.end).toBe(17)
+    expect(bh?.days).toEqual([1, 2, 3, 4, 5])
   })
 
   test('parses range with day spec', () => {
     const bh = parseBusinessHours('8-22 Mon-Sat')
     expect(bh).toBeDefined()
-    expect(bh!.start).toBe(8)
-    expect(bh!.end).toBe(22)
-    expect(bh!.days).toEqual([1, 2, 3, 4, 5, 6])
+    expect(bh?.start).toBe(8)
+    expect(bh?.end).toBe(22)
+    expect(bh?.days).toEqual([1, 2, 3, 4, 5, 6])
   })
 
   test('parses "business" keyword', () => {
     const bh = parseBusinessHours('business')
     expect(bh).toBeDefined()
-    expect(bh!.start).toBe(9)
-    expect(bh!.end).toBe(17)
-    expect(bh!.days).toEqual([1, 2, 3, 4, 5])
+    expect(bh?.start).toBe(9)
+    expect(bh?.end).toBe(17)
+    expect(bh?.days).toEqual([1, 2, 3, 4, 5])
   })
 
   test('rejects invalid range', () => {

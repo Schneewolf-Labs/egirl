@@ -1,19 +1,31 @@
-import type { ChatMessage, ChatResponse, LLMProvider, ToolCall, ToolDefinition, Tokenizer } from '../providers/types'
-import { ContextSizeError } from '../providers/types'
 import type { RuntimeConfig } from '../config'
-import type { ToolExecutor, ToolResult } from '../tools'
-import type { Skill } from '../skills/types'
-import type { AgentEventHandler } from './events'
 import type { ConversationStore } from '../conversation'
 import type { MemoryManager } from '../memory'
-import { Router, shouldRetryWithRemote, analyzeResponseForEscalation } from '../routing'
-import { createAgentContext, addMessage, type AgentContext, type SystemPromptOptions } from './context'
-import { fitToContextWindow } from './context-window'
-import { summarizeMessages, formatSummaryMessage } from './context-summarizer'
-import { retrieveForContext } from '../memory/retrieval'
 import { extractMemories } from '../memory/extractor'
+import { retrieveForContext } from '../memory/retrieval'
 import { createLlamaCppTokenizer } from '../providers/llamacpp-tokenizer'
+import type {
+  ChatMessage,
+  ChatResponse,
+  LLMProvider,
+  Tokenizer,
+  ToolCall,
+  ToolDefinition,
+} from '../providers/types'
+import { ContextSizeError } from '../providers/types'
+import { analyzeResponseForEscalation, type Router } from '../routing'
+import type { Skill } from '../skills/types'
+import type { ToolExecutor, ToolResult } from '../tools'
 import { log } from '../util/logger'
+import {
+  type AgentContext,
+  addMessage,
+  createAgentContext,
+  type SystemPromptOptions,
+} from './context'
+import { formatSummaryMessage, summarizeMessages } from './context-summarizer'
+import { fitToContextWindow } from './context-window'
+import type { AgentEventHandler } from './events'
 
 /** Default context limits for remote providers */
 const REMOTE_CONTEXT_LENGTH = 200_000
@@ -112,7 +124,10 @@ export class AgentLoop {
     const routingDecision = this.router.route(this.context.messages, this.toolExecutor.listTools())
     events?.onRoutingDecision?.(routingDecision)
 
-    let provider: LLMProvider = routingDecision.target === 'local' ? this.localProvider : (this.remoteProvider ?? this.localProvider)
+    let provider: LLMProvider =
+      routingDecision.target === 'local'
+        ? this.localProvider
+        : (this.remoteProvider ?? this.localProvider)
 
     // Fallback to local if remote not available
     if (!this.remoteProvider && routingDecision.target === 'remote') {
@@ -122,7 +137,7 @@ export class AgentLoop {
 
     let turns = 0
     let escalated = false
-    let totalUsage = { input_tokens: 0, output_tokens: 0 }
+    const totalUsage = { input_tokens: 0, output_tokens: 0 }
     let finalContent = ''
     let currentProvider = provider
     let currentTarget: 'local' | 'remote' = routingDecision.target
@@ -138,7 +153,7 @@ export class AgentLoop {
           currentProvider,
           tools,
           currentTarget,
-          events?.onToken
+          events?.onToken,
         )
       } catch (error) {
         const err = error instanceof Error ? error : new Error(String(error))
@@ -151,7 +166,10 @@ export class AgentLoop {
 
       // Check for escalation if we're using local
       if (currentTarget === 'local' && this.remoteProvider) {
-        const escalationDecision = analyzeResponseForEscalation(response, this.config.routing.escalationThreshold)
+        const escalationDecision = analyzeResponseForEscalation(
+          response,
+          this.config.routing.escalationThreshold,
+        )
         if (escalationDecision.shouldEscalate) {
           log.info('agent', `Escalating to remote model: ${escalationDecision.reason}`)
           events?.onEscalation?.(escalationDecision, currentProvider.name, this.remoteProvider.name)
@@ -190,9 +208,12 @@ export class AgentLoop {
         const toolResults = await this.executeToolsWithHooks(response.tool_calls, events)
 
         for (const [callId, result] of toolResults) {
-          log.debug('agent', `Tool ${callId}: ${result.output.substring(0, 100)}${result.output.length > 100 ? '...' : ''}`)
+          log.debug(
+            'agent',
+            `Tool ${callId}: ${result.output.substring(0, 100)}${result.output.length > 100 ? '...' : ''}`,
+          )
 
-          const call = response.tool_calls.find(c => c.id === callId)
+          const call = response.tool_calls.find((c) => c.id === callId)
           events?.onToolCallComplete?.(callId, call?.name ?? 'unknown', result)
 
           addMessage(this.context, {
@@ -202,9 +223,16 @@ export class AgentLoop {
           })
 
           if (result.suggest_escalation && currentTarget === 'local' && this.remoteProvider) {
-            const escalationDecision = analyzeResponseForEscalation(response, this.config.routing.escalationThreshold)
+            const escalationDecision = analyzeResponseForEscalation(
+              response,
+              this.config.routing.escalationThreshold,
+            )
             log.info('agent', `Tool suggests escalation: ${result.escalation_reason}`)
-            events?.onEscalation?.(escalationDecision, currentProvider.name, this.remoteProvider.name)
+            events?.onEscalation?.(
+              escalationDecision,
+              currentProvider.name,
+              this.remoteProvider.name,
+            )
             currentProvider = this.remoteProvider
             currentTarget = 'remote'
             escalated = true
@@ -228,7 +256,12 @@ export class AgentLoop {
       // Find the last assistant message with content
       for (let i = this.context.messages.length - 1; i >= 0; i--) {
         const msg = this.context.messages[i]
-        if (msg?.role === 'assistant' && msg.content && typeof msg.content === 'string' && msg.content.trim()) {
+        if (
+          msg?.role === 'assistant' &&
+          msg.content &&
+          typeof msg.content === 'string' &&
+          msg.content.trim()
+        ) {
           finalContent = msg.content
           break
         }
@@ -281,11 +314,10 @@ export class AgentLoop {
     provider: LLMProvider,
     tools: ToolDefinition[],
     target: 'local' | 'remote',
-    onToken?: (token: string) => void
+    onToken?: (token: string) => void,
   ): Promise<ChatResponse> {
-    const contextLength = target === 'local'
-      ? this.config.local.contextLength
-      : REMOTE_CONTEXT_LENGTH
+    const contextLength =
+      target === 'local' ? this.config.local.contextLength : REMOTE_CONTEXT_LENGTH
 
     // Use real tokenizer for local provider, skip for remote (no endpoint to call)
     const tokenizer = target === 'local' ? this.tokenizer : undefined
@@ -300,14 +332,19 @@ export class AgentLoop {
       messagesForFitting,
       tools,
       { contextLength },
-      tokenizer
+      tokenizer,
     )
 
     // Trigger async summarization of dropped messages (if compaction enabled)
     if (fitResult.wasTrimmed && this.config.conversation.contextCompaction) {
       // Filter out the summary message itself from dropped messages — only summarize real conversation
       const droppedConversation = fitResult.droppedMessages.filter(
-        m => !(m.role === 'system' && typeof m.content === 'string' && m.content.startsWith('[Conversation summary'))
+        (m) =>
+          !(
+            m.role === 'system' &&
+            typeof m.content === 'string' &&
+            m.content.startsWith('[Conversation summary')
+          ),
       )
       if (droppedConversation.length > 0) {
         this.triggerCompaction(droppedConversation)
@@ -319,7 +356,10 @@ export class AgentLoop {
       ...fitResult.messages,
     ]
 
-    log.debug('agent', `Sending ${messages.length} messages to ${provider.name} (budget: ${contextLength}t)`)
+    log.debug(
+      'agent',
+      `Sending ${messages.length} messages to ${provider.name} (budget: ${contextLength}t)`,
+    )
 
     try {
       return await this.chatWithRetry(provider, messages, tools, onToken)
@@ -329,7 +369,7 @@ export class AgentLoop {
       // Server reported a different context size than our config — retrim and retry once
       log.warn(
         'agent',
-        `Server n_ctx=${error.contextSize} differs from config (${contextLength}). Retrimming.`
+        `Server n_ctx=${error.contextSize} differs from config (${contextLength}). Retrimming.`,
       )
 
       const refitResult = await fitToContextWindow(
@@ -337,7 +377,7 @@ export class AgentLoop {
         messagesForFitting,
         tools,
         { contextLength: error.contextSize },
-        tokenizer
+        tokenizer,
       )
 
       const retryMessages: ChatMessage[] = [
@@ -360,7 +400,7 @@ export class AgentLoop {
 
     // Fire and forget — don't block the current response
     summarizeMessages(droppedMessages, provider, existingSummary)
-      .then(summary => {
+      .then((summary) => {
         this.context.conversationSummary = summary
         log.info('agent', `Context compacted: summary updated (${summary.length} chars)`)
 
@@ -373,7 +413,7 @@ export class AgentLoop {
           }
         }
       })
-      .catch(error => {
+      .catch((error) => {
         log.warn('agent', 'Context compaction failed:', error)
       })
   }
@@ -387,7 +427,7 @@ export class AgentLoop {
     messages: ChatMessage[],
     tools: ToolDefinition[],
     onToken?: (token: string) => void,
-    maxRetries = 2
+    maxRetries = 2,
   ): Promise<ChatResponse> {
     let lastError: unknown
 
@@ -404,8 +444,11 @@ export class AgentLoop {
         if (!isTransient || attempt >= maxRetries) throw error
 
         const delayMs = 1000 * (attempt + 1)
-        log.warn('agent', `Provider error (attempt ${attempt + 1}/${maxRetries + 1}), retrying in ${delayMs}ms: ${error instanceof Error ? error.message : String(error)}`)
-        await new Promise(resolve => setTimeout(resolve, delayMs))
+        log.warn(
+          'agent',
+          `Provider error (attempt ${attempt + 1}/${maxRetries + 1}), retrying in ${delayMs}ms: ${error instanceof Error ? error.message : String(error)}`,
+        )
+        await new Promise((resolve) => setTimeout(resolve, delayMs))
       }
     }
 
@@ -416,9 +459,14 @@ export class AgentLoop {
     if (!(error instanceof Error)) return false
     const msg = error.message.toLowerCase()
     // Network failures
-    if (msg.includes('fetch failed') || msg.includes('econnrefused') ||
-        msg.includes('econnreset') || msg.includes('etimedout') ||
-        msg.includes('network') || msg.includes('socket')) {
+    if (
+      msg.includes('fetch failed') ||
+      msg.includes('econnrefused') ||
+      msg.includes('econnreset') ||
+      msg.includes('etimedout') ||
+      msg.includes('network') ||
+      msg.includes('socket')
+    ) {
       return true
     }
     // HTTP 5xx errors
@@ -434,7 +482,7 @@ export class AgentLoop {
 
   private async executeToolsWithHooks(
     toolCalls: ToolCall[],
-    events?: AgentEventHandler
+    events?: AgentEventHandler,
   ): Promise<Map<string, ToolResult>> {
     if (!events?.onBeforeToolExec && !events?.onAfterToolExec) {
       return this.executeTools(toolCalls)
@@ -449,7 +497,10 @@ export class AgentLoop {
       if (events?.onBeforeToolExec) {
         const shouldRun = await events.onBeforeToolExec(call)
         if (shouldRun === false) {
-          const skipped: ToolResult = { success: false, output: `Tool ${call.name} skipped by hook` }
+          const skipped: ToolResult = {
+            success: false,
+            output: `Tool ${call.name} skipped by hook`,
+          }
           events?.onAfterToolExec?.(call, skipped)
           results.set(call.id, skipped)
           continue
@@ -488,7 +539,7 @@ export class AgentLoop {
           try {
             // Prefix auto-extracted keys to distinguish from manual ones
             const key = `auto/${extraction.key}`
-            await this.memory!.set(key, extraction.value, {
+            await this.memory?.set(key, extraction.value, {
               category: extraction.category,
               source: 'auto',
               sessionId,

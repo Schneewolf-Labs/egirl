@@ -3,11 +3,11 @@
  * Handles both interval-based and cron-based schedules, with business hours support.
  */
 
-import { parseScheduleExpression, nextOccurrence, type CronSchedule } from './cron'
+import { type CronSchedule, nextOccurrence } from './cron'
 
 export interface BusinessHours {
-  start: number  // hour (0-23)
-  end: number    // hour (0-23)
+  start: number // hour (0-23)
+  end: number // hour (0-23)
   days: number[] // days of week (0=Sun, 6=Sat)
 }
 
@@ -120,8 +120,20 @@ export function calculateNextRun(params: {
 // --- Internal helpers ---
 
 const DAY_MAP: Record<string, number> = {
-  SUN: 0, MON: 1, TUE: 2, WED: 3, THU: 4, FRI: 5, SAT: 6,
-  SUNDAY: 0, MONDAY: 1, TUESDAY: 2, WEDNESDAY: 3, THURSDAY: 4, FRIDAY: 5, SATURDAY: 6,
+  SUN: 0,
+  MON: 1,
+  TUE: 2,
+  WED: 3,
+  THU: 4,
+  FRI: 5,
+  SAT: 6,
+  SUNDAY: 0,
+  MONDAY: 1,
+  TUESDAY: 2,
+  WEDNESDAY: 3,
+  THURSDAY: 4,
+  FRIDAY: 5,
+  SATURDAY: 6,
 }
 
 function parseDaySpec(spec: string): number[] {

@@ -1,10 +1,14 @@
 import { spawn } from 'child_process'
-import { resolve, isAbsolute } from 'path'
+import { isAbsolute, resolve } from 'path'
 import type { Tool, ToolResult } from '../types'
 
 const MAX_OUTPUT = 20000
 
-function runGit(args: string[], cwd: string, timeout = 15000): Promise<{ code: number; stdout: string; stderr: string }> {
+function runGit(
+  args: string[],
+  cwd: string,
+  timeout = 15000,
+): Promise<{ code: number; stdout: string; stderr: string }> {
   return new Promise((res) => {
     let stdout = ''
     let stderr = ''
@@ -17,8 +21,12 @@ function runGit(args: string[], cwd: string, timeout = 15000): Promise<{ code: n
       proc.kill('SIGTERM')
     }, timeout)
 
-    proc.stdout.on('data', (d) => { stdout += d.toString() })
-    proc.stderr.on('data', (d) => { stderr += d.toString() })
+    proc.stdout.on('data', (d) => {
+      stdout += d.toString()
+    })
+    proc.stderr.on('data', (d) => {
+      stderr += d.toString()
+    })
 
     proc.on('error', (err) => {
       clearTimeout(timer)
@@ -40,7 +48,7 @@ function truncate(text: string, max = MAX_OUTPUT): string {
   if (text.length <= max) return text
   const half = Math.floor(max / 2)
   const omitted = text.length - max
-  return text.slice(0, half) + `\n\n... (${omitted} characters omitted) ...\n\n` + text.slice(-half)
+  return `${text.slice(0, half)}\n\n... (${omitted} characters omitted) ...\n\n${text.slice(-half)}`
 }
 
 function resolveCwd(dir: string | undefined, cwd: string): string {
@@ -53,7 +61,8 @@ function resolveCwd(dir: string | undefined, cwd: string): string {
 export const gitStatusTool: Tool = {
   definition: {
     name: 'git_status',
-    description: 'Show the current git repository state: branch name, staged changes, unstaged changes, and untracked files. Output is compact and structured for easy parsing.',
+    description:
+      'Show the current git repository state: branch name, staged changes, unstaged changes, and untracked files. Output is compact and structured for easy parsing.',
     parameters: {
       type: 'object',
       properties: {
@@ -116,7 +125,8 @@ export const gitStatusTool: Tool = {
 export const gitDiffTool: Tool = {
   definition: {
     name: 'git_diff',
-    description: 'Show git diff output. Can show staged changes, unstaged changes, or diff between references. Large diffs are truncated to protect context window.',
+    description:
+      'Show git diff output. Can show staged changes, unstaged changes, or diff between references. Large diffs are truncated to protect context window.',
     parameters: {
       type: 'object',
       properties: {
@@ -131,7 +141,8 @@ export const gitDiffTool: Tool = {
         },
         ref: {
           type: 'string',
-          description: 'Diff against a specific ref (branch, tag, commit hash). Overrides staged flag.',
+          description:
+            'Diff against a specific ref (branch, tag, commit hash). Overrides staged flag.',
         },
         context_lines: {
           type: 'number',
@@ -175,14 +186,14 @@ export const gitDiffTool: Tool = {
     }
 
     // Now get the actual patch
-    const patchArgs = args.filter(a => a !== '--stat')
+    const patchArgs = args.filter((a) => a !== '--stat')
     const patch = await runGit(patchArgs, dir)
 
     if (!patch.stdout.trim() && !stat.stdout.trim()) {
       return { success: true, output: 'No differences found' }
     }
 
-    const output = stat.stdout.trim() + '\n\n' + truncate(patch.stdout.trim())
+    const output = `${stat.stdout.trim()}\n\n${truncate(patch.stdout.trim())}`
     return { success: true, output }
   },
 }
@@ -192,7 +203,8 @@ export const gitDiffTool: Tool = {
 export const gitLogTool: Tool = {
   definition: {
     name: 'git_log',
-    description: 'Show recent commit history in a compact format. Each entry shows hash, author, date, and message.',
+    description:
+      'Show recent commit history in a compact format. Each entry shows hash, author, date, and message.',
     parameters: {
       type: 'object',
       properties: {
@@ -228,9 +240,7 @@ export const gitLogTool: Tool = {
     const file = params.file as string | undefined
     const oneline = params.oneline as boolean | undefined
 
-    const format = oneline
-      ? '--format=%h %s'
-      : '--format=%h %an %ad %s'
+    const format = oneline ? '--format=%h %s' : '--format=%h %an %ad %s'
 
     const args = ['log', format, `--date=short`, `-n${count}`, ref]
 
@@ -252,7 +262,8 @@ export const gitLogTool: Tool = {
 export const gitCommitTool: Tool = {
   definition: {
     name: 'git_commit',
-    description: 'Stage files and create a git commit. If no files are specified, commits whatever is already staged. Does NOT push.',
+    description:
+      'Stage files and create a git commit. If no files are specified, commits whatever is already staged. Does NOT push.',
     parameters: {
       type: 'object',
       properties: {
@@ -313,7 +324,8 @@ export const gitCommitTool: Tool = {
 export const gitShowTool: Tool = {
   definition: {
     name: 'git_show',
-    description: 'Show the contents of a specific commit: message, author, date, and diff. Large diffs are truncated.',
+    description:
+      'Show the contents of a specific commit: message, author, date, and diff. Large diffs are truncated.',
     parameters: {
       type: 'object',
       properties: {
@@ -353,7 +365,8 @@ export const gitShowTool: Tool = {
 
     const patch = await runGit(patchArgs, dir)
 
-    const output = stat.stdout.trim() + (patch.stdout.trim() ? '\n\n' + truncate(patch.stdout.trim()) : '')
+    const output =
+      stat.stdout.trim() + (patch.stdout.trim() ? `\n\n${truncate(patch.stdout.trim())}` : '')
     return { success: true, output }
   },
 }

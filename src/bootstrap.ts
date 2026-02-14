@@ -1,16 +1,21 @@
 import { join } from 'path'
+import { BrowserManager, type BrowserManager as BrowserManagerType } from './browser'
 import type { RuntimeConfig } from './config'
+import { type ConversationStore, createConversationStore } from './conversation'
+import { createMemoryManager, type MemoryManager, Qwen3VLEmbeddings } from './memory'
 import { createProviderRegistry, type ProviderRegistry } from './providers'
 import { createRouter, type Router } from './routing'
-import { createDefaultToolExecutor, type ToolExecutor, type CodeAgentConfig, type GitHubConfig } from './tools'
-import { createMemoryManager, Qwen3VLEmbeddings, type MemoryManager } from './memory'
-import { createConversationStore, type ConversationStore } from './conversation'
-import { createStatsTracker, type StatsTracker } from './tracking'
-import { createTaskStore, type TaskStore } from './tasks'
 import { buildSafetyConfig } from './safety/config-bridge'
 import { createSkillManager } from './skills'
 import type { Skill } from './skills/types'
-import { BrowserManager, type BrowserManager as BrowserManagerType } from './browser'
+import { createTaskStore, type TaskStore } from './tasks'
+import {
+  type CodeAgentConfig,
+  createDefaultToolExecutor,
+  type GitHubConfig,
+  type ToolExecutor,
+} from './tools'
+import { createStatsTracker, type StatsTracker } from './tracking'
 import { log } from './util/logger'
 
 /**
@@ -50,7 +55,10 @@ export function createConversations(config: RuntimeConfig): ConversationStore | 
       })
     }
 
-    log.info('main', `Conversation persistence enabled (${config.conversation.maxAgeDays}d retention, ${config.conversation.maxMessages} max messages)`)
+    log.info(
+      'main',
+      `Conversation persistence enabled (${config.conversation.maxAgeDays}d retention, ${config.conversation.maxMessages} max messages)`,
+    )
     return store
   } catch (error) {
     log.warn('main', 'Failed to initialize conversation store:', error)
@@ -69,10 +77,7 @@ export function createMemory(config: RuntimeConfig): MemoryManager | undefined {
   }
 
   try {
-    const embeddings = new Qwen3VLEmbeddings(
-      embeddingsConfig.endpoint,
-      embeddingsConfig.dimensions
-    )
+    const embeddings = new Qwen3VLEmbeddings(embeddingsConfig.endpoint, embeddingsConfig.dimensions)
 
     const memory = createMemoryManager({
       workspaceDir: config.workspace.path,
@@ -80,7 +85,10 @@ export function createMemory(config: RuntimeConfig): MemoryManager | undefined {
       embeddingDimensions: embeddingsConfig.dimensions,
     })
 
-    log.info('main', `Memory system initialized: ${embeddingsConfig.model} @ ${embeddingsConfig.endpoint}`)
+    log.info(
+      'main',
+      `Memory system initialized: ${embeddingsConfig.model} @ ${embeddingsConfig.endpoint}`,
+    )
     return memory
   } catch (error) {
     log.warn('main', 'Failed to initialize memory system:', error)
@@ -127,7 +135,7 @@ async function loadSkills(config: RuntimeConfig): Promise<Skill[]> {
     await skillManager.loadFromDirectories(allDirs)
     const enabled = skillManager.getEnabled()
     if (enabled.length > 0) {
-      log.info('main', `Skills loaded: ${enabled.map(s => s.name).join(', ')}`)
+      log.info('main', `Skills loaded: ${enabled.map((s) => s.name).join(', ')}`)
     }
     return enabled
   } catch (error) {
@@ -173,9 +181,25 @@ export async function createAppServices(config: RuntimeConfig): Promise<AppServi
   const skills = await loadSkills(config)
   const router = createRouter(config, skills)
   const browser = new BrowserManager()
-  const toolExecutor = createDefaultToolExecutor(memory, getCodeAgentConfig(config), getGitHubConfig(config), browser)
+  const toolExecutor = createDefaultToolExecutor(
+    memory,
+    getCodeAgentConfig(config),
+    getGitHubConfig(config),
+    browser,
+  )
   toolExecutor.setSafety(buildSafetyConfig(config))
   const stats = createStatsTracker()
 
-  return { config, providers, memory, conversations, taskStore, router, toolExecutor, stats, skills, browser }
+  return {
+    config,
+    providers,
+    memory,
+    conversations,
+    taskStore,
+    router,
+    toolExecutor,
+    stats,
+    skills,
+    browser,
+  }
 }
