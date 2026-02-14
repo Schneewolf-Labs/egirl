@@ -4,6 +4,7 @@ import { createDiscordChannel } from '../channels'
 import { createAppServices } from '../bootstrap'
 import { applyLogLevel } from '../util/args'
 import { log } from '../util/logger'
+import { gatherStandup } from '../standup'
 
 export async function runDiscord(config: RuntimeConfig, args: string[]): Promise<void> {
   applyLogLevel(args)
@@ -14,6 +15,9 @@ export async function runDiscord(config: RuntimeConfig, args: string[]): Promise
   }
 
   const { providers, memory, conversations, router, toolExecutor, skills } = await createAppServices(config)
+
+  // Gather workspace standup for agent context
+  const standup = await gatherStandup(config.workspace.path)
 
   // Create agent factory for per-session loops
   const agentFactory: AgentFactory = (sessionId: string) => createAgentLoop({
@@ -26,6 +30,7 @@ export async function runDiscord(config: RuntimeConfig, args: string[]): Promise
     memory,
     conversationStore: conversations,
     skills,
+    additionalContext: standup.context || undefined,
   })
 
   const discord = createDiscordChannel(agentFactory, config.channels.discord)

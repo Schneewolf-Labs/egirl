@@ -4,6 +4,7 @@ import { createXMPPChannel } from '../channels'
 import { createAppServices } from '../bootstrap'
 import { applyLogLevel } from '../util/args'
 import { log } from '../util/logger'
+import { gatherStandup } from '../standup'
 
 export async function runXMPP(config: RuntimeConfig, args: string[]): Promise<void> {
   applyLogLevel(args)
@@ -15,6 +16,9 @@ export async function runXMPP(config: RuntimeConfig, args: string[]): Promise<vo
 
   const { providers, router, toolExecutor, skills } = await createAppServices(config)
 
+  // Gather workspace standup for agent context
+  const standup = await gatherStandup(config.workspace.path)
+
   const agent = createAgentLoop({
     config,
     router,
@@ -23,6 +27,7 @@ export async function runXMPP(config: RuntimeConfig, args: string[]): Promise<vo
     remoteProvider: providers.remote,
     sessionId: 'xmpp:default',
     skills,
+    additionalContext: standup.context || undefined,
   })
 
   const xmpp = createXMPPChannel(agent, config.channels.xmpp)

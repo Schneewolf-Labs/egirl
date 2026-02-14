@@ -4,6 +4,7 @@ import { createAPIServer } from '../api'
 import { createAppServices } from '../bootstrap'
 import { applyLogLevel } from '../util/args'
 import { log } from '../util/logger'
+import { gatherStandup } from '../standup'
 
 export async function runAPI(config: RuntimeConfig, args: string[]): Promise<void> {
   applyLogLevel(args)
@@ -16,6 +17,9 @@ export async function runAPI(config: RuntimeConfig, args: string[]): Promise<voi
 
   const { providers, memory, router, toolExecutor, stats, skills } = await createAppServices(config)
 
+  // Gather workspace standup for agent context
+  const standup = await gatherStandup(config.workspace.path)
+
   const agent = createAgentLoop({
     config,
     router,
@@ -24,6 +28,7 @@ export async function runAPI(config: RuntimeConfig, args: string[]): Promise<voi
     remoteProvider: providers.remote,
     sessionId: 'api:default',
     skills,
+    additionalContext: standup.context || undefined,
   })
 
   const api = createAPIServer({ port, host }, {
