@@ -99,13 +99,16 @@ export function getCodeAgentConfig(config: RuntimeConfig): CodeAgentConfig | und
 }
 
 /**
- * Load skills from configured directories.
+ * Load skills from bundled + configured directories.
+ * Bundled skills are loaded first so user directories can override them.
  */
 async function loadSkills(config: RuntimeConfig): Promise<Skill[]> {
   const skillManager = createSkillManager()
+  const bundledDir = join(import.meta.dir, 'skills', 'bundled')
+  const allDirs = [bundledDir, ...config.skills.dirs]
 
   try {
-    await skillManager.loadFromDirectories(config.skills.dirs)
+    await skillManager.loadFromDirectories(allDirs)
     const enabled = skillManager.getEnabled()
     if (enabled.length > 0) {
       log.info('main', `Skills loaded: ${enabled.map(s => s.name).join(', ')}`)
