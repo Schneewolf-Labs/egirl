@@ -18,11 +18,13 @@ egirl is a personal AI agent for users with local GPU inference. It runs most ta
 ## Features
 
 - **Local-first** - Runs on your hardware, zero API cost for most tasks
-- **Smart routing** - Escalates to Claude/GPT only when needed
-- **Memory system** - Hybrid search (keyword + semantic) with multimodal embeddings
-- **Discord & CLI** - Talk via [Discord](DISCORD.md) DMs or terminal
-- **Tool use** - File ops, command execution, memory search
-- **Customizable personality** - Kira is the default, make her your own
+- **[Smart routing](docs/routing.md)** - Escalates to Claude/GPT only when needed, with configurable thresholds and mid-conversation escalation
+- **[Memory system](docs/memory.md)** - Hybrid search (keyword + semantic) with multimodal embeddings
+- **Multiple channels** - [Discord](DISCORD.md) DMs, terminal CLI, [XMPP/Jabber](docs/communication-protocols.md), [HTTP API](docs/configuration.md#channelsapi), and [Claude Code bridge](docs/claude-code.md)
+- **[Tool use](docs/tools.md)** - File ops, git, command execution, memory search, web research, screenshots, and code agent delegation
+- **[Vision](docs/vision.md)** - Screenshot analysis and image understanding via Qwen3-VL
+- **[Skills](docs/skills.md)** - Extend capabilities with reusable Markdown instruction sets
+- **[Customizable personality](docs/personality.md)** - Kira is the default, make her your own
 
 ## Quick Start
 
@@ -48,6 +50,8 @@ bun run start discord
 ```
 
 ## Configuration
+
+See [docs/configuration.md](docs/configuration.md) for the full reference including all channel options, routing rules, and skill directories.
 
 ### egirl.toml
 
@@ -91,11 +95,16 @@ DISCORD_TOKEN=...              # Required for Discord bot
 bun run start cli              # Interactive CLI
 bun run start cli -m "hello"   # Single message
 bun run start discord          # Discord bot
+bun run start claude-code      # Claude Code bridge (or: cc)
+bun run start xmpp             # XMPP/Jabber chat
+bun run start api              # HTTP REST API server
 bun run start status           # Check config and connections
 bun run start help             # Show all commands
 ```
 
 ## Architecture
+
+See [docs/architecture.md](docs/architecture.md) for the full system overview, request lifecycle, module dependencies, and design decisions.
 
 ```
 egirl/
@@ -106,7 +115,7 @@ egirl/
 │   ├── routing/               # Local vs remote decisions
 │   ├── memory/                # SQLite + embeddings search
 │   ├── tools/                 # File ops, exec, memory
-│   ├── channels/              # CLI, Discord, Claude Code
+│   ├── channels/              # CLI, Discord, Claude Code, XMPP, API
 │   ├── skills/                # Skill loading and management
 │   └── tracking/              # Usage stats and cost tracking
 ├── services/
@@ -115,6 +124,8 @@ egirl/
 ```
 
 ## Customizing Kira
+
+See [docs/personality.md](docs/personality.md) for the full guide on creating custom personalities with examples.
 
 Personality files live in `~/.egirl/workspace/`:
 
@@ -127,9 +138,11 @@ Edit these to customize. Or replace Kira entirely.
 
 ## Tools
 
+See [docs/tools.md](docs/tools.md) for the full reference with parameters and examples. egirl ships with 18 built-in tools. Tools use the [Qwen3 native tool calling format](docs/tool-format.md).
+
 | Tool | Description |
 |------|-------------|
-| `read_file` | Read file contents |
+| `read_file` | Read file contents (with optional line ranges) |
 | `write_file` | Write to file |
 | `edit_file` | String replacement edit |
 | `execute_command` | Run shell commands |
@@ -137,6 +150,16 @@ Edit these to customize. Or replace Kira entirely.
 | `memory_search` | Hybrid search memories |
 | `memory_get` | Get memory by key |
 | `memory_set` | Store a memory |
+| `memory_delete` | Delete a memory |
+| `memory_list` | List all stored memories |
+| `screenshot` | Capture display screenshot |
+| `web_research` | Fetch and read web pages |
+| `git_status` | Show repo state |
+| `git_diff` | Show changes |
+| `git_log` | Show commit history |
+| `git_commit` | Stage and commit |
+| `git_show` | Show commit contents |
+| `code_agent` | Delegate tasks to Claude Code |
 
 ## Documentation
 
@@ -146,13 +169,16 @@ Edit these to customize. Or replace Kira entirely.
 | [Configuration](docs/configuration.md) | Complete reference for `egirl.toml` and `.env` |
 | [Routing & Escalation](docs/routing.md) | How requests are routed between local and remote models |
 | [Memory System](docs/memory.md) | Hybrid search, embeddings, storage, and search strategies |
-| [Tools Reference](docs/tools.md) | All 7 built-in tools with parameters and examples |
+| [Tools Reference](docs/tools.md) | All 18 built-in tools with parameters and examples |
 | [Claude Code Integration](docs/claude-code.md) | Using egirl as a Claude Code supervisor |
 | [Skills](docs/skills.md) | Creating and managing skill files |
 | [Development Guide](docs/development.md) | Setup, testing, code style, and contributing |
 | [Discord Setup](DISCORD.md) | Step-by-step Discord bot configuration |
 | [Tool Format](docs/tool-format.md) | Qwen3 native tool calling specification |
 | [Vision](docs/vision.md) | Multimodal capabilities with Qwen3-VL |
+| [Personality](docs/personality.md) | Customizing agent personality via workspace files |
+| [Communication Protocols](docs/communication-protocols.md) | Evaluation of self-hosted chat protocols (XMPP, Matrix, SimpleX, IRC) |
+| [Conversation Persistence](docs/exploration-conversation-persistence.md) | Design exploration for persisting conversations across restarts |
 | [Fine-Tuning](docs/fine-tuning.md) | Training data strategy for custom models |
 
 ## Requirements
