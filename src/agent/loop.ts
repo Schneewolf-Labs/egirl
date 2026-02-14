@@ -106,8 +106,17 @@ export class AgentLoop {
       if (currentTarget === 'local' && this.remoteProvider) {
         const escalationDecision = analyzeResponseForEscalation(response, this.config.routing.escalationThreshold)
         if (escalationDecision.shouldEscalate) {
-          log.info('agent', 'Escalating to remote model')
+          log.info('agent', `Escalating to remote model: ${escalationDecision.reason}`)
           events?.onEscalation?.(escalationDecision, currentProvider.name, this.remoteProvider.name)
+
+          // Preserve the local response in context so the remote model has full history
+          if (response.content) {
+            addMessage(this.context, {
+              role: 'assistant',
+              content: `[Local model response (escalating due to ${escalationDecision.reason})]: ${response.content}`,
+            })
+          }
+
           currentProvider = this.remoteProvider
           currentTarget = 'remote'
           escalated = true
@@ -165,6 +174,26 @@ export class AgentLoop {
       break
     }
 
+    // If we exhausted maxTurns without a final text response, recover what we can
+    if (turns >= maxTurns && !finalContent) {
+      log.warn('agent', `Exhausted max turns (${maxTurns}) without a final response`)
+
+      // Find the last assistant message with content
+      for (let i = this.context.messages.length - 1; i >= 0; i--) {
+        const msg = this.context.messages[i]
+        if (msg?.role === 'assistant' && msg.content && typeof msg.content === 'string' && msg.content.trim()) {
+          finalContent = msg.content
+          break
+        }
+      }
+
+      if (!finalContent) {
+        finalContent = '[Agent reached maximum turns without producing a final response]'
+      }
+
+      events?.onResponseComplete?.()
+    }
+
     return {
       content: finalContent,
       target: currentTarget,
@@ -209,7 +238,7 @@ export class AgentLoop {
     log.debug('agent', `Sending ${messages.length} messages to ${provider.name} (budget: ${contextLength}t)`)
 
     try {
-      return await provider.chat({ messages, tools, onToken })
+      return await this.chatWithRetry(provider, messages, tools, onToken)
     } catch (error) {
       if (!(error instanceof ContextSizeError)) throw error
 
@@ -232,8 +261,58 @@ export class AgentLoop {
         ...refitted,
       ]
 
-      return await provider.chat({ messages: retryMessages, tools, onToken })
+      return await this.chatWithRetry(provider, retryMessages, tools, onToken)
     }
+  }
+
+  /**
+   * Call provider.chat with retry on transient errors (network failures, 5xx).
+   * Retries up to 2 times with exponential backoff (1s, 2s).
+   */
+  private async chatWithRetry(
+    provider: LLMProvider,
+    messages: ChatMessage[],
+    tools: ToolDefinition[],
+    onToken?: (token: string) => void,
+    maxRetries = 2
+  ): Promise<ChatResponse> {
+    let lastError: unknown
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        return await provider.chat({ messages, tools, onToken })
+      } catch (error) {
+        lastError = error
+
+        // Don't retry on ContextSizeError or other non-transient errors
+        if (error instanceof ContextSizeError) throw error
+
+        const isTransient = this.isTransientError(error)
+        if (!isTransient || attempt >= maxRetries) throw error
+
+        const delayMs = 1000 * (attempt + 1)
+        log.warn('agent', `Provider error (attempt ${attempt + 1}/${maxRetries + 1}), retrying in ${delayMs}ms: ${error instanceof Error ? error.message : String(error)}`)
+        await new Promise(resolve => setTimeout(resolve, delayMs))
+      }
+    }
+
+    throw lastError
+  }
+
+  private isTransientError(error: unknown): boolean {
+    if (!(error instanceof Error)) return false
+    const msg = error.message.toLowerCase()
+    // Network failures
+    if (msg.includes('fetch failed') || msg.includes('econnrefused') ||
+        msg.includes('econnreset') || msg.includes('etimedout') ||
+        msg.includes('network') || msg.includes('socket')) {
+      return true
+    }
+    // HTTP 5xx errors
+    if (/\b5\d{2}\b/.test(msg)) return true
+    // Rate limiting (429)
+    if (msg.includes('429') || msg.includes('rate limit')) return true
+    return false
   }
 
   private async executeTools(toolCalls: ToolCall[]): Promise<Map<string, ToolResult>> {
@@ -248,16 +327,19 @@ export class AgentLoop {
       return this.executeTools(toolCalls)
     }
 
+    // Run sequentially when hooks are present to avoid race conditions
+    // (e.g., onBeforeToolExec prompting for user confirmation concurrently)
     const results = new Map<string, ToolResult>()
 
-    const executions = toolCalls.map(async (call) => {
+    for (const call of toolCalls) {
       // Pre-execution hook — skip if it returns false
       if (events?.onBeforeToolExec) {
         const shouldRun = await events.onBeforeToolExec(call)
         if (shouldRun === false) {
           const skipped: ToolResult = { success: false, output: `Tool ${call.name} skipped by hook` }
           events?.onAfterToolExec?.(call, skipped)
-          return { id: call.id, result: skipped }
+          results.set(call.id, skipped)
+          continue
         }
       }
 
@@ -266,12 +348,7 @@ export class AgentLoop {
       // Post-execution hook
       events?.onAfterToolExec?.(call, result)
 
-      return { id: call.id, result }
-    })
-
-    const resolved = await Promise.all(executions)
-    for (const { id, result } of resolved) {
-      results.set(id, result)
+      results.set(call.id, result)
     }
 
     return results

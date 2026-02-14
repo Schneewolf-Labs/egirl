@@ -306,8 +306,8 @@ export async function fitToContextWindow(
   if (droppedCount > 0) {
     log.info('context-window', `Dropped ${droppedCount} older messages, kept ${result.length}`)
     result.unshift({
-      role: 'system',
-      content: `[Earlier conversation (${droppedCount} messages) was trimmed to fit context window.]`,
+      role: 'user',
+      content: `[System notice: Earlier conversation (${droppedCount} messages) was trimmed to fit context window.]`,
     })
   }
 

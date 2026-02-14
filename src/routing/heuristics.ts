@@ -1,4 +1,5 @@
 import type { ChatMessage } from '../providers/types'
+import { getTextContent } from '../providers/types'
 
 export interface HeuristicResult {
   shouldEscalate: boolean
@@ -43,7 +44,7 @@ export function analyzeMessageHeuristics(messages: ChatMessage[]): HeuristicResu
     return { shouldEscalate: false, confidence: 0.5 }
   }
 
-  const content = lastMessage.content.toLowerCase()
+  const content = getTextContent(lastMessage.content).toLowerCase()
   const wordCount = content.split(/\s+/).length
 
   // Very short messages are usually simple
