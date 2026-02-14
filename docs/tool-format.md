@@ -60,7 +60,8 @@ result from second tool
 - No `tool_call_id` — responses match calls by position
 - Parse tool calls with: `/<tool_call>\s*(\{[\s\S]*?\})\s*<\/tool_call>/g`
 - Always include `\n` after opening and before closing tags (matches training data)
-- Stop token: `</tool_call>` signals end of tool call generation
+- The model may generate multiple `<tool_call>` blocks in a single turn for parallel tool use
+- Do not use `</tool_call>` as a stop token — the model stops naturally after generating all tool calls
 
 ## Training Data Format
 

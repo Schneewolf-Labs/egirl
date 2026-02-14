@@ -3,10 +3,13 @@ import { ContextSizeError } from '../providers/types'
 import type { RuntimeConfig } from '../config'
 import type { ToolExecutor, ToolResult } from '../tools'
 import type { AgentEventHandler } from './events'
-import { Router, shouldRetryWithRemote } from '../routing'
+import type { ConversationStore } from '../conversation'
+import type { MemoryManager } from '../memory'
+import { Router, shouldRetryWithRemote, analyzeResponseForEscalation } from '../routing'
 import { createAgentContext, addMessage, type AgentContext } from './context'
 import { fitToContextWindow } from './context-window'
-import { createLlamaCppTokenizer } from '../providers/llamacpp'
+import { retrieveForContext } from '../memory/retrieval'
+import { createLlamaCppTokenizer } from '../providers/llamacpp-tokenizer'
 import { log } from '../util/logger'
 
 /** Default context limits for remote providers */
@@ -29,30 +32,49 @@ export interface AgentResponse {
   turns: number
 }
 
+export interface AgentLoopDeps {
+  config: RuntimeConfig
+  router: Router
+  toolExecutor: ToolExecutor
+  localProvider: LLMProvider
+  remoteProvider: LLMProvider | null
+  sessionId: string
+  memory?: MemoryManager
+  conversationStore?: ConversationStore
+}
+
 export class AgentLoop {
   private config: RuntimeConfig
   private router: Router
   private toolExecutor: ToolExecutor
   private localProvider: LLMProvider
   private remoteProvider: LLMProvider | null
+  private memory: MemoryManager | null
   private context: AgentContext
   private tokenizer: Tokenizer
+  private conversationStore: ConversationStore | null
+  private persistedIndex: number = 0
 
-  constructor(
-    config: RuntimeConfig,
-    router: Router,
-    toolExecutor: ToolExecutor,
-    localProvider: LLMProvider,
-    remoteProvider: LLMProvider | null,
-    sessionId: string
-  ) {
-    this.config = config
-    this.router = router
-    this.toolExecutor = toolExecutor
-    this.localProvider = localProvider
-    this.remoteProvider = remoteProvider
-    this.context = createAgentContext(config, sessionId)
-    this.tokenizer = createLlamaCppTokenizer(config.local.endpoint)
+  constructor(deps: AgentLoopDeps) {
+    this.config = deps.config
+    this.router = deps.router
+    this.toolExecutor = deps.toolExecutor
+    this.localProvider = deps.localProvider
+    this.remoteProvider = deps.remoteProvider
+    this.memory = deps.memory ?? null
+    this.conversationStore = deps.conversationStore ?? null
+    this.context = createAgentContext(deps.config, deps.sessionId)
+    this.tokenizer = createLlamaCppTokenizer(deps.config.local.endpoint)
+
+    // Load conversation history from store
+    if (this.conversationStore) {
+      const history = this.conversationStore.loadMessages(deps.sessionId)
+      if (history.length > 0) {
+        this.context.messages = history
+        this.persistedIndex = history.length
+        log.info('agent', `Loaded ${history.length} messages for session ${deps.sessionId}`)
+      }
+    }
   }
 
   async run(userMessage: string, options: AgentLoopOptions = {}): Promise<AgentResponse> {
@@ -61,8 +83,21 @@ export class AgentLoop {
     // Add user message to context
     addMessage(this.context, { role: 'user', content: userMessage })
 
+    // Proactive memory retrieval — inject relevant memories before the LLM sees the message
+    if (this.memory && this.config.memory.proactiveRetrieval) {
+      const recalled = await retrieveForContext(userMessage, this.memory, {
+        scoreThreshold: this.config.memory.scoreThreshold,
+        maxResults: this.config.memory.maxResults,
+        maxTokensBudget: this.config.memory.maxTokensBudget,
+      })
+      if (recalled) {
+        addMessage(this.context, { role: 'system', content: recalled })
+      }
+    }
+
     // Route the request
     const routingDecision = this.router.route(this.context.messages, this.toolExecutor.listTools())
+    events?.onRoutingDecision?.(routingDecision)
 
     let provider: LLMProvider = routingDecision.target === 'local' ? this.localProvider : (this.remoteProvider ?? this.localProvider)
 
@@ -83,20 +118,39 @@ export class AgentLoop {
       turns++
 
       const tools = this.toolExecutor.getDefinitions()
-      const response = await this.chatWithContextWindow(
-        currentProvider,
-        tools,
-        currentTarget,
-        events?.onToken
-      )
+
+      let response: ChatResponse
+      try {
+        response = await this.chatWithContextWindow(
+          currentProvider,
+          tools,
+          currentTarget,
+          events?.onToken
+        )
+      } catch (error) {
+        const err = error instanceof Error ? error : new Error(String(error))
+        events?.onError?.(err)
+        throw error
+      }
 
       totalUsage.input_tokens += response.usage.input_tokens
       totalUsage.output_tokens += response.usage.output_tokens
 
       // Check for escalation if we're using local
       if (currentTarget === 'local' && this.remoteProvider) {
-        if (shouldRetryWithRemote(response, this.config.routing.escalationThreshold)) {
-          log.info('agent', 'Escalating to remote model')
+        const escalationDecision = analyzeResponseForEscalation(response, this.config.routing.escalationThreshold)
+        if (escalationDecision.shouldEscalate) {
+          log.info('agent', `Escalating to remote model: ${escalationDecision.reason}`)
+          events?.onEscalation?.(escalationDecision, currentProvider.name, this.remoteProvider.name)
+
+          // Preserve the local response in context so the remote model has full history
+          if (response.content) {
+            addMessage(this.context, {
+              role: 'assistant',
+              content: `[Local model response (escalating due to ${escalationDecision.reason})]: ${response.content}`,
+            })
+          }
+
           currentProvider = this.remoteProvider
           currentTarget = 'remote'
           escalated = true
@@ -120,7 +174,7 @@ export class AgentLoop {
         // Emit tool call start event
         events?.onToolCallStart?.(response.tool_calls)
 
-        const toolResults = await this.executeTools(response.tool_calls)
+        const toolResults = await this.executeToolsWithHooks(response.tool_calls, events)
 
         for (const [callId, result] of toolResults) {
           log.debug('agent', `Tool ${callId}: ${result.output.substring(0, 100)}${result.output.length > 100 ? '...' : ''}`)
@@ -135,7 +189,9 @@ export class AgentLoop {
           })
 
           if (result.suggest_escalation && currentTarget === 'local' && this.remoteProvider) {
+            const escalationDecision = analyzeResponseForEscalation(response, this.config.routing.escalationThreshold)
             log.info('agent', `Tool suggests escalation: ${result.escalation_reason}`)
+            events?.onEscalation?.(escalationDecision, currentProvider.name, this.remoteProvider.name)
             currentProvider = this.remoteProvider
             currentTarget = 'remote'
             escalated = true
@@ -150,6 +206,39 @@ export class AgentLoop {
       addMessage(this.context, { role: 'assistant', content: finalContent })
       events?.onResponseComplete?.()
       break
+    }
+
+    // If we exhausted maxTurns without a final text response, recover what we can
+    if (turns >= maxTurns && !finalContent) {
+      log.warn('agent', `Exhausted max turns (${maxTurns}) without a final response`)
+
+      // Find the last assistant message with content
+      for (let i = this.context.messages.length - 1; i >= 0; i--) {
+        const msg = this.context.messages[i]
+        if (msg?.role === 'assistant' && msg.content && typeof msg.content === 'string' && msg.content.trim()) {
+          finalContent = msg.content
+          break
+        }
+      }
+
+      if (!finalContent) {
+        finalContent = '[Agent reached maximum turns without producing a final response]'
+      }
+
+      events?.onResponseComplete?.()
+    }
+
+    // Persist new messages from this run
+    if (this.conversationStore) {
+      try {
+        const newMessages = this.context.messages.slice(this.persistedIndex)
+        if (newMessages.length > 0) {
+          this.conversationStore.appendMessages(this.context.sessionId, newMessages)
+          this.persistedIndex = this.context.messages.length
+        }
+      } catch (error) {
+        log.warn('agent', 'Failed to persist conversation:', error)
+      }
     }
 
     return {
@@ -196,7 +285,7 @@ export class AgentLoop {
     log.debug('agent', `Sending ${messages.length} messages to ${provider.name} (budget: ${contextLength}t)`)
 
     try {
-      return await provider.chat({ messages, tools, onToken })
+      return await this.chatWithRetry(provider, messages, tools, onToken)
     } catch (error) {
       if (!(error instanceof ContextSizeError)) throw error
 
@@ -219,12 +308,97 @@ export class AgentLoop {
         ...refitted,
       ]
 
-      return await provider.chat({ messages: retryMessages, tools, onToken })
+      return await this.chatWithRetry(provider, retryMessages, tools, onToken)
     }
+  }
+
+  /**
+   * Call provider.chat with retry on transient errors (network failures, 5xx).
+   * Retries up to 2 times with exponential backoff (1s, 2s).
+   */
+  private async chatWithRetry(
+    provider: LLMProvider,
+    messages: ChatMessage[],
+    tools: ToolDefinition[],
+    onToken?: (token: string) => void,
+    maxRetries = 2
+  ): Promise<ChatResponse> {
+    let lastError: unknown
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        return await provider.chat({ messages, tools, onToken })
+      } catch (error) {
+        lastError = error
+
+        // Don't retry on ContextSizeError or other non-transient errors
+        if (error instanceof ContextSizeError) throw error
+
+        const isTransient = this.isTransientError(error)
+        if (!isTransient || attempt >= maxRetries) throw error
+
+        const delayMs = 1000 * (attempt + 1)
+        log.warn('agent', `Provider error (attempt ${attempt + 1}/${maxRetries + 1}), retrying in ${delayMs}ms: ${error instanceof Error ? error.message : String(error)}`)
+        await new Promise(resolve => setTimeout(resolve, delayMs))
+      }
+    }
+
+    throw lastError
+  }
+
+  private isTransientError(error: unknown): boolean {
+    if (!(error instanceof Error)) return false
+    const msg = error.message.toLowerCase()
+    // Network failures
+    if (msg.includes('fetch failed') || msg.includes('econnrefused') ||
+        msg.includes('econnreset') || msg.includes('etimedout') ||
+        msg.includes('network') || msg.includes('socket')) {
+      return true
+    }
+    // HTTP 5xx errors
+    if (/\b5\d{2}\b/.test(msg)) return true
+    // Rate limiting (429)
+    if (msg.includes('429') || msg.includes('rate limit')) return true
+    return false
   }
 
   private async executeTools(toolCalls: ToolCall[]): Promise<Map<string, ToolResult>> {
     return this.toolExecutor.executeAll(toolCalls, this.context.workspaceDir)
+  }
+
+  private async executeToolsWithHooks(
+    toolCalls: ToolCall[],
+    events?: AgentEventHandler
+  ): Promise<Map<string, ToolResult>> {
+    if (!events?.onBeforeToolExec && !events?.onAfterToolExec) {
+      return this.executeTools(toolCalls)
+    }
+
+    // Run sequentially when hooks are present to avoid race conditions
+    // (e.g., onBeforeToolExec prompting for user confirmation concurrently)
+    const results = new Map<string, ToolResult>()
+
+    for (const call of toolCalls) {
+      // Pre-execution hook — skip if it returns false
+      if (events?.onBeforeToolExec) {
+        const shouldRun = await events.onBeforeToolExec(call)
+        if (shouldRun === false) {
+          const skipped: ToolResult = { success: false, output: `Tool ${call.name} skipped by hook` }
+          events?.onAfterToolExec?.(call, skipped)
+          results.set(call.id, skipped)
+          continue
+        }
+      }
+
+      const result = await this.toolExecutor.execute(call, this.context.workspaceDir)
+
+      // Post-execution hook
+      events?.onAfterToolExec?.(call, result)
+
+      results.set(call.id, result)
+    }
+
+    return results
   }
 
   getContext(): AgentContext {
@@ -233,23 +407,22 @@ export class AgentLoop {
 
   clearContext(): void {
     this.context = createAgentContext(this.config, this.context.sessionId)
+    this.persistedIndex = 0
+  }
+
+  resetSession(): void {
+    if (this.conversationStore) {
+      this.conversationStore.deleteSession(this.context.sessionId)
+    }
+    this.clearContext()
   }
 }
 
-export function createAgentLoop(
-  config: RuntimeConfig,
-  router: Router,
-  toolExecutor: ToolExecutor,
-  localProvider: LLMProvider,
-  remoteProvider: LLMProvider | null,
-  sessionId?: string
-): AgentLoop {
-  return new AgentLoop(
-    config,
-    router,
-    toolExecutor,
-    localProvider,
-    remoteProvider,
-    sessionId ?? crypto.randomUUID()
-  )
+export type AgentFactory = (sessionId: string) => AgentLoop
+
+export function createAgentLoop(deps: AgentLoopDeps): AgentLoop {
+  return new AgentLoop({
+    ...deps,
+    sessionId: deps.sessionId ?? crypto.randomUUID(),
+  })
 }

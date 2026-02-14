@@ -41,15 +41,54 @@ export const EgirlConfigSchema = Type.Object({
       working_dir: Type.Optional(Type.String()),
       max_turns: Type.Optional(Type.Number()),
     })),
+    xmpp: Type.Optional(Type.Object({
+      service: Type.String({ default: 'xmpp://localhost:5222' }),
+      domain: Type.Optional(Type.String()),
+      resource: Type.Optional(Type.String()),
+      allowed_jids: Type.Array(Type.String(), { default: [] }),
+    })),
+    api: Type.Optional(Type.Object({
+      port: Type.Number({ default: 3000 }),
+      host: Type.String({ default: '127.0.0.1' }),
+    })),
+  })),
+
+  conversation: Type.Optional(Type.Object({
+    enabled: Type.Boolean({ default: true }),
+    max_age_days: Type.Number({ default: 30 }),
+    max_messages: Type.Number({ default: 1000 }),
+    compact_on_startup: Type.Boolean({ default: true }),
+  })),
+
+  memory: Type.Optional(Type.Object({
+    proactive_retrieval: Type.Boolean({ default: true }),
+    score_threshold: Type.Number({ default: 0.35 }),
+    max_results: Type.Number({ default: 5 }),
+    max_tokens_budget: Type.Number({ default: 2000 }),
   })),
 
   safety: Type.Optional(Type.Object({
     enabled: Type.Boolean({ default: true }),
-    audit_log: Type.Optional(Type.String()),
-    blocked_patterns: Type.Optional(Type.Array(Type.String())),
-    allowed_paths: Type.Optional(Type.Array(Type.String())),
-    sensitive_patterns: Type.Optional(Type.Array(Type.String())),
-    require_confirmation: Type.Boolean({ default: false }),
+    command_filter: Type.Optional(Type.Object({
+      enabled: Type.Boolean({ default: true }),
+      blocked_patterns: Type.Optional(Type.Array(Type.String())),
+    })),
+    path_sandbox: Type.Optional(Type.Object({
+      enabled: Type.Boolean({ default: false }),
+      allowed_paths: Type.Optional(Type.Array(Type.String())),
+    })),
+    sensitive_files: Type.Optional(Type.Object({
+      enabled: Type.Boolean({ default: true }),
+      patterns: Type.Optional(Type.Array(Type.String())),
+    })),
+    audit_log: Type.Optional(Type.Object({
+      enabled: Type.Boolean({ default: true }),
+      path: Type.Optional(Type.String()),
+    })),
+    confirmation: Type.Optional(Type.Object({
+      enabled: Type.Boolean({ default: false }),
+      tools: Type.Optional(Type.Array(Type.String())),
+    })),
   })),
 
   skills: Type.Object({
@@ -105,14 +144,53 @@ export interface RuntimeConfig {
       workingDir: string
       maxTurns?: number
     }
+    xmpp?: {
+      service: string
+      domain: string
+      username: string
+      password: string
+      resource?: string
+      allowedJids: string[]
+    }
+    api?: {
+      port: number
+      host: string
+    }
+  }
+  conversation: {
+    enabled: boolean
+    maxAgeDays: number
+    maxMessages: number
+    compactOnStartup: boolean
+  }
+  memory: {
+    proactiveRetrieval: boolean
+    scoreThreshold: number
+    maxResults: number
+    maxTokensBudget: number
   }
   safety: {
     enabled: boolean
-    auditLog?: string
-    blockedPatterns: string[]
-    allowedPaths: string[]
-    sensitivePatterns: string[]
-    requireConfirmation: boolean
+    commandFilter: {
+      enabled: boolean
+      blockedPatterns: string[]
+    }
+    pathSandbox: {
+      enabled: boolean
+      allowedPaths: string[]
+    }
+    sensitiveFiles: {
+      enabled: boolean
+      patterns: string[]
+    }
+    auditLog: {
+      enabled: boolean
+      path?: string
+    }
+    confirmation: {
+      enabled: boolean
+      tools: string[]
+    }
   }
   skills: {
     dirs: string[]

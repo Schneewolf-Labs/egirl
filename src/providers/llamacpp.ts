@@ -1,66 +1,8 @@
-import type { LLMProvider, ChatRequest, ChatResponse, ChatMessage, ContentPart, Tokenizer } from './types'
+import type { LLMProvider, ChatRequest, ChatResponse, ChatMessage, ContentPart } from './types'
 import { ContextSizeError } from './types'
 import { parseToolCalls } from '../tools/format'
+import { formatMessagesForQwen3 } from './qwen3-format'
 import { log } from '../util/logger'
-
-const TOKENIZE_TIMEOUT_MS = 5_000
-const MAX_CACHED_CONTENT_LENGTH = 100_000
-const MAX_CACHE_ENTRIES = 2048
-
-/**
- * Tokenizer backed by llama.cpp's /tokenize endpoint.
- * Caches results by content string so repeated calls (system prompt, tool defs,
- * unchanged messages between turns) are free.
- * Falls back to char-ratio estimation on network/server errors.
- */
-export class LlamaCppTokenizer implements Tokenizer {
-  private endpoint: string
-  private cache = new Map<string, number>()
-
-  constructor(endpoint: string) {
-    this.endpoint = endpoint.replace(/\/$/, '')
-  }
-
-  async countTokens(text: string): Promise<number> {
-    const cached = this.cache.get(text)
-    if (cached !== undefined) return cached
-
-    try {
-      const response = await fetch(`${this.endpoint}/tokenize`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: text, add_special: false }),
-        signal: AbortSignal.timeout(TOKENIZE_TIMEOUT_MS),
-      })
-
-      if (!response.ok) {
-        log.debug('tokenizer', `tokenize endpoint returned ${response.status}, falling back to estimate`)
-        return Math.ceil(text.length / 3.5)
-      }
-
-      const data = (await response.json()) as { tokens: number[] }
-      const count = data.tokens.length
-
-      // Cache if content isn't huge (avoids holding large strings as map keys)
-      if (text.length <= MAX_CACHED_CONTENT_LENGTH) {
-        if (this.cache.size >= MAX_CACHE_ENTRIES) {
-          const firstKey = this.cache.keys().next().value
-          if (firstKey !== undefined) this.cache.delete(firstKey)
-        }
-        this.cache.set(text, count)
-      }
-
-      return count
-    } catch (error) {
-      log.debug('tokenizer', 'tokenize request failed, falling back to estimate:', error)
-      return Math.ceil(text.length / 3.5)
-    }
-  }
-}
-
-export function createLlamaCppTokenizer(endpoint: string): Tokenizer {
-  return new LlamaCppTokenizer(endpoint)
-}
 
 type FormattedContent = string | ContentPart[]
 type FormattedMessage = { role: string; content: FormattedContent }
@@ -140,8 +82,6 @@ export class LlamaCppProvider implements LLMProvider {
         temperature: req.temperature,
         max_tokens: req.max_tokens,
         stream: shouldStream,
-        // Stop at tool_call close tag to prevent runaway generation
-        stop: req.tools?.length ? ['</tool_call>'] : undefined,
       }),
     })
 
@@ -191,9 +131,13 @@ export class LlamaCppProvider implements LLMProvider {
 
     log.debug('llamacpp', `Raw response (${content.length} chars): ${content.substring(0, 200)}${content.length > 200 ? '...' : ''}`)
 
-    // If we stopped at </tool_call>, add the closing tag back
-    if (req.tools?.length && content.includes('<tool_call>') && !content.includes('</tool_call>')) {
-      content += '</tool_call>'
+    // If generation was cut off mid-tool-call (e.g. by max_tokens), close the last tag
+    if (req.tools?.length && content.includes('<tool_call>')) {
+      const openCount = (content.match(/<tool_call>/g) || []).length
+      const closeCount = (content.match(/<\/tool_call>/g) || []).length
+      if (openCount > closeCount) {
+        content += '\n</tool_call>'
+      }
     }
 
     // Parse tool calls from response
@@ -329,68 +273,8 @@ export class LlamaCppProvider implements LLMProvider {
     return 0
   }
 
-  /**
-   * Format messages for Qwen3 chat template.
-   * The template handles:
-   * - Tools section in system prompt (via tools parameter)
-   * - Tool role messages converted to user role with <tool_response> tags
-   * - Multimodal content (images/videos)
-   *
-   * We only need to handle special cases like image tool results.
-   */
   private formatMessages(messages: ChatMessage[]): FormattedMessage[] {
-    const formatted: FormattedMessage[] = []
-
-    for (const msg of messages) {
-      if (msg.role === 'tool') {
-        const textContent = this.getTextContent(msg.content)
-
-        // Check if this is an image result (base64 data URL)
-        // For images, we need to pass multimodal content
-        if (textContent.startsWith('data:image/')) {
-          formatted.push({
-            role: 'tool',
-            content: [
-              { type: 'text', text: 'Screenshot captured' },
-              { type: 'image_url', image_url: { url: textContent } },
-            ],
-          })
-        } else {
-          formatted.push({
-            role: msg.role,
-            content: textContent,
-          })
-        }
-      } else if (Array.isArray(msg.content)) {
-        // Multimodal message, pass through
-        formatted.push({
-          role: msg.role,
-          content: msg.content,
-        })
-      } else {
-        // Regular text message
-        formatted.push({
-          role: msg.role,
-          content: msg.content,
-        })
-      }
-    }
-
-    return formatted
-  }
-
-  /**
-   * Extract text content from string or ContentPart array
-   */
-  private getTextContent(content: string | ContentPart[]): string {
-    if (typeof content === 'string') {
-      return content
-    }
-
-    return content
-      .filter((part): part is { type: 'text'; text: string } => part.type === 'text')
-      .map((part) => part.text)
-      .join('\n')
+    return formatMessagesForQwen3(messages)
   }
 }
 

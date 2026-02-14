@@ -1,6 +1,7 @@
 export { MemoryFiles, createMemoryFiles, type MemoryEntry } from './files'
 export { MemoryIndexer, createMemoryIndexer, type IndexedMemory, type ContentType } from './indexer'
 export { MemorySearch, createMemorySearch, type SearchResult, type SearchOptions } from './search'
+export { retrieveForContext, type RetrievalConfig } from './retrieval'
 export {
   createEmbeddingProvider,
   Qwen3VLEmbeddings,
@@ -9,13 +10,13 @@ export {
   type EmbeddingProvider,
   type EmbeddingInput,
   type EmbeddingProviderType,
-} from './embeddings'
+} from './embeddings/index'
 
 import { join } from 'path'
 import { createMemoryFiles, type MemoryFiles } from './files'
 import { createMemoryIndexer, type MemoryIndexer, type ContentType } from './indexer'
 import { createMemorySearch, type MemorySearch, type SearchResult } from './search'
-import { type EmbeddingProvider, type EmbeddingInput } from './embeddings'
+import { type EmbeddingProvider, type EmbeddingInput } from './embeddings/index'
 import { log } from '../util/logger'
 
 export interface MemoryManagerConfig {
@@ -205,6 +206,20 @@ export class MemoryManager {
       value: m.value,
       imagePath: m.imagePath,
     }))
+  }
+
+  /**
+   * List all memories with metadata
+   */
+  list(limit = 100, offset = 0): Array<{ key: string; value: string; contentType: string; updatedAt: number }> {
+    return this.indexer.list(limit, offset)
+  }
+
+  /**
+   * Count total stored memories
+   */
+  count(): number {
+    return this.indexer.count()
   }
 
   /**

@@ -43,8 +43,12 @@ export function analyzeResponseForEscalation(
 
   const content = response.content
 
-  // Check for uncertainty patterns
-  const hasUncertainty = UNCERTAINTY_PATTERNS.some(p => p.test(content))
+  // Strip code blocks before checking patterns — we only care about
+  // the model's own words, not code it's quoting
+  const prose = content.replace(/```[\s\S]*?```/g, '').replace(/`[^`]+`/g, '')
+
+  // Check for uncertainty patterns in the model's prose
+  const hasUncertainty = UNCERTAINTY_PATTERNS.some(p => p.test(prose))
   if (hasUncertainty) {
     return {
       shouldEscalate: true,
@@ -53,9 +57,9 @@ export function analyzeResponseForEscalation(
     }
   }
 
-  // Check for error patterns in code output
-  const hasErrors = ERROR_PATTERNS.some(p => p.test(content))
-  if (hasErrors && content.includes('```')) {
+  // Check for error patterns in the model's prose (not in quoted code)
+  const hasErrors = ERROR_PATTERNS.some(p => p.test(prose))
+  if (hasErrors) {
     return {
       shouldEscalate: true,
       reason: 'potential_code_errors',

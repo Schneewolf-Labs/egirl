@@ -1,4 +1,5 @@
 import type { ChatMessage } from '../providers/types'
+import { getTextContent } from '../providers/types'
 import type { RuntimeConfig } from '../config'
 import { analyzeMessageHeuristics, estimateComplexity } from './heuristics'
 import { createRoutingRules, applyRules, type RuleContext } from './rules'
@@ -37,25 +38,30 @@ export class Router {
       }
     }
 
+    const lastContent = getTextContent(lastMessage.content)
+
     // Quick heuristic analysis
     const heuristics = analyzeMessageHeuristics(messages)
 
     // Estimate complexity
-    const complexity = estimateComplexity(lastMessage.content)
+    const complexity = estimateComplexity(lastContent)
 
     // Estimate token count (rough approximation)
     const estimatedTokens = this.estimateTokens(messages)
 
     // Detect task type
-    const taskType = this.detectTaskType(lastMessage.content)
+    const taskType = this.detectTaskType(lastContent)
+
+    // Detect which tools the message likely involves (not all registered tools)
+    const likelyTools = this.detectLikelyTools(lastContent, toolsAvailable ?? [])
 
     // Build rule context
     const context: RuleContext = {
       taskType,
-      toolsInvolved: toolsAvailable,
+      toolsInvolved: likelyTools.length > 0 ? likelyTools : undefined,
       estimatedTokens,
       complexity,
-      userContent: lastMessage.content,
+      userContent: lastContent,
     }
 
     // Apply rules
@@ -105,9 +111,34 @@ export class Router {
   private estimateTokens(messages: ChatMessage[]): number {
     let totalChars = 0
     for (const msg of messages) {
-      totalChars += msg.content.length
+      totalChars += getTextContent(msg.content).length
     }
     return Math.ceil(totalChars / 4)
+  }
+
+  /** Map message content to tools it likely references */
+  private detectLikelyTools(content: string, available: string[]): string[] {
+    const lower = content.toLowerCase()
+    const toolHints: Record<string, string[]> = {
+      memory_search: ['remember', 'recall', 'what did i', 'do you remember', 'search memory'],
+      memory_get: ['recall', 'retrieve', 'get memory'],
+      memory_set: ['remember this', 'remember that', 'store this', 'save this'],
+      read_file: ['read file', 'show file', 'cat ', 'open file', 'look at file'],
+      write_file: ['write file', 'create file', 'save file', 'write to'],
+      edit_file: ['edit file', 'change file', 'modify file', 'replace in'],
+      execute_command: ['run command', 'execute', 'run script', 'shell'],
+      glob_files: ['find file', 'list file', 'search file', 'glob'],
+      web_research: ['fetch url', 'web search', 'look up', 'browse'],
+      code_agent: ['refactor', 'fix the code', 'debug this', 'multi-file', 'rewrite'],
+    }
+
+    const detected: string[] = []
+    for (const [tool, hints] of Object.entries(toolHints)) {
+      if (available.includes(tool) && hints.some(h => lower.includes(h))) {
+        detected.push(tool)
+      }
+    }
+    return detected
   }
 
   private detectTaskType(content: string): TaskAnalysis['type'] {
@@ -137,7 +168,7 @@ export class Router {
 
   analyzeTask(messages: ChatMessage[]): TaskAnalysis {
     const lastMessage = messages[messages.length - 1]
-    const content = lastMessage?.content ?? ''
+    const content = lastMessage ? getTextContent(lastMessage.content) : ''
 
     return {
       type: this.detectTaskType(content),

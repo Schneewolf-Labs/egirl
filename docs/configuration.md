@@ -82,6 +82,26 @@ Optional. Settings for the Claude Code bridge mode.
 - `"bypassPermissions"` — Skip all permission prompts (trust Claude Code)
 - `"plan"` — Claude Code creates a plan before executing
 
+### `[channels.xmpp]`
+
+Optional. Required only when running `bun run start xmpp`. XMPP credentials (`XMPP_USERNAME`, `XMPP_PASSWORD`) must be set in `.env`.
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `service` | string | `xmpp://localhost:5222` | XMPP server URI. Use `xmpps://` for direct TLS |
+| `domain` | string | (derived from service) | XMPP domain (e.g., `example.com`). Defaults to the hostname from `service` |
+| `resource` | string | `egirl` | XMPP resource identifier |
+| `allowed_jids` | string[] | `[]` | Bare JIDs allowed to message (e.g., `["user@example.com"]`). Empty array means all JIDs are allowed |
+
+### `[channels.api]`
+
+Optional. Required only when running `bun run start api`.
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `port` | number | `3000` | Port for the HTTP API server |
+| `host` | string | `127.0.0.1` | Bind address. Use `0.0.0.0` to listen on all interfaces |
+
 ### `[skills]`
 
 | Key | Type | Default | Description |
@@ -97,6 +117,8 @@ Create from the template: `cp .env.example .env`
 | `ANTHROPIC_API_KEY` | No | Anthropic API key for Claude (escalation provider) |
 | `OPENAI_API_KEY` | No | OpenAI API key (fallback escalation provider) |
 | `DISCORD_TOKEN` | For Discord mode | Discord bot token |
+| `XMPP_USERNAME` | For XMPP mode | XMPP account username (local part, without domain) |
+| `XMPP_PASSWORD` | For XMPP mode | XMPP account password |
 
 If neither `ANTHROPIC_API_KEY` nor `OPENAI_API_KEY` is set, all requests route to the local model regardless of routing rules. The agent will log a warning but function normally.
 
@@ -143,6 +165,15 @@ permission_mode = "bypassPermissions"
 working_dir = "/home/user/projects"
 max_turns = 50
 
+[channels.xmpp]
+service = "xmpp://chat.example.com:5222"
+domain = "example.com"
+allowed_jids = ["alice@example.com"]
+
+[channels.api]
+port = 3000
+host = "127.0.0.1"
+
 [skills]
 dirs = ["~/.egirl/skills", "{workspace}/skills"]
 ```
@@ -152,6 +183,8 @@ dirs = ["~/.egirl/skills", "{workspace}/skills"]
 ANTHROPIC_API_KEY=sk-ant-...
 OPENAI_API_KEY=sk-...
 DISCORD_TOKEN=...
+XMPP_USERNAME=egirl
+XMPP_PASSWORD=...
 ```
 
 ## RuntimeConfig

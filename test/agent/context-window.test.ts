@@ -82,7 +82,7 @@ describe('fitToContextWindow', () => {
     // Should have fewer messages than input
     expect(result.length).toBeLessThan(messages.length)
     // Should include truncation notice
-    const hasNotice = result.some(m => m.role === 'system' && typeof m.content === 'string' && m.content.includes('trimmed'))
+    const hasNotice = result.some(m => m.role === 'user' && typeof m.content === 'string' && m.content.includes('trimmed'))
     expect(hasNotice).toBe(true)
   })
 

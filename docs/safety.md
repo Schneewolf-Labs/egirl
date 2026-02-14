@@ -2,27 +2,40 @@
 
 egirl includes a safety layer that sits between the LLM and tool execution. It prevents the agent from running destructive commands, accessing files outside allowed directories, or touching sensitive credentials — even if the local model hallucinates something dangerous.
 
-All safety features are configurable via the `[safety]` section in `egirl.toml`.
+All safety features are independently configurable via sub-sections under `[safety]` in `egirl.toml`. Each feature has its own `enabled` flag so you can turn things on and off individually.
 
 ## Quick Start
 
-Safety is enabled by default with sensible defaults. No configuration needed for basic protection. To customize:
+Safety is enabled by default with sensible defaults. Out of the box you get command filtering, sensitive file protection, and audit logging. No configuration needed.
 
 ```toml
 [safety]
+enabled = true                          # master switch
+
+[safety.command_filter]
+enabled = true                          # block dangerous shell commands
+
+[safety.sensitive_files]
+enabled = true                          # block access to secrets/keys
+
+[safety.audit_log]
 enabled = true
-audit_log = "{workspace}/audit.log"
-# blocked_patterns = ["extra_regex"]
-# allowed_paths = ["{workspace}", "~/projects"]
-# sensitive_patterns = ["secret\\.yaml$"]
-require_confirmation = false
+path = "{workspace}/audit.log"          # JSONL log of all tool calls
+
+[safety.path_sandbox]
+enabled = false                         # opt-in: restrict file ops to dirs
+
+[safety.confirmation]
+enabled = false                         # opt-in: require confirmation
 ```
 
 ## Features
 
-### Command Blocklist
+### Command Filter
 
-The `execute_command` tool checks every command against a set of regex patterns before running it. Built-in patterns block:
+`[safety.command_filter]`
+
+Checks every `execute_command` call against regex patterns before running it. Built-in patterns block:
 
 | Pattern | What it catches |
 |---------|----------------|
@@ -37,29 +50,40 @@ The `execute_command` tool checks every command against a set of regex patterns 
 | `shutdown/reboot/halt/poweroff` | System power commands |
 | `pkill -9 init/systemd` | Killing init process |
 
-Add custom patterns in config:
+Add custom patterns (appended to built-in list):
 
 ```toml
-[safety]
+[safety.command_filter]
+enabled = true
 blocked_patterns = ["npm\\s+publish", "docker\\s+rm\\s+-f"]
 ```
 
-Custom patterns are added **on top of** the built-in list, not replacing it.
-
-### Path Sandboxing
-
-When `allowed_paths` is set, file operations (`read_file`, `write_file`, `edit_file`, `glob_files`) are restricted to those directories. Paths are resolved and normalized before checking.
+Disable:
 
 ```toml
-[safety]
+[safety.command_filter]
+enabled = false
+```
+
+### Path Sandbox
+
+`[safety.path_sandbox]`
+
+When enabled, file operations (`read_file`, `write_file`, `edit_file`, `glob_files`) are restricted to the listed directories. Paths are resolved and normalized before checking.
+
+**Disabled by default** — the agent can access any file the process user can.
+
+```toml
+[safety.path_sandbox]
+enabled = true
 allowed_paths = ["{workspace}", "~/projects/myrepo"]
 ```
 
-If `allowed_paths` is empty (the default), no path restriction is applied — the agent can access any file the process user can access.
+### Sensitive Files
 
-### Sensitive File Guard
+`[safety.sensitive_files]`
 
-Certain file patterns are always blocked from `read_file`, `write_file`, and `edit_file`, regardless of path sandboxing. Built-in patterns:
+Blocks `read_file`, `write_file`, and `edit_file` from touching files that match sensitive patterns. Built-in patterns:
 
 - `.env`, `.env.*` — environment secrets
 - `id_rsa`, `id_ed25519`, `id_ecdsa` — SSH private keys
@@ -71,20 +95,24 @@ Certain file patterns are always blocked from `read_file`, `write_file`, and `ed
 - `.aws/credentials` — AWS credentials
 - `.docker/config.json` — Docker auth
 
-Add custom patterns:
+Add custom patterns (appended to built-in list):
 
 ```toml
-[safety]
-sensitive_patterns = ["secret\\.yaml$", "vault-token"]
+[safety.sensitive_files]
+enabled = true
+patterns = ["secret\\.yaml$", "vault-token"]
 ```
 
 ### Audit Log
 
-When `audit_log` is set, every tool call is logged to a JSONL file — including blocked calls.
+`[safety.audit_log]`
+
+Logs every tool call to a JSONL file — including blocked calls.
 
 ```toml
-[safety]
-audit_log = "{workspace}/audit.log"
+[safety.audit_log]
+enabled = true
+path = "{workspace}/audit.log"
 ```
 
 Each line is a JSON object:
@@ -94,18 +122,21 @@ Each line is a JSON object:
 {"timestamp":"2025-06-15T10:30:05.000Z","tool":"execute_command","args":{"command":"rm -rf /"},"blocked":true,"reason":"Command matches blocked pattern: rm\\s+(-\\w+\\s+)*/"}
 ```
 
-The audit log is append-only and fire-and-forget (write failures are logged as warnings but don't block tool execution).
+Append-only, fire-and-forget (write failures logged as warnings, don't block execution).
 
-### Confirmation Mode
+### Confirmation
 
-When `require_confirmation` is enabled, destructive tools (`execute_command`, `write_file`, `edit_file`) are blocked unless a confirmation callback is registered on the `ToolExecutor`.
+`[safety.confirmation]`
+
+When enabled, destructive tools are blocked unless a confirmation callback is registered on the `ToolExecutor`. You can customize which tools require confirmation.
 
 ```toml
-[safety]
-require_confirmation = true
+[safety.confirmation]
+enabled = true
+tools = ["execute_command", "write_file", "edit_file"]
 ```
 
-Channel implementations can register a callback via `toolExecutor.setConfirmCallback(fn)` to prompt the user before execution. If no callback is registered, destructive tools are simply blocked.
+Channel implementations register a callback via `toolExecutor.setConfirmCallback(fn)` to prompt the user. If no callback is registered, the tools are simply blocked.
 
 ## Architecture
 
@@ -114,35 +145,85 @@ Tool Call
     ↓
 ToolExecutor.execute()
     ↓
-checkToolCall()
-    ├── isCommandBlocked()     → command blocklist
-    ├── isPathAllowed()        → path sandboxing
-    ├── isSensitivePath()      → sensitive file guard
-    └── requireConfirmation?   → confirmation mode
+checkToolCall(config)
+    ├── [command_filter.enabled?] isCommandBlocked()
+    ├── [path_sandbox.enabled?]   isPathAllowed()
+    ├── [sensitive_files.enabled?] isSensitivePath()
+    └── [confirmation.enabled?]   needsConfirmation
     ↓
 [blocked] → return error + audit log
 [allowed] → tool.execute() → audit log
 ```
 
+Each check is gated by its own `enabled` flag. The master `safety.enabled` switch short-circuits all checks when `false`.
+
 Safety checks run in `ToolExecutor` before any tool code executes. The safety module (`src/safety/`) is pure functions with no side effects (except audit logging), making it easy to test.
 
 ## Configuration Reference
 
+### `[safety]`
+
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `enabled` | bool | `true` | Master switch for all safety features |
-| `audit_log` | string | — | Path to JSONL audit log file |
-| `blocked_patterns` | string[] | `[]` | Additional regex patterns for command blocklist |
-| `allowed_paths` | string[] | `[]` | Directories file ops are restricted to (empty = no restriction) |
-| `sensitive_patterns` | string[] | `[]` | Additional regex patterns for sensitive file detection |
-| `require_confirmation` | bool | `false` | Require confirmation for destructive tools |
+
+### `[safety.command_filter]`
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `enabled` | bool | `true` | Enable command blocklist |
+| `blocked_patterns` | string[] | `[]` | Additional regex patterns (appended to built-in) |
+
+### `[safety.path_sandbox]`
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `enabled` | bool | `false` | Enable path restrictions |
+| `allowed_paths` | string[] | `[]` | Directories file ops are restricted to |
+
+### `[safety.sensitive_files]`
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `enabled` | bool | `true` | Enable sensitive file detection |
+| `patterns` | string[] | `[]` | Additional regex patterns (appended to built-in) |
+
+### `[safety.audit_log]`
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `enabled` | bool | `true` | Enable audit logging |
+| `path` | string | — | Path to JSONL audit log file |
+
+### `[safety.confirmation]`
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `enabled` | bool | `false` | Enable confirmation for destructive tools |
+| `tools` | string[] | `["execute_command", "write_file", "edit_file"]` | Tools that require confirmation |
 
 ## Disabling Safety
 
-To disable all safety checks:
+Kill everything:
 
 ```toml
 [safety]
+enabled = false
+```
+
+Or disable individual features:
+
+```toml
+[safety]
+enabled = true
+
+[safety.command_filter]
+enabled = false
+
+[safety.sensitive_files]
+enabled = false
+
+[safety.audit_log]
 enabled = false
 ```
 

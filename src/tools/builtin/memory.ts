@@ -10,6 +10,8 @@ export function createMemoryTools(memory: MemoryManager): {
   memorySearchTool: Tool
   memoryGetTool: Tool
   memorySetTool: Tool
+  memoryDeleteTool: Tool
+  memoryListTool: Tool
 } {
   const memorySearchTool: Tool = {
     definition: {
@@ -155,7 +157,110 @@ export function createMemoryTools(memory: MemoryManager): {
     },
   }
 
-  return { memorySearchTool, memoryGetTool, memorySetTool }
+  const memoryDeleteTool: Tool = {
+    definition: {
+      name: 'memory_delete',
+      description: 'Delete a memory by its exact key. Use this to remove outdated or incorrect information.',
+      parameters: {
+        type: 'object',
+        properties: {
+          key: {
+            type: 'string',
+            description: 'The exact memory key to delete',
+          },
+        },
+        required: ['key'],
+      },
+    },
+
+    async execute(params: Record<string, unknown>, _cwd: string): Promise<ToolResult> {
+      const key = params.key as string
+
+      try {
+        const deleted = memory.delete(key)
+
+        if (!deleted) {
+          return {
+            success: false,
+            output: `Memory not found: "${key}"`,
+          }
+        }
+
+        return {
+          success: true,
+          output: `Memory deleted: "${key}"`,
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        log.error('memory', `Delete failed for "${key}":`, error)
+        return {
+          success: false,
+          output: `Failed to delete memory: ${message}`,
+        }
+      }
+    },
+  }
+
+  const memoryListTool: Tool = {
+    definition: {
+      name: 'memory_list',
+      description: 'List all stored memories with their keys, content types, and previews. Useful for browsing what has been remembered.',
+      parameters: {
+        type: 'object',
+        properties: {
+          limit: {
+            type: 'number',
+            description: 'Maximum number of memories to list (default: 20)',
+          },
+          offset: {
+            type: 'number',
+            description: 'Number of memories to skip for pagination (default: 0)',
+          },
+        },
+        required: [],
+      },
+    },
+
+    async execute(params: Record<string, unknown>, _cwd: string): Promise<ToolResult> {
+      const limit = (params.limit as number) ?? 20
+      const offset = (params.offset as number) ?? 0
+
+      try {
+        const total = memory.count()
+        const items = memory.list(limit, offset)
+
+        if (items.length === 0) {
+          return {
+            success: true,
+            output: total === 0
+              ? 'No memories stored yet.'
+              : `No memories at offset ${offset} (${total} total).`,
+          }
+        }
+
+        const lines = items.map((m, i) => {
+          const preview = m.value.length > 100 ? m.value.slice(0, 100) + '...' : m.value
+          const date = new Date(m.updatedAt).toISOString().slice(0, 10)
+          return `${offset + i + 1}. [${m.key}] (${m.contentType}, ${date})\n   ${preview}`
+        })
+
+        const header = `Memories ${offset + 1}-${offset + items.length} of ${total}:`
+        return {
+          success: true,
+          output: `${header}\n\n${lines.join('\n\n')}`,
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        log.error('memory', 'List failed:', error)
+        return {
+          success: false,
+          output: `Failed to list memories: ${message}`,
+        }
+      }
+    },
+  }
+
+  return { memorySearchTool, memoryGetTool, memorySetTool, memoryDeleteTool, memoryListTool }
 }
 
 /**

@@ -6,6 +6,16 @@ import type { RuntimeConfig, EgirlConfig } from './schema'
 
 export { type EgirlConfig, type RuntimeConfig } from './schema'
 
+function getDomain(service: string): string {
+  try {
+    const url = new URL(service)
+    return url.hostname
+  } catch {
+    // Fallback: strip protocol and port
+    return service.replace(/^[a-z]+:\/\//, '').split(':')[0]!.split('/')[0]!
+  }
+}
+
 function expandPath(path: string, workspaceDir?: string): string {
   let result = path.replace(/^~/, homedir())
 
@@ -48,6 +58,12 @@ const defaultToml: EgirlConfig = {
     escalation_threshold: 0.4,
     always_local: ['memory_search', 'memory_get', 'greeting', 'acknowledgment'],
     always_remote: ['code_generation', 'code_review', 'complex_reasoning'],
+  },
+  conversation: {
+    enabled: true,
+    max_age_days: 30,
+    max_messages: 1000,
+    compact_on_startup: true,
   },
   skills: {
     dirs: ['~/.egirl/skills', '{workspace}/skills'],
@@ -93,16 +109,43 @@ export function loadConfig(): RuntimeConfig {
       alwaysLocal: toml.routing?.always_local ?? defaultToml.routing.always_local,
       alwaysRemote: toml.routing?.always_remote ?? defaultToml.routing.always_remote,
     },
+    conversation: {
+      enabled: toml.conversation?.enabled ?? true,
+      maxAgeDays: toml.conversation?.max_age_days ?? 30,
+      maxMessages: toml.conversation?.max_messages ?? 1000,
+      compactOnStartup: toml.conversation?.compact_on_startup ?? true,
+    },
     channels: {},
     safety: {
       enabled: toml.safety?.enabled ?? true,
-      auditLog: toml.safety?.audit_log
-        ? expandPath(toml.safety.audit_log, workspacePath)
-        : undefined,
-      blockedPatterns: toml.safety?.blocked_patterns ?? [],
-      allowedPaths: (toml.safety?.allowed_paths ?? []).map(p => expandPath(p, workspacePath)),
-      sensitivePatterns: toml.safety?.sensitive_patterns ?? [],
-      requireConfirmation: toml.safety?.require_confirmation ?? false,
+      commandFilter: {
+        enabled: toml.safety?.command_filter?.enabled ?? true,
+        blockedPatterns: toml.safety?.command_filter?.blocked_patterns ?? [],
+      },
+      pathSandbox: {
+        enabled: toml.safety?.path_sandbox?.enabled ?? false,
+        allowedPaths: (toml.safety?.path_sandbox?.allowed_paths ?? []).map(p => expandPath(p, workspacePath)),
+      },
+      sensitiveFiles: {
+        enabled: toml.safety?.sensitive_files?.enabled ?? true,
+        patterns: toml.safety?.sensitive_files?.patterns ?? [],
+      },
+      auditLog: {
+        enabled: toml.safety?.audit_log?.enabled ?? true,
+        path: toml.safety?.audit_log?.path
+          ? expandPath(toml.safety.audit_log.path, workspacePath)
+          : undefined,
+      },
+      confirmation: {
+        enabled: toml.safety?.confirmation?.enabled ?? false,
+        tools: toml.safety?.confirmation?.tools ?? ['execute_command', 'write_file', 'edit_file'],
+      },
+    },
+    memory: {
+      proactiveRetrieval: toml.memory?.proactive_retrieval ?? true,
+      scoreThreshold: toml.memory?.score_threshold ?? 0.35,
+      maxResults: toml.memory?.max_results ?? 5,
+      maxTokensBudget: toml.memory?.max_tokens_budget ?? 2000,
     },
     skills: {
       dirs: (toml.skills?.dirs ?? defaultToml.skills.dirs).map(d => expandPath(d, workspacePath)),
@@ -144,6 +187,29 @@ export function loadConfig(): RuntimeConfig {
       model: cc.model,
       workingDir: cc.working_dir ? expandPath(cc.working_dir, workspacePath) : process.cwd(),
       maxTurns: cc.max_turns,
+    }
+  }
+
+  const xmppUsername = process.env.XMPP_USERNAME
+  const xmppPassword = process.env.XMPP_PASSWORD
+
+  if (xmppUsername && xmppPassword && toml.channels?.xmpp) {
+    const xmppConf = toml.channels.xmpp
+    const service = xmppConf.service ?? 'xmpp://localhost:5222'
+    config.channels.xmpp = {
+      service,
+      domain: xmppConf.domain ?? getDomain(service),
+      username: xmppUsername,
+      password: xmppPassword,
+      resource: xmppConf.resource,
+      allowedJids: xmppConf.allowed_jids ?? [],
+    }
+  }
+
+  if (toml.channels?.api) {
+    config.channels.api = {
+      port: toml.channels.api.port ?? 3000,
+      host: toml.channels.api.host ?? '127.0.0.1',
     }
   }
 

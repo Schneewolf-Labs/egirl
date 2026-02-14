@@ -5,11 +5,16 @@ import {
   Message,
   ChannelType,
   Events,
+  type MessageReaction,
+  type User,
+  type PartialMessageReaction,
+  type PartialUser,
+  type Interaction,
 } from 'discord.js'
-import type { AgentLoop } from '../agent'
-import type { AgentEventHandler } from '../agent/events'
-import type { ToolCall } from '../providers/types'
-import type { ToolResult } from '../tools/types'
+import type { AgentLoop, AgentFactory } from '../agent'
+import type { Channel } from './types'
+import { createDiscordEventHandler, buildToolCallPrefix } from './discord/events'
+import { splitMessage } from './discord/formatting'
 import { log } from '../util/logger'
 
 export interface DiscordConfig {
@@ -18,79 +23,30 @@ export interface DiscordConfig {
   allowedUsers: string[]     // User IDs (empty = allow all)
 }
 
-function formatToolCallsMarkdown(calls: ToolCall[]): string {
-  const lines = calls.map(call => {
-    const args = Object.entries(call.arguments)
-    if (args.length === 0) return call.name + '()'
-    if (args.length === 1) {
-      const [key, val] = args[0]!
-      const valStr = typeof val === 'string' ? val : JSON.stringify(val)
-      if (valStr.length < 60) return `${call.name}(${key}: ${valStr})`
-    }
-    return `${call.name}(${JSON.stringify(call.arguments)})`
-  })
-  return lines.join('\n')
+export interface ReactionEvent {
+  emoji: string
+  userId: string
+  messageId: string
+  isBot: boolean
 }
 
-interface ToolCallEntry {
-  call: string
-  result?: string
-}
+export type ReactionHandler = (event: ReactionEvent) => void | Promise<void>
+export type InteractionHandler = (interaction: Interaction) => void | Promise<void>
 
-interface DiscordEventState {
-  entries: ToolCallEntry[]
-}
-
-function truncateResult(output: string, maxLen: number): string {
-  const trimmed = output.trim()
-  if (!trimmed) return ''
-  if (trimmed.length <= maxLen) return trimmed
-  return trimmed.substring(0, maxLen) + '...'
-}
-
-function createDiscordEventHandler(): { handler: AgentEventHandler; state: DiscordEventState } {
-  const state: DiscordEventState = { entries: [] }
-  let pendingCalls: ToolCall[] = []
-
-  const handler: AgentEventHandler = {
-    onToolCallStart(calls: ToolCall[]) {
-      pendingCalls = calls
-      for (const call of calls) {
-        state.entries.push({ call: formatToolCallsMarkdown([call]) })
-      }
-    },
-
-    onToolCallComplete(_callId: string, name: string, result: ToolResult) {
-      // Find the matching entry and attach the result
-      const entry = state.entries.find(e => e.call.startsWith(name) && !e.result)
-      if (entry) {
-        const status = result.success ? 'ok' : 'err'
-        const preview = truncateResult(result.output, 150)
-        entry.result = `  -> ${status}${preview ? ': ' + preview : ''}`
-      }
-    },
-  }
-
-  return { handler, state }
-}
-
-function buildToolCallPrefix(state: DiscordEventState): string {
-  if (state.entries.length === 0) return ''
-  const lines = state.entries.map(e => {
-    if (e.result) return `${e.call}\n${e.result}`
-    return e.call
-  })
-  return `\`\`\`\n${lines.join('\n')}\n\`\`\`\n`
-}
-
-export class DiscordChannel {
+export class DiscordChannel implements Channel {
+  readonly name = 'discord'
   private client: Client
-  private agent: AgentLoop
+  private agentFactory: AgentFactory
+  private sessions: Map<string, AgentLoop> = new Map()
   private config: DiscordConfig
   private ready = false
+  private reactionHandlers: ReactionHandler[] = []
+  private interactionHandlers: InteractionHandler[] = []
+  private messageQueue: Array<() => Promise<void>> = []
+  private processing = false
 
-  constructor(agent: AgentLoop, config: DiscordConfig) {
-    this.agent = agent
+  constructor(agentFactory: AgentFactory, config: DiscordConfig) {
+    this.agentFactory = agentFactory
     this.config = config
 
     this.client = new Client({
@@ -99,14 +55,26 @@ export class DiscordChannel {
         GatewayIntentBits.GuildMessages,
         GatewayIntentBits.MessageContent,
         GatewayIntentBits.DirectMessages,
+        GatewayIntentBits.GuildMessageReactions,
       ],
       partials: [
         Partials.Channel,  // Required for DMs
         Partials.Message,
+        Partials.Reaction,
       ],
     })
 
     this.setupEventHandlers()
+  }
+
+  /** Register a handler called when a reaction is added to any message */
+  onReaction(handler: ReactionHandler): void {
+    this.reactionHandlers.push(handler)
+  }
+
+  /** Register a handler called when a Discord interaction occurs (slash commands, buttons, etc.) */
+  onInteraction(handler: InteractionHandler): void {
+    this.interactionHandlers.push(handler)
   }
 
   private setupEventHandlers(): void {
@@ -125,9 +93,88 @@ export class DiscordChannel {
       await this.handleMessage(message)
     })
 
+    this.client.on(Events.MessageReactionAdd, async (reaction, user) => {
+      await this.handleReaction(reaction, user)
+    })
+
+    this.client.on(Events.InteractionCreate, async (interaction) => {
+      await this.handleInteraction(interaction)
+    })
+
     this.client.on(Events.Error, (error) => {
       log.error('discord', 'Client error:', error)
     })
+  }
+
+  private async handleReaction(
+    reaction: MessageReaction | PartialMessageReaction,
+    user: User | PartialUser
+  ): Promise<void> {
+    // Fetch partial reaction/message if needed
+    if (reaction.partial) {
+      try {
+        await reaction.fetch()
+      } catch (error) {
+        log.debug('discord', 'Failed to fetch partial reaction:', error)
+        return
+      }
+    }
+
+    const emoji = reaction.emoji.name ?? reaction.emoji.id ?? 'unknown'
+    const isBot = user.bot ?? false
+
+    log.debug('discord', `Reaction ${emoji} from ${user.id} on ${reaction.message.id}`)
+
+    const event: ReactionEvent = {
+      emoji,
+      userId: user.id,
+      messageId: reaction.message.id,
+      isBot,
+    }
+
+    for (const handler of this.reactionHandlers) {
+      try {
+        await handler(event)
+      } catch (error) {
+        log.error('discord', 'Reaction handler error:', error)
+      }
+    }
+  }
+
+  private async handleInteraction(interaction: Interaction): Promise<void> {
+    log.debug('discord', `Interaction ${interaction.type} from ${interaction.user.tag}`)
+
+    for (const handler of this.interactionHandlers) {
+      try {
+        await handler(interaction)
+      } catch (error) {
+        log.error('discord', 'Interaction handler error:', error)
+      }
+    }
+  }
+
+  private resolveSessionKey(message: Message): string {
+    if (message.channel.type === ChannelType.DM) {
+      return `discord:dm:${message.author.id}`
+    }
+    if (
+      message.channel.type === ChannelType.PublicThread ||
+      message.channel.type === ChannelType.PrivateThread ||
+      message.channel.type === ChannelType.AnnouncementThread
+    ) {
+      return `discord:thread:${message.channel.id}`
+    }
+    return `discord:channel:${message.channel.id}`
+  }
+
+  private getOrCreateAgent(sessionKey: string): AgentLoop {
+    let agent = this.sessions.get(sessionKey)
+    if (!agent) {
+      agent = this.agentFactory(sessionKey)
+      this.sessions.set(sessionKey, agent)
+      log.debug('discord', `Created agent for session ${sessionKey}`)
+    }
+    return agent
   }
 
   private async handleMessage(message: Message): Promise<void> {
@@ -154,15 +201,48 @@ export class DiscordChannel {
     const content = this.extractContent(message)
     if (!content.trim()) return
 
+    // Enqueue to prevent concurrent access to shared AgentLoop context
+    this.enqueueMessage(() => this.processMessage(message, content))
+  }
+
+  private enqueueMessage(task: () => Promise<void>): void {
+    this.messageQueue.push(task)
+    if (!this.processing) {
+      this.drainQueue()
+    }
+  }
+
+  private async drainQueue(): Promise<void> {
+    this.processing = true
+    while (this.messageQueue.length > 0) {
+      const task = this.messageQueue.shift()!
+      try {
+        await task()
+      } catch (error) {
+        log.error('discord', 'Queued message processing failed:', error)
+      }
+    }
+    this.processing = false
+  }
+
+  private async processMessage(message: Message, content: string): Promise<void> {
     log.info('discord', `Message from ${message.author.tag}: ${content.slice(0, 100)}...`)
 
+    const sessionKey = this.resolveSessionKey(message)
+    const agent = this.getOrCreateAgent(sessionKey)
+
+    // Keep typing indicator alive (Discord expires it after ~10s)
+    const typingInterval = setInterval(() => {
+      message.channel.sendTyping().catch(() => {})
+    }, 8_000)
+
     try {
-      // Show typing indicator
+      // Show typing indicator immediately
       await message.channel.sendTyping()
 
       // Run through agent with event handler for tool transparency
       const { handler, state } = createDiscordEventHandler()
-      const response = await this.agent.run(content, { events: handler })
+      const response = await agent.run(content, { events: handler })
 
       // Build response with tool call prefix
       const prefix = buildToolCallPrefix(state)
@@ -171,11 +251,13 @@ export class DiscordChannel {
       // Send response (split if too long)
       await this.sendResponse(message, fullResponse)
 
-      log.debug('discord', `Responded via ${response.provider}${response.escalated ? ' (escalated)' : ''}`)
+      log.debug('discord', `[${sessionKey}] Responded via ${response.provider}${response.escalated ? ' (escalated)' : ''}`)
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error)
       log.error('discord', `Error processing message:`, error)
       await message.reply(`Sorry, I encountered an error: ${errorMsg}`).catch(() => {})
+    } finally {
+      clearInterval(typingInterval)
     }
   }
 
@@ -194,7 +276,14 @@ export class DiscordChannel {
     }
 
     // Check specific channel ID
-    return allowedChannels.includes(message.channel.id)
+    if (allowedChannels.includes(message.channel.id)) return true
+
+    // Check parent channel for threads
+    if ('parentId' in message.channel && message.channel.parentId) {
+      return allowedChannels.includes(message.channel.parentId)
+    }
+
+    return false
   }
 
   private isMentioned(message: Message): boolean {
@@ -224,7 +313,7 @@ export class DiscordChannel {
     }
 
     // Split into chunks
-    const chunks = this.splitMessage(content, maxLength)
+    const chunks = splitMessage(content, maxLength)
 
     // Reply to first chunk
     await message.reply(chunks[0] ?? content.slice(0, maxLength))
@@ -236,34 +325,6 @@ export class DiscordChannel {
         await message.channel.send(chunk)
       }
     }
-  }
-
-  private splitMessage(content: string, maxLength: number): string[] {
-    const chunks: string[] = []
-    let remaining = content
-
-    while (remaining.length > 0) {
-      if (remaining.length <= maxLength) {
-        chunks.push(remaining)
-        break
-      }
-
-      // Try to split at a newline
-      let splitIndex = remaining.lastIndexOf('\n', maxLength)
-      if (splitIndex === -1 || splitIndex < maxLength / 2) {
-        // Try to split at a space
-        splitIndex = remaining.lastIndexOf(' ', maxLength)
-      }
-      if (splitIndex === -1 || splitIndex < maxLength / 2) {
-        // Hard split
-        splitIndex = maxLength
-      }
-
-      chunks.push(remaining.slice(0, splitIndex))
-      remaining = remaining.slice(splitIndex).trimStart()
-    }
-
-    return chunks
   }
 
   async start(): Promise<void> {
@@ -282,6 +343,6 @@ export class DiscordChannel {
   }
 }
 
-export function createDiscordChannel(agent: AgentLoop, config: DiscordConfig): DiscordChannel {
-  return new DiscordChannel(agent, config)
+export function createDiscordChannel(agentFactory: AgentFactory, config: DiscordConfig): DiscordChannel {
+  return new DiscordChannel(agentFactory, config)
 }

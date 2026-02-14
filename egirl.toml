@@ -23,6 +23,10 @@ always_remote = ["code_generation", "code_review", "complex_reasoning"]
 allowed_channels = ["dm"]                # or specific channel IDs
 allowed_users = []                       # set your Discord user ID
 
+[channels.api]
+port = 3000
+host = "127.0.0.1"
+
 [channels.claude_code]
 permission_mode = "default"               # local model handles permissions
 # model = "sonnet"                       # claude model (sonnet, opus, haiku)
@@ -30,12 +34,27 @@ permission_mode = "default"               # local model handles permissions
 # max_turns = 30                         # safety limit on turns per task
 
 [safety]
-enabled = true
-audit_log = "{workspace}/audit.log"       # JSONL log of all tool calls
-# blocked_patterns = ["extra_regex_here"] # added on top of built-in blocklist
-# allowed_paths = ["{workspace}", "~/projects"]  # restrict file ops (empty = no restriction)
-# sensitive_patterns = ["secret\\.yaml$"] # added on top of built-in patterns
-require_confirmation = false               # block destructive tools until confirmed
+enabled = true                             # master switch for all safety features
+
+[safety.command_filter]
+enabled = true                             # block dangerous shell commands
+# blocked_patterns = ["npm\\s+publish"]    # added on top of built-in blocklist
+
+[safety.path_sandbox]
+enabled = false                            # restrict file ops to allowed dirs
+# allowed_paths = ["{workspace}", "~/projects"]
+
+[safety.sensitive_files]
+enabled = true                             # block access to secrets/keys
+# patterns = ["secret\\.yaml$"]            # added on top of built-in patterns
+
+[safety.audit_log]
+enabled = true                             # log all tool calls to JSONL
+path = "{workspace}/audit.log"
+
+[safety.confirmation]
+enabled = false                            # require confirmation for destructive ops
+# tools = ["execute_command", "write_file", "edit_file"]
 
 [skills]
 dirs = ["~/.egirl/skills", "{workspace}/skills"]

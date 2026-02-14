@@ -40,6 +40,8 @@ Runs with `--watch` — auto-restarts on file changes.
 bun run start cli              # Interactive CLI
 bun run start discord          # Discord bot
 bun run start claude-code      # Claude Code bridge
+bun run start xmpp             # XMPP/Jabber chat
+bun run start api              # HTTP REST API server
 bun run start status           # Check connections
 ```
 
@@ -75,11 +77,30 @@ bun test --watch
 
 ```
 test/
+├── agent/
+│   └── context-window.test.ts  # Token counting, message fitting, truncation
+├── config/
+│   └── loader.test.ts          # Config loading, path expansion, defaults
+├── memory/
+│   └── search.test.ts          # Cosine similarity, FTS, vector, hybrid search
 ├── routing/
-│   └── model-router.test.ts    # Router decisions, complexity, task detection
+│   ├── model-router.test.ts    # Router decisions, complexity, task detection
+│   ├── escalation.test.ts      # Low confidence, uncertainty patterns
+│   ├── heuristics.test.ts      # Keyword detection, complexity estimation
+│   └── rules.test.ts           # Rule creation, always-local/remote
+├── skills/
+│   └── parser.test.ts          # YAML frontmatter parsing, name/description extraction
 ├── tools/
 │   ├── format.test.ts          # Tool call parsing, JSON handling
-│   └── executor.test.ts        # Tool execution, error handling
+│   ├── executor.test.ts        # Tool execution, error handling
+│   └── web-research.test.ts    # URL validation, HTML stripping, truncation
+├── tracking/
+│   ├── stats.test.ts           # Request counting, escalation tracking
+│   └── costs.test.ts           # Model pricing, cost calculation
+├── util/
+│   ├── tokens.test.ts          # Token counting, message estimation
+│   ├── async.test.ts           # Async utilities
+│   └── logger.test.ts          # Log levels, entry storage, filtering
 └── fixtures/
     └── skills/                 # Test skill files
 ```
@@ -115,7 +136,7 @@ See [architecture.md](architecture.md) for a detailed breakdown. Key points:
 - `src/routing/` — Local vs remote routing decisions
 - `src/tools/` — Built-in tool implementations
 - `src/memory/` — Hybrid search memory system
-- `src/channels/` — User interfaces (CLI, Discord, Claude Code)
+- `src/channels/` — User interfaces (CLI, Discord, Claude Code, XMPP)
 - `src/config/` — Configuration loading and validation
 
 ## Code Style
@@ -180,6 +201,7 @@ Current production dependencies:
 - `@anthropic-ai/claude-agent-sdk` — Claude Code integration
 - `@anthropic-ai/sdk` — Claude API client
 - `@sinclair/typebox` — Runtime schema validation
+- `@xmpp/client` — XMPP/Jabber protocol client
 - `discord.js` — Discord bot framework
 - `openai` — OpenAI API client
 - `smol-toml` — TOML parser

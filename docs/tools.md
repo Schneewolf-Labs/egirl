@@ -1,6 +1,6 @@
 # Built-in Tools Reference
 
-egirl ships with 7 built-in tools that the agent can invoke during conversations. Tools are registered in the `ToolExecutor` at startup and described in the system prompt so the model knows how to use them.
+egirl ships with 18 built-in tools that the agent can invoke during conversations. Tools are registered in the `ToolExecutor` at startup and described in the system prompt so the model knows how to use them.
 
 ## Tool Architecture
 
@@ -229,6 +229,50 @@ Store a new memory or update an existing one.
 
 ---
 
+## memory_delete
+
+Delete a memory by its exact key. Use this to remove outdated or incorrect information.
+
+**Source:** `src/tools/builtin/memory.ts`
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `key` | string | Yes | Exact memory key to delete |
+
+**Behavior:**
+- Deletes the memory entry and its embedding vector
+- Returns `success: false` if the key doesn't exist
+- Requires the memory system to be initialized
+
+**Example:**
+```json
+{"name": "memory_delete", "arguments": {"key": "old_project_goal"}}
+```
+
+---
+
+## memory_list
+
+List all stored memories with their keys, content types, and previews.
+
+**Source:** `src/tools/builtin/memory.ts`
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `limit` | number | No | Maximum number of memories to list (default: 50) |
+
+**Behavior:**
+- Returns all stored memories with key, type, and content preview
+- Useful for browsing what has been remembered
+- Requires the memory system to be initialized
+
+**Example:**
+```json
+{"name": "memory_list", "arguments": {"limit": 20}}
+```
+
+---
+
 ## screenshot
 
 Capture a screenshot of the current display.
@@ -250,6 +294,182 @@ Capture a screenshot of the current display.
 **Example:**
 ```json
 {"name": "screenshot", "arguments": {"region": {"x": 0, "y": 0, "width": 1920, "height": 1080}}}
+```
+
+---
+
+## web_research
+
+Fetch a URL and return its text content. Useful for reading web pages, documentation, and API responses.
+
+**Source:** `src/tools/builtin/web-research.ts`
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `url` | string | Yes | The URL to fetch (must start with `http://` or `https://`) |
+| `timeout` | number | No | Request timeout in milliseconds (default: 15000) |
+
+**Behavior:**
+- Validates that the URL starts with `http://` or `https://`
+- Follows redirects automatically
+- HTML responses are stripped of tags and converted to plain text (scripts, styles removed)
+- JSON responses are pretty-printed for readability
+- Content exceeding 50,000 characters is truncated
+- On timeout, returns an error with the elapsed time
+
+**Example:**
+```json
+{"name": "web_research", "arguments": {"url": "https://example.com/api/docs", "timeout": 10000}}
+```
+
+---
+
+## git_status
+
+Show the current git repository state: branch name, staged changes, unstaged changes, and untracked files.
+
+**Source:** `src/tools/builtin/git.ts`
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `repo_dir` | string | No | Repository directory (defaults to cwd) |
+
+**Behavior:**
+- Shows current branch name
+- Categorizes changes into staged, modified (unstaged), and untracked
+- Returns "clean working tree" when there are no changes
+- Detects if the directory is not a git repository
+
+**Example:**
+```json
+{"name": "git_status", "arguments": {}}
+```
+
+---
+
+## git_diff
+
+Show git diff output. Can show staged changes, unstaged changes, or diff between references.
+
+**Source:** `src/tools/builtin/git.ts`
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `staged` | boolean | No | Show staged (cached) changes instead of unstaged (default: false) |
+| `files` | string[] | No | Limit diff to specific file paths |
+| `ref` | string | No | Diff against a specific ref (branch, tag, commit hash). Overrides staged flag. |
+| `context_lines` | number | No | Number of context lines around changes (default: 3) |
+| `repo_dir` | string | No | Repository directory (defaults to cwd) |
+
+**Behavior:**
+- Includes both stat summary and patch output
+- Large diffs are truncated to protect context window (20,000 char limit)
+- Returns "No differences found" when clean
+
+**Example:**
+```json
+{"name": "git_diff", "arguments": {"staged": true}}
+```
+
+---
+
+## git_log
+
+Show recent commit history in a compact format.
+
+**Source:** `src/tools/builtin/git.ts`
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `count` | number | No | Number of commits to show (default: 10, max: 50) |
+| `ref` | string | No | Branch, tag, or commit to show history for (default: HEAD) |
+| `file` | string | No | Show only commits that touch this file path |
+| `oneline` | boolean | No | Ultra-compact one-line-per-commit format (default: false) |
+| `repo_dir` | string | No | Repository directory (defaults to cwd) |
+
+**Behavior:**
+- Default format: hash, author, date, message
+- Oneline format: hash and message only
+- Supports filtering by file path
+
+**Example:**
+```json
+{"name": "git_log", "arguments": {"count": 5, "oneline": true}}
+```
+
+---
+
+## git_commit
+
+Stage files and create a git commit. Does NOT push.
+
+**Source:** `src/tools/builtin/git.ts`
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `message` | string | Yes | Commit message |
+| `files` | string[] | No | Files to stage before committing. Use `["."]` to stage everything. |
+| `repo_dir` | string | No | Repository directory (defaults to cwd) |
+
+**Behavior:**
+- Stages specified files before committing (if provided)
+- Checks that there are staged changes before committing
+- Returns the new commit hash and message on success
+- Does not push to any remote
+
+**Example:**
+```json
+{"name": "git_commit", "arguments": {"message": "Fix routing logic", "files": ["src/router.ts"]}}
+```
+
+---
+
+## git_show
+
+Show the contents of a specific commit: message, author, date, and diff.
+
+**Source:** `src/tools/builtin/git.ts`
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `ref` | string | No | Commit hash, branch, or tag to show (default: HEAD) |
+| `file` | string | No | Show only changes to this file in the commit |
+| `repo_dir` | string | No | Repository directory (defaults to cwd) |
+
+**Behavior:**
+- Shows full commit metadata (hash, author, date, message) plus stat and patch
+- Large diffs are truncated to protect context window
+- Supports filtering to a specific file
+
+**Example:**
+```json
+{"name": "git_show", "arguments": {"ref": "HEAD~1"}}
+```
+
+---
+
+## code_agent
+
+Delegate a coding task to an autonomous code agent (Claude Code) via the `@anthropic-ai/claude-agent-sdk`.
+
+**Source:** `src/tools/builtin/code-agent.ts`
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `task` | string | Yes | A clear description of the coding task to perform |
+| `working_dir` | string | No | Working directory for the task (defaults to configured workspace) |
+
+**Behavior:**
+- Launches a Claude Code session using the Agent SDK's `query()` function
+- The code agent has full filesystem and command execution access
+- Permission mode, model, and max turns are configured in `[channels.claude_code]` in `egirl.toml`
+- Default timeout is 5 minutes; the session is aborted if exceeded
+- Returns the agent's final result with metadata (turns, cost, duration, session ID)
+- If the agent completes without producing a result, returns `success: false`
+
+**Example:**
+```json
+{"name": "code_agent", "arguments": {"task": "Refactor the routing module to extract heuristics into a separate file"}}
 ```
 
 ---
