@@ -3,6 +3,7 @@ import type { AgentLoop } from '../agent'
 import type { AgentEventHandler } from '../agent/events'
 import type { ToolCall } from '../providers/types'
 import type { ToolResult } from '../tools/types'
+import type { Channel } from './types'
 import { log } from '../util/logger'
 
 const DIM = '\x1b[2m'
@@ -86,7 +87,8 @@ function createCLIEventHandler(): { handler: AgentEventHandler; state: CLIEventS
   return { handler, state }
 }
 
-export class CLIChannel {
+export class CLIChannel implements Channel {
+  readonly name = 'cli'
   private rl: readline.Interface | null = null
   private agent: AgentLoop
   private running = false

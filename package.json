@@ -18,12 +18,14 @@
     "@anthropic-ai/claude-agent-sdk": "^0.2.39",
     "@anthropic-ai/sdk": "^0.39.0",
     "@sinclair/typebox": "^0.34.0",
+    "@xmpp/client": "^0.14.0",
     "discord.js": "^14.25.1",
     "openai": "^4.77.0",
     "smol-toml": "^1.6.0"
   },
   "devDependencies": {
     "@types/bun": "^1.1.0",
+    "@types/xmpp__client": "^0.14.1",
     "typescript": "^5.7.0"
   },
   "keywords": [
