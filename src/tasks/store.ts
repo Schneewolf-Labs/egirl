@@ -9,6 +9,7 @@ import type {
   TaskFilter,
   TaskStatus,
 } from './types'
+import type { TaskErrorKind } from './error-classify'
 
 function generateId(): string {
   return crypto.randomUUID().slice(0, 8)
@@ -26,6 +27,9 @@ function rowToTask(row: Record<string, unknown>): Task {
     memoryContext: row.memory_context ? JSON.parse(row.memory_context as string) : undefined,
     memoryCategory: (row.memory_category as string) ?? undefined,
     intervalMs: (row.interval_ms as number) ?? undefined,
+    cronExpression: (row.cron_expression as string) ?? undefined,
+    businessHours: (row.business_hours as string) ?? undefined,
+    dependsOn: (row.depends_on as string) ?? undefined,
     eventSource: (row.event_source as Task['eventSource']) ?? undefined,
     eventConfig: row.event_config ? JSON.parse(row.event_config as string) : undefined,
     nextRunAt: (row.next_run_at as number) ?? undefined,
@@ -33,6 +37,7 @@ function rowToTask(row: Record<string, unknown>): Task {
     runCount: (row.run_count as number) ?? 0,
     maxRuns: (row.max_runs as number) ?? undefined,
     consecutiveFailures: (row.consecutive_failures as number) ?? 0,
+    lastErrorKind: (row.last_error_kind as TaskErrorKind) ?? undefined,
     notify: (row.notify as Task['notify']) ?? 'on_change',
     lastResultHash: (row.last_result_hash as string) ?? undefined,
     channel: row.channel as string,
@@ -52,6 +57,7 @@ function rowToRun(row: Record<string, unknown>): TaskRun {
     status: row.status as TaskRun['status'],
     result: (row.result as string) ?? undefined,
     error: (row.error as string) ?? undefined,
+    errorKind: (row.error_kind as TaskErrorKind) ?? undefined,
     triggerInfo: row.trigger_info ? JSON.parse(row.trigger_info as string) : undefined,
     tokensUsed: (row.tokens_used as number) ?? 0,
   }
@@ -92,6 +98,9 @@ export class TaskStore {
         memory_context TEXT,
         memory_category TEXT,
         interval_ms INTEGER,
+        cron_expression TEXT,
+        business_hours TEXT,
+        depends_on TEXT,
         event_source TEXT,
         event_config TEXT,
         next_run_at INTEGER,
@@ -99,6 +108,7 @@ export class TaskStore {
         run_count INTEGER DEFAULT 0,
         max_runs INTEGER,
         consecutive_failures INTEGER DEFAULT 0,
+        last_error_kind TEXT,
         notify TEXT DEFAULT 'on_change',
         last_result_hash TEXT,
         channel TEXT NOT NULL,
@@ -118,6 +128,7 @@ export class TaskStore {
         status TEXT NOT NULL,
         result TEXT,
         error TEXT,
+        error_kind TEXT,
         trigger_info TEXT,
         tokens_used INTEGER DEFAULT 0,
         FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
@@ -142,11 +153,42 @@ export class TaskStore {
     this.db.run('CREATE INDEX IF NOT EXISTS idx_tasks_next_run ON tasks(next_run_at)')
     this.db.run('CREATE INDEX IF NOT EXISTS idx_task_runs_task ON task_runs(task_id, started_at)')
     this.db.run('CREATE INDEX IF NOT EXISTS idx_proposals_message ON task_proposals(message_id)')
+    this.db.run('CREATE INDEX IF NOT EXISTS idx_tasks_depends ON tasks(depends_on)')
 
     // Enable foreign keys
     this.db.run('PRAGMA foreign_keys = ON')
 
+    // Migrate existing databases: add new columns if missing
+    this.migrate()
+
     log.debug('tasks', 'Task store initialized')
+  }
+
+  private migrate(): void {
+    const columns = this.db.query("PRAGMA table_info(tasks)").all() as Array<{ name: string }>
+    const columnNames = new Set(columns.map(c => c.name))
+
+    const migrations: Array<[string, string]> = [
+      ['cron_expression', 'ALTER TABLE tasks ADD COLUMN cron_expression TEXT'],
+      ['business_hours', 'ALTER TABLE tasks ADD COLUMN business_hours TEXT'],
+      ['depends_on', 'ALTER TABLE tasks ADD COLUMN depends_on TEXT'],
+      ['last_error_kind', 'ALTER TABLE tasks ADD COLUMN last_error_kind TEXT'],
+    ]
+
+    for (const [col, sql] of migrations) {
+      if (!columnNames.has(col)) {
+        this.db.run(sql)
+        log.debug('tasks', `Migrated: added column ${col}`)
+      }
+    }
+
+    // Migrate task_runs table
+    const runColumns = this.db.query("PRAGMA table_info(task_runs)").all() as Array<{ name: string }>
+    const runColumnNames = new Set(runColumns.map(c => c.name))
+    if (!runColumnNames.has('error_kind')) {
+      this.db.run('ALTER TABLE task_runs ADD COLUMN error_kind TEXT')
+      log.debug('tasks', 'Migrated: added column error_kind to task_runs')
+    }
   }
 
   create(input: NewTask): Task {
@@ -155,8 +197,9 @@ export class TaskStore {
     const status: TaskStatus = input.createdBy === 'agent' ? 'proposed' : 'active'
 
     let nextRunAt: number | undefined
-    if (input.kind === 'scheduled' && input.intervalMs && status === 'active') {
-      nextRunAt = now + input.intervalMs
+    if (input.kind === 'scheduled' && (input.intervalMs || input.cronExpression) && status === 'active') {
+      // nextRunAt is calculated by the runner after creation when it calls activateTask
+      nextRunAt = input.intervalMs ? now + input.intervalMs : now
     }
     if (input.kind === 'oneshot' && status === 'active') {
       nextRunAt = now
@@ -166,10 +209,11 @@ export class TaskStore {
       INSERT INTO tasks (
         id, name, description, kind, status, prompt, workflow,
         memory_context, memory_category, interval_ms,
+        cron_expression, business_hours, depends_on,
         event_source, event_config, next_run_at,
         max_runs, notify, channel, channel_target, created_by,
         created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       id,
       input.name,
@@ -181,6 +225,9 @@ export class TaskStore {
       input.memoryContext ? JSON.stringify(input.memoryContext) : null,
       input.memoryCategory ?? null,
       input.intervalMs ?? null,
+      input.cronExpression ?? null,
+      input.businessHours ?? null,
+      input.dependsOn ?? null,
       input.eventSource ?? null,
       input.eventConfig ? JSON.stringify(input.eventConfig) : null,
       nextRunAt ?? null,
@@ -212,11 +259,15 @@ export class TaskStore {
       status: 'status',
       prompt: 'prompt',
       intervalMs: 'interval_ms',
+      cronExpression: 'cron_expression',
+      businessHours: 'business_hours',
+      dependsOn: 'depends_on',
       nextRunAt: 'next_run_at',
       lastRunAt: 'last_run_at',
       runCount: 'run_count',
       maxRuns: 'max_runs',
       consecutiveFailures: 'consecutive_failures',
+      lastErrorKind: 'last_error_kind',
       notify: 'notify',
       lastResultHash: 'last_result_hash',
       memoryCategory: 'memory_category',
@@ -311,6 +362,15 @@ export class TaskStore {
     return rows.map(rowToTask)
   }
 
+  /** Get tasks that depend on a given task ID */
+  getDependents(taskId: string): Task[] {
+    const rows = this.db.query(`
+      SELECT * FROM tasks
+      WHERE depends_on = ? AND status = 'active'
+    `).all(taskId) as Array<Record<string, unknown>>
+    return rows.map(rowToTask)
+  }
+
   // --- Run tracking ---
 
   createRun(taskId: string, triggerInfo?: unknown): TaskRun {
@@ -330,6 +390,7 @@ export class TaskStore {
       status: 'running',
       result: undefined,
       error: undefined,
+      errorKind: undefined,
       triggerInfo,
       tokensUsed: 0,
     }
@@ -338,12 +399,13 @@ export class TaskStore {
   completeRun(runId: string, result: RunResult): void {
     this.db.run(`
       UPDATE task_runs
-      SET status = ?, result = ?, error = ?, tokens_used = ?, completed_at = ?
+      SET status = ?, result = ?, error = ?, error_kind = ?, tokens_used = ?, completed_at = ?
       WHERE id = ?
     `, [
       result.status,
       result.result ?? null,
       result.error ?? null,
+      result.errorKind ?? null,
       result.tokensUsed ?? 0,
       Date.now(),
       runId,
@@ -358,6 +420,17 @@ export class TaskStore {
       LIMIT ?
     `).all(taskId, limit) as Array<Record<string, unknown>>
     return rows.map(rowToRun)
+  }
+
+  /** Get the most recent successful run for a task */
+  getLastSuccessfulRun(taskId: string): TaskRun | undefined {
+    const row = this.db.query(`
+      SELECT * FROM task_runs
+      WHERE task_id = ? AND status = 'success'
+      ORDER BY started_at DESC
+      LIMIT 1
+    `).get(taskId) as Record<string, unknown> | null
+    return row ? rowToRun(row) : undefined
   }
 
   // --- Proposals ---
