@@ -43,6 +43,7 @@ export interface AgentLoopDeps {
   memory?: MemoryManager
   conversationStore?: ConversationStore
   skills?: Skill[]
+  additionalContext?: string
 }
 
 export class AgentLoop {
@@ -66,7 +67,7 @@ export class AgentLoop {
     this.remoteProvider = deps.remoteProvider
     this.memory = deps.memory ?? null
     this.conversationStore = deps.conversationStore ?? null
-    this.promptOptions = { skills: deps.skills }
+    this.promptOptions = { skills: deps.skills, additionalContext: deps.additionalContext }
     this.context = createAgentContext(deps.config, deps.sessionId, this.promptOptions)
     this.tokenizer = createLlamaCppTokenizer(deps.config.local.endpoint)
 

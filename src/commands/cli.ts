@@ -3,6 +3,7 @@ import { createAgentLoop } from '../agent'
 import { createCLIChannel } from '../channels'
 import { createAppServices } from '../bootstrap'
 import { applyLogLevel } from '../util/args'
+import { gatherStandup } from '../standup'
 
 export async function runCLI(config: RuntimeConfig, args: string[]): Promise<void> {
   applyLogLevel(args)
@@ -12,6 +13,9 @@ export async function runCLI(config: RuntimeConfig, args: string[]): Promise<voi
   const singleMessage = messageIndex !== -1 ? args[messageIndex + 1] : null
 
   const { providers, memory, conversations, router, toolExecutor, stats, skills } = await createAppServices(config)
+
+  // Gather workspace standup for agent context
+  const standup = await gatherStandup(config.workspace.path)
 
   // Create agent loop with conversation persistence and memory
   const sessionId = singleMessage ? crypto.randomUUID() : 'cli:default'
@@ -25,6 +29,7 @@ export async function runCLI(config: RuntimeConfig, args: string[]): Promise<voi
     memory,
     conversationStore: conversations,
     skills,
+    additionalContext: standup.context || undefined,
   })
 
   // Single message mode
