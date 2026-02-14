@@ -69,8 +69,14 @@ export function createDefaultToolExecutor(memory?: MemoryManager, codeAgent?: Co
 
   // Memory tools (functional if MemoryManager provided)
   if (memory) {
-    const { memorySearchTool, memoryGetTool, memorySetTool } = createMemoryTools(memory)
-    executor.registerAll([memorySearchTool, memoryGetTool, memorySetTool])
+    const tools = createMemoryTools(memory)
+    executor.registerAll([
+      tools.memorySearchTool,
+      tools.memoryGetTool,
+      tools.memorySetTool,
+      tools.memoryDeleteTool,
+      tools.memoryListTool,
+    ])
   } else {
     // Register stubs that return helpful error messages
     executor.registerAll([memorySearchTool, memoryGetTool])

@@ -4,9 +4,11 @@ import type { RuntimeConfig } from '../config'
 import type { ToolExecutor, ToolResult } from '../tools'
 import type { AgentEventHandler } from './events'
 import type { ConversationStore } from '../conversation'
+import type { MemoryManager } from '../memory'
 import { Router, shouldRetryWithRemote, analyzeResponseForEscalation } from '../routing'
 import { createAgentContext, addMessage, type AgentContext } from './context'
 import { fitToContextWindow } from './context-window'
+import { retrieveForContext } from '../memory/retrieval'
 import { createLlamaCppTokenizer } from '../providers/llamacpp'
 import { log } from '../util/logger'
 
@@ -36,6 +38,7 @@ export class AgentLoop {
   private toolExecutor: ToolExecutor
   private localProvider: LLMProvider
   private remoteProvider: LLMProvider | null
+  private memory: MemoryManager | null
   private context: AgentContext
   private tokenizer: Tokenizer
   private conversationStore: ConversationStore | null
@@ -48,6 +51,7 @@ export class AgentLoop {
     localProvider: LLMProvider,
     remoteProvider: LLMProvider | null,
     sessionId: string,
+    memory?: MemoryManager,
     conversationStore?: ConversationStore
   ) {
     this.config = config
@@ -55,6 +59,7 @@ export class AgentLoop {
     this.toolExecutor = toolExecutor
     this.localProvider = localProvider
     this.remoteProvider = remoteProvider
+    this.memory = memory ?? null
     this.conversationStore = conversationStore ?? null
     this.context = createAgentContext(config, sessionId)
     this.tokenizer = createLlamaCppTokenizer(config.local.endpoint)
@@ -75,6 +80,18 @@ export class AgentLoop {
 
     // Add user message to context
     addMessage(this.context, { role: 'user', content: userMessage })
+
+    // Proactive memory retrieval — inject relevant memories before the LLM sees the message
+    if (this.memory && this.config.memory.proactiveRetrieval) {
+      const recalled = await retrieveForContext(userMessage, this.memory, {
+        scoreThreshold: this.config.memory.scoreThreshold,
+        maxResults: this.config.memory.maxResults,
+        maxTokensBudget: this.config.memory.maxTokensBudget,
+      })
+      if (recalled) {
+        addMessage(this.context, { role: 'system', content: recalled })
+      }
+    }
 
     // Route the request
     const routingDecision = this.router.route(this.context.messages, this.toolExecutor.listTools())
@@ -408,6 +425,7 @@ export function createAgentLoop(
   localProvider: LLMProvider,
   remoteProvider: LLMProvider | null,
   sessionId?: string,
+  memory?: MemoryManager,
   conversationStore?: ConversationStore
 ): AgentLoop {
   return new AgentLoop(
@@ -417,6 +435,7 @@ export function createAgentLoop(
     localProvider,
     remoteProvider,
     sessionId ?? crypto.randomUUID(),
+    memory,
     conversationStore
   )
 }

@@ -177,7 +177,7 @@ async function runCLI(config: RuntimeConfig, args: string[]) {
   // Create stats tracker
   const stats = createStatsTracker()
 
-  // Create agent loop with conversation persistence
+  // Create agent loop with conversation persistence and memory
   const sessionId = singleMessage ? crypto.randomUUID() : 'cli:default'
   const agent = createAgentLoop(
     config,
@@ -186,6 +186,7 @@ async function runCLI(config: RuntimeConfig, args: string[]) {
     providers.local,
     providers.remote,
     sessionId,
+    memory,
     conversations
   )
 
@@ -381,6 +382,7 @@ async function runDiscord(config: RuntimeConfig, args: string[]) {
     providers.local,
     providers.remote,
     sessionId,
+    memory,
     conversations
   )
 

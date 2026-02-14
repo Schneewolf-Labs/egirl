@@ -70,6 +70,8 @@ You have access to these tools:
 - \`memory_search\` - Search memories (hybrid keyword + semantic)
 - \`memory_get\` - Retrieve a specific memory by key
 - \`memory_set\` - Store a memory for later recall
+- \`memory_delete\` - Delete a memory by key
+- \`memory_list\` - List all stored memories
 - \`web_research\` - Fetch a URL and return its text content
 
 Use tools proactively to gather information rather than asking.`)

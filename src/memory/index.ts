@@ -1,6 +1,7 @@
 export { MemoryFiles, createMemoryFiles, type MemoryEntry } from './files'
 export { MemoryIndexer, createMemoryIndexer, type IndexedMemory, type ContentType } from './indexer'
 export { MemorySearch, createMemorySearch, type SearchResult, type SearchOptions } from './search'
+export { retrieveForContext, type RetrievalConfig } from './retrieval'
 export {
   createEmbeddingProvider,
   Qwen3VLEmbeddings,
@@ -205,6 +206,20 @@ export class MemoryManager {
       value: m.value,
       imagePath: m.imagePath,
     }))
+  }
+
+  /**
+   * List all memories with metadata
+   */
+  list(limit = 100, offset = 0): Array<{ key: string; value: string; contentType: string; updatedAt: number }> {
+    return this.indexer.list(limit, offset)
+  }
+
+  /**
+   * Count total stored memories
+   */
+  count(): number {
+    return this.indexer.count()
   }
 
   /**
