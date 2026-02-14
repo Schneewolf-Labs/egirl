@@ -24,6 +24,7 @@ egirl is a personal AI agent for users with local GPU inference. It runs most ta
 - **[Tool use](docs/tools.md)** - File ops, git, command execution, memory search, web research, screenshots, and code agent delegation
 - **[Vision](docs/vision.md)** - Screenshot analysis and image understanding via Qwen3-VL
 - **[Skills](docs/skills.md)** - Extend capabilities with reusable Markdown instruction sets
+- **[Safety](docs/safety.md)** - Command blocklist, path sandboxing, sensitive file guard, audit logging
 - **[Customizable personality](docs/personality.md)** - Kira is the default, make her your own
 
 ## Quick Start
@@ -115,6 +116,7 @@ egirl/
 │   ├── routing/               # Local vs remote decisions
 │   ├── memory/                # SQLite + embeddings search
 │   ├── tools/                 # File ops, exec, memory
+│   ├── safety/                # Command filter, path sandbox, audit log
 │   ├── channels/              # CLI, Discord, Claude Code, XMPP, API
 │   ├── skills/                # Skill loading and management
 │   └── tracking/              # Usage stats and cost tracking
@@ -172,6 +174,7 @@ See [docs/tools.md](docs/tools.md) for the full reference with parameters and ex
 | [Tools Reference](docs/tools.md) | All 18 built-in tools with parameters and examples |
 | [Claude Code Integration](docs/claude-code.md) | Using egirl as a Claude Code supervisor |
 | [Skills](docs/skills.md) | Creating and managing skill files |
+| [Safety](docs/safety.md) | Command filtering, path sandboxing, sensitive file guard, audit logging, confirmation mode |
 | [Development Guide](docs/development.md) | Setup, testing, code style, and contributing |
 | [Discord Setup](DISCORD.md) | Step-by-step Discord bot configuration |
 | [Tool Format](docs/tool-format.md) | Qwen3 native tool calling specification |

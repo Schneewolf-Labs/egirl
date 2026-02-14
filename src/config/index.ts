@@ -116,6 +116,31 @@ export function loadConfig(): RuntimeConfig {
       compactOnStartup: toml.conversation?.compact_on_startup ?? true,
     },
     channels: {},
+    safety: {
+      enabled: toml.safety?.enabled ?? true,
+      commandFilter: {
+        enabled: toml.safety?.command_filter?.enabled ?? true,
+        blockedPatterns: toml.safety?.command_filter?.blocked_patterns ?? [],
+      },
+      pathSandbox: {
+        enabled: toml.safety?.path_sandbox?.enabled ?? false,
+        allowedPaths: (toml.safety?.path_sandbox?.allowed_paths ?? []).map(p => expandPath(p, workspacePath)),
+      },
+      sensitiveFiles: {
+        enabled: toml.safety?.sensitive_files?.enabled ?? true,
+        patterns: toml.safety?.sensitive_files?.patterns ?? [],
+      },
+      auditLog: {
+        enabled: toml.safety?.audit_log?.enabled ?? true,
+        path: toml.safety?.audit_log?.path
+          ? expandPath(toml.safety.audit_log.path, workspacePath)
+          : undefined,
+      },
+      confirmation: {
+        enabled: toml.safety?.confirmation?.enabled ?? false,
+        tools: toml.safety?.confirmation?.tools ?? ['execute_command', 'write_file', 'edit_file'],
+      },
+    },
     memory: {
       proactiveRetrieval: toml.memory?.proactive_retrieval ?? true,
       scoreThreshold: toml.memory?.score_threshold ?? 0.35,

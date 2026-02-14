@@ -6,6 +6,7 @@ import { createDefaultToolExecutor, type ToolExecutor, type CodeAgentConfig } fr
 import { createMemoryManager, Qwen3VLEmbeddings, type MemoryManager } from './memory'
 import { createConversationStore, type ConversationStore } from './conversation'
 import { createStatsTracker, type StatsTracker } from './tracking'
+import { buildSafetyConfig } from './safety/config-bridge'
 import { createSkillManager } from './skills'
 import type { Skill } from './skills/types'
 import { log } from './util/logger'
@@ -132,6 +133,7 @@ export async function createAppServices(config: RuntimeConfig): Promise<AppServi
   const skills = await loadSkills(config)
   const router = createRouter(config, skills)
   const toolExecutor = createDefaultToolExecutor(memory, getCodeAgentConfig(config))
+  toolExecutor.setSafety(buildSafetyConfig(config))
   const stats = createStatsTracker()
 
   return { config, providers, memory, conversations, router, toolExecutor, stats, skills }

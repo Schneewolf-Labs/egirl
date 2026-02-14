@@ -33,5 +33,28 @@ permission_mode = "default"               # local model handles permissions
 # working_dir = "~/projects/myrepo"      # defaults to cwd
 # max_turns = 30                         # safety limit on turns per task
 
+[safety]
+enabled = true                             # master switch for all safety features
+
+[safety.command_filter]
+enabled = true                             # block dangerous shell commands
+# blocked_patterns = ["npm\\s+publish"]    # added on top of built-in blocklist
+
+[safety.path_sandbox]
+enabled = false                            # restrict file ops to allowed dirs
+# allowed_paths = ["{workspace}", "~/projects"]
+
+[safety.sensitive_files]
+enabled = true                             # block access to secrets/keys
+# patterns = ["secret\\.yaml$"]            # added on top of built-in patterns
+
+[safety.audit_log]
+enabled = true                             # log all tool calls to JSONL
+path = "{workspace}/audit.log"
+
+[safety.confirmation]
+enabled = false                            # require confirmation for destructive ops
+# tools = ["execute_command", "write_file", "edit_file"]
+
 [skills]
 dirs = ["~/.egirl/skills", "{workspace}/skills"]

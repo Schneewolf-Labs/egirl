@@ -67,6 +67,30 @@ export const EgirlConfigSchema = Type.Object({
     max_tokens_budget: Type.Number({ default: 2000 }),
   })),
 
+  safety: Type.Optional(Type.Object({
+    enabled: Type.Boolean({ default: true }),
+    command_filter: Type.Optional(Type.Object({
+      enabled: Type.Boolean({ default: true }),
+      blocked_patterns: Type.Optional(Type.Array(Type.String())),
+    })),
+    path_sandbox: Type.Optional(Type.Object({
+      enabled: Type.Boolean({ default: false }),
+      allowed_paths: Type.Optional(Type.Array(Type.String())),
+    })),
+    sensitive_files: Type.Optional(Type.Object({
+      enabled: Type.Boolean({ default: true }),
+      patterns: Type.Optional(Type.Array(Type.String())),
+    })),
+    audit_log: Type.Optional(Type.Object({
+      enabled: Type.Boolean({ default: true }),
+      path: Type.Optional(Type.String()),
+    })),
+    confirmation: Type.Optional(Type.Object({
+      enabled: Type.Boolean({ default: false }),
+      tools: Type.Optional(Type.Array(Type.String())),
+    })),
+  })),
+
   skills: Type.Object({
     dirs: Type.Array(Type.String(), { default: ['~/.egirl/skills', '{workspace}/skills'] }),
   }),
@@ -144,6 +168,29 @@ export interface RuntimeConfig {
     scoreThreshold: number
     maxResults: number
     maxTokensBudget: number
+  }
+  safety: {
+    enabled: boolean
+    commandFilter: {
+      enabled: boolean
+      blockedPatterns: string[]
+    }
+    pathSandbox: {
+      enabled: boolean
+      allowedPaths: string[]
+    }
+    sensitiveFiles: {
+      enabled: boolean
+      patterns: string[]
+    }
+    auditLog: {
+      enabled: boolean
+      path?: string
+    }
+    confirmation: {
+      enabled: boolean
+      tools: string[]
+    }
   }
   skills: {
     dirs: string[]
