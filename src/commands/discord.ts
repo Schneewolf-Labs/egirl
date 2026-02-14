@@ -33,7 +33,7 @@ export async function runDiscord(config: RuntimeConfig, args: string[]): Promise
     additionalContext: standup.context || undefined,
   })
 
-  const discord = createDiscordChannel(agentFactory, config.channels.discord)
+  const discord = createDiscordChannel(agentFactory, config.channels.discord, providers.local)
 
   // Handle graceful shutdown
   const shutdown = async () => {
