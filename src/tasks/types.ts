@@ -1,3 +1,5 @@
+import type { TaskErrorKind } from './error-classify'
+
 export type TaskKind = 'scheduled' | 'event' | 'oneshot'
 export type TaskStatus = 'proposed' | 'active' | 'paused' | 'done' | 'failed'
 export type TaskNotify = 'always' | 'on_change' | 'on_failure' | 'never'
@@ -16,6 +18,9 @@ export interface Task {
   memoryContext: string[] | undefined
   memoryCategory: string | undefined
   intervalMs: number | undefined
+  cronExpression: string | undefined
+  businessHours: string | undefined
+  dependsOn: string | undefined
   eventSource: EventSourceType | undefined
   eventConfig: unknown | undefined
   nextRunAt: number | undefined
@@ -23,6 +28,7 @@ export interface Task {
   runCount: number
   maxRuns: number | undefined
   consecutiveFailures: number
+  lastErrorKind: TaskErrorKind | undefined
   notify: TaskNotify
   lastResultHash: string | undefined
   channel: string
@@ -41,6 +47,9 @@ export interface NewTask {
   memoryContext?: string[]
   memoryCategory?: string
   intervalMs?: number
+  cronExpression?: string
+  businessHours?: string
+  dependsOn?: string
   eventSource?: EventSourceType
   eventConfig?: unknown
   maxRuns?: number
@@ -58,6 +67,7 @@ export interface TaskRun {
   status: RunStatus
   result: string | undefined
   error: string | undefined
+  errorKind: TaskErrorKind | undefined
   triggerInfo: unknown | undefined
   tokensUsed: number
 }
@@ -66,6 +76,7 @@ export interface RunResult {
   status: 'success' | 'failure'
   result?: string
   error?: string
+  errorKind?: TaskErrorKind
   tokensUsed?: number
 }
 

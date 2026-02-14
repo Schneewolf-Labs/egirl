@@ -4,6 +4,9 @@ import { retrieveForContext } from '../memory/retrieval'
 import { extractMemories } from '../memory/extractor'
 import { executeWorkflow } from '../workflows/engine'
 import { AgentLoop } from '../agent/loop'
+import { parseScheduleExpression, nextOccurrence } from './cron'
+import { calculateNextRun, parseBusinessHours, isWithinBusinessHours } from './schedule'
+import { classifyError, getRetryPolicy } from './error-classify'
 import type { AgentLoopDeps } from '../agent/loop'
 import type { WorkflowDefinition } from '../workflows/types'
 import type { MemoryManager } from '../memory'
@@ -32,6 +35,7 @@ If you need context from previous runs, use memory_search.`
 interface QueuedEvent {
   taskId: string
   payload: EventPayload
+  queuedAt: number
 }
 
 export interface OutboundChannel {
@@ -60,6 +64,10 @@ export class TaskRunner {
   private currentTaskId: string | undefined
   private abortController: AbortController | undefined
   private lastInteractionAt: number = Date.now()
+  /** Track last event timestamp per task for deduplication */
+  private lastEventAt: Map<string, number> = new Map()
+  /** Minimum ms between event-triggered runs for same task */
+  private eventDedupeMs = 10_000
 
   constructor(deps: TaskRunnerDeps) {
     this.deps = deps
@@ -124,8 +132,9 @@ export class TaskRunner {
     if (task.kind === 'event') {
       this.registerEventSource(task)
     }
-    if (task.kind === 'scheduled' && task.intervalMs) {
-      this.deps.store.update(taskId, { nextRunAt: Date.now() + task.intervalMs })
+    if (task.kind === 'scheduled') {
+      const nextRunAt = this.calculateTaskNextRun(task)
+      this.deps.store.update(taskId, { nextRunAt })
     }
     if (task.kind === 'oneshot') {
       this.deps.store.update(taskId, { nextRunAt: Date.now() })
@@ -144,10 +153,38 @@ export class TaskRunner {
     return this.executeTask(task)
   }
 
+  private calculateTaskNextRun(task: Task, now?: Date): number {
+    const currentTime = now ?? new Date()
+
+    // Parse business hours if configured
+    const businessHours = task.businessHours
+      ? parseBusinessHours(task.businessHours)
+      : undefined
+
+    // Cron expression takes precedence over interval
+    if (task.cronExpression) {
+      const schedule = parseScheduleExpression(task.cronExpression)
+      if (schedule) {
+        return calculateNextRun({
+          cronSchedule: schedule,
+          businessHours,
+          now: currentTime,
+        })
+      }
+    }
+
+    // Fall back to interval
+    return calculateNextRun({
+      intervalMs: task.intervalMs,
+      businessHours,
+      now: currentTime,
+    })
+  }
+
   private async tick(): Promise<void> {
     if (this.isExecuting) return
 
-    // Process queued events first
+    // Process queued events first (deduplicated)
     if (this.eventQueue.length > 0) {
       const event = this.eventQueue.shift()!
       const task = this.deps.store.get(event.taskId)
@@ -159,8 +196,20 @@ export class TaskRunner {
 
     // Check for due scheduled/oneshot tasks
     const due = this.deps.store.getDueTasks(Date.now())
-    if (due.length > 0) {
-      await this.executeTask(due[0]!)
+    for (const task of due) {
+      // Check business hours constraint before running
+      if (task.businessHours) {
+        const hours = parseBusinessHours(task.businessHours)
+        if (hours && !isWithinBusinessHours(new Date(), hours)) {
+          // Reschedule to next business hours window
+          const nextRunAt = this.calculateTaskNextRun(task)
+          this.deps.store.update(task.id, { nextRunAt })
+          continue
+        }
+      }
+
+      await this.executeTask(task)
+      return // One task per tick
     }
   }
 
@@ -203,10 +252,19 @@ export class TaskRunner {
     if (!source) return
 
     source.start((payload) => {
+      // Deduplicate: skip if we got an event for this task within dedupeMs
+      const now = Date.now()
+      const lastEvent = this.lastEventAt.get(task.id) ?? 0
+      if (now - lastEvent < this.eventDedupeMs) {
+        log.debug('tasks', `Deduplicating event for task ${task.id} (${now - lastEvent}ms since last)`)
+        return
+      }
+      this.lastEventAt.set(task.id, now)
+
       // If currently executing, queue it (keep only latest per task)
       if (this.isExecuting) {
         this.eventQueue = this.eventQueue.filter(e => e.taskId !== task.id)
-        this.eventQueue.push({ taskId: task.id, payload })
+        this.eventQueue.push({ taskId: task.id, payload, queuedAt: now })
         return
       }
 
@@ -228,6 +286,7 @@ export class TaskRunner {
       source.stop()
       this.eventSources.delete(taskId)
     }
+    this.lastEventAt.delete(taskId)
   }
 
   private async executeTask(task: Task, eventPayload?: EventPayload): Promise<TaskRun> {
@@ -251,17 +310,19 @@ export class TaskRunner {
       // Check notification criteria
       const shouldNotify = this.shouldNotify(task, resultHash, result)
 
-      // Update task state
+      // Update task state — clear failure tracking on success
       this.deps.store.update(task.id, {
         lastRunAt: Date.now(),
         runCount: task.runCount + 1,
         consecutiveFailures: 0,
+        lastErrorKind: undefined,
         lastResultHash: resultHash,
       })
 
       // Schedule next run for scheduled tasks
-      if (task.kind === 'scheduled' && task.intervalMs) {
-        this.deps.store.update(task.id, { nextRunAt: Date.now() + task.intervalMs })
+      if (task.kind === 'scheduled') {
+        const nextRunAt = this.calculateTaskNextRun(task)
+        this.deps.store.update(task.id, { nextRunAt })
       }
 
       // Check max_runs
@@ -278,26 +339,48 @@ export class TaskRunner {
         await this.notify(task, result)
       }
 
+      // Trigger dependent tasks
+      await this.triggerDependents(task.id)
+
       return { ...run, status: 'success', result, completedAt: Date.now() }
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err)
       log.warn('tasks', `Task ${task.name} failed: ${errorMsg}`)
 
+      // Classify the error
+      const errorKind = classifyError(errorMsg)
       const failures = task.consecutiveFailures + 1
+      const policy = getRetryPolicy(errorKind, failures)
+
+      log.info('tasks', `Task ${task.name}: error classified as ${errorKind} — ${policy.reason}`)
+
       this.deps.store.update(task.id, {
         lastRunAt: Date.now(),
         consecutiveFailures: failures,
+        lastErrorKind: errorKind,
       })
 
-      // Pause after 2 consecutive failures
-      if (failures >= 2) {
+      if (policy.shouldPause) {
         this.deps.store.update(task.id, { status: 'paused' })
         this.unregisterEventSource(task.id)
-        await this.notify(task, `Task "${task.name}" paused after ${failures} consecutive failures. Last error: ${errorMsg}`)
+        await this.notify(
+          task,
+          `Task "${task.name}" paused: ${policy.reason}\nLast error (${errorKind}): ${errorMsg}`,
+        )
+      } else if (policy.shouldRetry && task.kind === 'scheduled') {
+        // Schedule retry with backoff
+        const nextRunAt = Date.now() + policy.backoffMs
+        this.deps.store.update(task.id, { nextRunAt })
+        log.info('tasks', `Task ${task.name}: retrying in ${Math.round(policy.backoffMs / 1000)}s`)
       }
 
-      this.deps.store.completeRun(run.id, { status: 'failure', error: errorMsg })
-      return { ...run, status: 'failure', error: errorMsg, completedAt: Date.now() }
+      // Notify on failure if configured
+      if (task.notify === 'on_failure' || task.notify === 'always') {
+        await this.notify(task, `Task "${task.name}" failed (${errorKind}): ${errorMsg}`)
+      }
+
+      this.deps.store.completeRun(run.id, { status: 'failure', error: errorMsg, errorKind })
+      return { ...run, status: 'failure', error: errorMsg, errorKind, completedAt: Date.now() }
     } finally {
       this.isExecuting = false
       this.currentTaskId = undefined
@@ -305,9 +388,32 @@ export class TaskRunner {
     }
   }
 
-  private async doExecute(task: Task, eventPayload?: EventPayload): Promise<string> {
-    const cwd = this.deps.config.workspace.path
+  /** Trigger tasks that depend on the completed task */
+  private async triggerDependents(completedTaskId: string): Promise<void> {
+    const dependents = this.deps.store.getDependents(completedTaskId)
+    for (const dep of dependents) {
+      log.info('tasks', `Triggering dependent task: ${dep.name} (depends on ${completedTaskId})`)
 
+      // For scheduled dependents, set them to run now
+      if (dep.kind === 'scheduled' || dep.kind === 'oneshot') {
+        this.deps.store.update(dep.id, { nextRunAt: Date.now() })
+      }
+      // For event dependents, queue a synthetic event
+      if (dep.kind === 'event') {
+        this.eventQueue.push({
+          taskId: dep.id,
+          payload: {
+            source: 'command',
+            summary: `Triggered by completion of task ${completedTaskId}`,
+            data: { triggeredBy: completedTaskId },
+          },
+          queuedAt: Date.now(),
+        })
+      }
+    }
+  }
+
+  private async doExecute(task: Task, eventPayload?: EventPayload): Promise<string> {
     // If task has a workflow definition, try workflow-first execution
     if (task.workflow) {
       const workflowResult = await this.executeWorkflow(task)
