@@ -61,26 +61,28 @@ handle edge cases more gracefully.
 
 ---
 
-### 3. Cron / Scheduled Agent Tasks
+### 3. Cron / Scheduled Agent Tasks — ALREADY IMPLEMENTED
 
 **What they do:** Persistent scheduled tasks with three schedule types:
 - `at`: one-shot ISO timestamp
 - `every`: interval with anchor (prevents drift)
 - `cron`: standard cron expressions with timezone
 
-Jobs can either inject a system event into the main session or run an isolated agent
-turn with its own context. Isolated jobs can optionally deliver results to a channel.
-Exponential backoff on errors (30s -> 60s -> 5m -> 15m -> 60m). Survived restarts.
+**egirl status:** The background task framework (PR #33) already covers this and then
+some. We have interval scheduling, event-driven triggers (file watcher, GitHub polling,
+command output, webhooks), SQLite persistence, and a proposal system for agent-initiated
+tasks. Our implementation is arguably better for our use case because it includes
+real-time file watching and hybrid workflow+prompt execution.
 
-**Why it's good:** An agent that can schedule its own work is significantly more useful.
-"Remind me about X tomorrow", "Check CI status every 30 minutes", "Run the standup
-summary at 9am" - these are real workflows.
+**Remaining gaps from OpenClaw's approach:**
+- No cron expression syntax (only intervals like `"30m"`, `"1d"`)
+- No time-of-day scheduling ("run at 9am") or business-hour constraints
+- No retry policies with exponential backoff (auto-pauses after 2 failures)
+- No task dependencies (task B after task A)
 
-**egirl adaptation:** Implement a simple cron service backed by SQLite. Support `at`
-and `every` schedules (skip cron expressions for v1). Add a `schedule_task` tool
-so the agent can create its own scheduled work. Store in the existing SQLite db.
+Adding cron expression support and time-of-day scheduling would close the main gap.
 
-**Priority: High** - This is a force multiplier for a personal agent.
+**Priority: Low** - Core functionality exists. Cron syntax would be nice-to-have.
 
 ---
 
@@ -305,15 +307,18 @@ case without the complexity of multi-agent orchestration.
 
 | Feature | Effort | Priority | Lines (est.) |
 |---------|--------|----------|--------------|
-| Cron/scheduled tasks | Medium | High | ~200 |
 | Skill requirements declaration | Low | High | ~30 |
 | Auth profile rotation | Low-Medium | Medium | ~100 |
 | Error classification for fallback | Low | Medium | ~80 |
 | Browser automation (Playwright) | High | Medium | ~400 |
+| Cron expression support (for tasks) | Low | Low | ~60 |
 | Session cost tracking (enhanced) | Low | Low | ~50 |
 | User-defined hooks | Medium | Low | ~150 |
 
-Total estimated new code: ~1,000 lines for the high+medium priority items.
+Note: Cron/scheduled tasks were already implemented in PR #33 (background task
+framework). The remaining gap is cron expression syntax and time-of-day scheduling.
+
+Total estimated new code: ~610 lines for the high+medium priority items.
 
 The main takeaway: OpenClaw's best ideas are about **resilience** (auth rotation,
 error classification, fallback chains) and **autonomy** (cron, scheduled tasks).
