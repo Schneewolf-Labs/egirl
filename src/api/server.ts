@@ -5,8 +5,10 @@ import type { RuntimeConfig } from '../config'
 import type { ProviderRegistry } from '../providers'
 import type { StatsTracker } from '../tracking/stats'
 import { createRoutes, type RouteDeps } from './routes'
+import { createBrowserRoutes } from './browser-routes'
 import { buildOpenAPISpec } from './openapi'
 import { log } from '../util/logger'
+import type { BrowserManager } from '../browser'
 
 export interface APIServerConfig {
   port: number
@@ -20,6 +22,7 @@ export interface APIServerDeps {
   memory: MemoryManager | undefined
   providers: ProviderRegistry
   stats: StatsTracker
+  browser?: BrowserManager
 }
 
 export class APIServer {
@@ -39,6 +42,19 @@ export class APIServer {
     }
 
     this.routes = createRoutes(routeDeps)
+
+    // Merge browser routes if BrowserManager provided
+    if (deps.browser) {
+      const browserRoutes = createBrowserRoutes(deps.browser)
+      for (const [path, methods] of browserRoutes) {
+        if (!this.routes.has(path)) {
+          this.routes.set(path, new Map())
+        }
+        for (const [method, handler] of methods) {
+          this.routes.get(path)!.set(method, handler)
+        }
+      }
+    }
   }
 
   start(): void {

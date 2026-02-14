@@ -10,6 +10,7 @@ import { createTaskStore, type TaskStore } from './tasks'
 import { buildSafetyConfig } from './safety/config-bridge'
 import { createSkillManager } from './skills'
 import type { Skill } from './skills/types'
+import { BrowserManager, type BrowserManager as BrowserManagerType } from './browser'
 import { log } from './util/logger'
 
 /**
@@ -26,6 +27,7 @@ export interface AppServices {
   toolExecutor: ToolExecutor
   stats: StatsTracker
   skills: Skill[]
+  browser: BrowserManagerType
 }
 
 /**
@@ -170,9 +172,10 @@ export async function createAppServices(config: RuntimeConfig): Promise<AppServi
   const taskStore = createTasks(config)
   const skills = await loadSkills(config)
   const router = createRouter(config, skills)
-  const toolExecutor = createDefaultToolExecutor(memory, getCodeAgentConfig(config), getGitHubConfig(config))
+  const browser = new BrowserManager()
+  const toolExecutor = createDefaultToolExecutor(memory, getCodeAgentConfig(config), getGitHubConfig(config), browser)
   toolExecutor.setSafety(buildSafetyConfig(config))
   const stats = createStatsTracker()
 
-  return { config, providers, memory, conversations, taskStore, router, toolExecutor, stats, skills }
+  return { config, providers, memory, conversations, taskStore, router, toolExecutor, stats, skills, browser }
 }

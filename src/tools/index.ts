@@ -22,10 +22,12 @@ export {
   createGitHubTools,
   type GitHubConfig,
   createTaskTools,
+  createBrowserTools,
 } from './builtin'
 
 import { createToolExecutor } from './executor'
 import type { MemoryManager } from '../memory'
+import type { BrowserManager } from '../browser'
 import {
   readTool,
   writeTool,
@@ -46,6 +48,7 @@ import {
   gitShowTool,
   createGitHubTools,
   type GitHubConfig,
+  createBrowserTools,
 } from './builtin'
 import { createWorkflowTool, builtinWorkflows } from '../workflows'
 
@@ -59,6 +62,7 @@ export function createDefaultToolExecutor(
   memory?: MemoryManager,
   codeAgent?: CodeAgentConfig,
   github?: GitHubConfig,
+  browser?: BrowserManager,
 ) {
   const executor = createToolExecutor()
 
@@ -114,6 +118,24 @@ export function createDefaultToolExecutor(
       gh.ghIssueUpdateTool,
       gh.ghCiStatusTool,
       gh.ghBranchCreateTool,
+    ])
+  }
+
+  // Browser tools (available if BrowserManager provided)
+  if (browser) {
+    const bt = createBrowserTools(browser)
+    executor.registerAll([
+      bt.browserNavigateTool,
+      bt.browserClickTool,
+      bt.browserFillTool,
+      bt.browserSnapshotTool,
+      bt.browserScreenshotTool,
+      bt.browserSelectTool,
+      bt.browserCheckTool,
+      bt.browserHoverTool,
+      bt.browserWaitTool,
+      bt.browserEvalTool,
+      bt.browserCloseTool,
     ])
   }
 
