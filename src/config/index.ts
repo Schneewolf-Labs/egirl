@@ -215,6 +215,16 @@ export function loadConfig(): RuntimeConfig {
     }
   }
 
+  // GitHub integration
+  const githubToken = process.env.GITHUB_TOKEN
+  if (githubToken) {
+    config.github = {
+      token: githubToken,
+      defaultOwner: toml.github?.default_owner,
+      defaultRepo: toml.github?.default_repo,
+    }
+  }
+
   return config
 }
 

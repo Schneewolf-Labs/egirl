@@ -19,6 +19,8 @@ export {
   gitLogTool,
   gitCommitTool,
   gitShowTool,
+  createGitHubTools,
+  type GitHubConfig,
 } from './builtin'
 
 import { createToolExecutor } from './executor'
@@ -41,14 +43,21 @@ import {
   gitLogTool,
   gitCommitTool,
   gitShowTool,
+  createGitHubTools,
+  type GitHubConfig,
 } from './builtin'
 
 /**
  * Create tool executor with all default tools.
  * If MemoryManager is provided, memory tools will be functional.
  * If CodeAgentConfig is provided, the code_agent tool will be available.
+ * If GitHubConfig is provided, GitHub integration tools will be available.
  */
-export function createDefaultToolExecutor(memory?: MemoryManager, codeAgent?: CodeAgentConfig) {
+export function createDefaultToolExecutor(
+  memory?: MemoryManager,
+  codeAgent?: CodeAgentConfig,
+  github?: GitHubConfig,
+) {
   const executor = createToolExecutor()
 
   // Base tools (always available)
@@ -85,6 +94,24 @@ export function createDefaultToolExecutor(memory?: MemoryManager, codeAgent?: Co
   // Code agent tool (available if claude code config provided)
   if (codeAgent) {
     executor.register(createCodeAgentTool(codeAgent))
+  }
+
+  // GitHub tools (available if GITHUB_TOKEN is set)
+  if (github) {
+    const gh = createGitHubTools(github)
+    executor.registerAll([
+      gh.ghPrListTool,
+      gh.ghPrViewTool,
+      gh.ghPrCreateTool,
+      gh.ghPrReviewTool,
+      gh.ghPrCommentTool,
+      gh.ghIssueListTool,
+      gh.ghIssueViewTool,
+      gh.ghIssueCommentTool,
+      gh.ghIssueUpdateTool,
+      gh.ghCiStatusTool,
+      gh.ghBranchCreateTool,
+    ])
   }
 
   return executor
