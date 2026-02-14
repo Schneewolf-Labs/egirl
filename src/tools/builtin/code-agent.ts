@@ -2,11 +2,15 @@ import { query, type ClaudeAgentOptions } from '@anthropic-ai/claude-agent-sdk'
 import type { Tool, ToolResult } from '../types'
 import { log } from '../../util/logger'
 
+/** Default timeout: 5 minutes */
+const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000
+
 export interface CodeAgentConfig {
   permissionMode: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan'
   model?: string
   workingDir: string
   maxTurns?: number
+  timeoutMs?: number
 }
 
 /**
@@ -50,19 +54,26 @@ export function createCodeAgentTool(config: CodeAgentConfig): Tool {
 
       const startTime = Date.now()
       let sessionId = ''
-      let turns = 0
+      let sdkTurns: number | undefined
+      let manualTurns = 0
       let totalCost = 0
       let finalResult = ''
+
+      const timeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS
+      const abortController = new AbortController()
+      const timeoutId = setTimeout(() => abortController.abort(), timeoutMs)
 
       const options: ClaudeAgentOptions = {
         permissionMode: config.permissionMode === 'bypassPermissions' ? 'bypassPermissions' : 'default',
         model: config.model as 'claude-sonnet-4-20250514' | undefined,
         maxTurns: config.maxTurns,
         cwd: workingDir,
+        abortSignal: abortController.signal,
       }
 
       try {
         for await (const message of query({ prompt: task, options })) {
+          if (abortController.signal.aborted) break
           if (!('type' in message)) continue
 
           switch (message.type) {
@@ -77,29 +88,35 @@ export function createCodeAgentTool(config: CodeAgentConfig): Tool {
             case 'result': {
               const resultMsg = message as { result?: string; num_turns?: number; total_cost_usd?: number }
               finalResult = resultMsg.result ?? ''
-              turns = resultMsg.num_turns ?? turns
+              sdkTurns = resultMsg.num_turns
               totalCost = resultMsg.total_cost_usd ?? totalCost
               break
             }
           }
 
-          // Count assistant turns
+          // Count assistant turns as fallback if SDK doesn't report them
           if ('message' in message && message.message) {
             const msg = message.message as { role?: string }
             if (msg.role === 'assistant') {
-              turns++
+              manualTurns++
             }
           }
         }
       } catch (error) {
-        const msg = error instanceof Error ? error.message : String(error)
+        clearTimeout(timeoutId)
+        const isTimeout = error instanceof DOMException && error.name === 'AbortError'
+        const msg = isTimeout
+          ? `Code agent timed out after ${(timeoutMs / 1000).toFixed(0)}s`
+          : error instanceof Error ? error.message : String(error)
         log.error('code-agent', `Task failed: ${msg}`)
         return {
           success: false,
           output: `Code agent error: ${msg}`,
         }
       }
+      clearTimeout(timeoutId)
 
+      const turns = sdkTurns ?? manualTurns
       const durationMs = Date.now() - startTime
       const durationSec = (durationMs / 1000).toFixed(1)
 

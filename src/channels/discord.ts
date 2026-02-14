@@ -105,6 +105,8 @@ export class DiscordChannel {
   private ready = false
   private reactionHandlers: ReactionHandler[] = []
   private interactionHandlers: InteractionHandler[] = []
+  private messageQueue: Array<() => Promise<void>> = []
+  private processing = false
 
   constructor(agent: AgentLoop, config: DiscordConfig) {
     this.agent = agent
@@ -238,10 +240,40 @@ export class DiscordChannel {
     const content = this.extractContent(message)
     if (!content.trim()) return
 
+    // Enqueue to prevent concurrent access to shared AgentLoop context
+    this.enqueueMessage(() => this.processMessage(message, content))
+  }
+
+  private enqueueMessage(task: () => Promise<void>): void {
+    this.messageQueue.push(task)
+    if (!this.processing) {
+      this.drainQueue()
+    }
+  }
+
+  private async drainQueue(): Promise<void> {
+    this.processing = true
+    while (this.messageQueue.length > 0) {
+      const task = this.messageQueue.shift()!
+      try {
+        await task()
+      } catch (error) {
+        log.error('discord', 'Queued message processing failed:', error)
+      }
+    }
+    this.processing = false
+  }
+
+  private async processMessage(message: Message, content: string): Promise<void> {
     log.info('discord', `Message from ${message.author.tag}: ${content.slice(0, 100)}...`)
 
+    // Keep typing indicator alive (Discord expires it after ~10s)
+    const typingInterval = setInterval(() => {
+      message.channel.sendTyping().catch(() => {})
+    }, 8_000)
+
     try {
-      // Show typing indicator
+      // Show typing indicator immediately
       await message.channel.sendTyping()
 
       // Run through agent with event handler for tool transparency
@@ -260,6 +292,8 @@ export class DiscordChannel {
       const errorMsg = error instanceof Error ? error.message : String(error)
       log.error('discord', `Error processing message:`, error)
       await message.reply(`Sorry, I encountered an error: ${errorMsg}`).catch(() => {})
+    } finally {
+      clearInterval(typingInterval)
     }
   }
 
