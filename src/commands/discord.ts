@@ -1,4 +1,5 @@
 import { type AgentFactory, createAgentLoop } from '../agent'
+import { SessionMutex } from '../agent/session-mutex'
 import { createAppServices } from '../bootstrap'
 import { createDiscordChannel } from '../channels'
 import type { RuntimeConfig } from '../config'
@@ -24,6 +25,9 @@ export async function runDiscord(config: RuntimeConfig, args: string[]): Promise
   // Gather workspace standup for agent context
   const standup = await gatherStandup(config.workspace.path)
 
+  // Shared mutex serializes agent runs across Discord messages and background tasks
+  const sessionMutex = new SessionMutex()
+
   // Create agent factory for per-session loops
   const agentFactory: AgentFactory = (sessionId: string) =>
     createAgentLoop({
@@ -37,6 +41,7 @@ export async function runDiscord(config: RuntimeConfig, args: string[]): Promise
       conversationStore: conversations,
       skills,
       additionalContext: standup.context || undefined,
+      sessionMutex,
     })
 
   const discord = createDiscordChannel(agentFactory, config.channels.discord, providers.local)
@@ -59,6 +64,7 @@ export async function runDiscord(config: RuntimeConfig, args: string[]): Promise
       remoteProvider: providers.remote,
       memory,
       outbound,
+      sessionMutex,
     })
 
     // Register task tools on the shared tool executor

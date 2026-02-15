@@ -1,4 +1,5 @@
 import { createAgentLoop } from '../agent'
+import { SessionMutex } from '../agent/session-mutex'
 import { createAPIServer } from '../api'
 import { createAppServices } from '../bootstrap'
 import type { RuntimeConfig } from '../config'
@@ -22,6 +23,8 @@ export async function runAPI(config: RuntimeConfig, args: string[]): Promise<voi
   // Gather workspace standup for agent context
   const standup = await gatherStandup(config.workspace.path)
 
+  const sessionMutex = new SessionMutex()
+
   const agent = createAgentLoop({
     config,
     router,
@@ -31,6 +34,7 @@ export async function runAPI(config: RuntimeConfig, args: string[]): Promise<voi
     sessionId: 'api:default',
     skills,
     additionalContext: standup.context || undefined,
+    sessionMutex,
   })
 
   const api = createAPIServer(

@@ -22,3 +22,4 @@ export {
   type AgentResponse,
   createAgentLoop,
 } from './loop'
+export { SessionMutex } from './session-mutex'
