@@ -11,6 +11,24 @@ export interface AuditEntry {
   success?: boolean
 }
 
+export interface AuditMemoryEntry {
+  timestamp: string
+  action: 'memory_get' | 'memory_set' | 'memory_delete' | 'memory_search' | 'memory_recall'
+  key?: string
+  query?: string
+  source?: string
+  sessionId?: string
+}
+
+export interface AuditAPIEntry {
+  timestamp: string
+  action: 'api_request'
+  method: string
+  path: string
+  ip: string
+  status: number
+}
+
 export async function appendAuditLog(entry: AuditEntry, logPath: string): Promise<void> {
   try {
     await mkdir(dirname(logPath), { recursive: true })
@@ -18,5 +36,28 @@ export async function appendAuditLog(entry: AuditEntry, logPath: string): Promis
     await appendFile(logPath, line, 'utf-8')
   } catch (error) {
     log.warn('safety', `Failed to write audit log: ${error}`)
+  }
+}
+
+export async function auditMemoryOperation(
+  entry: AuditMemoryEntry,
+  logPath: string,
+): Promise<void> {
+  try {
+    await mkdir(dirname(logPath), { recursive: true })
+    const line = `${JSON.stringify(entry)}\n`
+    await appendFile(logPath, line, 'utf-8')
+  } catch (error) {
+    log.warn('safety', `Failed to write memory audit log: ${error}`)
+  }
+}
+
+export async function auditAPIRequest(entry: AuditAPIEntry, logPath: string): Promise<void> {
+  try {
+    await mkdir(dirname(logPath), { recursive: true })
+    const line = `${JSON.stringify(entry)}\n`
+    await appendFile(logPath, line, 'utf-8')
+  } catch (error) {
+    log.warn('safety', `Failed to write API audit log: ${error}`)
   }
 }

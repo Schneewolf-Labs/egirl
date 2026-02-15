@@ -141,8 +141,8 @@ export function loadConfig(): RuntimeConfig {
         blockedPatterns: toml.safety?.command_filter?.blocked_patterns ?? [],
       },
       pathSandbox: {
-        enabled: toml.safety?.path_sandbox?.enabled ?? false,
-        allowedPaths: (toml.safety?.path_sandbox?.allowed_paths ?? []).map((p) =>
+        enabled: toml.safety?.path_sandbox?.enabled ?? true,
+        allowedPaths: (toml.safety?.path_sandbox?.allowed_paths ?? [workspacePath]).map((p) =>
           expandPath(p, workspacePath),
         ),
       },

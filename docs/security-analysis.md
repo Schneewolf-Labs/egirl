@@ -249,9 +249,9 @@ confirmation: {
 },
 ```
 
-The confirmation system (requiring user approval before dangerous tools run) is configured but disabled. Combined with the weak command filter, this means the LLM can execute arbitrary shell commands without human review.
+The confirmation system (requiring user approval before dangerous tools run) is configured but disabled. This is **intentional by design** — egirl is a single-user local-first agent where the operator trusts the agent to execute autonomously. The command allowlist provides the safety boundary instead of interactive confirmation.
 
-**Recommendation**: Enable confirmation mode by default for `execute_command` at minimum. The CLI channel can prompt the user; the Discord channel can require a reaction.
+**Status**: Won't fix — by design. Documented in code. Users can enable via `safety.confirmation.enabled = true` in `egirl.toml`.
 
 ---
 

@@ -77,19 +77,25 @@ export class ConversationStore {
       tool_call_id: string | null
     }>
 
-    return rows.map((row) => {
-      const msg: ChatMessage = {
-        role: row.role as ChatMessage['role'],
-        content: JSON.parse(row.content),
+    const messages: ChatMessage[] = []
+    for (const row of rows) {
+      try {
+        const msg: ChatMessage = {
+          role: row.role as ChatMessage['role'],
+          content: JSON.parse(row.content),
+        }
+        if (row.tool_calls) {
+          msg.tool_calls = JSON.parse(row.tool_calls) as ToolCall[]
+        }
+        if (row.tool_call_id) {
+          msg.tool_call_id = row.tool_call_id
+        }
+        messages.push(msg)
+      } catch (error) {
+        log.warn('conversation', `Skipping malformed message in session ${sessionId}:`, error)
       }
-      if (row.tool_calls) {
-        msg.tool_calls = JSON.parse(row.tool_calls) as ToolCall[]
-      }
-      if (row.tool_call_id) {
-        msg.tool_call_id = row.tool_call_id
-      }
-      return msg
-    })
+    }
+    return messages
   }
 
   appendMessages(sessionId: string, messages: ChatMessage[]): void {

@@ -2,8 +2,9 @@ import { type AuditEntry, appendAuditLog } from './audit-log'
 import { getDefaultBlockedPatterns, isCommandBlocked } from './command-filter'
 import { getDefaultSensitivePatterns, isPathAllowed, isSensitivePath } from './path-guard'
 
-export type { AuditEntry } from './audit-log'
-export { compilePatterns, getDefaultBlockedPatterns } from './command-filter'
+export type { AuditEntry, AuditMemoryEntry, AuditAPIEntry } from './audit-log'
+export { appendAuditLog, auditMemoryOperation, auditAPIRequest } from './audit-log'
+export { compilePatterns, getDefaultBlockedPatterns, getDefaultAllowedCommands } from './command-filter'
 export { getDefaultSensitivePatterns } from './path-guard'
 
 export interface SafetyConfig {
@@ -45,7 +46,7 @@ export function getDefaultSafetyConfig(): SafetyConfig {
       patterns: getDefaultBlockedPatterns(),
     },
     pathSandbox: {
-      enabled: false,
+      enabled: true,
       allowedPaths: [],
     },
     sensitiveFiles: {
@@ -55,6 +56,10 @@ export function getDefaultSafetyConfig(): SafetyConfig {
     auditLog: {
       enabled: true,
     },
+    // Confirmation mode is intentionally disabled by default.
+    // egirl is a single-user local-first agent — the operator trusts the agent
+    // to execute commands autonomously. Enable via egirl.toml if you want
+    // interactive approval before execute_command/write_file/edit_file.
     confirmation: {
       enabled: false,
       tools: ['execute_command', 'write_file', 'edit_file'],
