@@ -18,6 +18,21 @@ export interface ProviderRegistry {
   local: LLMProvider
   remote: LLMProvider | null
   getProvider(type: 'local' | 'remote'): LLMProvider | null
+  /**
+   * Resolve a model reference to a provider instance.
+   *
+   * Supported formats:
+   *   "local"                        — local llama.cpp provider
+   *   "anthropic"                    — Anthropic with default model from config
+   *   "openai"                       — OpenAI with default model from config
+   *   "anthropic/<model>"            — Anthropic with a specific model override
+   *   "openai/<model>"               — OpenAI with a specific model override
+   *
+   * Returns null if the referenced provider isn't configured (missing API key).
+   * Providers for specific model overrides are cached so repeated calls
+   * with the same ref reuse the same instance.
+   */
+  resolveModelRef(ref: string): LLMProvider | null
 }
 
 /**
@@ -101,11 +116,76 @@ export function createProviderRegistry(config: RuntimeConfig): ProviderRegistry 
     }
   }
 
+  // Cache for model-specific provider overrides (e.g. "anthropic/claude-opus-4-20250514")
+  const overrideCache = new Map<string, LLMProvider>()
+
+  function resolveModelRef(ref: string): LLMProvider | null {
+    if (ref === 'local') return local
+
+    if (ref === 'anthropic') {
+      if (!config.remote.anthropic) return null
+      return remote?.name.startsWith('anthropic/') ? remote : null
+    }
+
+    if (ref === 'openai') {
+      if (!config.remote.openai) return null
+      // If remote is the OpenAI provider with the default model, return it
+      if (remote?.name.startsWith('openai/')) return remote
+      // Otherwise create one (Anthropic was preferred as remote, but OpenAI is also configured)
+      const cached = overrideCache.get(ref)
+      if (cached) return cached
+      const provider = createOpenAIProvider(
+        config.remote.openai.apiKey,
+        config.remote.openai.model,
+        config.remote.openai.baseUrl,
+      )
+      overrideCache.set(ref, provider)
+      return provider
+    }
+
+    // Handle "provider/model" format
+    const slashIndex = ref.indexOf('/')
+    if (slashIndex === -1) return null
+
+    const providerName = ref.substring(0, slashIndex)
+    const modelName = ref.substring(slashIndex + 1)
+
+    // Check cache first
+    const cached = overrideCache.get(ref)
+    if (cached) return cached
+
+    if (providerName === 'anthropic' && config.remote.anthropic) {
+      // If the requested model matches the default, return the existing provider
+      if (modelName === config.remote.anthropic.model && remote?.name.startsWith('anthropic/')) {
+        return remote
+      }
+      const provider = createAnthropicProvider(config.remote.anthropic.apiKey, modelName)
+      overrideCache.set(ref, provider)
+      return provider
+    }
+
+    if (providerName === 'openai' && config.remote.openai) {
+      if (modelName === config.remote.openai.model && remote?.name.startsWith('openai/')) {
+        return remote
+      }
+      const provider = createOpenAIProvider(
+        config.remote.openai.apiKey,
+        modelName,
+        config.remote.openai.baseUrl,
+      )
+      overrideCache.set(ref, provider)
+      return provider
+    }
+
+    return null
+  }
+
   return {
     local,
     remote,
     getProvider(type: 'local' | 'remote'): LLMProvider | null {
       return type === 'local' ? local : remote
     },
+    resolveModelRef,
   }
 }

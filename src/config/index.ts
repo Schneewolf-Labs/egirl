@@ -148,6 +148,7 @@ export function loadConfig(): RuntimeConfig {
         toml.routing?.escalation_threshold ?? defaultToml.routing.escalation_threshold,
       alwaysLocal: toml.routing?.always_local ?? defaultToml.routing.always_local,
       alwaysRemote: toml.routing?.always_remote ?? defaultToml.routing.always_remote,
+      models: (toml.routing as Record<string, unknown>)?.models as Record<string, string[]> ?? {},
     },
     conversation: {
       enabled: toml.conversation?.enabled ?? true,

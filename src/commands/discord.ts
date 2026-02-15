@@ -36,6 +36,7 @@ export async function runDiscord(config: RuntimeConfig, args: string[]): Promise
       toolExecutor,
       localProvider: providers.local,
       remoteProvider: providers.remote,
+      providers,
       sessionId,
       memory,
       conversationStore: conversations,

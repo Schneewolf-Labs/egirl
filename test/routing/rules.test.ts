@@ -16,6 +16,7 @@ const baseConfig: RuntimeConfig = {
     escalationThreshold: 0.4,
     alwaysLocal: ['memory_search', 'memory_get'],
     alwaysRemote: ['code_generation', 'code_review'],
+    models: {},
   },
   channels: {},
   skills: { dirs: [] },
