@@ -13,6 +13,9 @@ import { createRoutes, type RouteDeps } from './routes'
 export interface APIServerConfig {
   port: number
   host: string
+  bearerToken?: string
+  maxRequestBytes?: number
+  rateLimitPerMinute?: number
 }
 
 export interface APIServerDeps {
@@ -25,13 +28,63 @@ export interface APIServerDeps {
   browser?: BrowserManager
 }
 
+/** Simple sliding-window rate limiter keyed by IP */
+class RateLimiter {
+  private requests: Map<string, number[]> = new Map()
+  private windowMs = 60_000
+
+  constructor(private maxPerWindow: number) {}
+
+  isAllowed(ip: string): boolean {
+    const now = Date.now()
+    const cutoff = now - this.windowMs
+
+    let timestamps = this.requests.get(ip)
+    if (!timestamps) {
+      timestamps = []
+      this.requests.set(ip, timestamps)
+    }
+
+    // Prune old entries
+    while (timestamps.length > 0 && (timestamps[0] ?? 0) < cutoff) {
+      timestamps.shift()
+    }
+
+    if (timestamps.length >= this.maxPerWindow) {
+      return false
+    }
+
+    timestamps.push(now)
+    return true
+  }
+
+  /** Periodic cleanup of stale entries */
+  cleanup(): void {
+    const cutoff = Date.now() - this.windowMs
+    for (const [ip, timestamps] of this.requests) {
+      while (timestamps.length > 0 && (timestamps[0] ?? 0) < cutoff) {
+        timestamps.shift()
+      }
+      if (timestamps.length === 0) {
+        this.requests.delete(ip)
+      }
+    }
+  }
+}
+
+const DEFAULT_MAX_REQUEST_BYTES = 64 * 1024 // 64 KB
+const DEFAULT_RATE_LIMIT = 30 // requests per minute
+
 export class APIServer {
   private server: ReturnType<typeof Bun.serve> | null = null
   private serverConfig: APIServerConfig
   private routes: ReturnType<typeof createRoutes>
+  private rateLimiter: RateLimiter
+  private cleanupInterval: ReturnType<typeof setInterval> | null = null
 
   constructor(serverConfig: APIServerConfig, deps: APIServerDeps) {
     this.serverConfig = serverConfig
+    this.rateLimiter = new RateLimiter(serverConfig.rateLimitPerMinute ?? DEFAULT_RATE_LIMIT)
 
     const spec = buildOpenAPISpec(serverConfig.host, serverConfig.port)
 
@@ -66,6 +119,9 @@ export class APIServer {
       fetch: (req) => this.handleRequest(req),
     })
 
+    // Periodic cleanup of rate limiter state
+    this.cleanupInterval = setInterval(() => this.rateLimiter.cleanup(), 60_000)
+
     log.info('api', `API server listening on http://${host}:${port}`)
     log.info('api', `OpenAPI spec at http://${host}:${port}/openapi.json`)
   }
@@ -73,6 +129,10 @@ export class APIServer {
   stop(): void {
     this.server?.stop()
     this.server = null
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval)
+      this.cleanupInterval = null
+    }
     log.info('api', 'API server stopped')
   }
 
@@ -80,8 +140,46 @@ export class APIServer {
     const url = new URL(req.url)
     const method = req.method
     const path = url.pathname
+    const ip = this.server?.requestIP(req)?.address ?? 'unknown'
 
-    log.debug('api', `${method} ${path}`)
+    log.debug('api', `${method} ${path} from ${ip}`)
+
+    // Bearer token auth (skip for health check)
+    if (this.serverConfig.bearerToken && path !== '/health') {
+      const authHeader = req.headers.get('authorization')
+      const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : undefined
+
+      if (token !== this.serverConfig.bearerToken) {
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+          status: 401,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+    }
+
+    // Rate limiting
+    if (!this.rateLimiter.isAllowed(ip)) {
+      log.warn('api', `Rate limit exceeded for ${ip}`)
+      return new Response(JSON.stringify({ error: 'Rate limit exceeded' }), {
+        status: 429,
+        headers: {
+          'Content-Type': 'application/json',
+          'Retry-After': '60',
+        },
+      })
+    }
+
+    // Request size limit (for POST/PUT/PATCH)
+    if (method === 'POST' || method === 'PUT' || method === 'PATCH') {
+      const contentLength = req.headers.get('content-length')
+      const maxBytes = this.serverConfig.maxRequestBytes ?? DEFAULT_MAX_REQUEST_BYTES
+      if (contentLength && Number(contentLength) > maxBytes) {
+        return new Response(JSON.stringify({ error: 'Request body too large' }), {
+          status: 413,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+    }
 
     // Try exact match first
     const exactMethods = this.routes.get(path)

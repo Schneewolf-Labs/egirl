@@ -109,7 +109,7 @@ export const EgirlConfigSchema = Type.Object({
       ),
       path_sandbox: Type.Optional(
         Type.Object({
-          enabled: Type.Boolean({ default: false }),
+          enabled: Type.Boolean({ default: true }),
           allowed_paths: Type.Optional(Type.Array(Type.String())),
         }),
       ),
