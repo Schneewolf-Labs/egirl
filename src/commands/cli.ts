@@ -16,8 +16,17 @@ export async function runCLI(config: RuntimeConfig, args: string[]): Promise<voi
   const messageIndex = args.indexOf('-m')
   const singleMessage = messageIndex !== -1 ? args[messageIndex + 1] : null
 
-  const { providers, memory, conversations, taskStore, router, toolExecutor, stats, skills } =
-    await createAppServices(config)
+  const {
+    providers,
+    memory,
+    conversations,
+    taskStore,
+    router,
+    toolExecutor,
+    stats,
+    transcript,
+    skills,
+  } = await createAppServices(config)
 
   // Gather workspace standup for agent context
   const standup = await gatherStandup(config.workspace.path)
@@ -36,6 +45,7 @@ export async function runCLI(config: RuntimeConfig, args: string[]): Promise<voi
     sessionId,
     memory,
     conversationStore: conversations,
+    transcript,
     skills,
     additionalContext: standup.context || undefined,
     sessionMutex,
@@ -83,6 +93,7 @@ export async function runCLI(config: RuntimeConfig, args: string[]): Promise<voi
       localProvider: providers.local,
       remoteProvider: providers.remote,
       memory,
+      transcript,
       outbound,
       sessionMutex,
     })
@@ -114,6 +125,7 @@ export async function runCLI(config: RuntimeConfig, args: string[]): Promise<voi
         router,
         localProvider: providers.local,
         memory,
+        transcript,
       })
     }
 

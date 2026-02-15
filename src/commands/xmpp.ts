@@ -17,7 +17,7 @@ export async function runXMPP(config: RuntimeConfig, args: string[]): Promise<vo
     process.exit(1)
   }
 
-  const { providers, router, toolExecutor, skills } = await createAppServices(config)
+  const { providers, router, toolExecutor, transcript, skills } = await createAppServices(config)
 
   // Gather workspace standup for agent context
   const standup = await gatherStandup(config.workspace.path)
@@ -31,6 +31,7 @@ export async function runXMPP(config: RuntimeConfig, args: string[]): Promise<vo
     localProvider: providers.local,
     remoteProvider: providers.remote,
     sessionId: 'xmpp:default',
+    transcript,
     skills,
     additionalContext: standup.context || undefined,
     sessionMutex,

@@ -153,6 +153,13 @@ export const EgirlConfigSchema = Type.Object({
     }),
   ),
 
+  transcript: Type.Optional(
+    Type.Object({
+      enabled: Type.Boolean({ default: true }),
+      path: Type.Optional(Type.String()),
+    }),
+  ),
+
   skills: Type.Object({
     dirs: Type.Array(Type.String(), { default: ['~/.egirl/skills', '{workspace}/skills'] }),
   }),
@@ -274,6 +281,10 @@ export interface RuntimeConfig {
     discoveryEnabled: boolean
     discoveryIntervalMs: number
     idleThresholdMs: number
+  }
+  transcript: {
+    enabled: boolean
+    path: string
   }
   skills: {
     dirs: string[]

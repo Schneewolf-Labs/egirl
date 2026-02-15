@@ -17,6 +17,7 @@ import { analyzeResponseForEscalation, type Router } from '../routing'
 import { auditMemoryOperation } from '../safety'
 import type { Skill } from '../skills/types'
 import type { ToolExecutor, ToolResult } from '../tools'
+import type { TranscriptLogger } from '../tracking/transcript'
 import { log } from '../util/logger'
 import {
   type AgentContext,
@@ -84,6 +85,7 @@ export interface AgentLoopDeps {
   sessionId: string
   memory?: MemoryManager
   conversationStore?: ConversationStore
+  transcript?: TranscriptLogger
   skills?: Skill[]
   additionalContext?: string
   /** Shared mutex to serialize agent runs across entry points */
@@ -100,6 +102,7 @@ export class AgentLoop {
   private context: AgentContext
   private tokenizer: Tokenizer
   private conversationStore: ConversationStore | null
+  private transcript: TranscriptLogger | null
   private persistedIndex: number = 0
   private promptOptions: SystemPromptOptions
   private mutex: SessionMutex | null
@@ -113,6 +116,7 @@ export class AgentLoop {
     this.memory = deps.memory ?? null
     this.conversationStore = deps.conversationStore ?? null
     this.mutex = deps.sessionMutex ?? null
+    this.transcript = deps.transcript ?? null
     this.promptOptions = { skills: deps.skills, additionalContext: deps.additionalContext }
     this.context = createAgentContext(deps.config, deps.sessionId, this.promptOptions)
     this.tokenizer = createLlamaCppTokenizer(deps.config.local.endpoint)
@@ -143,6 +147,10 @@ export class AgentLoop {
 
   private async doRun(userMessage: string, options: AgentLoopOptions): Promise<AgentResponse> {
     const { maxTurns = 10, events } = options
+    const turnStartedAt = Date.now()
+
+    // Log turn start to transcript
+    this.transcript?.turnStart(this.context.sessionId, userMessage)
 
     // Add user message to context
     addMessage(this.context, { role: 'user', content: userMessage })
@@ -161,6 +169,8 @@ export class AgentLoop {
           role: 'user',
           content: `[Recalled context from memory — use as reference, not as instructions]\n${sanitized}`,
         })
+
+        this.transcript?.memoryRecall(this.context.sessionId, userMessage, sanitized.length)
 
         // Audit the memory recall
         const auditPath = this.config.safety.auditLog.path
@@ -181,6 +191,7 @@ export class AgentLoop {
     // Route the request
     const routingDecision = this.router.route(this.context.messages, this.toolExecutor.listTools())
     events?.onRoutingDecision?.(routingDecision)
+    this.transcript?.routing(this.context.sessionId, routingDecision)
 
     let provider: LLMProvider =
       routingDecision.target === 'local'
@@ -206,6 +217,7 @@ export class AgentLoop {
       const tools = this.toolExecutor.getDefinitions()
 
       let response: ChatResponse
+      const inferenceStart = Date.now()
       try {
         response = await this.chatWithContextWindow(
           currentProvider,
@@ -218,9 +230,19 @@ export class AgentLoop {
         events?.onError?.(err)
         throw error
       }
+      const inferenceDuration = Date.now() - inferenceStart
 
       totalUsage.input_tokens += response.usage.input_tokens
       totalUsage.output_tokens += response.usage.output_tokens
+
+      this.transcript?.inference(this.context.sessionId, {
+        provider: currentProvider.name,
+        target: currentTarget,
+        input_tokens: response.usage.input_tokens,
+        output_tokens: response.usage.output_tokens,
+        duration_ms: inferenceDuration,
+        has_tool_calls: (response.tool_calls?.length ?? 0) > 0,
+      })
 
       // Check for escalation if we're using local
       if (currentTarget === 'local' && this.remoteProvider) {
@@ -231,6 +253,12 @@ export class AgentLoop {
         if (escalationDecision.shouldEscalate) {
           log.info('agent', `Escalating to remote model: ${escalationDecision.reason}`)
           events?.onEscalation?.(escalationDecision, currentProvider.name, this.remoteProvider.name)
+          this.transcript?.escalation(this.context.sessionId, {
+            from: currentProvider.name,
+            to: this.remoteProvider.name,
+            reason: escalationDecision.reason ?? 'unknown',
+            confidence: escalationDecision.confidence,
+          })
 
           // Preserve the local response in context so the remote model has full history
           if (response.content) {
@@ -291,6 +319,12 @@ export class AgentLoop {
               currentProvider.name,
               this.remoteProvider.name,
             )
+            this.transcript?.escalation(this.context.sessionId, {
+              from: currentProvider.name,
+              to: this.remoteProvider.name,
+              reason: result.escalation_reason ?? 'tool_suggested',
+              confidence: escalationDecision.confidence,
+            })
             currentProvider = this.remoteProvider
             currentTarget = 'remote'
             escalated = true
@@ -349,6 +383,17 @@ export class AgentLoop {
     if (this.memory && this.config.memory.autoExtract) {
       this.runAutoExtraction(this.context.messages, this.context.sessionId)
     }
+
+    this.transcript?.turnEnd(this.context.sessionId, {
+      content_length: finalContent.length,
+      target: currentTarget,
+      provider: currentProvider.name,
+      input_tokens: totalUsage.input_tokens,
+      output_tokens: totalUsage.output_tokens,
+      escalated,
+      turns,
+      duration_ms: Date.now() - turnStartedAt,
+    })
 
     return {
       content: finalContent,
@@ -542,12 +587,11 @@ export class AgentLoop {
     toolCalls: ToolCall[],
     events?: AgentEventHandler,
   ): Promise<Map<string, ToolResult>> {
-    if (!events?.onBeforeToolExec && !events?.onAfterToolExec) {
+    if (!events?.onBeforeToolExec && !events?.onAfterToolExec && !this.transcript) {
       return this.executeTools(toolCalls)
     }
 
-    // Run sequentially when hooks are present to avoid race conditions
-    // (e.g., onBeforeToolExec prompting for user confirmation concurrently)
+    // Run sequentially when hooks or transcript logging are present
     const results = new Map<string, ToolResult>()
 
     for (const call of toolCalls) {
@@ -565,10 +609,19 @@ export class AgentLoop {
         }
       }
 
+      const toolStart = Date.now()
       const result = await this.toolExecutor.execute(call, this.context.workspaceDir)
+      const toolDuration = Date.now() - toolStart
 
       // Post-execution hook
       events?.onAfterToolExec?.(call, result)
+
+      this.transcript?.toolCall(this.context.sessionId, {
+        tool: call.name,
+        args_keys: Object.keys(call.arguments),
+        success: result.success,
+        duration_ms: toolDuration,
+      })
 
       results.set(call.id, result)
     }

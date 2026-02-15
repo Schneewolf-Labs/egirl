@@ -9,6 +9,7 @@ import type { LLMProvider } from '../providers/types'
 import type { Router } from '../routing'
 import { gatherStandup } from '../standup'
 import type { ToolExecutor } from '../tools'
+import type { TranscriptLogger } from '../tracking/transcript'
 import { log } from '../util/logger'
 import { executeWorkflow } from '../workflows/engine'
 import type { WorkflowDefinition } from '../workflows/types'
@@ -46,6 +47,7 @@ export interface TaskRunnerDeps {
   localProvider: LLMProvider
   remoteProvider: LLMProvider | null
   memory: MemoryManager | undefined
+  transcript?: TranscriptLogger
   outbound: Map<string, OutboundChannel>
   webhookRouter?: WebhookRouter
   /** Shared mutex to serialize agent runs across entry points */
@@ -513,6 +515,7 @@ export class TaskRunner {
       remoteProvider: this.deps.remoteProvider,
       sessionId: `task:${task.id}`,
       memory: this.deps.memory,
+      transcript: this.deps.transcript,
       // No conversation store — task conversations are ephemeral
       additionalContext: `${TASK_SYSTEM_PROMPT}\n\nTask: ${task.description}\n\n${contextParts.join('\n\n')}`,
       sessionMutex: this.deps.sessionMutex,
