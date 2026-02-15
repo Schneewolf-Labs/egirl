@@ -46,7 +46,7 @@ class RateLimiter {
     }
 
     // Prune old entries
-    while (timestamps.length > 0 && timestamps[0]! < cutoff) {
+    while (timestamps.length > 0 && (timestamps[0] ?? 0) < cutoff) {
       timestamps.shift()
     }
 
@@ -62,7 +62,7 @@ class RateLimiter {
   cleanup(): void {
     const cutoff = Date.now() - this.windowMs
     for (const [ip, timestamps] of this.requests) {
-      while (timestamps.length > 0 && timestamps[0]! < cutoff) {
+      while (timestamps.length > 0 && (timestamps[0] ?? 0) < cutoff) {
         timestamps.shift()
       }
       if (timestamps.length === 0) {
@@ -147,9 +147,7 @@ export class APIServer {
     // Bearer token auth (skip for health check)
     if (this.serverConfig.bearerToken && path !== '/health') {
       const authHeader = req.headers.get('authorization')
-      const token = authHeader?.startsWith('Bearer ')
-        ? authHeader.slice(7)
-        : undefined
+      const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : undefined
 
       if (token !== this.serverConfig.bearerToken) {
         return new Response(JSON.stringify({ error: 'Unauthorized' }), {

@@ -2,9 +2,13 @@ import { type AuditEntry, appendAuditLog } from './audit-log'
 import { getDefaultBlockedPatterns, isCommandBlocked } from './command-filter'
 import { getDefaultSensitivePatterns, isPathAllowed, isSensitivePath } from './path-guard'
 
-export type { AuditEntry, AuditMemoryEntry, AuditAPIEntry } from './audit-log'
-export { appendAuditLog, auditMemoryOperation, auditAPIRequest } from './audit-log'
-export { compilePatterns, getDefaultBlockedPatterns, getDefaultAllowedCommands } from './command-filter'
+export type { AuditAPIEntry, AuditEntry, AuditMemoryEntry } from './audit-log'
+export { appendAuditLog, auditAPIRequest, auditMemoryOperation } from './audit-log'
+export {
+  compilePatterns,
+  getDefaultAllowedCommands,
+  getDefaultBlockedPatterns,
+} from './command-filter'
 export { getDefaultSensitivePatterns } from './path-guard'
 
 export interface SafetyConfig {

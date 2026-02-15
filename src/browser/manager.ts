@@ -10,7 +10,10 @@ import { resolveTarget } from './targeting'
  * dynamic script creation, navigation, and window.open.
  */
 const BLOCKED_BROWSER_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
-  { pattern: /\bfetch\s*\(/, reason: 'fetch() calls are not allowed — use web_research tool instead' },
+  {
+    pattern: /\bfetch\s*\(/,
+    reason: 'fetch() calls are not allowed — use web_research tool instead',
+  },
   { pattern: /\bXMLHttpRequest\b/, reason: 'XMLHttpRequest is not allowed' },
   { pattern: /\bnew\s+WebSocket\b/, reason: 'WebSocket creation is not allowed' },
   { pattern: /\bdocument\.cookie\b/, reason: 'Cookie access is not allowed' },
@@ -18,7 +21,10 @@ const BLOCKED_BROWSER_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
   { pattern: /\bsessionStorage\b/, reason: 'sessionStorage access is not allowed' },
   { pattern: /\bindexedDB\b/, reason: 'indexedDB access is not allowed' },
   { pattern: /\bdocument\.write\b/, reason: 'document.write is not allowed' },
-  { pattern: /\bcreateElement\s*\(\s*['"`]script/, reason: 'Dynamic script creation is not allowed' },
+  {
+    pattern: /\bcreateElement\s*\(\s*['"`]script/,
+    reason: 'Dynamic script creation is not allowed',
+  },
   { pattern: /\bwindow\.open\s*\(/, reason: 'window.open is not allowed' },
   { pattern: /\blocation\s*[.=]/, reason: 'Navigation via location is not allowed' },
   { pattern: /\bnavigator\.sendBeacon\b/, reason: 'sendBeacon is not allowed' },
@@ -81,7 +87,8 @@ export class BrowserManager {
     if (!this.browser || !this.browser.isConnected()) {
       this.browser = await chromium.launch({ headless: this.config.headless })
       this.context = await this.browser.newContext({
-        userAgent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+        userAgent:
+          'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
       })
       this.page = await this.context.newPage()
       this.page.setDefaultTimeout(this.config.defaultTimeout!)

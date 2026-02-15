@@ -3,7 +3,6 @@ import type { ConversationStore } from '../conversation'
 import type { MemoryManager } from '../memory'
 import { extractMemories } from '../memory/extractor'
 import { retrieveForContext } from '../memory/retrieval'
-import { auditMemoryOperation } from '../safety'
 import { createLlamaCppTokenizer } from '../providers/llamacpp-tokenizer'
 import type {
   ChatMessage,
@@ -15,6 +14,7 @@ import type {
 } from '../providers/types'
 import { ContextSizeError } from '../providers/types'
 import { analyzeResponseForEscalation, type Router } from '../routing'
+import { auditMemoryOperation } from '../safety'
 import type { Skill } from '../skills/types'
 import type { ToolExecutor, ToolResult } from '../tools'
 import { log } from '../util/logger'
@@ -52,6 +52,7 @@ function sanitizeRecalledMemory(content: string): string {
     sanitized = sanitized.replace(pattern, '[filtered]')
   }
   // Strip control characters except newlines and tabs
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: intentional — stripping dangerous control chars from memory
   sanitized = sanitized.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
   return sanitized
 }
@@ -152,12 +153,15 @@ export class AgentLoop {
         // Audit the memory recall
         const auditPath = this.config.safety.auditLog.path
         if (this.config.safety.auditLog.enabled && auditPath) {
-          auditMemoryOperation({
-            timestamp: new Date().toISOString(),
-            action: 'memory_recall',
-            query: userMessage.slice(0, 200),
-            sessionId: this.context.sessionId,
-          }, auditPath)
+          auditMemoryOperation(
+            {
+              timestamp: new Date().toISOString(),
+              action: 'memory_recall',
+              query: userMessage.slice(0, 200),
+              sessionId: this.context.sessionId,
+            },
+            auditPath,
+          )
         }
       }
     }

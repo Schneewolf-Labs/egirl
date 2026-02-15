@@ -188,10 +188,10 @@ function extractCommands(command: string): string[] {
 
     // Extract base command (first word)
     const match = withoutPrefixes.match(/^([^\s;|&<>]+)/)
-    if (match) {
+    if (match?.[1]) {
       // Resolve full paths to just the command name
-      const cmd = match[1]!
-      const basename = cmd.includes('/') ? cmd.split('/').pop()! : cmd
+      const cmd = match[1]
+      const basename = cmd.includes('/') ? (cmd.split('/').pop() ?? cmd) : cmd
       commands.push(basename)
     }
   }
