@@ -7,6 +7,7 @@ import type { LLMProvider } from '../providers/types'
 import type { Router } from '../routing'
 import { gatherStandup } from '../standup'
 import type { ToolExecutor } from '../tools'
+import type { TranscriptLogger } from '../tracking/transcript'
 import { log } from '../util/logger'
 import { formatInterval } from './parse-interval'
 import type { TaskRunner } from './runner'
@@ -41,6 +42,7 @@ export interface DiscoveryDeps {
   router: Router
   localProvider: LLMProvider
   memory: MemoryManager | undefined
+  transcript?: TranscriptLogger
 }
 
 export class Discovery {
@@ -129,6 +131,7 @@ export class Discovery {
         remoteProvider: null, // Force local only
         sessionId: 'discovery',
         memory: this.deps.memory,
+        transcript: this.deps.transcript,
         additionalContext: contextParts.join('\n\n'),
       }
 

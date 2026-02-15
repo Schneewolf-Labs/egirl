@@ -16,6 +16,7 @@ import {
   type ToolExecutor,
 } from './tools'
 import { createStatsTracker, type StatsTracker } from './tracking'
+import { createTranscriptLogger, type TranscriptLogger } from './tracking/transcript'
 import { log } from './util/logger'
 
 /**
@@ -31,6 +32,7 @@ export interface AppServices {
   router: Router
   toolExecutor: ToolExecutor
   stats: StatsTracker
+  transcript: TranscriptLogger | undefined
   skills: Skill[]
   browser: BrowserManagerType
 }
@@ -189,6 +191,11 @@ export async function createAppServices(config: RuntimeConfig): Promise<AppServi
   )
   toolExecutor.setSafety(buildSafetyConfig(config))
   const stats = createStatsTracker()
+  const transcript = createTranscriptLogger(config.transcript)
+
+  if (transcript) {
+    log.info('main', `JSONL transcripts enabled: ${config.transcript.path}`)
+  }
 
   return {
     config,
@@ -199,6 +206,7 @@ export async function createAppServices(config: RuntimeConfig): Promise<AppServi
     router,
     toolExecutor,
     stats,
+    transcript,
     skills,
     browser,
   }

@@ -17,7 +17,7 @@ export async function runAPI(config: RuntimeConfig, args: string[]): Promise<voi
     portIndex !== -1 ? parseInt(args[portIndex + 1]!, 10) : (config.channels.api?.port ?? 3000)
   const host = hostIndex !== -1 ? args[hostIndex + 1]! : (config.channels.api?.host ?? '127.0.0.1')
 
-  const { providers, memory, router, toolExecutor, stats, skills, browser } =
+  const { providers, memory, router, toolExecutor, stats, transcript, skills, browser } =
     await createAppServices(config)
 
   // Gather workspace standup for agent context
@@ -32,6 +32,7 @@ export async function runAPI(config: RuntimeConfig, args: string[]): Promise<voi
     localProvider: providers.local,
     remoteProvider: providers.remote,
     sessionId: 'api:default',
+    transcript,
     skills,
     additionalContext: standup.context || undefined,
     sessionMutex,

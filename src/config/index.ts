@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync } from 'fs'
 import { homedir } from 'os'
-import { resolve } from 'path'
+import { join, resolve } from 'path'
 import { parse } from 'smol-toml'
 import { setTheme } from '../ui/theme'
 import type { EgirlConfig, RuntimeConfig } from './schema'
@@ -178,6 +178,12 @@ export function loadConfig(): RuntimeConfig {
       discoveryEnabled: toml.tasks?.discovery_enabled ?? true,
       discoveryIntervalMs: toml.tasks?.discovery_interval_ms ?? 1800000,
       idleThresholdMs: toml.tasks?.idle_threshold_ms ?? 600000,
+    },
+    transcript: {
+      enabled: toml.transcript?.enabled ?? true,
+      path: toml.transcript?.path
+        ? expandPath(toml.transcript.path, workspacePath)
+        : join(workspacePath, 'transcripts'),
     },
     skills: {
       dirs: (toml.skills?.dirs ?? defaultToml.skills.dirs).map((d) => expandPath(d, workspacePath)),
