@@ -500,12 +500,10 @@ export class AgentLoop {
       }
 
       if (resolved.length > 0) {
-        log.debug(
-          'agent',
-          `Model chain resolved: [${resolved.map((p) => p.name).join(' -> ')}]`,
-        )
+        log.debug('agent', `Model chain resolved: [${resolved.map((p) => p.name).join(' -> ')}]`)
+        const primary = resolved[0] as LLMProvider
         return {
-          provider: resolved[0]!,
+          provider: primary,
           fallbackProviders: resolved.slice(1),
         }
       }
@@ -514,9 +512,7 @@ export class AgentLoop {
 
     // Legacy: simple local/remote selection
     const primary =
-      decision.target === 'local'
-        ? this.localProvider
-        : (this.remoteProvider ?? this.localProvider)
+      decision.target === 'local' ? this.localProvider : (this.remoteProvider ?? this.localProvider)
 
     if (!this.remoteProvider && decision.target === 'remote') {
       log.warn('agent', 'Remote provider not available, falling back to local')
@@ -542,7 +538,7 @@ export class AgentLoop {
     _error: unknown,
   ): { provider: LLMProvider; target: 'local' | 'remote' } | undefined {
     if (remaining.length === 0) return undefined
-    const next = remaining.shift()!
+    const next = remaining.shift() as LLMProvider
     const target = next.name.startsWith('llamacpp/') ? 'local' : 'remote'
     return { provider: next, target }
   }

@@ -113,7 +113,7 @@ export class Router {
 
     // If a model chain is configured, derive target from the first entry
     if (modelChain && modelChain.length > 0) {
-      const primaryRef = modelChain[0]!
+      const primaryRef = modelChain[0] as string
       const isLocal = primaryRef === 'local'
       finalTarget = isLocal ? 'local' : 'remote'
       finalReason = `models:${taskType}`
@@ -122,7 +122,7 @@ export class Router {
     // Check if we have a remote provider
     if (finalTarget === 'remote' && !this.config.remote.anthropic && !this.config.remote.openai) {
       // If we have a model chain, try to find any local entry in it
-      if (modelChain && modelChain.some((ref) => ref === 'local')) {
+      if (modelChain?.some((ref) => ref === 'local')) {
         finalTarget = 'local'
         finalReason = 'models:fallback_to_local'
         finalConfidence = 0.5
