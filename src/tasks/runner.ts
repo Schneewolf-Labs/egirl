@@ -1,5 +1,6 @@
 import type { AgentLoopDeps } from '../agent/loop'
 import { AgentLoop } from '../agent/loop'
+import type { SessionMutex } from '../agent/session-mutex'
 import type { RuntimeConfig } from '../config'
 import type { MemoryManager } from '../memory'
 import { extractMemories } from '../memory/extractor'
@@ -47,6 +48,8 @@ export interface TaskRunnerDeps {
   memory: MemoryManager | undefined
   outbound: Map<string, OutboundChannel>
   webhookRouter?: WebhookRouter
+  /** Shared mutex to serialize agent runs across entry points */
+  sessionMutex?: SessionMutex
 }
 
 export class TaskRunner {
@@ -512,6 +515,7 @@ export class TaskRunner {
       memory: this.deps.memory,
       // No conversation store — task conversations are ephemeral
       additionalContext: `${TASK_SYSTEM_PROMPT}\n\nTask: ${task.description}\n\n${contextParts.join('\n\n')}`,
+      sessionMutex: this.deps.sessionMutex,
     }
 
     const agent = new AgentLoop(deps)

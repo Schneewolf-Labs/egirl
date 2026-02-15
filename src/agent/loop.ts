@@ -27,6 +27,7 @@ import {
 import { formatSummaryMessage, summarizeMessages } from './context-summarizer'
 import { fitToContextWindow } from './context-window'
 import type { AgentEventHandler } from './events'
+import type { SessionMutex } from './session-mutex'
 
 /** Default context limits for remote providers */
 const REMOTE_CONTEXT_LENGTH = 200_000
@@ -85,6 +86,8 @@ export interface AgentLoopDeps {
   conversationStore?: ConversationStore
   skills?: Skill[]
   additionalContext?: string
+  /** Shared mutex to serialize agent runs across entry points */
+  sessionMutex?: SessionMutex
 }
 
 export class AgentLoop {
@@ -99,6 +102,7 @@ export class AgentLoop {
   private conversationStore: ConversationStore | null
   private persistedIndex: number = 0
   private promptOptions: SystemPromptOptions
+  private mutex: SessionMutex | null
 
   constructor(deps: AgentLoopDeps) {
     this.config = deps.config
@@ -108,6 +112,7 @@ export class AgentLoop {
     this.remoteProvider = deps.remoteProvider
     this.memory = deps.memory ?? null
     this.conversationStore = deps.conversationStore ?? null
+    this.mutex = deps.sessionMutex ?? null
     this.promptOptions = { skills: deps.skills, additionalContext: deps.additionalContext }
     this.context = createAgentContext(deps.config, deps.sessionId, this.promptOptions)
     this.tokenizer = createLlamaCppTokenizer(deps.config.local.endpoint)
@@ -130,6 +135,13 @@ export class AgentLoop {
   }
 
   async run(userMessage: string, options: AgentLoopOptions = {}): Promise<AgentResponse> {
+    if (this.mutex) {
+      return this.mutex.run(() => this.doRun(userMessage, options))
+    }
+    return this.doRun(userMessage, options)
+  }
+
+  private async doRun(userMessage: string, options: AgentLoopOptions): Promise<AgentResponse> {
     const { maxTurns = 10, events } = options
 
     // Add user message to context

@@ -1,4 +1,5 @@
 import { createAgentLoop } from '../agent'
+import { SessionMutex } from '../agent/session-mutex'
 import { createAppServices } from '../bootstrap'
 import { createXMPPChannel } from '../channels'
 import type { RuntimeConfig } from '../config'
@@ -21,6 +22,8 @@ export async function runXMPP(config: RuntimeConfig, args: string[]): Promise<vo
   // Gather workspace standup for agent context
   const standup = await gatherStandup(config.workspace.path)
 
+  const sessionMutex = new SessionMutex()
+
   const agent = createAgentLoop({
     config,
     router,
@@ -30,6 +33,7 @@ export async function runXMPP(config: RuntimeConfig, args: string[]): Promise<vo
     sessionId: 'xmpp:default',
     skills,
     additionalContext: standup.context || undefined,
+    sessionMutex,
   })
 
   const xmpp = createXMPPChannel(agent, config.channels.xmpp)

@@ -1,4 +1,5 @@
 import { createAgentLoop } from '../agent'
+import { SessionMutex } from '../agent/session-mutex'
 import { createAppServices } from '../bootstrap'
 import { createCLIChannel } from '../channels'
 import type { RuntimeConfig } from '../config'
@@ -21,6 +22,9 @@ export async function runCLI(config: RuntimeConfig, args: string[]): Promise<voi
   // Gather workspace standup for agent context
   const standup = await gatherStandup(config.workspace.path)
 
+  // Shared mutex serializes agent runs across CLI input and background tasks
+  const sessionMutex = new SessionMutex()
+
   // Create agent loop with conversation persistence and memory
   const sessionId = singleMessage ? crypto.randomUUID() : 'cli:default'
   const agent = createAgentLoop({
@@ -34,6 +38,7 @@ export async function runCLI(config: RuntimeConfig, args: string[]): Promise<voi
     conversationStore: conversations,
     skills,
     additionalContext: standup.context || undefined,
+    sessionMutex,
   })
 
   // Single message mode — no task runner
@@ -79,6 +84,7 @@ export async function runCLI(config: RuntimeConfig, args: string[]): Promise<voi
       remoteProvider: providers.remote,
       memory,
       outbound,
+      sessionMutex,
     })
 
     // Register task tools on the shared tool executor
