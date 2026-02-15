@@ -25,6 +25,7 @@ export {
   OpenAIEmbeddings,
   Qwen3VLEmbeddings,
 } from './embeddings/index'
+export { type CompactionExtraction, flushBeforeCompaction } from './compaction-flush'
 export { type ExtractionResult, extractMemories } from './extractor'
 export { createMemoryFiles, type MemoryEntry, MemoryFiles } from './files'
 export {

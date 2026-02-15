@@ -1,6 +1,7 @@
 import type { RuntimeConfig } from '../config'
 import type { ConversationStore } from '../conversation'
 import type { MemoryManager } from '../memory'
+import { flushBeforeCompaction } from '../memory/compaction-flush'
 import { extractMemories } from '../memory/extractor'
 import { retrieveForContext } from '../memory/retrieval'
 import { createLlamaCppTokenizer } from '../providers/llamacpp-tokenizer'
@@ -555,12 +556,21 @@ export class AgentLoop {
 
   /**
    * Summarize dropped messages and update the conversation summary.
+   * Before summarizing, flushes durable facts from the dropped messages
+   * into memory so they survive even if the summary is lossy or fails.
+   *
    * Runs asynchronously — the summary will be available on the next turn.
    * Uses the local provider to avoid API costs.
    */
   private triggerCompaction(droppedMessages: ChatMessage[]): void {
     const provider = this.localProvider
     const existingSummary = this.context.conversationSummary
+
+    // Flush durable facts to memory before summarization (fire and forget).
+    // Runs in parallel with summarization — both use the local provider.
+    if (this.memory) {
+      this.flushDroppedToMemory(droppedMessages)
+    }
 
     // Fire and forget — don't block the current response
     summarizeMessages(droppedMessages, provider, existingSummary)
@@ -579,6 +589,43 @@ export class AgentLoop {
       })
       .catch((error) => {
         log.warn('agent', 'Context compaction failed:', error)
+      })
+  }
+
+  /**
+   * Extract and persist key facts from messages being dropped during compaction.
+   * Prevents silent context loss — facts survive in durable memory even if
+   * the LLM summary is lossy or compaction fails entirely.
+   */
+  private flushDroppedToMemory(droppedMessages: ChatMessage[]): void {
+    const provider = this.localProvider
+    const sessionId = this.context.sessionId
+
+    flushBeforeCompaction(droppedMessages, provider)
+      .then(async (extractions) => {
+        if (extractions.length === 0) return
+
+        log.info(
+          'agent',
+          `Pre-compaction flush: persisting ${extractions.length} memories from dropped context`,
+        )
+
+        for (const extraction of extractions) {
+          try {
+            const key = `compaction/${extraction.key}`
+            await this.memory?.set(key, extraction.value, {
+              category: extraction.category,
+              source: 'compaction',
+              sessionId,
+            })
+            log.debug('agent', `Flushed compaction memory: ${key} [${extraction.category}]`)
+          } catch (error) {
+            log.warn('agent', `Failed to flush compaction memory ${extraction.key}:`, error)
+          }
+        }
+      })
+      .catch((error) => {
+        log.warn('agent', 'Pre-compaction memory flush failed:', error)
       })
   }
 
