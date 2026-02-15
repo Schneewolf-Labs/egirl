@@ -1,6 +1,14 @@
 # CLI color theme: egirl (purple/pink), midnight (blue/teal), neon (green/cyan), mono (grayscale)
 theme = "egirl"
 
+# Extended thinking / reasoning controls
+# Applies to Anthropic (extended thinking) and Qwen3 (/think mode)
+# Override per-session in CLI with: /think <level>
+[thinking]
+level = "off"                            # off, low, medium, high
+# budget_tokens = 8192                   # override budget (default: auto from level)
+show_thinking = true                     # display thinking output in CLI
+
 [workspace]
 path = "~/.egirl/workspace"
 

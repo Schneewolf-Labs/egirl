@@ -21,6 +21,13 @@ export interface ToolDefinition {
   parameters: Record<string, unknown> // JSON Schema
 }
 
+export interface ThinkingConfig {
+  /** Thinking level: off disables, low/medium/high set increasing budget */
+  level: 'off' | 'low' | 'medium' | 'high'
+  /** Override budget_tokens directly (takes precedence over level mapping) */
+  budgetTokens?: number
+}
+
 export interface ChatRequest {
   messages: ChatMessage[]
   tools?: ToolDefinition[]
@@ -28,6 +35,8 @@ export interface ChatRequest {
   max_tokens?: number
   /** If provided, the provider streams tokens via this callback */
   onToken?: (token: string) => void
+  /** Extended thinking / reasoning configuration */
+  thinking?: ThinkingConfig
 }
 
 export interface ChatResponse {
@@ -36,6 +45,8 @@ export interface ChatResponse {
   usage: { input_tokens: number; output_tokens: number }
   confidence?: number // local model only, 0-1
   model: string
+  /** Extended thinking / reasoning content from the model */
+  thinking?: string
 }
 
 export interface LLMProvider {
@@ -60,6 +71,21 @@ export function getTextContent(content: string | ContentPart[]): string {
     .filter((part): part is TextContent => part.type === 'text')
     .map((part) => part.text)
     .join('\n')
+}
+
+/** Map thinking level to budget_tokens. Returns 0 for 'off'. */
+export function thinkingBudget(config: ThinkingConfig): number {
+  if (config.budgetTokens !== undefined) return config.budgetTokens
+  switch (config.level) {
+    case 'off':
+      return 0
+    case 'low':
+      return 2048
+    case 'medium':
+      return 8192
+    case 'high':
+      return 32768
+  }
 }
 
 /**

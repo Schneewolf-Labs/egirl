@@ -7,7 +7,7 @@ import type {
   LLMProvider,
   ToolCall,
 } from './types'
-import { getTextContent } from './types'
+import { getTextContent, thinkingBudget } from './types'
 
 export class AnthropicProvider implements LLMProvider {
   readonly name: string
@@ -23,12 +23,22 @@ export class AnthropicProvider implements LLMProvider {
   async chat(req: ChatRequest): Promise<ChatResponse> {
     const { systemPrompt, messages } = this.prepareMessages(req.messages)
 
+    const budget = req.thinking ? thinkingBudget(req.thinking) : 0
+    const isThinkingEnabled = budget > 0
+
+    const maxTokens = req.max_tokens ?? 4096
     const params: Anthropic.Messages.MessageCreateParamsNonStreaming = {
       model: this.model,
-      max_tokens: req.max_tokens ?? 4096,
+      // When thinking is enabled, max_tokens must accommodate the budget
+      max_tokens: isThinkingEnabled ? Math.max(maxTokens, budget + 4096) : maxTokens,
       messages,
       ...(systemPrompt && { system: systemPrompt }),
-      ...(req.temperature !== undefined && { temperature: req.temperature }),
+      // Temperature must not be set (or must be 1) when thinking is enabled
+      ...(!isThinkingEnabled && req.temperature !== undefined && { temperature: req.temperature }),
+    }
+
+    if (isThinkingEnabled) {
+      params.thinking = { type: 'enabled', budget_tokens: budget }
     }
 
     if (req.tools && req.tools.length > 0) {
@@ -64,6 +74,7 @@ export class AnthropicProvider implements LLMProvider {
 
   private parseResponse(response: Anthropic.Messages.Message): ChatResponse {
     let content = ''
+    let thinking = ''
     const tool_calls: ToolCall[] = []
 
     for (const block of response.content) {
@@ -75,6 +86,8 @@ export class AnthropicProvider implements LLMProvider {
           name: block.name,
           arguments: block.input as Record<string, unknown>,
         })
+      } else if (block.type === 'thinking') {
+        thinking += (block as { type: 'thinking'; thinking: string }).thinking
       }
     }
 
@@ -86,6 +99,7 @@ export class AnthropicProvider implements LLMProvider {
         output_tokens: response.usage.output_tokens,
       },
       model: response.model,
+      thinking: thinking || undefined,
     }
   }
 

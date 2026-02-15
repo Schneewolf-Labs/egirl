@@ -1,7 +1,20 @@
 import { type Static, Type } from '@sinclair/typebox'
 
+export type ThinkingLevel = 'off' | 'low' | 'medium' | 'high'
+
 export const EgirlConfigSchema = Type.Object({
   theme: Type.Optional(Type.String({ default: 'egirl' })),
+
+  thinking: Type.Optional(
+    Type.Object({
+      level: Type.Union(
+        [Type.Literal('off'), Type.Literal('low'), Type.Literal('medium'), Type.Literal('high')],
+        { default: 'off' },
+      ),
+      budget_tokens: Type.Optional(Type.Number()),
+      show_thinking: Type.Boolean({ default: true }),
+    }),
+  ),
 
   workspace: Type.Object({
     path: Type.String({ default: '~/.egirl/workspace' }),
@@ -170,6 +183,11 @@ export type EgirlConfig = Static<typeof EgirlConfigSchema>
 // Runtime config with resolved paths and secrets from .env
 export interface RuntimeConfig {
   theme: string
+  thinking: {
+    level: ThinkingLevel
+    budgetTokens?: number
+    showThinking: boolean
+  }
   workspace: {
     path: string
   }
