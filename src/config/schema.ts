@@ -44,9 +44,7 @@ export const EgirlConfigSchema = Type.Object({
     always_remote: Type.Array(Type.String(), {
       default: ['code_generation', 'code_review', 'complex_reasoning'],
     }),
-    models: Type.Optional(
-      Type.Record(Type.String(), Type.Array(Type.String())),
-    ),
+    models: Type.Optional(Type.Record(Type.String(), Type.Array(Type.String()))),
   }),
 
   channels: Type.Optional(

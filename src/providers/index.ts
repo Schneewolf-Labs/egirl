@@ -134,11 +134,8 @@ export function createProviderRegistry(config: RuntimeConfig): ProviderRegistry 
       // Otherwise create one (Anthropic was preferred as remote, but OpenAI is also configured)
       const cached = overrideCache.get(ref)
       if (cached) return cached
-      const provider = createOpenAIProvider(
-        config.remote.openai.apiKey,
-        config.remote.openai.model,
-        config.remote.openai.baseUrl,
-      )
+      const { apiKeys, model, baseUrl } = config.remote.openai
+      const provider = createOpenAIProvider(apiKeys[0] ?? '', model, baseUrl)
       overrideCache.set(ref, provider)
       return provider
     }
@@ -159,7 +156,8 @@ export function createProviderRegistry(config: RuntimeConfig): ProviderRegistry 
       if (modelName === config.remote.anthropic.model && remote?.name.startsWith('anthropic/')) {
         return remote
       }
-      const provider = createAnthropicProvider(config.remote.anthropic.apiKey, modelName)
+      const key = config.remote.anthropic.apiKeys[0] ?? ''
+      const provider = createAnthropicProvider(key, modelName)
       overrideCache.set(ref, provider)
       return provider
     }
@@ -168,11 +166,8 @@ export function createProviderRegistry(config: RuntimeConfig): ProviderRegistry 
       if (modelName === config.remote.openai.model && remote?.name.startsWith('openai/')) {
         return remote
       }
-      const provider = createOpenAIProvider(
-        config.remote.openai.apiKey,
-        modelName,
-        config.remote.openai.baseUrl,
-      )
+      const key = config.remote.openai.apiKeys[0] ?? ''
+      const provider = createOpenAIProvider(key, modelName, config.remote.openai.baseUrl)
       overrideCache.set(ref, provider)
       return provider
     }

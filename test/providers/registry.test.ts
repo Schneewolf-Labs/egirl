@@ -44,7 +44,7 @@ describe('ProviderRegistry.resolveModelRef', () => {
     const config: RuntimeConfig = {
       ...baseConfig,
       remote: {
-        anthropic: { apiKey: 'test-key', model: 'claude-sonnet-4-20250514' },
+        anthropic: { apiKey: 'test-key', apiKeys: ['test-key'], model: 'claude-sonnet-4-20250514' },
       },
     }
     const registry = createProviderRegistry(config)
@@ -57,7 +57,7 @@ describe('ProviderRegistry.resolveModelRef', () => {
     const config: RuntimeConfig = {
       ...baseConfig,
       remote: {
-        openai: { apiKey: 'test-key', model: 'gpt-4o' },
+        openai: { apiKey: 'test-key', apiKeys: ['test-key'], model: 'gpt-4o' },
       },
     }
     const registry = createProviderRegistry(config)
@@ -70,7 +70,7 @@ describe('ProviderRegistry.resolveModelRef', () => {
     const config: RuntimeConfig = {
       ...baseConfig,
       remote: {
-        anthropic: { apiKey: 'test-key', model: 'claude-sonnet-4-20250514' },
+        anthropic: { apiKey: 'test-key', apiKeys: ['test-key'], model: 'claude-sonnet-4-20250514' },
       },
     }
     const registry = createProviderRegistry(config)
@@ -83,7 +83,7 @@ describe('ProviderRegistry.resolveModelRef', () => {
     const config: RuntimeConfig = {
       ...baseConfig,
       remote: {
-        anthropic: { apiKey: 'test-key', model: 'claude-sonnet-4-20250514' },
+        anthropic: { apiKey: 'test-key', apiKeys: ['test-key'], model: 'claude-sonnet-4-20250514' },
       },
     }
     const registry = createProviderRegistry(config)
@@ -97,7 +97,7 @@ describe('ProviderRegistry.resolveModelRef', () => {
     const config: RuntimeConfig = {
       ...baseConfig,
       remote: {
-        anthropic: { apiKey: 'test-key', model: 'claude-sonnet-4-20250514' },
+        anthropic: { apiKey: 'test-key', apiKeys: ['test-key'], model: 'claude-sonnet-4-20250514' },
       },
     }
     const registry = createProviderRegistry(config)
@@ -120,8 +120,12 @@ describe('ProviderRegistry.resolveModelRef', () => {
     const config: RuntimeConfig = {
       ...baseConfig,
       remote: {
-        anthropic: { apiKey: 'test-key-a', model: 'claude-sonnet-4-20250514' },
-        openai: { apiKey: 'test-key-o', model: 'gpt-4o' },
+        anthropic: {
+          apiKey: 'test-key-a',
+          apiKeys: ['test-key-a'],
+          model: 'claude-sonnet-4-20250514',
+        },
+        openai: { apiKey: 'test-key-o', apiKeys: ['test-key-o'], model: 'gpt-4o' },
       },
     }
     const registry = createProviderRegistry(config)
