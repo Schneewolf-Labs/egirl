@@ -123,6 +123,7 @@ export class APIServer {
     this.cleanupInterval = setInterval(() => this.rateLimiter.cleanup(), 60_000)
 
     log.info('api', `API server listening on http://${host}:${port}`)
+    log.info('api', `Dashboard at http://${host}:${port}/`)
     log.info('api', `OpenAPI spec at http://${host}:${port}/openapi.json`)
   }
 
