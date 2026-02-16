@@ -103,6 +103,30 @@ export class MemoryFiles {
   getImagesDir(): string {
     return this.imagesDir
   }
+
+  /**
+   * Get the daily logs directory path
+   */
+  getDailyLogDir(): string {
+    return this.dailyLogDir
+  }
+
+  /**
+   * List available daily log files, returning dates (YYYY-MM-DD) sorted newest first
+   */
+  async listDailyLogs(): Promise<string[]> {
+    const { readdir } = await import('fs/promises')
+    try {
+      const files = await readdir(this.dailyLogDir)
+      return files
+        .filter((f) => f.endsWith('.md'))
+        .map((f) => f.replace('.md', ''))
+        .sort()
+        .reverse()
+    } catch {
+      return []
+    }
+  }
 }
 
 export function createMemoryFiles(workspaceDir: string): MemoryFiles {
