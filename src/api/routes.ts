@@ -1,3 +1,4 @@
+import { join } from 'path'
 import type { AgentLoop, AgentResponse } from '../agent'
 import type { RuntimeConfig } from '../config'
 import type { MemoryManager, SearchResult } from '../memory'
@@ -6,6 +7,8 @@ import type { ToolExecutor } from '../tools'
 import type { StatsTracker } from '../tracking/stats'
 import { log } from '../util/logger'
 import type { OpenAPISpec } from './openapi'
+
+const STATIC_DIR = join(import.meta.dir, '../../static')
 
 export interface RouteDeps {
   agent: AgentLoop
@@ -48,6 +51,20 @@ export function createRoutes(deps: RouteDeps): Map<string, Map<string, RouteHand
     }
     routes.get(path)?.set(method, handler)
   }
+
+  // GET / — HTML dashboard
+  route('GET', '/', async () => {
+    return new Response(Bun.file(join(STATIC_DIR, 'dashboard.html')))
+  })
+
+  // Static assets
+  route('GET', '/static/dashboard.css', async () => {
+    return new Response(Bun.file(join(STATIC_DIR, 'dashboard.css')))
+  })
+
+  route('GET', '/static/dashboard.js', async () => {
+    return new Response(Bun.file(join(STATIC_DIR, 'dashboard.js')))
+  })
 
   // GET /health
   route('GET', '/health', async () => {
@@ -234,6 +251,98 @@ export function createRoutes(deps: RouteDeps): Map<string, Map<string, RouteHand
       },
       stats,
     })
+  })
+
+  // GET /v1/config — return current config (secrets masked)
+  route('GET', '/v1/config', async () => {
+    const c = deps.config
+    return json({
+      theme: c.theme,
+      thinking: c.thinking,
+      workspace: { path: c.workspace.path },
+      local: {
+        endpoint: c.local.endpoint,
+        model: c.local.model,
+        contextLength: c.local.contextLength,
+        maxConcurrent: c.local.maxConcurrent,
+        embeddings: c.local.embeddings
+          ? {
+              endpoint: c.local.embeddings.endpoint,
+              model: c.local.embeddings.model,
+              dimensions: c.local.embeddings.dimensions,
+              multimodal: c.local.embeddings.multimodal,
+            }
+          : undefined,
+      },
+      remote: {
+        hasAnthropic: !!c.remote.anthropic,
+        hasOpenAI: !!c.remote.openai,
+        anthropicModel: c.remote.anthropic?.model,
+        openaiModel: c.remote.openai?.model,
+      },
+      routing: {
+        default: c.routing.default,
+        escalationThreshold: c.routing.escalationThreshold,
+        alwaysLocal: c.routing.alwaysLocal,
+        alwaysRemote: c.routing.alwaysRemote,
+      },
+      channels: {
+        hasDiscord: !!c.channels.discord,
+        discord: c.channels.discord
+          ? {
+              allowedChannels: c.channels.discord.allowedChannels,
+              allowedUsers: c.channels.discord.allowedUsers,
+              passiveChannels: c.channels.discord.passiveChannels,
+              batchWindowMs: c.channels.discord.batchWindowMs,
+            }
+          : undefined,
+        api: c.channels.api,
+        claudeCode: c.channels.claudeCode
+          ? {
+              permissionMode: c.channels.claudeCode.permissionMode,
+              model: c.channels.claudeCode.model,
+              workingDir: c.channels.claudeCode.workingDir,
+              maxTurns: c.channels.claudeCode.maxTurns,
+            }
+          : undefined,
+        xmpp: c.channels.xmpp
+          ? {
+              service: c.channels.xmpp.service,
+              domain: c.channels.xmpp.domain,
+              resource: c.channels.xmpp.resource,
+              allowedJids: c.channels.xmpp.allowedJids,
+            }
+          : undefined,
+      },
+      conversation: c.conversation,
+      memory: c.memory,
+      safety: c.safety,
+      tasks: c.tasks,
+      skills: { dirs: c.skills.dirs },
+      transcript: c.transcript,
+      hasGithub: !!c.github,
+      github: c.github
+        ? { defaultOwner: c.github.defaultOwner, defaultRepo: c.github.defaultRepo }
+        : undefined,
+    })
+  })
+
+  // PUT /v1/config — write TOML config to disk
+  route('PUT', '/v1/config', async (req) => {
+    const body = (await parseBody(req)) as Record<string, unknown> | null
+    if (!body) {
+      return error('Invalid request body')
+    }
+
+    try {
+      const { writeConfigToml } = await import('../config/writer')
+      await writeConfigToml(body)
+      return json({ success: true })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      log.error('api', `Config write error: ${message}`)
+      return error(message, 500)
+    }
   })
 
   return routes

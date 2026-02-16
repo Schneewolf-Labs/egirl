@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>egirl — dashboard</title>
+<link rel="stylesheet" href="/static/dashboard.css">
+</head>
+<body>
+
+<div class="shell">
+  <nav>
+    <div class="brand">
+      <h1>egirl</h1>
+      <div class="sub">local-first ai agent</div>
+    </div>
+    <div class="nav-group">Overview</div>
+    <a href="#" data-section="dashboard" class="active">Dashboard</a>
+    <a href="#" data-section="chat">Chat</a>
+    <div class="nav-group">Config</div>
+    <a href="#" data-section="general">General</a>
+    <a href="#" data-section="local">Local Model</a>
+    <a href="#" data-section="routing">Routing</a>
+    <a href="#" data-section="channels">Channels</a>
+    <a href="#" data-section="memory-cfg">Memory</a>
+    <a href="#" data-section="conversation">Conversation</a>
+    <a href="#" data-section="safety">Safety</a>
+    <a href="#" data-section="tasks-cfg">Tasks</a>
+    <a href="#" data-section="thinking">Thinking</a>
+    <a href="#" data-section="transcript">Transcript</a>
+    <a href="#" data-section="github">GitHub</a>
+    <div class="nav-group">Explore</div>
+    <a href="#" data-section="api">API Explorer</a>
+    <a href="#" data-section="tools">Tools</a>
+    <a href="#" data-section="memory">Memory Browser</a>
+  </nav>
+
+  <main>
+    <!-- DASHBOARD -->
+    <section id="sec-dashboard" class="section active">
+      <h2>Dashboard</h2>
+      <div class="card-row" id="status-cards">
+        <div class="stat-card"><div class="label">Status</div><div class="value" id="dash-health">...</div></div>
+        <div class="stat-card"><div class="label">Uptime</div><div class="value purple" id="dash-uptime">—</div></div>
+        <div class="stat-card"><div class="label">Local Model</div><div class="value pink" id="dash-model">—</div></div>
+        <div class="stat-card"><div class="label">Routing Default</div><div class="value" id="dash-routing">—</div></div>
+      </div>
+
+      <h3>Providers</h3>
+      <div class="card">
+        <div id="dash-providers"></div>
+      </div>
+
+      <h3>Usage Stats</h3>
+      <div class="card-row" id="stats-cards">
+        <div class="stat-card"><div class="label">Total Requests</div><div class="value purple" id="stat-total">0</div></div>
+        <div class="stat-card"><div class="label">Local</div><div class="value ok" id="stat-local">0</div></div>
+        <div class="stat-card"><div class="label">Remote</div><div class="value pink" id="stat-remote">0</div></div>
+        <div class="stat-card"><div class="label">Escalations</div><div class="value gold" id="stat-esc">0</div></div>
+      </div>
+      <div class="card-row">
+        <div class="stat-card"><div class="label">Tokens In / Out</div><div class="value" id="stat-tokens" style="font-size:14px">—</div></div>
+        <div class="stat-card"><div class="label">API Cost</div><div class="value err" id="stat-cost">$0.00</div></div>
+        <div class="stat-card"><div class="label">Estimated Savings</div><div class="value ok" id="stat-saved">$0.00</div></div>
+      </div>
+    </section>
+
+    <!-- CHAT -->
+    <section id="sec-chat" class="section">
+      <h2>Chat</h2>
+      <div class="chat-log" id="chat-log">
+        <div style="color:var(--text-dim);font-style:italic">Send a message to test the agent...</div>
+      </div>
+      <div class="chat-input-row">
+        <input type="text" id="chat-input" placeholder="Type a message..." autocomplete="off">
+        <button class="btn primary" id="chat-send">Send</button>
+      </div>
+    </section>
+
+    <!-- GENERAL CONFIG -->
+    <section id="sec-general" class="section">
+      <h2>General</h2>
+      <div class="card">
+        <div class="field">
+          <label>Theme</label>
+          <div style="display:flex;gap:8px">
+            <button class="btn theme-btn" data-theme="egirl" style="border-color:var(--purple);color:var(--purple)">egirl</button>
+            <button class="btn theme-btn" data-theme="midnight" style="border-color:#5fafff;color:#5fafff">midnight</button>
+            <button class="btn theme-btn" data-theme="neon" style="border-color:#00ff00;color:#00ff00">neon</button>
+            <button class="btn theme-btn" data-theme="mono" style="border-color:#bcbcbc;color:#bcbcbc">mono</button>
+          </div>
+          <div class="hint">Active theme for CLI output. Restart required.</div>
+        </div>
+        <div class="field">
+          <label>Workspace Path</label>
+          <input type="text" id="cfg-workspace" placeholder="~/.egirl/workspace">
+          <div class="hint">Root directory for memory, logs, sessions, skills</div>
+        </div>
+        <div class="field">
+          <label>Skill Directories</label>
+          <div class="tag-list" id="cfg-skill-dirs"></div>
+          <div class="hint">Directories searched for skill definitions</div>
+        </div>
+      </div>
+      <h3>Environment Keys</h3>
+      <div class="card" id="env-keys-card">
+        <div class="toggle-row">
+          <div><div class="toggle-label">ANTHROPIC_API_KEY</div><div class="toggle-desc">Claude API access</div></div>
+          <span class="badge" id="env-anthropic">—</span>
+        </div>
+        <div class="toggle-row">
+          <div><div class="toggle-label">OPENAI_API_KEY</div><div class="toggle-desc">OpenAI / fallback provider</div></div>
+          <span class="badge" id="env-openai">—</span>
+        </div>
+        <div class="toggle-row">
+          <div><div class="toggle-label">DISCORD_TOKEN</div><div class="toggle-desc">Discord bot token</div></div>
+          <span class="badge" id="env-discord">—</span>
+        </div>
+        <div class="toggle-row">
+          <div><div class="toggle-label">GITHUB_TOKEN</div><div class="toggle-desc">GitHub integration</div></div>
+          <span class="badge" id="env-github">—</span>
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn primary" onclick="saveConfig()">Save Configuration</button>
+      </div>
+    </section>
+
+    <!-- LOCAL MODEL -->
+    <section id="sec-local" class="section">
+      <h2>Local Model</h2>
+      <div class="card">
+        <div class="field-row">
+          <div class="field">
+            <label>Endpoint</label>
+            <input type="text" id="cfg-local-endpoint" placeholder="http://localhost:8080">
+          </div>
+          <div class="field">
+            <label>Model Name</label>
+            <input type="text" id="cfg-local-model" placeholder="qwen3-vl-32b">
+            <div class="hint">Display/logging only — not sent to server</div>
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label>Context Length</label>
+            <input type="number" id="cfg-local-ctx" placeholder="32768">
+          </div>
+          <div class="field">
+            <label>Max Concurrent</label>
+            <input type="number" id="cfg-local-concurrent" placeholder="2">
+          </div>
+        </div>
+      </div>
+
+      <h3>Embeddings</h3>
+      <div class="card">
+        <div class="field-row">
+          <div class="field">
+            <label>Endpoint</label>
+            <input type="text" id="cfg-emb-endpoint" placeholder="http://localhost:8082">
+          </div>
+          <div class="field">
+            <label>Model</label>
+            <input type="text" id="cfg-emb-model" placeholder="qwen3-vl-embedding-2b">
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label>Dimensions</label>
+            <input type="number" id="cfg-emb-dims" placeholder="2048">
+          </div>
+          <div class="field">
+            <label>Multimodal</label>
+            <div style="padding-top:4px">
+              <label class="switch"><input type="checkbox" id="cfg-emb-multi"><span class="slider"></span></label>
+              <span style="font-size:11px;color:var(--text-dim);margin-left:8px">Supports image embeddings</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn primary" onclick="saveConfig()">Save Configuration</button>
+        <button class="btn" onclick="pingLocal()">Test Connection</button>
+      </div>
+    </section>
+
+    <!-- ROUTING -->
+    <section id="sec-routing" class="section">
+      <h2>Routing</h2>
+      <div class="card">
+        <div class="field">
+          <label>Default Target</label>
+          <select id="cfg-route-default">
+            <option value="local">local</option>
+            <option value="remote">remote</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Escalation Threshold <span class="range-val" id="cfg-esc-val">0.4</span></label>
+          <input type="range" id="cfg-esc-threshold" min="0" max="1" step="0.05" value="0.4">
+          <div class="hint">Confidence below this value triggers escalation to remote provider</div>
+        </div>
+        <div class="field">
+          <label>Always Local</label>
+          <div class="tag-list" id="cfg-always-local"></div>
+          <input type="text" class="tag-input" id="cfg-always-local-input" placeholder="+ add task type">
+        </div>
+        <div class="field">
+          <label>Always Remote</label>
+          <div class="tag-list" id="cfg-always-remote"></div>
+          <input type="text" class="tag-input" id="cfg-always-remote-input" placeholder="+ add task type">
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn primary" onclick="saveConfig()">Save Configuration</button>
+      </div>
+    </section>
+
+    <!-- CHANNELS -->
+    <section id="sec-channels" class="section">
+      <h2>Channels</h2>
+
+      <h3>API Server</h3>
+      <div class="card">
+        <div class="field-row">
+          <div class="field">
+            <label>Port</label>
+            <input type="number" id="cfg-api-port" placeholder="3000">
+          </div>
+          <div class="field">
+            <label>Host</label>
+            <input type="text" id="cfg-api-host" placeholder="127.0.0.1">
+          </div>
+        </div>
+      </div>
+
+      <h3>Discord</h3>
+      <div class="card">
+        <div class="field">
+          <label>DISCORD_TOKEN</label>
+          <span class="secret-mask" id="chan-discord-token">not loaded from env</span>
+        </div>
+        <div class="field">
+          <label>Allowed Channels</label>
+          <div class="tag-list" id="cfg-discord-channels"></div>
+          <input type="text" class="tag-input" id="cfg-discord-channels-input" placeholder="+ add channel ID or 'dm'">
+        </div>
+        <div class="field">
+          <label>Allowed Users</label>
+          <div class="tag-list" id="cfg-discord-users"></div>
+          <input type="text" class="tag-input" id="cfg-discord-users-input" placeholder="+ add user ID">
+          <div class="hint">Empty = allow all users</div>
+        </div>
+        <div class="field">
+          <label>Passive Channels</label>
+          <div class="tag-list" id="cfg-discord-passive"></div>
+          <input type="text" class="tag-input" id="cfg-discord-passive-input" placeholder="+ add channel ID">
+          <div class="hint">Monitor and respond without being @mentioned</div>
+        </div>
+        <div class="field">
+          <label>Batch Window (ms)</label>
+          <input type="number" id="cfg-discord-batch" placeholder="3000">
+          <div class="hint">Debounce interval for passive channel batching</div>
+        </div>
+      </div>
+
+      <h3>Claude Code</h3>
+      <div class="card">
+        <div class="field-row">
+          <div class="field">
+            <label>Permission Mode</label>
+            <select id="cfg-cc-perm">
+              <option value="default">default</option>
+              <option value="acceptEdits">acceptEdits</option>
+              <option value="bypassPermissions">bypassPermissions</option>
+              <option value="plan">plan</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Model Override</label>
+            <input type="text" id="cfg-cc-model" placeholder="(none)">
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label>Working Directory</label>
+            <input type="text" id="cfg-cc-workdir" placeholder="(defaults to cwd)">
+          </div>
+          <div class="field">
+            <label>Max Turns</label>
+            <input type="number" id="cfg-cc-turns" placeholder="30">
+          </div>
+        </div>
+      </div>
+
+      <h3>XMPP</h3>
+      <div class="card">
+        <div class="field-row">
+          <div class="field">
+            <label>Service URL</label>
+            <input type="text" id="cfg-xmpp-service" placeholder="xmpp://localhost:5222">
+          </div>
+          <div class="field">
+            <label>Domain</label>
+            <input type="text" id="cfg-xmpp-domain" placeholder="(derived from service)">
+          </div>
+        </div>
+        <div class="field">
+          <label>Resource</label>
+          <input type="text" id="cfg-xmpp-resource" placeholder="(optional)">
+        </div>
+        <div class="field">
+          <label>Allowed JIDs</label>
+          <div class="tag-list" id="cfg-xmpp-jids"></div>
+          <input type="text" class="tag-input" id="cfg-xmpp-jids-input" placeholder="+ add JID">
+          <div class="hint">Empty = allow all</div>
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn primary" onclick="saveConfig()">Save Configuration</button>
+      </div>
+    </section>
+
+    <!-- MEMORY CONFIG -->
+    <section id="sec-memory-cfg" class="section">
+      <h2>Memory Settings</h2>
+      <div class="card">
+        <div class="toggle-row">
+          <div><div class="toggle-label">Proactive Retrieval</div><div class="toggle-desc">Auto-retrieve relevant memories during conversation</div></div>
+          <label class="switch"><input type="checkbox" id="cfg-mem-proactive"><span class="slider"></span></label>
+        </div>
+        <div class="toggle-row">
+          <div><div class="toggle-label">Auto Extract</div><div class="toggle-desc">Automatically extract facts from conversations</div></div>
+          <label class="switch"><input type="checkbox" id="cfg-mem-extract"><span class="slider"></span></label>
+        </div>
+      </div>
+      <div class="card">
+        <div class="field">
+          <label>Score Threshold <span class="range-val" id="cfg-mem-thresh-val">0.35</span></label>
+          <input type="range" id="cfg-mem-threshold" min="0" max="1" step="0.05" value="0.35">
+          <div class="hint">Minimum relevance score for memory retrieval</div>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label>Max Results</label>
+            <input type="number" id="cfg-mem-maxresults" placeholder="5">
+          </div>
+          <div class="field">
+            <label>Max Tokens Budget</label>
+            <input type="number" id="cfg-mem-budget" placeholder="2000">
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label>Extraction Min Messages</label>
+            <input type="number" id="cfg-mem-minmsg" placeholder="2">
+          </div>
+          <div class="field">
+            <label>Extraction Max Per Turn</label>
+            <input type="number" id="cfg-mem-maxperturn" placeholder="5">
+          </div>
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn primary" onclick="saveConfig()">Save Configuration</button>
+      </div>
+    </section>
+
+    <!-- CONVERSATION -->
+    <section id="sec-conversation" class="section">
+      <h2>Conversation</h2>
+      <div class="card">
+        <div class="toggle-row">
+          <div><div class="toggle-label">Enabled</div><div class="toggle-desc">Store conversation history</div></div>
+          <label class="switch"><input type="checkbox" id="cfg-conv-enabled"><span class="slider"></span></label>
+        </div>
+        <div class="toggle-row">
+          <div><div class="toggle-label">Compact on Startup</div><div class="toggle-desc">Compact database when agent starts</div></div>
+          <label class="switch"><input type="checkbox" id="cfg-conv-compact"><span class="slider"></span></label>
+        </div>
+        <div class="toggle-row">
+          <div><div class="toggle-label">Context Compaction</div><div class="toggle-desc">Compress context window during long conversations</div></div>
+          <label class="switch"><input type="checkbox" id="cfg-conv-compaction"><span class="slider"></span></label>
+        </div>
+      </div>
+      <div class="card">
+        <div class="field-row">
+          <div class="field">
+            <label>Max Age (days)</label>
+            <input type="number" id="cfg-conv-maxage" placeholder="30">
+          </div>
+          <div class="field">
+            <label>Max Messages</label>
+            <input type="number" id="cfg-conv-maxmsg" placeholder="1000">
+          </div>
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn primary" onclick="saveConfig()">Save Configuration</button>
+      </div>
+    </section>
+
+    <!-- SAFETY -->
+    <section id="sec-safety" class="section">
+      <h2>Safety</h2>
+      <div class="card">
+        <div class="toggle-row">
+          <div><div class="toggle-label">Safety System</div><div class="toggle-desc">Master switch for all safety features</div></div>
+          <label class="switch"><input type="checkbox" id="cfg-safety-enabled"><span class="slider"></span></label>
+        </div>
+      </div>
+
+      <h3>Command Filter</h3>
+      <div class="card">
+        <div class="toggle-row">
+          <div><div class="toggle-label">Enabled</div><div class="toggle-desc">Block dangerous shell commands</div></div>
+          <label class="switch"><input type="checkbox" id="cfg-safety-cmd"><span class="slider"></span></label>
+        </div>
+        <div class="field" style="margin-top:8px">
+          <label>Blocked Patterns (regex)</label>
+          <div class="tag-list" id="cfg-safety-cmd-patterns"></div>
+          <input type="text" class="tag-input" id="cfg-safety-cmd-patterns-input" placeholder="+ add regex pattern">
+          <div class="hint">Added on top of built-in blocklist</div>
+        </div>
+      </div>
+
+      <h3>Path Sandbox</h3>
+      <div class="card">
+        <div class="toggle-row">
+          <div><div class="toggle-label">Enabled</div><div class="toggle-desc">Restrict file operations to allowed directories</div></div>
+          <label class="switch"><input type="checkbox" id="cfg-safety-path"><span class="slider"></span></label>
+        </div>
+        <div class="field" style="margin-top:8px">
+          <label>Allowed Paths</label>
+          <div class="tag-list" id="cfg-safety-allowed-paths"></div>
+          <input type="text" class="tag-input" id="cfg-safety-allowed-paths-input" placeholder="+ add path">
+        </div>
+      </div>
+
+      <h3>Sensitive Files</h3>
+      <div class="card">
+        <div class="toggle-row">
+          <div><div class="toggle-label">Enabled</div><div class="toggle-desc">Block access to secrets and key files</div></div>
+          <label class="switch"><input type="checkbox" id="cfg-safety-sens"><span class="slider"></span></label>
+        </div>
+        <div class="field" style="margin-top:8px">
+          <label>Patterns (regex)</label>
+          <div class="tag-list" id="cfg-safety-sens-patterns"></div>
+          <input type="text" class="tag-input" id="cfg-safety-sens-patterns-input" placeholder="+ add file pattern">
+        </div>
+      </div>
+
+      <h3>Audit Log</h3>
+      <div class="card">
+        <div class="toggle-row">
+          <div><div class="toggle-label">Enabled</div><div class="toggle-desc">Log all tool calls to JSONL</div></div>
+          <label class="switch"><input type="checkbox" id="cfg-safety-audit"><span class="slider"></span></label>
+        </div>
+        <div class="field" style="margin-top:8px">
+          <label>Log Path</label>
+          <input type="text" id="cfg-safety-audit-path" placeholder="{workspace}/audit.log">
+        </div>
+      </div>
+
+      <h3>Confirmation</h3>
+      <div class="card">
+        <div class="toggle-row">
+          <div><div class="toggle-label">Enabled</div><div class="toggle-desc">Require confirmation for destructive operations</div></div>
+          <label class="switch"><input type="checkbox" id="cfg-safety-confirm"><span class="slider"></span></label>
+        </div>
+        <div class="field" style="margin-top:8px">
+          <label>Tools Requiring Confirmation</label>
+          <div class="tag-list" id="cfg-safety-confirm-tools"></div>
+          <input type="text" class="tag-input" id="cfg-safety-confirm-tools-input" placeholder="+ add tool name">
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn primary" onclick="saveConfig()">Save Configuration</button>
+      </div>
+    </section>
+
+    <!-- TASKS CONFIG -->
+    <section id="sec-tasks-cfg" class="section">
+      <h2>Tasks</h2>
+      <div class="card">
+        <div class="toggle-row">
+          <div><div class="toggle-label">Task System</div><div class="toggle-desc">Enable task scheduling and execution</div></div>
+          <label class="switch"><input type="checkbox" id="cfg-tasks-enabled"><span class="slider"></span></label>
+        </div>
+        <div class="toggle-row">
+          <div><div class="toggle-label">Discovery</div><div class="toggle-desc">Auto-discover and propose tasks</div></div>
+          <label class="switch"><input type="checkbox" id="cfg-tasks-discovery"><span class="slider"></span></label>
+        </div>
+      </div>
+      <div class="card">
+        <div class="field-row">
+          <div class="field">
+            <label>Tick Interval (ms)</label>
+            <input type="number" id="cfg-tasks-tick" placeholder="30000">
+          </div>
+          <div class="field">
+            <label>Max Active Tasks</label>
+            <input type="number" id="cfg-tasks-max" placeholder="20">
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label>Task Timeout (ms)</label>
+            <input type="number" id="cfg-tasks-timeout" placeholder="300000">
+          </div>
+          <div class="field">
+            <label>Discovery Interval (ms)</label>
+            <input type="number" id="cfg-tasks-disc-int" placeholder="1800000">
+          </div>
+        </div>
+        <div class="field">
+          <label>Idle Threshold (ms)</label>
+          <input type="number" id="cfg-tasks-idle" placeholder="600000">
+          <div class="hint">Time before the agent is considered idle</div>
+        </div>
+      </div>
+      <h3>Heartbeat</h3>
+      <div class="card">
+        <div class="toggle-row">
+          <div><div class="toggle-label">Enabled</div><div class="toggle-desc">Periodic health check and status report</div></div>
+          <label class="switch"><input type="checkbox" id="cfg-hb-enabled"><span class="slider"></span></label>
+        </div>
+        <div class="field-row" style="margin-top:8px">
+          <div class="field">
+            <label>Schedule (cron)</label>
+            <input type="text" id="cfg-hb-schedule" placeholder="*/30 * * * *">
+            <div class="hint">Cron expression for heartbeat interval</div>
+          </div>
+          <div class="field">
+            <label>Business Hours</label>
+            <input type="text" id="cfg-hb-hours" placeholder="(optional) e.g. 09:00-17:00">
+            <div class="hint">Only run heartbeat during these hours</div>
+          </div>
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn primary" onclick="saveConfig()">Save Configuration</button>
+      </div>
+    </section>
+
+    <!-- THINKING -->
+    <section id="sec-thinking" class="section">
+      <h2>Thinking</h2>
+      <div class="card">
+        <div class="field">
+          <label>Level</label>
+          <select id="cfg-think-level">
+            <option value="off">off</option>
+            <option value="low">low</option>
+            <option value="medium">medium</option>
+            <option value="high">high</option>
+          </select>
+          <div class="hint">Controls extended thinking for Anthropic and Qwen3 /think mode</div>
+        </div>
+        <div class="field">
+          <label>Budget Tokens</label>
+          <input type="number" id="cfg-think-budget" placeholder="(auto from level)">
+          <div class="hint">Override thinking budget. Leave empty for automatic.</div>
+        </div>
+        <div class="toggle-row">
+          <div><div class="toggle-label">Show Thinking</div><div class="toggle-desc">Display thinking output in CLI</div></div>
+          <label class="switch"><input type="checkbox" id="cfg-think-show"><span class="slider"></span></label>
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn primary" onclick="saveConfig()">Save Configuration</button>
+      </div>
+    </section>
+
+    <!-- TRANSCRIPT -->
+    <section id="sec-transcript" class="section">
+      <h2>Transcript</h2>
+      <div class="card">
+        <div class="toggle-row">
+          <div><div class="toggle-label">Enabled</div><div class="toggle-desc">Save conversation transcripts to disk</div></div>
+          <label class="switch"><input type="checkbox" id="cfg-transcript-enabled"><span class="slider"></span></label>
+        </div>
+        <div class="field" style="margin-top:8px">
+          <label>Transcript Path</label>
+          <input type="text" id="cfg-transcript-path" placeholder="{workspace}/transcripts">
+          <div class="hint">Directory for saved transcripts</div>
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn primary" onclick="saveConfig()">Save Configuration</button>
+      </div>
+    </section>
+
+    <!-- GITHUB -->
+    <section id="sec-github" class="section">
+      <h2>GitHub</h2>
+      <div class="card">
+        <div class="toggle-row">
+          <div><div class="toggle-label">GITHUB_TOKEN</div><div class="toggle-desc">GitHub API integration</div></div>
+          <span class="badge" id="env-github-cfg">—</span>
+        </div>
+        <div class="field-row" style="margin-top:12px">
+          <div class="field">
+            <label>Default Owner</label>
+            <input type="text" id="cfg-gh-owner" placeholder="(optional) org or user">
+            <div class="hint">Default repository owner for GitHub operations</div>
+          </div>
+          <div class="field">
+            <label>Default Repo</label>
+            <input type="text" id="cfg-gh-repo" placeholder="(optional) repo name">
+            <div class="hint">Default repository name</div>
+          </div>
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn primary" onclick="saveConfig()">Save Configuration</button>
+      </div>
+    </section>
+
+    <!-- API EXPLORER -->
+    <section id="sec-api" class="section">
+      <h2>API Explorer</h2>
+      <div id="api-endpoints"></div>
+    </section>
+
+    <!-- TOOLS -->
+    <section id="sec-tools" class="section">
+      <h2>Tools</h2>
+      <div id="tools-list" style="color:var(--text-dim)">Loading tools...</div>
+    </section>
+
+    <!-- MEMORY BROWSER -->
+    <section id="sec-memory" class="section">
+      <h2>Memory Browser</h2>
+      <div class="card">
+        <div class="field-row">
+          <div class="field" style="flex:1">
+            <input type="text" id="mem-query" placeholder="Search memories...">
+          </div>
+          <div class="field" style="width:140px">
+            <select id="mem-mode">
+              <option value="hybrid">hybrid</option>
+              <option value="text">text (FTS)</option>
+              <option value="semantic">semantic</option>
+            </select>
+          </div>
+        </div>
+        <div class="btn-row" style="margin-top:0">
+          <button class="btn primary" onclick="searchMemory()">Search</button>
+        </div>
+      </div>
+      <div id="mem-results"></div>
+
+      <h3 style="margin-top:24px">Store Memory</h3>
+      <div class="card">
+        <div class="field-row">
+          <div class="field">
+            <label>Key</label>
+            <input type="text" id="mem-set-key" placeholder="memory-key">
+          </div>
+          <div class="field">
+            <label>Value</label>
+            <input type="text" id="mem-set-val" placeholder="memory value">
+          </div>
+        </div>
+        <div class="btn-row" style="margin-top:0">
+          <button class="btn primary" onclick="storeMemory()">Store</button>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="/static/dashboard.js"></script>
+</body>
+</html>
