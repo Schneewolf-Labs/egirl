@@ -2,7 +2,12 @@ import { join } from 'path'
 import { BrowserManager, type BrowserManager as BrowserManagerType } from './browser'
 import type { RuntimeConfig } from './config'
 import { type ConversationStore, createConversationStore } from './conversation'
-import { createMemoryManager, type MemoryManager, Qwen3VLEmbeddings } from './memory'
+import {
+  createMemoryManager,
+  indexDailyLogs,
+  type MemoryManager,
+  Qwen3VLEmbeddings,
+} from './memory'
 import { createProviderRegistry, type ProviderRegistry } from './providers'
 import { createRouter, type Router } from './routing'
 import { buildSafetyConfig } from './safety/config-bridge'
@@ -178,6 +183,14 @@ export async function createAppServices(config: RuntimeConfig): Promise<AppServi
   }
 
   const memory = createMemory(config)
+
+  // Tier 2: index daily conversation logs into vector search (async, non-blocking)
+  if (memory) {
+    indexDailyLogs(memory, memory.getFiles()).catch((error) => {
+      log.warn('main', 'Daily log indexing failed:', error)
+    })
+  }
+
   const conversations = createConversations(config)
   const taskStore = createTasks(config)
   const skills = await loadSkills(config)

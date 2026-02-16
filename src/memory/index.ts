@@ -36,6 +36,7 @@ export {
   MemoryIndexer,
   type MemorySource,
 } from './indexer'
+export { chunkDailyLog, indexDailyLogs } from './log-indexer'
 export { type RetrievalConfig, retrieveForContext } from './retrieval'
 export { createMemorySearch, MemorySearch, type SearchOptions, type SearchResult } from './search'
 
@@ -317,6 +318,13 @@ export class MemoryManager {
    */
   hasMultimodalEmbeddings(): boolean {
     return this.embeddings?.supportsImages ?? false
+  }
+
+  /**
+   * Access underlying file operations (for log indexing, etc.)
+   */
+  getFiles(): MemoryFiles {
+    return this.files
   }
 
   close(): void {

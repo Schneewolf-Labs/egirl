@@ -22,6 +22,24 @@ function getDomain(service: string): string {
   }
 }
 
+/**
+ * Collect API keys from environment variables.
+ * Looks for BASE_KEY, BASE_KEY_2, BASE_KEY_3, etc.
+ */
+function collectApiKeys(baseEnvVar: string): string[] {
+  const keys: string[] = []
+  const primary = process.env[baseEnvVar]
+  if (primary) keys.push(primary)
+
+  // Check for numbered variants: _2, _3, ..., _10
+  for (let i = 2; i <= 10; i++) {
+    const key = process.env[`${baseEnvVar}_${i}`]
+    if (key) keys.push(key)
+  }
+
+  return keys
+}
+
 function expandPath(path: string, workspaceDir?: string): string {
   let result = path.replace(/^~/, homedir())
 
@@ -183,6 +201,11 @@ export function loadConfig(): RuntimeConfig {
       discoveryEnabled: toml.tasks?.discovery_enabled ?? true,
       discoveryIntervalMs: toml.tasks?.discovery_interval_ms ?? 1800000,
       idleThresholdMs: toml.tasks?.idle_threshold_ms ?? 600000,
+      heartbeat: {
+        enabled: toml.tasks?.heartbeat?.enabled ?? true,
+        schedule: toml.tasks?.heartbeat?.schedule ?? '*/30 * * * *',
+        businessHours: toml.tasks?.heartbeat?.business_hours,
+      },
     },
     transcript: {
       enabled: toml.transcript?.enabled ?? true,
@@ -196,20 +219,25 @@ export function loadConfig(): RuntimeConfig {
   }
 
   // Load secrets from environment
-  const anthropicKey = process.env.ANTHROPIC_API_KEY
-  const openaiKey = process.env.OPENAI_API_KEY
+  // Supports multiple keys: ANTHROPIC_API_KEY, ANTHROPIC_API_KEY_2, ANTHROPIC_API_KEY_3, etc.
+  const anthropicKeys = collectApiKeys('ANTHROPIC_API_KEY')
+  const openaiKeys = collectApiKeys('OPENAI_API_KEY')
   const discordToken = process.env.DISCORD_TOKEN
 
-  if (anthropicKey) {
+  if (anthropicKeys.length > 0) {
+    const primaryKey = anthropicKeys[0] ?? ''
     config.remote.anthropic = {
-      apiKey: anthropicKey,
+      apiKey: primaryKey,
+      apiKeys: anthropicKeys,
       model: process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-4-20250514',
     }
   }
 
-  if (openaiKey) {
+  if (openaiKeys.length > 0) {
+    const primaryKey = openaiKeys[0] ?? ''
     config.remote.openai = {
-      apiKey: openaiKey,
+      apiKey: primaryKey,
+      apiKeys: openaiKeys,
       model: process.env.OPENAI_MODEL ?? 'gpt-4o',
       ...(process.env.OPENAI_BASE_URL && { baseUrl: process.env.OPENAI_BASE_URL }),
     }

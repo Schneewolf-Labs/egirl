@@ -19,6 +19,7 @@ import { type CommandEventConfig, createCommandSource } from './events/command'
 import { createFileWatcher, type FileWatchConfig } from './events/file-watcher'
 import { createGitHubEventSource, type GitHubEventConfig } from './events/github'
 import { createWebhookSource, type WebhookConfig, type WebhookRouter } from './events/webhook'
+import { HEARTBEAT_TASK_NAME, heartbeatPreCheck } from './heartbeat'
 import { calculateNextRun, isWithinBusinessHours, parseBusinessHours } from './schedule'
 import type { TaskStore } from './store'
 import type { EventPayload, EventSource, Task, TaskRun, TasksConfig } from './types'
@@ -461,6 +462,16 @@ export class TaskRunner {
   }
 
   private async doExecute(task: Task, eventPayload?: EventPayload): Promise<string> {
+    // Heartbeat pre-check: deterministic file parsing, skip LLM if nothing to do
+    if (task.name === HEARTBEAT_TASK_NAME) {
+      const prompt = await heartbeatPreCheck(this.deps.config.workspace.path)
+      if (!prompt) {
+        return 'No unchecked items in HEARTBEAT.md'
+      }
+      // Override the empty prompt with the dynamically built one
+      return this.executePrompt({ ...task, prompt }, eventPayload)
+    }
+
     // If task has a workflow definition, try workflow-first execution
     if (task.workflow) {
       const workflowResult = await this.executeWorkflow(task)
