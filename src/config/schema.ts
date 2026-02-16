@@ -163,6 +163,13 @@ export const EgirlConfigSchema = Type.Object({
       discovery_enabled: Type.Boolean({ default: true }),
       discovery_interval_ms: Type.Number({ default: 1800000 }),
       idle_threshold_ms: Type.Number({ default: 600000 }),
+      heartbeat: Type.Optional(
+        Type.Object({
+          enabled: Type.Boolean({ default: true }),
+          schedule: Type.String({ default: '*/30 * * * *' }),
+          business_hours: Type.Optional(Type.String()),
+        }),
+      ),
     }),
   ),
 
@@ -299,6 +306,11 @@ export interface RuntimeConfig {
     discoveryEnabled: boolean
     discoveryIntervalMs: number
     idleThresholdMs: number
+    heartbeat: {
+      enabled: boolean
+      schedule: string
+      businessHours?: string
+    }
   }
   transcript: {
     enabled: boolean

@@ -6,7 +6,15 @@ import { log } from '../util/logger'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const TEMPLATES_DIR = join(__dirname, 'templates')
 
-const WORKSPACE_FILES = ['AGENTS.md', 'SOUL.md', 'TOOLS.md', 'IDENTITY.md', 'USER.md', 'MEMORY.md']
+const WORKSPACE_FILES = [
+  'AGENTS.md',
+  'SOUL.md',
+  'TOOLS.md',
+  'IDENTITY.md',
+  'USER.md',
+  'MEMORY.md',
+  'HEARTBEAT.md',
+]
 
 async function fileExists(path: string): Promise<boolean> {
   try {

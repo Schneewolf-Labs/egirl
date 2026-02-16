@@ -4,7 +4,7 @@ import { createAppServices } from '../bootstrap'
 import { createDiscordChannel } from '../channels'
 import type { RuntimeConfig } from '../config'
 import { gatherStandup } from '../standup'
-import { createDiscovery, createTaskRunner } from '../tasks'
+import { createDiscovery, createTaskRunner, seedHeartbeatTask } from '../tasks'
 import { createTaskTools } from '../tools/builtin/tasks'
 import { applyLogLevel } from '../util/args'
 import { log } from '../util/logger'
@@ -119,6 +119,17 @@ export async function runDiscord(config: RuntimeConfig, args: string[]): Promise
         transcript,
       })
     }
+
+    // Seed built-in heartbeat task if enabled
+    seedHeartbeatTask({
+      store: taskStore,
+      runner: taskRunner,
+      tasksConfig: config.tasks,
+      heartbeatConfig: config.tasks.heartbeat,
+      workspacePath: config.workspace.path,
+      channel: 'discord',
+      channelTarget: defaultTarget,
+    })
 
     log.info('main', 'Background task system initialized')
   }

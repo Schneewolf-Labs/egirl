@@ -10,6 +10,15 @@ export type { DiscoveryDeps } from './discovery'
 export { createDiscovery, Discovery } from './discovery'
 export type { RetryPolicy, TaskErrorKind } from './error-classify'
 export { classifyError, getRetryPolicy } from './error-classify'
+export type { HeartbeatConfig } from './heartbeat'
+export {
+  checkOffItem,
+  HEARTBEAT_DEFAULTS,
+  HEARTBEAT_TASK_NAME,
+  heartbeatPreCheck,
+  parseHeartbeatFile,
+  seedHeartbeatTask,
+} from './heartbeat'
 export { formatInterval, parseInterval } from './parse-interval'
 export type { OutboundChannel, TaskRunnerDeps } from './runner'
 export { createTaskRunner, TaskRunner } from './runner'

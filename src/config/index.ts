@@ -183,6 +183,11 @@ export function loadConfig(): RuntimeConfig {
       discoveryEnabled: toml.tasks?.discovery_enabled ?? true,
       discoveryIntervalMs: toml.tasks?.discovery_interval_ms ?? 1800000,
       idleThresholdMs: toml.tasks?.idle_threshold_ms ?? 600000,
+      heartbeat: {
+        enabled: toml.tasks?.heartbeat?.enabled ?? true,
+        schedule: toml.tasks?.heartbeat?.schedule ?? '*/30 * * * *',
+        businessHours: toml.tasks?.heartbeat?.business_hours,
+      },
     },
     transcript: {
       enabled: toml.transcript?.enabled ?? true,
