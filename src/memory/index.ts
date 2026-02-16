@@ -16,6 +16,7 @@ import {
   type SearchResult,
 } from './search'
 
+export { type CompactionExtraction, flushBeforeCompaction } from './compaction-flush'
 export {
   createEmbeddingProvider,
   type EmbeddingInput,

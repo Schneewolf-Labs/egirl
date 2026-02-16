@@ -13,7 +13,7 @@ export type MemoryCategory =
   | 'conversation'
   | 'lesson'
 
-export type MemorySource = 'manual' | 'auto' | 'conversation'
+export type MemorySource = 'manual' | 'auto' | 'conversation' | 'compaction'
 
 export interface IndexedMemory {
   id: number
