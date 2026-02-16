@@ -36,7 +36,7 @@ export function parseInterval(input: string): number | undefined {
   if (!match) return undefined
 
   const value = Number(match[1])
-  const unit = match[2]!
+  const unit = match[2] ?? ''
 
   if (Number.isNaN(value) || value <= 0) return undefined
 

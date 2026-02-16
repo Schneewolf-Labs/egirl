@@ -22,7 +22,9 @@ function formatToolCallsPlain(calls: ToolCall[]): string {
       const args = Object.entries(call.arguments)
       if (args.length === 0) return `${call.name}()`
       if (args.length === 1) {
-        const [key, val] = args[0]!
+        const entry = args[0]
+        if (!entry) return `${call.name}()`
+        const [key, val] = entry
         const valStr = typeof val === 'string' ? val : JSON.stringify(val)
         if (valStr.length < 60) return `${call.name}(${key}: ${valStr})`
       }
@@ -75,7 +77,7 @@ function buildToolCallPrefix(state: XMPPEventState): string {
 }
 
 function bareJid(fullJid: string): string {
-  return fullJid.split('/')[0]!
+  return fullJid.split('/')[0] ?? fullJid
 }
 
 export class XMPPChannel implements Channel {

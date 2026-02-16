@@ -1,6 +1,12 @@
 import type { Locator, Page } from 'playwright'
 
 /**
+ * ARIA role string accepted by Playwright's getByRole().
+ * Kept in sync with VALID_ROLES below.
+ */
+type AriaRole = Parameters<Page['getByRole']>[0]
+
+/**
  * ARIA roles recognized by Playwright's getByRole().
  * Subset of WAI-ARIA roles that are most useful for automation.
  */
@@ -176,9 +182,9 @@ export function resolveTarget(page: Page, ref: string): Locator {
   switch (target.strategy) {
     case 'role':
       if (target.name) {
-        return page.getByRole(target.role as any, { name: target.name })
+        return page.getByRole(target.role as AriaRole, { name: target.name })
       }
-      return page.getByRole(target.role as any)
+      return page.getByRole(target.role as AriaRole)
     case 'text':
       return page.getByText(target.value)
     case 'label':

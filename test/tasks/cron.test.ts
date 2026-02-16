@@ -120,14 +120,16 @@ describe('parseScheduleExpression', () => {
 
 describe('nextOccurrence', () => {
   test('finds next minute for every-minute schedule', () => {
-    const schedule = parseCron('* * * * *')!
+    const schedule = parseCron('* * * * *')
+    if (!schedule) throw new Error('Failed to parse cron')
     const after = new Date('2025-06-15T10:30:00')
     const next = nextOccurrence(schedule, after)
     expect(next.getTime()).toBe(new Date('2025-06-15T10:31:00').getTime())
   })
 
   test('finds next weekday morning', () => {
-    const schedule = parseCron('0 9 * * MON-FRI')!
+    const schedule = parseCron('0 9 * * MON-FRI')
+    if (!schedule) throw new Error('Failed to parse cron')
     // Saturday at noon
     const after = new Date('2025-06-14T12:00:00')
     const next = nextOccurrence(schedule, after)
@@ -138,7 +140,8 @@ describe('nextOccurrence', () => {
   })
 
   test('finds next occurrence on same day if not yet passed', () => {
-    const schedule = parseTimeOfDay('17:00')!
+    const schedule = parseTimeOfDay('17:00')
+    if (!schedule) throw new Error('Failed to parse time')
     const after = new Date('2025-06-15T10:00:00')
     const next = nextOccurrence(schedule, after)
     expect(next.getDate()).toBe(15)
@@ -146,7 +149,8 @@ describe('nextOccurrence', () => {
   })
 
   test('finds next occurrence on next day if already passed', () => {
-    const schedule = parseTimeOfDay('09:00')!
+    const schedule = parseTimeOfDay('09:00')
+    if (!schedule) throw new Error('Failed to parse time')
     const after = new Date('2025-06-15T10:00:00')
     const next = nextOccurrence(schedule, after)
     expect(next.getDate()).toBe(16)
@@ -156,17 +160,20 @@ describe('nextOccurrence', () => {
 
 describe('formatSchedule', () => {
   test('formats daily schedule', () => {
-    const schedule = parseTimeOfDay('09:00')!
+    const schedule = parseTimeOfDay('09:00')
+    if (!schedule) throw new Error('Failed to parse time')
     expect(formatSchedule(schedule)).toBe('daily at 09:00')
   })
 
   test('formats weekday schedule', () => {
-    const schedule = parseTimeOfDay('09:00 Mon-Fri')!
+    const schedule = parseTimeOfDay('09:00 Mon-Fri')
+    if (!schedule) throw new Error('Failed to parse time')
     expect(formatSchedule(schedule)).toBe('weekdays at 09:00')
   })
 
   test('formats complex schedule as custom', () => {
-    const schedule = parseCron('*/15 * * * *')!
+    const schedule = parseCron('*/15 * * * *')
+    if (!schedule) throw new Error('Failed to parse cron')
     expect(formatSchedule(schedule)).toBe('custom cron schedule')
   })
 })

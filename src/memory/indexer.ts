@@ -11,6 +11,7 @@ export type MemoryCategory =
   | 'project'
   | 'entity'
   | 'conversation'
+  | 'lesson'
 
 export type MemorySource = 'manual' | 'auto' | 'conversation'
 
@@ -30,11 +31,9 @@ export interface IndexedMemory {
 
 export class MemoryIndexer {
   private db: Database
-  private dimensions: number
 
-  constructor(dbPath: string, dimensions = 2048) {
+  constructor(dbPath: string, _dimensions = 2048) {
     this.db = new Database(dbPath)
-    this.dimensions = dimensions
     this.initialize()
   }
 

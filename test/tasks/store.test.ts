@@ -63,17 +63,19 @@ describe('TaskStore', () => {
       }),
     )
 
-    const fetched = store.get(task.id)!
-    expect(fetched.cronExpression).toBe('0 9 * * MON-FRI')
-    expect(fetched.businessHours).toBe('9-17 Mon-Fri')
+    const fetched = store.get(task.id)
+    expect(fetched).toBeDefined()
+    expect(fetched?.cronExpression).toBe('0 9 * * MON-FRI')
+    expect(fetched?.businessHours).toBe('9-17 Mon-Fri')
   })
 
   test('stores task dependency', () => {
     const parent = store.create(makeTask({ name: 'parent' }))
     const child = store.create(makeTask({ name: 'child', dependsOn: parent.id }))
 
-    const fetched = store.get(child.id)!
-    expect(fetched.dependsOn).toBe(parent.id)
+    const fetched = store.get(child.id)
+    expect(fetched).toBeDefined()
+    expect(fetched?.dependsOn).toBe(parent.id)
   })
 
   test('getDependents returns tasks that depend on a given task', () => {
@@ -91,8 +93,9 @@ describe('TaskStore', () => {
     const task = store.create(makeTask())
     store.update(task.id, { lastErrorKind: 'rate_limit' as const })
 
-    const fetched = store.get(task.id)!
-    expect(fetched.lastErrorKind).toBe('rate_limit')
+    const fetched = store.get(task.id)
+    expect(fetched).toBeDefined()
+    expect(fetched?.lastErrorKind).toBe('rate_limit')
   })
 
   test('completeRun stores errorKind', () => {
@@ -139,5 +142,74 @@ describe('TaskStore', () => {
 
     const task = store.create(makeTask({ cronExpression: '0 9 * * *' }))
     expect(store.get(task.id)?.cronExpression).toBe('0 9 * * *')
+  })
+
+  test('stores triggerMode', () => {
+    const task = store.create(makeTask({ kind: 'event', triggerMode: 'create_task' }))
+    const fetched = store.get(task.id)
+    expect(fetched).toBeDefined()
+    expect(fetched?.triggerMode).toBe('create_task')
+  })
+
+  test('triggerMode defaults to execute', () => {
+    const task = store.create(makeTask())
+    const fetched = store.get(task.id)
+    expect(fetched).toBeDefined()
+    expect(fetched?.triggerMode).toBe('execute')
+  })
+
+  test('records initial transition on create', () => {
+    const task = store.create(makeTask())
+    const transitions = store.getTransitions(task.id)
+    expect(transitions).toHaveLength(1)
+    expect(transitions[0]?.fromStatus).toBe('new')
+    expect(transitions[0]?.toStatus).toBe('active')
+  })
+
+  test('records transition on status change', () => {
+    const task = store.create(makeTask())
+    store.update(task.id, { status: 'paused' }, 'Manual pause')
+
+    const transitions = store.getTransitions(task.id)
+    expect(transitions).toHaveLength(2)
+    // Most recent first
+    expect(transitions[0]?.fromStatus).toBe('active')
+    expect(transitions[0]?.toStatus).toBe('paused')
+    expect(transitions[0]?.reason).toBe('Manual pause')
+  })
+
+  test('does not record transition when status unchanged', () => {
+    const task = store.create(makeTask())
+    store.update(task.id, { status: 'active' })
+
+    const transitions = store.getTransitions(task.id)
+    // Only the initial create transition
+    expect(transitions).toHaveLength(1)
+  })
+
+  test('tracks full transition history', () => {
+    const task = store.create(makeTask())
+    store.update(task.id, { status: 'paused' }, 'Rate limited')
+    store.update(task.id, { status: 'active' }, 'Resumed')
+    store.update(task.id, { status: 'done' }, 'Completed all runs')
+
+    const transitions = store.getTransitions(task.id)
+    expect(transitions).toHaveLength(4)
+    // Most recent first
+    expect(transitions[0]?.toStatus).toBe('done')
+    expect(transitions[1]?.toStatus).toBe('active')
+    expect(transitions[2]?.toStatus).toBe('paused')
+    expect(transitions[3]?.toStatus).toBe('active') // initial
+  })
+
+  test('compact removes old transitions', () => {
+    const task = store.create(makeTask())
+    store.update(task.id, { status: 'paused' })
+    store.update(task.id, { status: 'active' })
+
+    // Compact with 0 days = remove everything
+    const result = store.compact(0)
+    expect(result.transitionsDeleted).toBeGreaterThan(0)
+    expect(store.getTransitions(task.id)).toHaveLength(0)
   })
 })

@@ -143,7 +143,7 @@ export class LlamaCppProvider implements LLMProvider {
     if (shouldStream && response.body) {
       const result = await this.readStream(
         response.body,
-        req.onToken!,
+        req.onToken ?? (() => {}),
         (req.tools?.length ?? 0) > 0,
       )
       content = result.content

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { extractMemories } from '../../src/memory/extractor'
+import { extractLessonsFromTask, extractMemories } from '../../src/memory/extractor'
 import type { ChatRequest, ChatResponse, LLMProvider } from '../../src/providers/types'
 
 function mockProvider(responseContent: string): LLMProvider {
@@ -223,5 +223,136 @@ describe('extractMemories', () => {
 
     const results = await extractMemories(messages, provider, { minMessages: 1 })
     expect(results.length).toBe(0)
+  })
+
+  test('accepts lesson category', async () => {
+    const provider = mockProvider(
+      JSON.stringify([
+        {
+          key: 'ci_timeout_fix',
+          value:
+            'CI jobs need a 10-minute timeout — default 5 minutes is too short for integration tests',
+          category: 'lesson',
+        },
+      ]),
+    )
+
+    const messages = [
+      { role: 'user' as const, content: 'The CI keeps timing out on integration tests' },
+      {
+        role: 'assistant' as const,
+        content: 'I increased the timeout from 5 to 10 minutes and it passed',
+      },
+      { role: 'user' as const, content: 'Great, that fixed it' },
+    ]
+
+    const results = await extractMemories(messages, provider, { minMessages: 1 })
+    expect(results.length).toBe(1)
+    expect(results[0]?.category).toBe('lesson')
+    expect(results[0]?.key).toBe('ci_timeout_fix')
+  })
+
+  test('accepts structured decisions with rationale', async () => {
+    const provider = mockProvider(
+      JSON.stringify([
+        {
+          key: 'chose_postgres_over_mysql',
+          value:
+            'Chose PostgreSQL over MySQL for the new service. Rationale: better JSON support, JSONB indexing, and the team has more experience with it',
+          category: 'decision',
+        },
+      ]),
+    )
+
+    const messages = [
+      { role: 'user' as const, content: 'Should we use PostgreSQL or MySQL for the new service?' },
+      {
+        role: 'assistant' as const,
+        content: 'PostgreSQL is better here — JSONB support and team familiarity',
+      },
+      { role: 'user' as const, content: 'Agreed, let us go with Postgres' },
+    ]
+
+    const results = await extractMemories(messages, provider, { minMessages: 1 })
+    expect(results.length).toBe(1)
+    expect(results[0]?.category).toBe('decision')
+    expect(results[0]?.value).toContain('Rationale')
+  })
+})
+
+describe('extractLessonsFromTask', () => {
+  test('extracts lessons from task execution', async () => {
+    const provider = mockProvider(
+      JSON.stringify([
+        {
+          key: 'deploy_needs_tracking',
+          value: 'Always include tracking numbers in shipping delay responses — saves a follow-up',
+          category: 'lesson',
+        },
+      ]),
+    )
+
+    const results = await extractLessonsFromTask(
+      'reply-to-client',
+      'Reply to client about shipping delay',
+      'Replied to client with FedEx tracking update. Client responded positively.',
+      false,
+      provider,
+    )
+
+    expect(results.length).toBe(1)
+    expect(results[0]?.category).toBe('lesson')
+    expect(results[0]?.key).toBe('deploy_needs_tracking')
+  })
+
+  test('returns empty for short results', async () => {
+    const provider = mockProvider('[]')
+    const results = await extractLessonsFromTask(
+      'simple-task',
+      'Do something',
+      'Done.',
+      false,
+      provider,
+    )
+    expect(results.length).toBe(0)
+  })
+
+  test('returns empty on provider error', async () => {
+    const provider: LLMProvider = {
+      name: 'mock',
+      async chat(): Promise<ChatResponse> {
+        throw new Error('connection refused')
+      },
+    }
+
+    const results = await extractLessonsFromTask(
+      'failing-task',
+      'Do something complex',
+      'This is a long enough result to trigger extraction but the provider will fail on us unfortunately',
+      true,
+      provider,
+    )
+    expect(results.length).toBe(0)
+  })
+
+  test('caps at 3 lessons max', async () => {
+    const provider = mockProvider(
+      JSON.stringify([
+        { key: 'a', value: 'lesson a', category: 'lesson' },
+        { key: 'b', value: 'lesson b', category: 'lesson' },
+        { key: 'c', value: 'lesson c', category: 'lesson' },
+        { key: 'd', value: 'lesson d', category: 'lesson' },
+        { key: 'e', value: 'lesson e', category: 'lesson' },
+      ]),
+    )
+
+    const results = await extractLessonsFromTask(
+      'big-task',
+      'Do many things',
+      'Completed many operations with several interesting outcomes that we should remember for next time',
+      false,
+      provider,
+    )
+    expect(results.length).toBe(3)
   })
 })

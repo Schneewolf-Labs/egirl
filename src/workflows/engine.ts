@@ -18,14 +18,14 @@ export function interpolate(value: unknown, ctx: StepContext): unknown {
       const parts = trimmed.split('.')
 
       if (parts[0] === 'params' && parts.length === 2) {
-        const key = parts[1]!
+        const key = parts[1] ?? ''
         const val = ctx.params[key]
         return val !== undefined ? String(val) : ''
       }
 
       if (parts[0] === 'steps' && parts.length === 3) {
-        const stepName = parts[1]!
-        const field = parts[2]!
+        const stepName = parts[1] ?? ''
+        const field = parts[2] ?? ''
         const stepResult = ctx.steps[stepName]
         if (!stepResult) return ''
         if (field === 'output') return stepResult.output
@@ -154,8 +154,15 @@ export async function executeWorkflow(
     }
 
     // result is always set because maxAttempts >= 1
-    ctx.steps[step.name] = result!
-    stepResults.push(result!)
+    const finalResult = result ?? {
+      step: step.name,
+      tool: step.tool,
+      success: false,
+      output: 'No attempts executed',
+      skipped: false,
+    }
+    ctx.steps[step.name] = finalResult
+    stepResults.push(finalResult)
 
     if (!result?.success) {
       log.info('workflow', `Step ${step.name} failed: ${result?.output.slice(0, 200)}`)

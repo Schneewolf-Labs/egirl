@@ -229,8 +229,9 @@ function matchRoute(pattern: string, path: string): Record<string, string> | nul
   const params: Record<string, string> = {}
 
   for (let i = 0; i < patternParts.length; i++) {
-    const pp = patternParts[i]!
-    const pathPart = pathParts[i]!
+    const pp = patternParts[i]
+    const pathPart = pathParts[i]
+    if (pp === undefined || pathPart === undefined) return null
 
     if (pp.startsWith(':')) {
       params[pp.slice(1)] = decodeURIComponent(pathPart)

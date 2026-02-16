@@ -59,13 +59,13 @@ function detectRepo(cwd: string): Promise<{ owner: string; repo: string } | unde
       // Handle SSH: git@github.com:owner/repo.git
       const sshMatch = url.match(/github\.com[:/]([^/]+)\/([^/.]+)/)
       if (sshMatch) {
-        res({ owner: sshMatch[1]!, repo: sshMatch[2]! })
+        res({ owner: sshMatch[1] ?? '', repo: sshMatch[2] ?? '' })
         return
       }
       // Handle HTTPS: https://github.com/owner/repo.git
       const httpsMatch = url.match(/github\.com\/([^/]+)\/([^/.]+)/)
       if (httpsMatch) {
-        res({ owner: httpsMatch[1]!, repo: httpsMatch[2]! })
+        res({ owner: httpsMatch[1] ?? '', repo: httpsMatch[2] ?? '' })
         return
       }
       res(undefined)

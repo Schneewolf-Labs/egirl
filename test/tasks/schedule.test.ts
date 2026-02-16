@@ -42,7 +42,8 @@ describe('parseBusinessHours', () => {
 })
 
 describe('isWithinBusinessHours', () => {
-  const bh = parseBusinessHours('9-17 Mon-Fri')!
+  const bh = parseBusinessHours('9-17 Mon-Fri')
+  if (!bh) throw new Error('Failed to parse business hours')
 
   test('within hours on weekday', () => {
     // Wednesday at 10am
@@ -76,7 +77,8 @@ describe('isWithinBusinessHours', () => {
 })
 
 describe('nextBusinessHoursStart', () => {
-  const bh = parseBusinessHours('9-17 Mon-Fri')!
+  const bh = parseBusinessHours('9-17 Mon-Fri')
+  if (!bh) throw new Error('Failed to parse business hours')
 
   test('already in business hours', () => {
     const date = new Date('2025-06-11T10:00:00') // Wed 10am
@@ -115,7 +117,8 @@ describe('calculateNextRun', () => {
 
   test('cron-based', () => {
     const now = new Date('2025-06-11T10:00:00') // Wed
-    const schedule = parseScheduleExpression('0 9 * * MON-FRI')!
+    const schedule = parseScheduleExpression('0 9 * * MON-FRI')
+    if (!schedule) throw new Error('Failed to parse schedule')
     const next = calculateNextRun({ cronSchedule: schedule, now })
     // Next 9am is Thursday
     const nextDate = new Date(next)
@@ -127,7 +130,8 @@ describe('calculateNextRun', () => {
   test('interval with business hours delays outside hours', () => {
     // Wed at 4:50pm, 30min interval would land at 5:20pm (outside 9-17)
     const now = new Date('2025-06-11T16:50:00')
-    const bh = parseBusinessHours('9-17 Mon-Fri')!
+    const bh = parseBusinessHours('9-17 Mon-Fri')
+    if (!bh) throw new Error('Failed to parse business hours')
     const next = calculateNextRun({ intervalMs: 30 * 60 * 1000, businessHours: bh, now })
     const nextDate = new Date(next)
     // Should be pushed to Thursday 9am

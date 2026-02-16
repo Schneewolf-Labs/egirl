@@ -203,3 +203,15 @@ Batch related changes into single commits. Don't commit after every file change.
 - Use `bun:test` — no Jest, no Vitest
 - Test behavior, not implementation
 - Mock at module boundaries (providers, file system), not internal functions
+
+### Verification
+
+After making changes, always run all three checks before considering work complete:
+
+```
+bun test          # unit tests
+bun run lint      # biome check (formatting + lint rules)
+bun run typecheck # tsc --noEmit
+```
+
+All three must pass. Do not push code that fails any of these checks.

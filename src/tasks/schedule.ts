@@ -142,8 +142,8 @@ function parseDaySpec(spec: string): number[] {
   // Range: "Mon-Fri"
   const rangeMatch = upper.match(/^([A-Z]+)-([A-Z]+)$/)
   if (rangeMatch) {
-    const start = DAY_MAP[rangeMatch[1]!]
-    const end = DAY_MAP[rangeMatch[2]!]
+    const start = DAY_MAP[rangeMatch[1] ?? '']
+    const end = DAY_MAP[rangeMatch[2] ?? '']
     if (start === undefined || end === undefined) return []
     const result: number[] = []
     for (let i = start; i !== (end + 1) % 7; i = (i + 1) % 7) {

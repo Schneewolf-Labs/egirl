@@ -14,8 +14,11 @@ export async function runAPI(config: RuntimeConfig, args: string[]): Promise<voi
   const portIndex = args.indexOf('--port')
   const hostIndex = args.indexOf('--host')
   const port =
-    portIndex !== -1 ? parseInt(args[portIndex + 1]!, 10) : (config.channels.api?.port ?? 3000)
-  const host = hostIndex !== -1 ? args[hostIndex + 1]! : (config.channels.api?.host ?? '127.0.0.1')
+    portIndex !== -1 ? parseInt(args[portIndex + 1] ?? '', 10) : (config.channels.api?.port ?? 3000)
+  const host =
+    hostIndex !== -1
+      ? (args[hostIndex + 1] ?? '127.0.0.1')
+      : (config.channels.api?.host ?? '127.0.0.1')
 
   const { providers, memory, router, toolExecutor, stats, transcript, skills, browser } =
     await createAppServices(config)

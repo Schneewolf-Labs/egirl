@@ -266,7 +266,8 @@ export class DiscordChannel implements Channel {
   private async drainQueue(): Promise<void> {
     this.processing = true
     while (this.messageQueue.length > 0) {
-      const task = this.messageQueue.shift()!
+      const task = this.messageQueue.shift()
+      if (!task) break
       try {
         await task()
       } catch (error) {

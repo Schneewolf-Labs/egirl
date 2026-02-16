@@ -33,7 +33,8 @@ export function formatMessagesForQwen3(messages: ChatMessage[]): FormattedMessag
   let i = 0
 
   while (i < messages.length) {
-    const msg = messages[i]!
+    const msg = messages[i]
+    if (!msg) break
 
     if (msg.role === 'assistant' && msg.tool_calls && msg.tool_calls.length > 0) {
       // Reconstruct <tool_call> XML so the model sees what it called
@@ -48,7 +49,8 @@ export function formatMessagesForQwen3(messages: ChatMessage[]): FormattedMessag
       const responseParts: string[] = []
 
       while (i < messages.length && messages[i]?.role === 'tool') {
-        const toolMsg = messages[i]!
+        const toolMsg = messages[i]
+        if (!toolMsg) break
         const textContent = getTextContent(toolMsg.content)
 
         if (textContent.startsWith('data:image/')) {

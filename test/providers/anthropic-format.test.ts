@@ -29,7 +29,8 @@ describe('prepareAnthropicMessages', () => {
     // assistant + one merged user message
     expect(prepared).toHaveLength(2)
 
-    const userMsg = prepared[1]!
+    const userMsg = prepared[1]
+    if (!userMsg) throw new Error('Expected user message')
     expect(userMsg.role).toBe('user')
 
     // Content should be an array with both tool_result blocks

@@ -184,7 +184,8 @@ function buildMessageGroups(messages: ChatMessage[], tokenCounts: number[]): Mes
   let idx = 0
 
   while (idx < messages.length) {
-    const msg = messages[idx]!
+    const msg = messages[idx]
+    if (!msg) break
     const msgTokens = tokenCounts[idx] ?? 0
 
     if (msg.role === 'assistant' && msg.tool_calls && msg.tool_calls.length > 0) {
@@ -283,7 +284,8 @@ export async function fitToContextWindow(
   let usedTokens = 0
 
   for (let g = groups.length - 1; g >= 0; g--) {
-    const group = groups[g]!
+    const group = groups[g]
+    if (!group) continue
     if (usedTokens + group.tokens <= availableTokens) {
       fittedGroups.unshift(group)
       usedTokens += group.tokens

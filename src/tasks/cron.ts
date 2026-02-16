@@ -80,11 +80,11 @@ export function parseCron(input: string): CronSchedule | undefined {
   const parts = input.trim().split(/\s+/)
   if (parts.length !== 5) return undefined
 
-  const minutes = parseField(parts[0]!, 0, 59, {})
-  const hours = parseField(parts[1]!, 0, 23, {})
-  const daysOfMonth = parseField(parts[2]!, 1, 31, {})
-  const months = parseField(parts[3]!, 1, 12, MONTH_NAMES)
-  const daysOfWeek = parseField(parts[4]!, 0, 6, DAY_NAMES)
+  const minutes = parseField(parts[0] ?? '', 0, 59, {})
+  const hours = parseField(parts[1] ?? '', 0, 23, {})
+  const daysOfMonth = parseField(parts[2] ?? '', 1, 31, {})
+  const months = parseField(parts[3] ?? '', 1, 12, MONTH_NAMES)
+  const daysOfWeek = parseField(parts[4] ?? '', 0, 6, DAY_NAMES)
 
   if (!minutes || !hours || !daysOfMonth || !months || !daysOfWeek) return undefined
 
@@ -141,8 +141,8 @@ export function nextOccurrence(schedule: CronSchedule, after: Date): Date {
 export function formatSchedule(schedule: CronSchedule): string {
   // Check if it's a simple daily time
   if (schedule.minutes.size === 1 && schedule.hours.size === 1) {
-    const minute = [...schedule.minutes][0]!
-    const hour = [...schedule.hours][0]!
+    const minute = [...schedule.minutes][0] ?? 0
+    const hour = [...schedule.hours][0] ?? 0
     const time = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`
 
     if (schedule.daysOfWeek.size === 7) return `daily at ${time}`
@@ -199,7 +199,7 @@ function parsePart(
   // Step: */N or range/N
   const stepMatch = part.match(/^(.+)\/(\d+)$/)
   const step = stepMatch ? Number(stepMatch[2]) : 1
-  const base = stepMatch ? stepMatch[1]! : part
+  const base = stepMatch ? (stepMatch[1] ?? part) : part
 
   if (step < 1) return undefined
 
@@ -212,8 +212,8 @@ function parsePart(
   // Range: A-B
   const rangeMatch = base.match(/^([A-Z0-9]+)-([A-Z0-9]+)$/i)
   if (rangeMatch) {
-    const start = resolveValue(rangeMatch[1]!, names)
-    const end = resolveValue(rangeMatch[2]!, names)
+    const start = resolveValue(rangeMatch[1] ?? '', names)
+    const end = resolveValue(rangeMatch[2] ?? '', names)
     if (start === undefined || end === undefined) return undefined
     if (start < min || end > max) return undefined
     for (let i = start; i <= end; i += step) result.add(i)

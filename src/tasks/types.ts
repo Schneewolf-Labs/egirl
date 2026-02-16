@@ -7,6 +7,8 @@ export type EventSourceType = 'file' | 'webhook' | 'github' | 'command'
 export type RunStatus = 'running' | 'success' | 'failure' | 'skipped'
 export type ProposalStatus = 'pending' | 'approved' | 'rejected'
 
+export type TriggerMode = 'execute' | 'create_task'
+
 export interface Task {
   id: string
   name: string
@@ -23,6 +25,7 @@ export interface Task {
   dependsOn: string | undefined
   eventSource: EventSourceType | undefined
   eventConfig: unknown | undefined
+  triggerMode: TriggerMode
   nextRunAt: number | undefined
   lastRunAt: number | undefined
   runCount: number
@@ -52,6 +55,7 @@ export interface NewTask {
   dependsOn?: string
   eventSource?: EventSourceType
   eventConfig?: unknown
+  triggerMode?: TriggerMode
   maxRuns?: number
   notify?: TaskNotify
   channel: string
@@ -106,6 +110,15 @@ export interface EventPayload {
 export interface EventSource {
   start(onTrigger: (payload: EventPayload) => void): void
   stop(): void
+}
+
+export interface TaskTransition {
+  id: string
+  taskId: string
+  fromStatus: TaskStatus | 'new'
+  toStatus: TaskStatus
+  reason: string | undefined
+  timestamp: number
 }
 
 export interface TasksConfig {

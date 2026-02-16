@@ -10,6 +10,7 @@ const VALID_CATEGORIES = [
   'project',
   'entity',
   'conversation',
+  'lesson',
 ] as const
 
 /**
@@ -471,8 +472,8 @@ function parseTimeExpression(expr: string): number | undefined {
   // "N days/weeks/hours ago"
   const agoMatch = trimmed.match(/^(\d+)\s+(day|days|week|weeks|hour|hours|minute|minutes)\s+ago$/)
   if (agoMatch) {
-    const count = parseInt(agoMatch[1]!, 10)
-    const unit = agoMatch[2]!
+    const count = parseInt(agoMatch[1] ?? '0', 10)
+    const unit = agoMatch[2] ?? ''
     if (unit.startsWith('day')) return now - count * DAY
     if (unit.startsWith('week')) return now - count * WEEK
     if (unit.startsWith('hour')) return now - count * 3_600_000
