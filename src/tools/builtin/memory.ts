@@ -10,6 +10,7 @@ const VALID_CATEGORIES = [
   'project',
   'entity',
   'conversation',
+  'lesson',
 ] as const
 
 /**

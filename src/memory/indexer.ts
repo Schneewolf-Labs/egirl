@@ -32,9 +32,8 @@ export interface IndexedMemory {
 export class MemoryIndexer {
   private db: Database
 
-  constructor(dbPath: string, dimensions = 2048) {
+  constructor(dbPath: string, _dimensions = 2048) {
     this.db = new Database(dbPath)
-    this.dimensions = dimensions
     this.initialize()
   }
 

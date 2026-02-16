@@ -16,7 +16,6 @@ export class MemoryFiles {
   private imagesDir: string
 
   constructor(workspaceDir: string) {
-    this.workspaceDir = workspaceDir
     this.memoryFile = join(workspaceDir, 'MEMORY.md')
     this.dailyLogDir = join(workspaceDir, 'logs')
     this.imagesDir = join(workspaceDir, 'images')

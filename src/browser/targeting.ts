@@ -1,4 +1,10 @@
-import type { AriaRole, Locator, Page } from 'playwright'
+import type { Locator, Page } from 'playwright'
+
+/**
+ * ARIA role string accepted by Playwright's getByRole().
+ * Kept in sync with VALID_ROLES below.
+ */
+type AriaRole = Parameters<Page['getByRole']>[0]
 
 /**
  * ARIA roles recognized by Playwright's getByRole().
