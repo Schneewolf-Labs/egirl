@@ -1,6 +1,17 @@
 # Built-in Tools Reference
 
-egirl ships with 18 built-in tools that the agent can invoke during conversations. Tools are registered in the `ToolExecutor` at startup and described in the system prompt so the model knows how to use them.
+egirl ships with 48 built-in tools across 8 categories that the agent can invoke during conversations. Tools are registered in the `ToolExecutor` at startup and described in the system prompt so the model knows how to use them.
+
+| Category | Count | Tools |
+|----------|-------|-------|
+| File ops | 4 | `read_file`, `write_file`, `edit_file`, `glob_files` |
+| Commands | 1 | `execute_command` |
+| Memory | 5 | `memory_search`, `memory_get`, `memory_set`, `memory_delete`, `memory_list` |
+| Git | 5 | `git_status`, `git_diff`, `git_log`, `git_commit`, `git_show` |
+| GitHub | 11 | `gh_pr_list`, `gh_pr_view`, `gh_pr_create`, `gh_pr_review`, `gh_pr_comment`, `gh_issue_list`, `gh_issue_view`, `gh_issue_comment`, `gh_issue_update`, `gh_ci_status`, `gh_branch_create` |
+| Browser | 11 | `browser_navigate`, `browser_click`, `browser_fill`, `browser_snapshot`, `browser_screenshot`, `browser_select`, `browser_check`, `browser_hover`, `browser_wait`, `browser_eval`, `browser_close` |
+| Tasks | 8 | `task_add`, `task_propose`, `task_list`, `task_pause`, `task_resume`, `task_cancel`, `task_run_now`, `task_history` |
+| Other | 3 | `screenshot`, `web_research`, `code_agent` |
 
 ## Tool Architecture
 
@@ -471,6 +482,331 @@ Delegate a coding task to an autonomous code agent (Claude Code) via the `@anthr
 ```json
 {"name": "code_agent", "arguments": {"task": "Refactor the routing module to extract heuristics into a separate file"}}
 ```
+
+---
+
+## GitHub Tools
+
+GitHub tools are created via `createGitHubTools(config)` in `src/tools/builtin/github.ts`. They require a `GITHUB_TOKEN` environment variable. Repository owner and repo are auto-detected from the git remote when not specified.
+
+### gh_pr_list
+
+List pull requests for a GitHub repository.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `state` | string | No | Filter by PR state: `open`, `closed`, `all` (default: `open`) |
+| `head` | string | No | Filter by head branch |
+| `base` | string | No | Filter by base branch |
+| `limit` | number | No | Max results (default: 10, max: 30) |
+| `owner` | string | No | Repository owner (auto-detected from git remote) |
+| `repo` | string | No | Repository name (auto-detected from git remote) |
+
+### gh_pr_view
+
+View detailed PR information: title, description, reviews, check status, and file changes.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `number` | number | Yes | PR number |
+| `owner` | string | No | Repository owner |
+| `repo` | string | No | Repository name |
+
+### gh_pr_create
+
+Create a new pull request. The head branch must already be pushed to the remote.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `title` | string | Yes | PR title |
+| `head` | string | Yes | Head branch name |
+| `base` | string | No | Base branch (default: `main`) |
+| `body` | string | No | PR description |
+| `draft` | boolean | No | Create as draft (default: `false`) |
+| `owner` | string | No | Repository owner |
+| `repo` | string | No | Repository name |
+
+### gh_pr_review
+
+Submit a review on a pull request.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `number` | number | Yes | PR number |
+| `event` | string | Yes | Review action: `APPROVE`, `REQUEST_CHANGES`, `COMMENT` |
+| `body` | string | No | Review comment (required for `REQUEST_CHANGES` and `COMMENT`) |
+| `owner` | string | No | Repository owner |
+| `repo` | string | No | Repository name |
+
+### gh_pr_comment
+
+Add a comment to a pull request.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `number` | number | Yes | PR number |
+| `body` | string | Yes | Comment text |
+| `owner` | string | No | Repository owner |
+| `repo` | string | No | Repository name |
+
+### gh_issue_list
+
+List issues for a GitHub repository.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `state` | string | No | Filter: `open`, `closed`, `all` (default: `open`) |
+| `labels` | string | No | Comma-separated label names |
+| `assignee` | string | No | Filter by assignee username |
+| `sort` | string | No | Sort by: `created`, `updated`, `comments` (default: `updated`) |
+| `limit` | number | No | Max results (default: 10, max: 30) |
+| `owner` | string | No | Repository owner |
+| `repo` | string | No | Repository name |
+
+### gh_issue_view
+
+View detailed issue information including body and recent comments.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `number` | number | Yes | Issue number |
+| `owner` | string | No | Repository owner |
+| `repo` | string | No | Repository name |
+
+### gh_issue_comment
+
+Add a comment to a GitHub issue.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `number` | number | Yes | Issue number |
+| `body` | string | Yes | Comment text |
+| `owner` | string | No | Repository owner |
+| `repo` | string | No | Repository name |
+
+### gh_issue_update
+
+Update a GitHub issue: change state, labels, assignees, or title.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `number` | number | Yes | Issue number |
+| `state` | string | No | Set state: `open`, `closed` |
+| `title` | string | No | New title |
+| `labels` | string[] | No | Replace all labels |
+| `assignees` | string[] | No | Replace all assignees |
+| `owner` | string | No | Repository owner |
+| `repo` | string | No | Repository name |
+
+### gh_ci_status
+
+Check CI/workflow status for a git ref (branch, tag, or commit SHA).
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `ref` | string | No | Git ref to check (default: HEAD branch) |
+| `owner` | string | No | Repository owner |
+| `repo` | string | No | Repository name |
+
+### gh_branch_create
+
+Create a new branch on the GitHub remote.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `branch` | string | Yes | Name for the new branch |
+| `from` | string | No | Source ref to branch from (default: `main`) |
+| `owner` | string | No | Repository owner |
+| `repo` | string | No | Repository name |
+
+---
+
+## Browser Tools
+
+Browser tools are created via `createBrowserTools(manager)` in `src/tools/builtin/browser.ts`. They use Playwright for browser automation with accessibility-based element targeting. Requires `playwright` to be installed (`bunx playwright install`).
+
+**Targeting format:** Elements are targeted using `"role/Name"` for ARIA roles (e.g., `"button/Submit"`, `"link/Home"`), `"text:value"` for text content, `"label:value"` for form labels, `"placeholder:value"`, `"testid:value"`, `"title:value"`, or `"css:selector"` as an escape hatch.
+
+### browser_navigate
+
+Navigate the browser to a URL. Returns a text snapshot of the page content.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `url` | string | Yes | URL to navigate to (must start with `http://` or `https://`) |
+
+### browser_click
+
+Click an element on the page using accessibility targeting.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `target` | string | Yes | Element target ref (e.g., `"button/Submit"`, `"link/Home"`) |
+
+### browser_fill
+
+Fill a form field using accessibility targeting.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `target` | string | Yes | Element target ref (e.g., `"textbox/Email"`, `"label:Password"`) |
+| `value` | string | Yes | Text to fill into the field |
+
+### browser_snapshot
+
+Get a text snapshot of the current page content.
+
+*No parameters.*
+
+### browser_screenshot
+
+Take a screenshot of the current browser page for visual analysis.
+
+*No parameters.*
+
+### browser_select
+
+Select an option from a dropdown/select element.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `target` | string | Yes | Element target ref (e.g., `"combobox/Country"`) |
+| `value` | string | Yes | Option value or label to select |
+
+### browser_check
+
+Check or uncheck a checkbox element.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `target` | string | Yes | Element target ref (e.g., `"checkbox/Remember me"`) |
+| `checked` | boolean | No | Check (`true`) or uncheck (`false`) (default: `true`) |
+
+### browser_hover
+
+Hover over an element.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `target` | string | Yes | Element target ref (e.g., `"button/Menu"`) |
+
+### browser_wait
+
+Wait for an element to become visible on the page.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `target` | string | Yes | Element target ref to wait for |
+| `timeout` | number | No | Max wait time in ms (default: 30000) |
+
+### browser_eval
+
+Evaluate a JavaScript expression in the browser page context.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `expression` | string | Yes | JavaScript expression to evaluate |
+
+### browser_close
+
+Close the browser. It relaunches automatically on the next browser action.
+
+*No parameters.*
+
+---
+
+## Task Tools
+
+Task tools are created via `createTaskTools(store, runner, maxActiveTasks, getContext)` in `src/tools/builtin/tasks.ts`. They manage the [background task framework](background-tasks.md).
+
+### task_add
+
+Create a new background task that activates immediately.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `name` | string | Yes | Short identifier (e.g., `"watch-ci-main"`) |
+| `description` | string | Yes | What this task does |
+| `prompt` | string | Yes | Agent prompt to execute each run |
+| `kind` | string | Yes | Task type: `scheduled`, `event`, `oneshot` |
+| `interval` | string | No | Run interval: `"30m"`, `"2h"`, `"1d"` (scheduled only) |
+| `cron` | string | No | Cron expression or time: `"0 9 * * MON-FRI"`, `"09:00"` (scheduled only) |
+| `business_hours` | string | No | Restrict runs: `"9-17 Mon-Fri"`, `"business"` |
+| `depends_on` | string | No | Task ID — runs after that task completes |
+| `event_source` | string | No | Event source: `file`, `webhook`, `github`, `command` (event only) |
+| `event_config` | object | No | Source-specific config (event only) |
+| `workflow` | object | No | Workflow definition for deterministic execution |
+| `notify` | string | No | Notification: `always`, `on_change`, `on_failure`, `never` (default: `on_change`) |
+| `max_runs` | number | No | Max runs (`null` = unlimited) |
+| `memory_context` | string[] | No | Memory keys to pre-load |
+| `memory_category` | string | No | Category filter for proactive retrieval |
+
+### task_propose
+
+Propose a task for user approval. Stays inactive until approved via reaction (Discord) or command (CLI).
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `name` | string | Yes | Short identifier |
+| `description` | string | Yes | What this task does |
+| `prompt` | string | Yes | Agent prompt |
+| `kind` | string | Yes | Task type: `scheduled`, `event`, `oneshot` |
+| `reason` | string | Yes | Why this task would be useful |
+| `interval` | string | No | Run interval (scheduled only) |
+| `cron` | string | No | Cron expression (scheduled only) |
+| `event_source` | string | No | Event source (event only) |
+| `event_config` | object | No | Source-specific config (event only) |
+| `notify` | string | No | Notification mode (default: `on_change`) |
+| `max_runs` | number | No | Max runs |
+
+### task_list
+
+List background tasks, optionally filtered by status.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `status` | string | No | Filter: `active`, `paused`, `proposed`, `done`, `failed` |
+
+### task_pause
+
+Pause an active background task.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `id` | string | Yes | Task ID to pause |
+
+### task_resume
+
+Resume a paused background task. Clears failure tracking.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `id` | string | Yes | Task ID to resume |
+
+### task_cancel
+
+Delete a background task permanently.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `id` | string | Yes | Task ID to cancel |
+
+### task_run_now
+
+Trigger a task to run immediately, regardless of schedule.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `id` | string | Yes | Task ID to run |
+
+### task_history
+
+Show recent run history for a task.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `id` | string | Yes | Task ID |
+| `limit` | number | No | Number of runs to show (default: 5) |
 
 ---
 

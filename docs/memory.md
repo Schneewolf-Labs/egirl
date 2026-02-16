@@ -112,9 +112,9 @@ Implements search strategies:
 
 ## Embedding Providers
 
-Three embedding provider implementations exist in `src/memory/embeddings.ts`:
+Three embedding provider implementations exist in `src/memory/embeddings/`:
 
-### Qwen3VLEmbeddings
+### Qwen3VLEmbeddings (`src/memory/embeddings/qwen3-vl.ts`)
 
 The default provider. Sends requests to a llama.cpp server running a Qwen3-VL-Embedding model.
 
@@ -122,29 +122,49 @@ The default provider. Sends requests to a llama.cpp server running a Qwen3-VL-Em
 - Images are sent as base64 with `[img-N]` placeholder format
 - Endpoint: `POST /embeddings` (llama.cpp compatible)
 
-### LlamaCppEmbeddings
+### LlamaCppEmbeddings (`src/memory/embeddings/llamacpp.ts`)
 
 Generic llama.cpp embedding endpoint. Text-only (no image support).
 
 - Endpoint: `POST /embeddings`
 - Used when the embedding model doesn't support vision
 
-### OpenAIEmbeddings
+### OpenAIEmbeddings (`src/memory/embeddings/openai.ts`)
 
 Uses the OpenAI Embeddings API. Text-only.
 
 - Model: configurable (e.g., `text-embedding-3-small`)
 - Endpoint: OpenAI API via the `openai` npm package
 
+## Additional Components
+
+### MemoryRetrieval (`src/memory/retrieval.ts`)
+
+Proactive memory retrieval for context injection. Before each agent turn, relevant memories are automatically loaded based on the user's message. Supports category-filtered retrieval for scoped context (e.g., only loading project-related memories for background tasks).
+
+### MemoryExtractor (`src/memory/extractor.ts`)
+
+Auto-extraction of notable facts from conversations. After each conversation, the extractor scans the messages for facts worth remembering and stores them with `source: 'auto'`. Uses the local model — zero API cost.
+
+### LogIndexer (`src/memory/log-indexer.ts`)
+
+Indexes stdout logs as searchable memories, enabling the agent to recall information from previous sessions.
+
+### CompactionFlush (`src/memory/compaction-flush.ts`)
+
+Database maintenance for the memory store. Removes stale embeddings, compacts the FTS index, and flushes write-ahead logs.
+
 ## Tool Integration
 
-The memory system is exposed to the agent through three tools:
+The memory system is exposed to the agent through five tools:
 
 | Tool | Description |
 |------|-------------|
 | `memory_search` | Hybrid search — finds memories by meaning and keywords |
 | `memory_get` | Exact key lookup — retrieves a specific memory |
 | `memory_set` | Store a new memory — generates embedding automatically |
+| `memory_delete` | Remove a memory by key — deletes entry and embedding |
+| `memory_list` | List all stored memories with previews |
 
 These tools are created via factory function `createMemoryTools(memory)` in `src/tools/builtin/memory.ts`. If the memory system is not initialized (no embeddings configured), stub implementations return an error message.
 

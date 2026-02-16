@@ -78,31 +78,67 @@ bun test --watch
 ```
 test/
 ├── agent/
-│   └── context-window.test.ts  # Token counting, message fitting, truncation
+│   ├── context-window.test.ts      # Token counting, message fitting, truncation
+│   ├── context-summarizer.test.ts  # Conversation summarization
+│   └── session-mutex.test.ts       # Concurrent session serialization
+├── browser/
+│   └── targeting.test.ts           # Accessibility element targeting
+├── channels/
+│   ├── discord-events.test.ts      # Discord event state management
+│   └── discord-formatting.test.ts  # Message formatting, tool call rendering
 ├── config/
-│   └── loader.test.ts          # Config loading, path expansion, defaults
+│   └── loader.test.ts              # Config loading, path expansion, defaults
+├── conversation/
+│   └── store.test.ts               # Conversation persistence
 ├── memory/
-│   └── search.test.ts          # Cosine similarity, FTS, vector, hybrid search
+│   ├── search.test.ts              # Cosine similarity, FTS, vector, hybrid search
+│   ├── indexer.test.ts             # SQLite storage, embedding vectors
+│   ├── retrieval.test.ts           # Proactive memory retrieval
+│   ├── extractor.test.ts           # Fact auto-extraction
+│   ├── log-indexer.test.ts         # Log indexing
+│   └── compaction-flush.test.ts    # Database maintenance
+├── providers/
+│   ├── llamacpp-format.test.ts     # llama.cpp response parsing
+│   ├── anthropic-format.test.ts    # Anthropic format handling
+│   ├── registry.test.ts            # Provider registry
+│   ├── key-pool.test.ts            # API key rotation
+│   └── error-classify.test.ts      # Error categorization
 ├── routing/
-│   ├── model-router.test.ts    # Router decisions, complexity, task detection
-│   ├── escalation.test.ts      # Low confidence, uncertainty patterns
-│   ├── heuristics.test.ts      # Keyword detection, complexity estimation
-│   └── rules.test.ts           # Rule creation, always-local/remote
+│   ├── model-router.test.ts        # Router decisions, complexity, task detection
+│   ├── escalation.test.ts          # Low confidence, uncertainty patterns
+│   ├── heuristics.test.ts          # Keyword detection, complexity estimation
+│   └── rules.test.ts               # Rule creation, always-local/remote
+├── safety/
+│   ├── command-filter.test.ts      # Dangerous command blocking
+│   ├── path-guard.test.ts          # Path sandboxing
+│   └── safety-check.test.ts        # Safety check orchestration
 ├── skills/
-│   └── parser.test.ts          # YAML frontmatter parsing, name/description extraction
+│   ├── parser.test.ts              # YAML frontmatter parsing
+│   └── loader.test.ts              # Filesystem skill discovery
+├── standup/
+│   ├── gather.test.ts              # Workspace context gathering
+│   └── index.test.ts               # Standup exports
+├── tasks/
+│   ├── store.test.ts               # SQLite task CRUD
+│   ├── cron.test.ts                # Cron expression parsing
+│   ├── schedule.test.ts            # Interval parsing, business hours
+│   ├── heartbeat.test.ts           # Periodic task pulse
+│   └── error-classify.test.ts      # Task error categorization
 ├── tools/
-│   ├── format.test.ts          # Tool call parsing, JSON handling
-│   ├── executor.test.ts        # Tool execution, error handling
-│   └── web-research.test.ts    # URL validation, HTML stripping, truncation
+│   ├── format.test.ts              # Tool call parsing, JSON handling
+│   ├── executor.test.ts            # Tool execution, error handling
+│   └── web-research.test.ts        # URL validation, HTML stripping, truncation
 ├── tracking/
-│   ├── stats.test.ts           # Request counting, escalation tracking
-│   └── costs.test.ts           # Model pricing, cost calculation
+│   ├── stats.test.ts               # Request counting, escalation tracking
+│   └── costs.test.ts               # Model pricing, cost calculation
 ├── util/
-│   ├── tokens.test.ts          # Token counting, message estimation
-│   ├── async.test.ts           # Async utilities
-│   └── logger.test.ts          # Log levels, entry storage, filtering
+│   ├── tokens.test.ts              # Token counting, message estimation
+│   ├── async.test.ts               # Async utilities
+│   └── logger.test.ts              # Log levels, entry storage, filtering
+├── workflows/
+│   └── engine.test.ts              # Workflow execution
 └── fixtures/
-    └── skills/                 # Test skill files
+    └── skills/                     # Test skill files
 ```
 
 ### Writing Tests
@@ -130,14 +166,26 @@ describe('Router', () => {
 
 See [architecture.md](architecture.md) for a detailed breakdown. Key points:
 
-- `src/index.ts` — Entry point and CLI command routing
-- `src/agent/` — Core conversation loop
+- `src/index.ts` — Entry point, parses command and dispatches to runner
+- `src/bootstrap.ts` — Shared `AppServices` factory
+- `src/commands/` — Command runners (cli, discord, xmpp, api, claude-code, status)
+- `src/agent/` — Core conversation loop, context management, summarization
+- `src/api/` — HTTP REST server (chat, tools, memory, stats endpoints)
+- `src/browser/` — Playwright browser automation
+- `src/channels/` — User interfaces (CLI, Discord, Claude Code, XMPP, API)
+- `src/config/` — Configuration loading and validation
+- `src/conversation/` — Conversation persistence (SQLite)
+- `src/memory/` — Hybrid search memory system with embeddings
 - `src/providers/` — LLM provider implementations
 - `src/routing/` — Local vs remote routing decisions
-- `src/tools/` — Built-in tool implementations
-- `src/memory/` — Hybrid search memory system
-- `src/channels/` — User interfaces (CLI, Discord, Claude Code, XMPP)
-- `src/config/` — Configuration loading and validation
+- `src/safety/` — Command filtering, path sandboxing, audit logging
+- `src/skills/` — Skill loading and management
+- `src/standup/` — Workspace context gathering
+- `src/tasks/` — Background task scheduler and event sources
+- `src/tools/` — 48 built-in tools across 8 categories
+- `src/tracking/` — Usage stats, cost tracking, transcript logging
+- `src/ui/` — 256-color ANSI theme system
+- `src/workflows/` — Workflow engine for structured multi-step tasks
 
 ## Code Style
 
@@ -204,7 +252,9 @@ Current production dependencies:
 - `@xmpp/client` — XMPP/Jabber protocol client
 - `discord.js` — Discord bot framework
 - `openai` — OpenAI API client
+- `playwright` — Browser automation (for browser tools)
 - `smol-toml` — TOML parser
+- `yaml` — YAML parsing (for skill frontmatter)
 
 ## Git Conventions
 
@@ -256,5 +306,6 @@ These workspace files are user data — never modify without explicit permission
 ### Adding a New Channel
 
 1. Create `src/channels/my-channel.ts`
-2. Add a command case in `src/index.ts`
-3. Wire up agent loop and providers in the command handler
+2. Create a command runner in `src/commands/my-channel.ts`
+3. Add a command case in `src/index.ts`
+4. Wire up agent loop and providers in the command handler
