@@ -3,7 +3,7 @@ import { AgentLoop } from '../agent/loop'
 import type { SessionMutex } from '../agent/session-mutex'
 import type { RuntimeConfig } from '../config'
 import type { MemoryManager } from '../memory'
-import { extractMemories } from '../memory/extractor'
+import { extractLessonsFromTask, extractMemories } from '../memory/extractor'
 import { retrieveForContext } from '../memory/retrieval'
 import type { LLMProvider } from '../providers/types'
 import type { Router } from '../routing'
@@ -264,19 +264,25 @@ export class TaskRunner {
       }
       this.lastEventAt.set(task.id, now)
 
-      // If currently executing, queue it (keep only latest per task)
+      const t = this.deps.store.get(task.id)
+      if (!t || t.status !== 'active') return
+
+      // Trigger mode: create a new oneshot task instead of executing directly
+      if (t.triggerMode === 'create_task') {
+        this.createTriggeredTask(t, payload)
+        return
+      }
+
+      // Default: execute directly
       if (this.isExecuting) {
         this.eventQueue = this.eventQueue.filter((e) => e.taskId !== task.id)
         this.eventQueue.push({ taskId: task.id, payload, queuedAt: now })
         return
       }
 
-      const t = this.deps.store.get(task.id)
-      if (t && t.status === 'active') {
-        this.executeTask(t, payload).catch((err) =>
-          log.error('tasks', `Event-triggered execution failed for ${task.id}: ${err}`),
-        )
-      }
+      this.executeTask(t, payload).catch((err) =>
+        log.error('tasks', `Event-triggered execution failed for ${task.id}: ${err}`),
+      )
     })
 
     this.eventSources.set(task.id, source)
@@ -330,7 +336,7 @@ export class TaskRunner {
 
       // Check max_runs
       if (task.maxRuns && task.runCount + 1 >= task.maxRuns) {
-        this.deps.store.update(task.id, { status: 'done' })
+        this.deps.store.update(task.id, { status: 'done' }, `Reached max runs (${task.maxRuns})`)
         this.unregisterEventSource(task.id)
       }
 
@@ -364,7 +370,7 @@ export class TaskRunner {
       })
 
       if (policy.shouldPause) {
-        this.deps.store.update(task.id, { status: 'paused' })
+        this.deps.store.update(task.id, { status: 'paused' }, `${policy.reason} (${errorKind}: ${errorMsg.slice(0, 100)})`)
         this.unregisterEventSource(task.id)
         await this.notify(
           task,
@@ -414,6 +420,41 @@ export class TaskRunner {
         })
       }
     }
+  }
+
+  /** Create a new oneshot task from an event trigger instead of executing directly */
+  private createTriggeredTask(parentTask: Task, payload: EventPayload): void {
+    const eventSummary = payload.summary.slice(0, 80)
+    const slug = eventSummary
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '')
+      .slice(0, 40)
+
+    const name = `${parentTask.name}/${slug}-${Date.now().toString(36)}`
+    const eventData =
+      typeof payload.data === 'string'
+        ? payload.data
+        : JSON.stringify(payload.data, null, 2)
+    const prompt = `[Triggered by: ${payload.source} — ${payload.summary}]\n${eventData}\n\n${parentTask.prompt}`
+
+    const created = this.deps.store.create({
+      name,
+      description: `Auto-created from event on "${parentTask.name}": ${eventSummary}`,
+      kind: 'oneshot',
+      prompt,
+      memoryContext: parentTask.memoryContext,
+      memoryCategory: parentTask.memoryCategory,
+      notify: parentTask.notify,
+      channel: parentTask.channel,
+      channelTarget: parentTask.channelTarget,
+      createdBy: 'trigger',
+    })
+
+    log.info(
+      'tasks',
+      `Event on "${parentTask.name}" created task "${created.name}" (${created.id})`,
+    )
   }
 
   private async doExecute(task: Task, eventPayload?: EventPayload): Promise<string> {
@@ -484,14 +525,26 @@ export class TaskRunner {
       }
     }
 
-    // Proactive memory retrieval
+    // Proactive memory retrieval — search by prompt and event context
     if (this.deps.memory) {
-      const recalled = await retrieveForContext(task.prompt, this.deps.memory, {
+      const retrievalConfig = {
         scoreThreshold: this.deps.config.memory?.scoreThreshold ?? 0.35,
         maxResults: this.deps.config.memory?.maxResults ?? 5,
         maxTokensBudget: this.deps.config.memory?.maxTokensBudget ?? 2000,
-      })
+      }
+
+      const recalled = await retrieveForContext(task.prompt, this.deps.memory, retrievalConfig)
       if (recalled) contextParts.push(recalled)
+
+      // Also search by event context for richer recall
+      if (eventPayload?.summary) {
+        const eventRecalled = await retrieveForContext(
+          eventPayload.summary,
+          this.deps.memory,
+          { ...retrievalConfig, maxResults: 3 },
+        )
+        if (eventRecalled) contextParts.push(eventRecalled)
+      }
     }
 
     if (additionalContext) contextParts.push(additionalContext)
@@ -526,6 +579,11 @@ export class TaskRunner {
 
     // Fire-and-forget auto-extraction
     if (this.deps.memory) {
+      const storeMemory = this.deps.memory
+      const taskId = task.id
+      const taskName = task.name
+
+      // General memory extraction
       extractMemories(
         [
           { role: 'user', content: userMessage },
@@ -536,14 +594,36 @@ export class TaskRunner {
       )
         .then(async (extractions) => {
           for (const ext of extractions) {
-            await this.deps.memory?.set(`auto/task/${task.name}/${ext.key}`, ext.value, {
+            await storeMemory.set(`auto/task/${taskName}/${ext.key}`, ext.value, {
               category: ext.category,
               source: 'auto',
-              sessionId: `task:${task.id}`,
+              sessionId: `task:${taskId}`,
             })
           }
         })
-        .catch((err) => log.warn('tasks', `Auto-extraction failed for task ${task.id}: ${err}`))
+        .catch((err) => log.warn('tasks', `Auto-extraction failed for task ${taskId}: ${err}`))
+
+      // Lesson extraction — identifies actionable insights from the execution
+      extractLessonsFromTask(
+        taskName,
+        task.prompt,
+        response.content,
+        response.escalated,
+        this.deps.localProvider,
+      )
+        .then(async (lessons) => {
+          for (const lesson of lessons) {
+            await storeMemory.set(`lesson/task/${taskName}/${lesson.key}`, lesson.value, {
+              category: 'lesson',
+              source: 'auto',
+              sessionId: `task:${taskId}`,
+            })
+          }
+          if (lessons.length > 0) {
+            log.info('tasks', `Stored ${lessons.length} lesson(s) from task ${taskName}`)
+          }
+        })
+        .catch((err) => log.warn('tasks', `Lesson extraction failed for task ${taskId}: ${err}`))
     }
 
     return response.content

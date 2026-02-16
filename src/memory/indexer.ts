@@ -11,6 +11,7 @@ export type MemoryCategory =
   | 'project'
   | 'entity'
   | 'conversation'
+  | 'lesson'
 
 export type MemorySource = 'manual' | 'auto' | 'conversation'
 

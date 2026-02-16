@@ -21,19 +21,20 @@ const DEFAULT_CONFIG: ExtractorConfig = {
   maxExtractions: 5,
 }
 
-const EXTRACTION_PROMPT = `You are a memory extraction system. Analyze the following conversation and extract important facts, preferences, decisions, and project details worth remembering for future conversations.
+const EXTRACTION_PROMPT = `You are a memory extraction system. Analyze the following conversation and extract important facts, preferences, decisions, lessons, and project details worth remembering for future conversations.
 
 For each extracted memory, output a JSON array where each item has:
 - "key": a short snake_case identifier (e.g., "preferred_language", "api_redesign_decision")
 - "value": a concise but complete description of what to remember
-- "category": one of "fact", "preference", "decision", "project", "entity"
+- "category": one of "fact", "preference", "decision", "project", "entity", "lesson"
 
 Categories:
 - fact: Concrete information stated by the user (technical details, names, dates)
 - preference: User preferences, opinions, or how they like things done
-- decision: Decisions made during the conversation about how to proceed
+- decision: Decisions made during the conversation about how to proceed. Include the rationale and any alternatives that were considered
 - project: Project state, goals, milestones, architecture choices
 - entity: People, services, repos, or other named entities and their relationships
+- lesson: Actionable insight learned from experience — something that went wrong and how it was fixed, a pattern that worked well, or a mistake to avoid next time. Lessons should change future behavior
 
 Rules:
 - Only extract information that would be useful in future conversations
@@ -85,6 +86,67 @@ export async function extractMemories(
     return parseExtractions(response.content, maxExtractions)
   } catch (error) {
     log.warn('extractor', 'Memory extraction failed:', error)
+    return []
+  }
+}
+
+const LESSON_EXTRACTION_PROMPT = `You are a lesson extraction system for a background task agent. Analyze the task execution below and extract actionable lessons — things learned from this execution that should improve future runs.
+
+For each lesson, output a JSON array where each item has:
+- "key": a short snake_case identifier describing the lesson (e.g., "deploy_needs_tracking_numbers", "ci_timeout_increase")
+- "value": a concise, actionable description of what was learned and when it applies
+- "category": always "lesson"
+
+Focus on:
+- Errors encountered and how they were resolved
+- Patterns that worked well or failed
+- Unexpected behavior that required adaptation
+- Context that was needed but missing (for next time)
+
+Rules:
+- Only extract genuinely useful lessons — not routine task completion
+- Each value should be 1-2 sentences, written as advice for future runs
+- If the task completed routinely with nothing notable, return: []
+- Output ONLY the JSON array, no other text
+
+Task execution:
+`
+
+/**
+ * Extract lessons from a completed task execution.
+ *
+ * Analyzes the task prompt, result, and whether it failed/recovered to
+ * identify actionable lessons worth storing for future task runs.
+ */
+export async function extractLessonsFromTask(
+  taskName: string,
+  prompt: string,
+  result: string,
+  hadErrors: boolean,
+  provider: LLMProvider,
+): Promise<ExtractionResult[]> {
+  // Only extract lessons from non-trivial results
+  if (result.length < 50) return []
+
+  const context = [
+    `Task: ${taskName}`,
+    `Prompt: ${prompt.slice(0, 500)}`,
+    hadErrors ? 'Note: This task encountered errors during execution.' : '',
+    `Result:\n${result.slice(0, 1500)}`,
+  ]
+    .filter(Boolean)
+    .join('\n')
+
+  try {
+    const response = await provider.chat({
+      messages: [{ role: 'user', content: LESSON_EXTRACTION_PROMPT + context }],
+      temperature: 0.1,
+      max_tokens: 512,
+    })
+
+    return parseExtractions(response.content, 3)
+  } catch (error) {
+    log.warn('extractor', 'Lesson extraction failed:', error)
     return []
   }
 }
@@ -168,7 +230,14 @@ function parseExtractions(content: string, maxExtractions: number): ExtractionRe
 
   if (!Array.isArray(parsed)) return []
 
-  const validCategories = new Set<string>(['fact', 'preference', 'decision', 'project', 'entity'])
+  const validCategories = new Set<string>([
+    'fact',
+    'preference',
+    'decision',
+    'project',
+    'entity',
+    'lesson',
+  ])
   const results: ExtractionResult[] = []
 
   for (const item of parsed) {

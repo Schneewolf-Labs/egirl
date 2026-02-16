@@ -9,6 +9,7 @@ import type {
   TaskProposal,
   TaskRun,
   TaskStatus,
+  TaskTransition,
 } from './types'
 
 function generateId(): string {
@@ -32,6 +33,7 @@ function rowToTask(row: Record<string, unknown>): Task {
     dependsOn: (row.depends_on as string) ?? undefined,
     eventSource: (row.event_source as Task['eventSource']) ?? undefined,
     eventConfig: row.event_config ? JSON.parse(row.event_config as string) : undefined,
+    triggerMode: ((row.trigger_mode as string) ?? 'execute') as Task['triggerMode'],
     nextRunAt: (row.next_run_at as number) ?? undefined,
     lastRunAt: (row.last_run_at as number) ?? undefined,
     runCount: (row.run_count as number) ?? 0,
@@ -149,6 +151,19 @@ export class TaskStore {
       )
     `)
 
+    this.db.run(`
+      CREATE TABLE IF NOT EXISTS task_transitions (
+        id TEXT PRIMARY KEY,
+        task_id TEXT NOT NULL,
+        from_status TEXT NOT NULL,
+        to_status TEXT NOT NULL,
+        reason TEXT,
+        timestamp INTEGER NOT NULL,
+        FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+      )
+    `)
+
+    this.db.run('CREATE INDEX IF NOT EXISTS idx_transitions_task ON task_transitions(task_id, timestamp)')
     this.db.run('CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status)')
     this.db.run('CREATE INDEX IF NOT EXISTS idx_tasks_next_run ON tasks(next_run_at)')
     this.db.run('CREATE INDEX IF NOT EXISTS idx_task_runs_task ON task_runs(task_id, started_at)')
@@ -173,6 +188,7 @@ export class TaskStore {
       ['business_hours', 'ALTER TABLE tasks ADD COLUMN business_hours TEXT'],
       ['depends_on', 'ALTER TABLE tasks ADD COLUMN depends_on TEXT'],
       ['last_error_kind', 'ALTER TABLE tasks ADD COLUMN last_error_kind TEXT'],
+      ['trigger_mode', "ALTER TABLE tasks ADD COLUMN trigger_mode TEXT DEFAULT 'execute'"],
     ]
 
     for (const [col, sql] of migrations) {
@@ -217,10 +233,10 @@ export class TaskStore {
         id, name, description, kind, status, prompt, workflow,
         memory_context, memory_category, interval_ms,
         cron_expression, business_hours, depends_on,
-        event_source, event_config, next_run_at,
+        event_source, event_config, trigger_mode, next_run_at,
         max_runs, notify, channel, channel_target, created_by,
         created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
       [
         id,
@@ -238,6 +254,7 @@ export class TaskStore {
         input.dependsOn ?? null,
         input.eventSource ?? null,
         input.eventConfig ? JSON.stringify(input.eventConfig) : null,
+        input.triggerMode ?? 'execute',
         nextRunAt ?? null,
         input.maxRuns ?? null,
         input.notify ?? 'on_change',
@@ -248,6 +265,9 @@ export class TaskStore {
         now,
       ],
     )
+
+    // Record initial transition
+    this.recordTransition(id, 'new', status)
 
     return this.get(id)!
   }
@@ -260,7 +280,15 @@ export class TaskStore {
     return row ? rowToTask(row) : undefined
   }
 
-  update(id: string, changes: Partial<Task>): void {
+  update(id: string, changes: Partial<Task>, reason?: string): void {
+    // Record transition if status is changing
+    if (changes.status) {
+      const current = this.get(id)
+      if (current && current.status !== changes.status) {
+        this.recordTransition(id, current.status, changes.status, reason)
+      }
+    }
+
     const sets: string[] = []
     const values: unknown[] = []
 
@@ -274,6 +302,7 @@ export class TaskStore {
       cronExpression: 'cron_expression',
       businessHours: 'business_hours',
       dependsOn: 'depends_on',
+      triggerMode: 'trigger_mode',
       nextRunAt: 'next_run_at',
       lastRunAt: 'last_run_at',
       runCount: 'run_count',
@@ -453,6 +482,42 @@ export class TaskStore {
     return rows.map(rowToRun)
   }
 
+  // --- Transition ledger ---
+
+  recordTransition(
+    taskId: string,
+    fromStatus: string,
+    toStatus: string,
+    reason?: string,
+  ): void {
+    const id = generateId()
+    this.db.run(
+      `INSERT INTO task_transitions (id, task_id, from_status, to_status, reason, timestamp)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [id, taskId, fromStatus, toStatus, reason ?? null, Date.now()],
+    )
+  }
+
+  getTransitions(taskId: string, limit = 50): TaskTransition[] {
+    const rows = this.db
+      .query(`
+      SELECT id, task_id, from_status, to_status, reason, timestamp
+      FROM task_transitions
+      WHERE task_id = ?
+      ORDER BY timestamp DESC
+      LIMIT ?
+    `)
+      .all(taskId, limit) as Array<Record<string, unknown>>
+    return rows.map((row) => ({
+      id: row.id as string,
+      taskId: row.task_id as string,
+      fromStatus: row.from_status as string,
+      toStatus: row.to_status as string,
+      reason: (row.reason as string) ?? undefined,
+      timestamp: row.timestamp as number,
+    })) as TaskTransition[]
+  }
+
   /** Get the most recent successful run for a task */
   getLastSuccessfulRun(taskId: string): TaskRun | undefined {
     const row = this.db
@@ -527,10 +592,11 @@ export class TaskStore {
 
   // --- Lifecycle ---
 
-  compact(maxAgeDays: number): { runsDeleted: number; proposalsDeleted: number } {
+  compact(maxAgeDays: number): { runsDeleted: number; proposalsDeleted: number; transitionsDeleted: number } {
     const cutoff = Date.now() - maxAgeDays * 86_400_000
     let runsDeleted = 0
     let proposalsDeleted = 0
+    let transitionsDeleted = 0
 
     this.db.transaction(() => {
       const runResult = this.db.run(
@@ -541,13 +607,16 @@ export class TaskStore {
 
       const propResult = this.db.run('DELETE FROM task_proposals WHERE created_at < ?', [cutoff])
       proposalsDeleted = propResult.changes
+
+      const transResult = this.db.run('DELETE FROM task_transitions WHERE timestamp < ?', [cutoff])
+      transitionsDeleted = transResult.changes
     })()
 
-    if (runsDeleted > 0 || proposalsDeleted > 0) {
-      log.info('tasks', `Compacted: ${runsDeleted} runs, ${proposalsDeleted} proposals removed`)
+    if (runsDeleted > 0 || proposalsDeleted > 0 || transitionsDeleted > 0) {
+      log.info('tasks', `Compacted: ${runsDeleted} runs, ${proposalsDeleted} proposals, ${transitionsDeleted} transitions removed`)
     }
 
-    return { runsDeleted, proposalsDeleted }
+    return { runsDeleted, proposalsDeleted, transitionsDeleted }
   }
 
   close(): void {
