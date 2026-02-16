@@ -18,6 +18,7 @@ describe('Router', () => {
       escalationThreshold: 0.4,
       alwaysLocal: ['memory_search', 'memory_get'],
       alwaysRemote: ['code_generation', 'code_review'],
+      models: {},
     },
     channels: {},
     skills: { dirs: [] },
@@ -164,5 +165,96 @@ describe('Router', () => {
     const decision = routerWithSkills.route(messages)
     expect(decision.target).toBe('remote')
     expect(decision.reason).toBe('skill:Research')
+  })
+
+  test('includes model chain from routing.models for matching task type', () => {
+    const configWithModels: RuntimeConfig = {
+      ...configWithRemote,
+      routing: {
+        ...configWithRemote.routing,
+        models: {
+          code_generation: ['anthropic/claude-opus-4-20250514', 'openai/gpt-4o', 'local'],
+        },
+      },
+    }
+
+    const r = createRouter(configWithModels)
+    const messages: ChatMessage[] = [
+      { role: 'user', content: 'Write code to implement a sorting algorithm' },
+    ]
+
+    const decision = r.route(messages)
+    expect(decision.modelChain).toEqual([
+      'anthropic/claude-opus-4-20250514',
+      'openai/gpt-4o',
+      'local',
+    ])
+    expect(decision.reason).toBe('models:code_generation')
+    expect(decision.target).toBe('remote')
+  })
+
+  test('uses models.default chain when no task-specific chain matches', () => {
+    const configWithDefault: RuntimeConfig = {
+      ...configWithRemote,
+      routing: {
+        ...configWithRemote.routing,
+        models: {
+          default: ['local', 'anthropic'],
+        },
+      },
+    }
+
+    const r = createRouter(configWithDefault)
+    const messages: ChatMessage[] = [{ role: 'user', content: 'Hello there' }]
+
+    const decision = r.route(messages)
+    expect(decision.modelChain).toEqual(['local', 'anthropic'])
+    expect(decision.target).toBe('local')
+    expect(decision.reason).toBe('models:conversation')
+  })
+
+  test('model chain with local first sets target to local', () => {
+    const configWithModels: RuntimeConfig = {
+      ...configWithRemote,
+      routing: {
+        ...configWithRemote.routing,
+        models: {
+          conversation: ['local', 'anthropic'],
+        },
+      },
+    }
+
+    const r = createRouter(configWithModels)
+    const messages: ChatMessage[] = [{ role: 'user', content: 'Hello' }]
+
+    const decision = r.route(messages)
+    expect(decision.target).toBe('local')
+    expect(decision.provider).toBe('local')
+  })
+
+  test('no model chain when routing.models is empty', () => {
+    const messages: ChatMessage[] = [{ role: 'user', content: 'Hello' }]
+
+    const decision = router.route(messages)
+    expect(decision.modelChain).toBeUndefined()
+  })
+
+  test('falls back to local when model chain specifies remote but no provider configured', () => {
+    const configNoRemoteWithModels: RuntimeConfig = {
+      ...baseConfig,
+      routing: {
+        ...baseConfig.routing,
+        models: {
+          conversation: ['anthropic', 'local'],
+        },
+      },
+    }
+
+    const r = createRouter(configNoRemoteWithModels)
+    const messages: ChatMessage[] = [{ role: 'user', content: 'Hello' }]
+
+    const decision = r.route(messages)
+    expect(decision.target).toBe('local')
+    expect(decision.reason).toBe('models:fallback_to_local')
   })
 })

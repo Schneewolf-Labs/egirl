@@ -42,6 +42,7 @@ export async function runCLI(config: RuntimeConfig, args: string[]): Promise<voi
     toolExecutor,
     localProvider: providers.local,
     remoteProvider: providers.remote,
+    providers,
     sessionId,
     memory,
     conversationStore: conversations,

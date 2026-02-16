@@ -30,6 +30,7 @@ export async function runXMPP(config: RuntimeConfig, args: string[]): Promise<vo
     toolExecutor,
     localProvider: providers.local,
     remoteProvider: providers.remote,
+    providers,
     sessionId: 'xmpp:default',
     transcript,
     skills,

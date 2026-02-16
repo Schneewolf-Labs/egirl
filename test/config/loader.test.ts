@@ -74,6 +74,7 @@ describe('Config loading', () => {
         escalationThreshold: 0.4,
         alwaysLocal: [] as string[],
         alwaysRemote: [] as string[],
+        models: {} as Record<string, string[]>,
       },
       channels: {
         xmpp: {

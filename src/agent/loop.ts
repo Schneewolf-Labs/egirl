@@ -4,6 +4,7 @@ import type { MemoryManager } from '../memory'
 import { flushBeforeCompaction } from '../memory/compaction-flush'
 import { extractMemories } from '../memory/extractor'
 import { retrieveForContext } from '../memory/retrieval'
+import type { ProviderRegistry } from '../providers'
 import { classifyProviderError, isRetryable, retryDelay } from '../providers/error-classify'
 import { createLlamaCppTokenizer } from '../providers/llamacpp-tokenizer'
 import type {
@@ -93,6 +94,8 @@ export interface AgentLoopDeps {
   toolExecutor: ToolExecutor
   localProvider: LLMProvider
   remoteProvider: LLMProvider | null
+  /** Provider registry for resolving fallback model chains. */
+  providers?: ProviderRegistry
   sessionId: string
   memory?: MemoryManager
   conversationStore?: ConversationStore
@@ -109,6 +112,7 @@ export class AgentLoop {
   private toolExecutor: ToolExecutor
   private localProvider: LLMProvider
   private remoteProvider: LLMProvider | null
+  private providers: ProviderRegistry | null
   private memory: MemoryManager | null
   private context: AgentContext
   private tokenizer: Tokenizer
@@ -124,6 +128,7 @@ export class AgentLoop {
     this.toolExecutor = deps.toolExecutor
     this.localProvider = deps.localProvider
     this.remoteProvider = deps.remoteProvider
+    this.providers = deps.providers ?? null
     this.memory = deps.memory ?? null
     this.conversationStore = deps.conversationStore ?? null
     this.mutex = deps.sessionMutex ?? null
@@ -216,16 +221,8 @@ export class AgentLoop {
     events?.onRoutingDecision?.(routingDecision)
     this.transcript?.routing(this.context.sessionId, routingDecision)
 
-    let provider: LLMProvider =
-      routingDecision.target === 'local'
-        ? this.localProvider
-        : (this.remoteProvider ?? this.localProvider)
-
-    // Fallback to local if remote not available
-    if (!this.remoteProvider && routingDecision.target === 'remote') {
-      log.warn('agent', 'Remote provider not available, falling back to local')
-      provider = this.localProvider
-    }
+    // Resolve the provider from the model chain or fall back to legacy logic
+    const { provider, fallbackProviders } = this.resolveProviderChain(routingDecision)
 
     let turns = 0
     let escalated = false
@@ -233,6 +230,8 @@ export class AgentLoop {
     let finalContent = ''
     let currentProvider = provider
     let currentTarget: 'local' | 'remote' = routingDecision.target
+    // Track remaining fallbacks for this run
+    const remainingFallbacks = [...fallbackProviders]
 
     let lastThinking: string | undefined
 
@@ -253,6 +252,17 @@ export class AgentLoop {
           thinking,
         )
       } catch (error) {
+        // On failure, try the next fallback provider before giving up
+        const fallback = this.tryNextFallback(remainingFallbacks, currentProvider, error)
+        if (fallback) {
+          currentProvider = fallback.provider
+          currentTarget = fallback.target
+          log.info(
+            'agent',
+            `Provider ${currentProvider.name} failed, falling back to ${fallback.provider.name}: ${error instanceof Error ? error.message : String(error)}`,
+          )
+          continue
+        }
         const err = error instanceof Error ? error : new Error(String(error))
         events?.onError?.(err)
         throw error
@@ -278,33 +288,36 @@ export class AgentLoop {
       }
 
       // Check for escalation if we're using local
-      if (currentTarget === 'local' && this.remoteProvider) {
-        const escalationDecision = analyzeResponseForEscalation(
-          response,
-          this.config.routing.escalationThreshold,
-        )
-        if (escalationDecision.shouldEscalate) {
-          log.info('agent', `Escalating to remote model: ${escalationDecision.reason}`)
-          events?.onEscalation?.(escalationDecision, currentProvider.name, this.remoteProvider.name)
-          this.transcript?.escalation(this.context.sessionId, {
-            from: currentProvider.name,
-            to: this.remoteProvider.name,
-            reason: escalationDecision.reason ?? 'unknown',
-            confidence: escalationDecision.confidence,
-          })
-
-          // Preserve the local response in context so the remote model has full history
-          if (response.content) {
-            addMessage(this.context, {
-              role: 'assistant',
-              content: `[Local model response (escalating due to ${escalationDecision.reason})]: ${response.content}`,
+      if (currentTarget === 'local') {
+        const remoteProvider = this.getEscalationTarget(remainingFallbacks)
+        if (remoteProvider) {
+          const escalationDecision = analyzeResponseForEscalation(
+            response,
+            this.config.routing.escalationThreshold,
+          )
+          if (escalationDecision.shouldEscalate) {
+            log.info('agent', `Escalating to ${remoteProvider.name}: ${escalationDecision.reason}`)
+            events?.onEscalation?.(escalationDecision, currentProvider.name, remoteProvider.name)
+            this.transcript?.escalation(this.context.sessionId, {
+              from: currentProvider.name,
+              to: remoteProvider.name,
+              reason: escalationDecision.reason ?? 'unknown',
+              confidence: escalationDecision.confidence,
             })
-          }
 
-          currentProvider = this.remoteProvider
-          currentTarget = 'remote'
-          escalated = true
-          continue
+            // Preserve the local response in context so the remote model has full history
+            if (response.content) {
+              addMessage(this.context, {
+                role: 'assistant',
+                content: `[Local model response (escalating due to ${escalationDecision.reason})]: ${response.content}`,
+              })
+            }
+
+            currentProvider = remoteProvider
+            currentTarget = 'remote'
+            escalated = true
+            continue
+          }
         }
       }
 
@@ -341,26 +354,25 @@ export class AgentLoop {
             tool_call_id: callId,
           })
 
-          if (result.suggest_escalation && currentTarget === 'local' && this.remoteProvider) {
-            const escalationDecision = analyzeResponseForEscalation(
-              response,
-              this.config.routing.escalationThreshold,
-            )
-            log.info('agent', `Tool suggests escalation: ${result.escalation_reason}`)
-            events?.onEscalation?.(
-              escalationDecision,
-              currentProvider.name,
-              this.remoteProvider.name,
-            )
-            this.transcript?.escalation(this.context.sessionId, {
-              from: currentProvider.name,
-              to: this.remoteProvider.name,
-              reason: result.escalation_reason ?? 'tool_suggested',
-              confidence: escalationDecision.confidence,
-            })
-            currentProvider = this.remoteProvider
-            currentTarget = 'remote'
-            escalated = true
+          if (result.suggest_escalation && currentTarget === 'local') {
+            const remoteProvider = this.getEscalationTarget(remainingFallbacks)
+            if (remoteProvider) {
+              const escalationDecision = analyzeResponseForEscalation(
+                response,
+                this.config.routing.escalationThreshold,
+              )
+              log.info('agent', `Tool suggests escalation: ${result.escalation_reason}`)
+              events?.onEscalation?.(escalationDecision, currentProvider.name, remoteProvider.name)
+              this.transcript?.escalation(this.context.sessionId, {
+                from: currentProvider.name,
+                to: remoteProvider.name,
+                reason: result.escalation_reason ?? 'tool_suggested',
+                confidence: escalationDecision.confidence,
+              })
+              currentProvider = remoteProvider
+              currentTarget = 'remote'
+              escalated = true
+            }
           }
         }
 
@@ -465,6 +477,83 @@ export class AgentLoop {
       turns,
       thinking: lastThinking,
     }
+  }
+
+  /**
+   * Resolve the primary provider and ordered fallback list from a routing decision.
+   *
+   * When the routing decision includes a modelChain (from [routing.models] config),
+   * each ref is resolved via the provider registry. The first available provider
+   * becomes primary; the rest become ordered fallbacks.
+   *
+   * Without a model chain, falls back to the legacy local/remote selection.
+   */
+  private resolveProviderChain(decision: { target: 'local' | 'remote'; modelChain?: string[] }): {
+    provider: LLMProvider
+    fallbackProviders: LLMProvider[]
+  } {
+    if (decision.modelChain && decision.modelChain.length > 0 && this.providers) {
+      const resolved: LLMProvider[] = []
+      for (const ref of decision.modelChain) {
+        const p = this.providers.resolveModelRef(ref)
+        if (p) resolved.push(p)
+      }
+
+      if (resolved.length > 0) {
+        log.debug('agent', `Model chain resolved: [${resolved.map((p) => p.name).join(' -> ')}]`)
+        const primary = resolved[0] as LLMProvider
+        return {
+          provider: primary,
+          fallbackProviders: resolved.slice(1),
+        }
+      }
+      log.warn('agent', 'No providers available from model chain, using default selection')
+    }
+
+    // Legacy: simple local/remote selection
+    const primary =
+      decision.target === 'local' ? this.localProvider : (this.remoteProvider ?? this.localProvider)
+
+    if (!this.remoteProvider && decision.target === 'remote') {
+      log.warn('agent', 'Remote provider not available, falling back to local')
+    }
+
+    // Legacy fallback: if starting local and remote is available, it's the fallback
+    const fallbacks: LLMProvider[] = []
+    if (decision.target === 'local' && this.remoteProvider) {
+      fallbacks.push(this.remoteProvider)
+    }
+
+    return { provider: primary, fallbackProviders: fallbacks }
+  }
+
+  /**
+   * Try the next available fallback provider when the current one fails.
+   * Pops from the front of the remaining fallbacks list.
+   * Returns the next provider and its target type, or undefined if exhausted.
+   */
+  private tryNextFallback(
+    remaining: LLMProvider[],
+    _failedProvider: LLMProvider,
+    _error: unknown,
+  ): { provider: LLMProvider; target: 'local' | 'remote' } | undefined {
+    if (remaining.length === 0) return undefined
+    const next = remaining.shift() as LLMProvider
+    const target = next.name.startsWith('llamacpp/') ? 'local' : 'remote'
+    return { provider: next, target }
+  }
+
+  /**
+   * Find the best remote provider to escalate to from the remaining fallbacks,
+   * or fall back to the legacy remoteProvider.
+   */
+  private getEscalationTarget(remaining: LLMProvider[]): LLMProvider | null {
+    // Prefer the first non-local provider in the remaining fallback chain
+    for (const p of remaining) {
+      if (!p.name.startsWith('llamacpp/')) return p
+    }
+    // Legacy fallback
+    return this.remoteProvider
   }
 
   /**

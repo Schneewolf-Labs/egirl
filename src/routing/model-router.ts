@@ -11,6 +11,8 @@ export interface RoutingDecision {
   provider?: string
   reason: string
   confidence: number
+  /** Ordered list of model refs to try. First available wins; rest are fallbacks. */
+  modelChain?: string[]
 }
 
 export interface TaskAnalysis {
@@ -105,15 +107,34 @@ export class Router {
       }
     }
 
+    // Look up fallback model chain for this task type
+    const modelsConfig = this.config.routing.models
+    const modelChain = modelsConfig[taskType] ?? modelsConfig.default ?? undefined
+
+    // If a model chain is configured, derive target from the first entry
+    if (modelChain && modelChain.length > 0) {
+      const primaryRef = modelChain[0] as string
+      const isLocal = primaryRef === 'local'
+      finalTarget = isLocal ? 'local' : 'remote'
+      finalReason = `models:${taskType}`
+    }
+
     // Check if we have a remote provider
     if (finalTarget === 'remote' && !this.config.remote.anthropic && !this.config.remote.openai) {
-      log.warn(
-        'routing',
-        'Remote model requested but no remote provider configured, falling back to local',
-      )
-      finalTarget = 'local'
-      finalReason = 'no_remote_provider'
-      finalConfidence = 0.5
+      // If we have a model chain, try to find any local entry in it
+      if (modelChain?.some((ref) => ref === 'local')) {
+        finalTarget = 'local'
+        finalReason = 'models:fallback_to_local'
+        finalConfidence = 0.5
+      } else {
+        log.warn(
+          'routing',
+          'Remote model requested but no remote provider configured, falling back to local',
+        )
+        finalTarget = 'local'
+        finalReason = 'no_remote_provider'
+        finalConfidence = 0.5
+      }
     }
 
     const decision: RoutingDecision = {
@@ -122,7 +143,10 @@ export class Router {
       confidence: finalConfidence,
     }
 
-    if (finalTarget === 'remote') {
+    if (modelChain && modelChain.length > 0) {
+      decision.modelChain = modelChain
+      decision.provider = modelChain[0]
+    } else if (finalTarget === 'remote') {
       if (this.config.remote.anthropic) {
         decision.provider = `anthropic/${this.config.remote.anthropic.model}`
       } else if (this.config.remote.openai) {
@@ -134,7 +158,9 @@ export class Router {
 
     log.debug(
       'routing',
-      `Routed to ${decision.target}: ${decision.reason} (confidence: ${decision.confidence})`,
+      `Routed to ${decision.target}: ${decision.reason} (confidence: ${decision.confidence})${
+        decision.modelChain ? ` chain: [${decision.modelChain.join(' -> ')}]` : ''
+      }`,
     )
 
     return decision

@@ -34,6 +34,7 @@ export async function runAPI(config: RuntimeConfig, args: string[]): Promise<voi
     toolExecutor,
     localProvider: providers.local,
     remoteProvider: providers.remote,
+    providers,
     sessionId: 'api:default',
     transcript,
     skills,
