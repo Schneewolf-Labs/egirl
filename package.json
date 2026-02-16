@@ -16,7 +16,8 @@
     "lint": "biome check src/ test/",
     "lint:fix": "biome check --fix src/ test/",
     "typecheck": "tsc --noEmit",
-    "check": "bun run lint && bun run typecheck"
+    "check": "bun run lint && bun run typecheck",
+    "dashboard": "bun run scripts/serve-dashboard.ts"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.39",

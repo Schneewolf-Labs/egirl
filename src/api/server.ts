@@ -137,6 +137,16 @@ export class APIServer {
     log.info('api', 'API server stopped')
   }
 
+  private corsHeaders(req: Request): Record<string, string> {
+    const origin = req.headers.get('origin')
+    if (!origin) return {}
+    return {
+      'Access-Control-Allow-Origin': origin,
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    }
+  }
+
   private async handleRequest(req: Request): Promise<Response> {
     const url = new URL(req.url)
     const method = req.method
@@ -145,6 +155,27 @@ export class APIServer {
 
     log.debug('api', `${method} ${path} from ${ip}`)
 
+    // CORS preflight
+    if (method === 'OPTIONS') {
+      return new Response(null, { status: 204, headers: this.corsHeaders(req) })
+    }
+
+    const res = await this.routeRequest(req, method, path, ip)
+    const cors = this.corsHeaders(req)
+    if (Object.keys(cors).length > 0) {
+      for (const [k, v] of Object.entries(cors)) {
+        res.headers.set(k, v)
+      }
+    }
+    return res
+  }
+
+  private async routeRequest(
+    req: Request,
+    method: string,
+    path: string,
+    ip: string,
+  ): Promise<Response> {
     // Bearer token auth (skip for health check)
     if (this.serverConfig.bearerToken && path !== '/health') {
       const authHeader = req.headers.get('authorization')

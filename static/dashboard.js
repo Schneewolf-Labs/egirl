@@ -1,3 +1,7 @@
+// -- API base URL --
+// Use ?api=http://host:port to point at a remote egirl instance
+const API_BASE = new URLSearchParams(window.location.search).get('api') || '';
+
 // -- State --
 let currentConfig = {};
 
@@ -23,7 +27,7 @@ function toast(msg, isErr) {
 
 // -- API helpers --
 async function api(path, opts) {
-  const res = await fetch(path, opts);
+  const res = await fetch(API_BASE + path, opts);
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || res.statusText);
   return data;
@@ -554,7 +558,7 @@ async function tryEndpoint(method, path, id) {
       opts.body = bodyEl ? bodyEl.value : '{}';
     }
 
-    const res = await fetch(path, opts);
+    const res = await fetch(API_BASE + path, opts);
     const status = res.status;
     const data = await res.json();
 
