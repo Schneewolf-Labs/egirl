@@ -1,6 +1,6 @@
 import type { RuntimeConfig } from '../config'
 import { createProviderRegistry } from '../providers'
-import { createSkillManager } from '../skills'
+import { loadSkillsFromDirectories } from '../skills'
 import { BOLD, colors, DIM, getTheme, RESET } from '../ui/theme'
 
 export async function showStatus(config: RuntimeConfig): Promise<void> {
@@ -34,13 +34,12 @@ export async function showStatus(config: RuntimeConfig): Promise<void> {
   }
 
   // Show loaded skills
-  const skillManager = createSkillManager()
+  let skills: Awaited<ReturnType<typeof loadSkillsFromDirectories>> = []
   try {
-    await skillManager.loadFromDirectories(config.skills.dirs)
+    skills = await loadSkillsFromDirectories(config.skills.dirs)
   } catch {
     /* already logged */
   }
-  const skills = skillManager.getAll()
   console.log(`\n${c.primary}Skills${RESET} ${DIM}(${skills.length} loaded)${RESET}`)
   for (const skill of skills) {
     const emoji = skill.metadata.openclaw?.emoji ?? ''

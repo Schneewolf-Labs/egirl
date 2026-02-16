@@ -14,8 +14,6 @@ export {
   gitShowTool,
   gitStatusTool,
   globTool,
-  memoryGetTool,
-  memorySearchTool,
   readTool,
   screenshotTool,
   webResearchTool,
@@ -43,14 +41,33 @@ import {
   gitShowTool,
   gitStatusTool,
   globTool,
-  memoryGetTool,
-  memorySearchTool,
   readTool,
   screenshotTool,
   webResearchTool,
   writeTool,
 } from './builtin'
 import { createToolExecutor } from './executor'
+import type { Tool, ToolResult } from './types'
+
+const MEMORY_NOT_INITIALIZED =
+  'Memory system not initialized. Start egirl with embeddings configured.'
+
+function memoryStub(name: string, description: string, requiredParam: string): Tool {
+  return {
+    definition: {
+      name,
+      description,
+      parameters: {
+        type: 'object',
+        properties: { [requiredParam]: { type: 'string', description: `The ${requiredParam}` } },
+        required: [requiredParam],
+      },
+    },
+    async execute(): Promise<ToolResult> {
+      return { success: false, output: MEMORY_NOT_INITIALIZED }
+    },
+  }
+}
 
 /**
  * Create tool executor with all default tools.
@@ -95,7 +112,10 @@ export function createDefaultToolExecutor(
     ])
   } else {
     // Register stubs that return helpful error messages
-    executor.registerAll([memorySearchTool, memoryGetTool])
+    executor.registerAll([
+      memoryStub('memory_search', 'Search through stored memories using semantic search', 'query'),
+      memoryStub('memory_get', 'Retrieve a specific memory by key', 'key'),
+    ])
   }
 
   // Code agent tool (available if claude code config provided)
