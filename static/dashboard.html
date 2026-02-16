@@ -28,6 +28,7 @@
     <a href="#" data-section="tasks-cfg">Tasks</a>
     <a href="#" data-section="thinking">Thinking</a>
     <a href="#" data-section="transcript">Transcript</a>
+    <a href="#" data-section="github">GitHub</a>
     <div class="nav-group">Explore</div>
     <a href="#" data-section="api">API Explorer</a>
     <a href="#" data-section="tools">Tools</a>
@@ -519,6 +520,25 @@
           <div class="hint">Time before the agent is considered idle</div>
         </div>
       </div>
+      <h3>Heartbeat</h3>
+      <div class="card">
+        <div class="toggle-row">
+          <div><div class="toggle-label">Enabled</div><div class="toggle-desc">Periodic health check and status report</div></div>
+          <label class="switch"><input type="checkbox" id="cfg-hb-enabled"><span class="slider"></span></label>
+        </div>
+        <div class="field-row" style="margin-top:8px">
+          <div class="field">
+            <label>Schedule (cron)</label>
+            <input type="text" id="cfg-hb-schedule" placeholder="*/30 * * * *">
+            <div class="hint">Cron expression for heartbeat interval</div>
+          </div>
+          <div class="field">
+            <label>Business Hours</label>
+            <input type="text" id="cfg-hb-hours" placeholder="(optional) e.g. 09:00-17:00">
+            <div class="hint">Only run heartbeat during these hours</div>
+          </div>
+        </div>
+      </div>
       <div class="btn-row">
         <button class="btn primary" onclick="saveConfig()">Save Configuration</button>
       </div>
@@ -565,6 +585,32 @@
           <label>Transcript Path</label>
           <input type="text" id="cfg-transcript-path" placeholder="{workspace}/transcripts">
           <div class="hint">Directory for saved transcripts</div>
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn primary" onclick="saveConfig()">Save Configuration</button>
+      </div>
+    </section>
+
+    <!-- GITHUB -->
+    <section id="sec-github" class="section">
+      <h2>GitHub</h2>
+      <div class="card">
+        <div class="toggle-row">
+          <div><div class="toggle-label">GITHUB_TOKEN</div><div class="toggle-desc">GitHub API integration</div></div>
+          <span class="badge" id="env-github-cfg">—</span>
+        </div>
+        <div class="field-row" style="margin-top:12px">
+          <div class="field">
+            <label>Default Owner</label>
+            <input type="text" id="cfg-gh-owner" placeholder="(optional) org or user">
+            <div class="hint">Default repository owner for GitHub operations</div>
+          </div>
+          <div class="field">
+            <label>Default Repo</label>
+            <input type="text" id="cfg-gh-repo" placeholder="(optional) repo name">
+            <div class="hint">Default repository name</div>
+          </div>
         </div>
       </div>
       <div class="btn-row">

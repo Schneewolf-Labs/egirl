@@ -266,6 +266,11 @@ function populateForms(c) {
   document.getElementById('cfg-tasks-disc-int').value = c.tasks?.discoveryIntervalMs || '';
   document.getElementById('cfg-tasks-idle').value = c.tasks?.idleThresholdMs || '';
 
+  // Tasks — Heartbeat
+  document.getElementById('cfg-hb-enabled').checked = c.tasks?.heartbeat?.enabled !== false;
+  document.getElementById('cfg-hb-schedule').value = c.tasks?.heartbeat?.schedule || '';
+  document.getElementById('cfg-hb-hours').value = c.tasks?.heartbeat?.businessHours || '';
+
   // Thinking
   document.getElementById('cfg-think-level').value = c.thinking?.level || 'off';
   document.getElementById('cfg-think-budget').value = c.thinking?.budgetTokens || '';
@@ -274,6 +279,11 @@ function populateForms(c) {
   // Transcript
   document.getElementById('cfg-transcript-enabled').checked = c.transcript?.enabled !== false;
   document.getElementById('cfg-transcript-path').value = c.transcript?.path || '';
+
+  // GitHub
+  setBadge('env-github-cfg', c.hasGithub);
+  document.getElementById('cfg-gh-owner').value = c.github?.defaultOwner || '';
+  document.getElementById('cfg-gh-repo').value = c.github?.defaultRepo || '';
 }
 
 function setBadge(id, isSet) {
@@ -352,6 +362,11 @@ async function saveConfig() {
       discovery_enabled: document.getElementById('cfg-tasks-discovery').checked,
       discovery_interval_ms: parseInt(document.getElementById('cfg-tasks-disc-int').value) || 1800000,
       idle_threshold_ms: parseInt(document.getElementById('cfg-tasks-idle').value) || 600000,
+      heartbeat: {
+        enabled: document.getElementById('cfg-hb-enabled').checked,
+        schedule: document.getElementById('cfg-hb-schedule').value || '*/30 * * * *',
+        business_hours: document.getElementById('cfg-hb-hours').value || undefined,
+      },
     },
     skills: { dirs: getTagValues('cfg-skill-dirs') },
     thinking: {
@@ -364,6 +379,16 @@ async function saveConfig() {
       path: document.getElementById('cfg-transcript-path').value || undefined,
     },
   };
+
+  // GitHub (only include if owner or repo is set)
+  const ghOwner = document.getElementById('cfg-gh-owner').value;
+  const ghRepo = document.getElementById('cfg-gh-repo').value;
+  if (ghOwner || ghRepo) {
+    payload.github = {
+      default_owner: ghOwner || undefined,
+      default_repo: ghRepo || undefined,
+    };
+  }
 
   // Embeddings (only include if endpoint is set)
   const embEndpoint = document.getElementById('cfg-emb-endpoint').value;
