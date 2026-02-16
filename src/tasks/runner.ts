@@ -186,7 +186,8 @@ export class TaskRunner {
 
     // Process queued events first (deduplicated)
     if (this.eventQueue.length > 0) {
-      const event = this.eventQueue.shift()!
+      const event = this.eventQueue.shift()
+      if (!event) return
       const task = this.deps.store.get(event.taskId)
       if (task && task.status === 'active') {
         await this.executeTask(task, event.payload)
@@ -370,7 +371,11 @@ export class TaskRunner {
       })
 
       if (policy.shouldPause) {
-        this.deps.store.update(task.id, { status: 'paused' }, `${policy.reason} (${errorKind}: ${errorMsg.slice(0, 100)})`)
+        this.deps.store.update(
+          task.id,
+          { status: 'paused' },
+          `${policy.reason} (${errorKind}: ${errorMsg.slice(0, 100)})`,
+        )
         this.unregisterEventSource(task.id)
         await this.notify(
           task,
@@ -433,9 +438,7 @@ export class TaskRunner {
 
     const name = `${parentTask.name}/${slug}-${Date.now().toString(36)}`
     const eventData =
-      typeof payload.data === 'string'
-        ? payload.data
-        : JSON.stringify(payload.data, null, 2)
+      typeof payload.data === 'string' ? payload.data : JSON.stringify(payload.data, null, 2)
     const prompt = `[Triggered by: ${payload.source} — ${payload.summary}]\n${eventData}\n\n${parentTask.prompt}`
 
     const created = this.deps.store.create({
@@ -538,11 +541,10 @@ export class TaskRunner {
 
       // Also search by event context for richer recall
       if (eventPayload?.summary) {
-        const eventRecalled = await retrieveForContext(
-          eventPayload.summary,
-          this.deps.memory,
-          { ...retrievalConfig, maxResults: 3 },
-        )
+        const eventRecalled = await retrieveForContext(eventPayload.summary, this.deps.memory, {
+          ...retrievalConfig,
+          maxResults: 3,
+        })
         if (eventRecalled) contextParts.push(eventRecalled)
       }
     }

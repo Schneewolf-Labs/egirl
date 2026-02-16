@@ -163,7 +163,9 @@ export class TaskStore {
       )
     `)
 
-    this.db.run('CREATE INDEX IF NOT EXISTS idx_transitions_task ON task_transitions(task_id, timestamp)')
+    this.db.run(
+      'CREATE INDEX IF NOT EXISTS idx_transitions_task ON task_transitions(task_id, timestamp)',
+    )
     this.db.run('CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status)')
     this.db.run('CREATE INDEX IF NOT EXISTS idx_tasks_next_run ON tasks(next_run_at)')
     this.db.run('CREATE INDEX IF NOT EXISTS idx_task_runs_task ON task_runs(task_id, started_at)')
@@ -269,7 +271,9 @@ export class TaskStore {
     // Record initial transition
     this.recordTransition(id, 'new', status)
 
-    return this.get(id)!
+    const created = this.get(id)
+    if (!created) throw new Error(`Failed to create task ${id}`)
+    return created
   }
 
   get(id: string): Task | undefined {
@@ -484,12 +488,7 @@ export class TaskStore {
 
   // --- Transition ledger ---
 
-  recordTransition(
-    taskId: string,
-    fromStatus: string,
-    toStatus: string,
-    reason?: string,
-  ): void {
+  recordTransition(taskId: string, fromStatus: string, toStatus: string, reason?: string): void {
     const id = generateId()
     this.db.run(
       `INSERT INTO task_transitions (id, task_id, from_status, to_status, reason, timestamp)
@@ -592,7 +591,11 @@ export class TaskStore {
 
   // --- Lifecycle ---
 
-  compact(maxAgeDays: number): { runsDeleted: number; proposalsDeleted: number; transitionsDeleted: number } {
+  compact(maxAgeDays: number): {
+    runsDeleted: number
+    proposalsDeleted: number
+    transitionsDeleted: number
+  } {
     const cutoff = Date.now() - maxAgeDays * 86_400_000
     let runsDeleted = 0
     let proposalsDeleted = 0
@@ -613,7 +616,10 @@ export class TaskStore {
     })()
 
     if (runsDeleted > 0 || proposalsDeleted > 0 || transitionsDeleted > 0) {
-      log.info('tasks', `Compacted: ${runsDeleted} runs, ${proposalsDeleted} proposals, ${transitionsDeleted} transitions removed`)
+      log.info(
+        'tasks',
+        `Compacted: ${runsDeleted} runs, ${proposalsDeleted} proposals, ${transitionsDeleted} transitions removed`,
+      )
     }
 
     return { runsDeleted, proposalsDeleted, transitionsDeleted }

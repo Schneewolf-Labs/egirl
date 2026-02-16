@@ -1,4 +1,4 @@
-import type { Locator, Page } from 'playwright'
+import type { AriaRole, Locator, Page } from 'playwright'
 
 /**
  * ARIA roles recognized by Playwright's getByRole().
@@ -176,9 +176,9 @@ export function resolveTarget(page: Page, ref: string): Locator {
   switch (target.strategy) {
     case 'role':
       if (target.name) {
-        return page.getByRole(target.role as any, { name: target.name })
+        return page.getByRole(target.role as AriaRole, { name: target.name })
       }
-      return page.getByRole(target.role as any)
+      return page.getByRole(target.role as AriaRole)
     case 'text':
       return page.getByText(target.value)
     case 'label':

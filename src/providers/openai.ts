@@ -176,7 +176,7 @@ export class OpenAIProvider implements LLMProvider {
         return {
           role: 'tool' as const,
           content: getTextContent(msg.content),
-          tool_call_id: msg.tool_call_id!,
+          tool_call_id: msg.tool_call_id ?? '',
         }
       }
       throw new Error(`Unknown message role: ${msg.role}`)

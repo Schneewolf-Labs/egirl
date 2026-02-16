@@ -102,7 +102,7 @@ export function createRoutes(deps: RouteDeps): Map<string, Map<string, RouteHand
 
   // POST /v1/tools/:name/execute
   route('POST', '/v1/tools/:name/execute', async (req, params) => {
-    const name = params.name!
+    const name = params.name ?? ''
     const tool = deps.toolExecutor.get(name)
     if (!tool) {
       return error(`Unknown tool: ${name}`, 404)
@@ -131,7 +131,7 @@ export function createRoutes(deps: RouteDeps): Map<string, Map<string, RouteHand
       return error('Memory system not initialized', 503)
     }
 
-    const key = params.key!
+    const key = params.key ?? ''
     const result = deps.memory.get(key)
     if (!result) {
       return error(`Memory not found: ${key}`, 404)
@@ -151,7 +151,7 @@ export function createRoutes(deps: RouteDeps): Map<string, Map<string, RouteHand
       return error('Missing required field: value')
     }
 
-    const key = params.key!
+    const key = params.key ?? ''
     await deps.memory.set(key, body.value)
     return json({ success: true })
   })
@@ -162,7 +162,7 @@ export function createRoutes(deps: RouteDeps): Map<string, Map<string, RouteHand
       return error('Memory system not initialized', 503)
     }
 
-    const key = params.key!
+    const key = params.key ?? ''
     const deleted = deps.memory.delete(key)
     return json({ deleted })
   })

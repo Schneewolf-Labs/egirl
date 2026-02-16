@@ -73,7 +73,8 @@ describe('formatMessagesForQwen3', () => {
     // Should have 2 messages: assistant + grouped user
     expect(formatted).toHaveLength(2)
 
-    const userMsg = formatted[1]!
+    const userMsg = formatted[1]
+    if (!userMsg) throw new Error('Expected user message')
     expect(userMsg.role).toBe('user')
     const content = userMsg.content as string
     expect(content).toContain('<tool_response>')
@@ -97,7 +98,8 @@ describe('formatMessagesForQwen3', () => {
 
     const formatted = formatMessagesForQwen3(messages)
 
-    const toolResponse = formatted[1]!
+    const toolResponse = formatted[1]
+    if (!toolResponse) throw new Error('Expected tool response')
     expect(toolResponse.role).toBe('user')
     expect(toolResponse.content).toContain('<tool_response>')
     expect(toolResponse.content).toContain('file1.txt\nfile2.txt')

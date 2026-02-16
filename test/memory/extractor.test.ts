@@ -230,7 +230,8 @@ describe('extractMemories', () => {
       JSON.stringify([
         {
           key: 'ci_timeout_fix',
-          value: 'CI jobs need a 10-minute timeout — default 5 minutes is too short for integration tests',
+          value:
+            'CI jobs need a 10-minute timeout — default 5 minutes is too short for integration tests',
           category: 'lesson',
         },
       ]),
@@ -238,7 +239,10 @@ describe('extractMemories', () => {
 
     const messages = [
       { role: 'user' as const, content: 'The CI keeps timing out on integration tests' },
-      { role: 'assistant' as const, content: 'I increased the timeout from 5 to 10 minutes and it passed' },
+      {
+        role: 'assistant' as const,
+        content: 'I increased the timeout from 5 to 10 minutes and it passed',
+      },
       { role: 'user' as const, content: 'Great, that fixed it' },
     ]
 
@@ -253,7 +257,8 @@ describe('extractMemories', () => {
       JSON.stringify([
         {
           key: 'chose_postgres_over_mysql',
-          value: 'Chose PostgreSQL over MySQL for the new service. Rationale: better JSON support, JSONB indexing, and the team has more experience with it',
+          value:
+            'Chose PostgreSQL over MySQL for the new service. Rationale: better JSON support, JSONB indexing, and the team has more experience with it',
           category: 'decision',
         },
       ]),
@@ -261,7 +266,10 @@ describe('extractMemories', () => {
 
     const messages = [
       { role: 'user' as const, content: 'Should we use PostgreSQL or MySQL for the new service?' },
-      { role: 'assistant' as const, content: 'PostgreSQL is better here — JSONB support and team familiarity' },
+      {
+        role: 'assistant' as const,
+        content: 'PostgreSQL is better here — JSONB support and team familiarity',
+      },
       { role: 'user' as const, content: 'Agreed, let us go with Postgres' },
     ]
 

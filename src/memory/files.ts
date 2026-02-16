@@ -11,7 +11,6 @@ export interface MemoryEntry {
 }
 
 export class MemoryFiles {
-  private workspaceDir: string
   private memoryFile: string
   private dailyLogDir: string
   private imagesDir: string

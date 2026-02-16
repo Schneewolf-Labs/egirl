@@ -140,7 +140,8 @@ export function prepareAnthropicMessages(messages: ChatMessage[]): {
   let i = 0
 
   while (i < messages.length) {
-    const msg = messages[i]!
+    const msg = messages[i]
+    if (!msg) break
 
     if (msg.role === 'system') {
       const text = getTextContent(msg.content)
@@ -177,10 +178,11 @@ export function prepareAnthropicMessages(messages: ChatMessage[]): {
       // Group consecutive tool results into a single user message
       const toolResults: Anthropic.Messages.ToolResultBlockParam[] = []
       while (i < messages.length && messages[i]?.role === 'tool') {
-        const toolMsg = messages[i]!
+        const toolMsg = messages[i]
+        if (!toolMsg) break
         toolResults.push({
           type: 'tool_result',
-          tool_use_id: toolMsg.tool_call_id!,
+          tool_use_id: toolMsg.tool_call_id ?? '',
           content: getTextContent(toolMsg.content),
         })
         i++

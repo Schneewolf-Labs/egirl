@@ -18,7 +18,9 @@ function formatArgs(args: Record<string, unknown>): string {
   const entries = Object.entries(args)
   if (entries.length === 0) return ''
   if (entries.length === 1) {
-    const [key, val] = entries[0]!
+    const entry = entries[0]
+    if (!entry) return ''
+    const [key, val] = entry
     const valStr = typeof val === 'string' ? val : JSON.stringify(val)
     // Short single-arg: show inline
     if (valStr.length < 60) return `${key}: ${valStr}`
