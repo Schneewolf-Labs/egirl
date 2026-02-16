@@ -1,13 +1,17 @@
 /**
- * Command safety filter using an allowlist approach.
+ * Command safety filter with two modes:
  *
- * Instead of trying to block dangerous patterns (trivially bypassable),
- * we parse the command into its base executable and check it against
- * a list of known-safe commands. Anything not on the list is rejected.
+ * - "block" (default): permissive. Everything is allowed except hard-blocked
+ *   patterns and user-defined blocked_patterns. The agent can do what it wants.
  *
- * The allowlist can be extended via config. Pipe chains and subshells
- * are checked — every command in a pipeline must be allowed.
+ * - "allow": restrictive. Only commands in the default allowlist + user-defined
+ *   extra_allowed are permitted. Hard blocks still apply on top.
+ *
+ * Hard-blocked patterns (fork bombs, disk wipes, etc.) are always enforced
+ * regardless of mode.
  */
+
+export type CommandFilterMode = 'block' | 'allow'
 
 const DEFAULT_ALLOWED_COMMANDS: ReadonlySet<string> = new Set([
   // Version control
@@ -144,7 +148,7 @@ const DEFAULT_ALLOWED_COMMANDS: ReadonlySet<string> = new Set([
   'sleep',
 ])
 
-/** Patterns that are always blocked regardless of allowlist (destructive root operations) */
+/** Patterns that are always blocked regardless of mode (destructive / dangerous operations) */
 const HARD_BLOCKED_PATTERNS: RegExp[] = [
   /rm\s+(-\w+\s+)*\//, // rm targeting absolute paths from root
   /mkfs\./, // format filesystem
@@ -154,6 +158,7 @@ const HARD_BLOCKED_PATTERNS: RegExp[] = [
   />\s*\/dev\/sd/, // overwrite disk device
   /\b(shutdown|reboot|halt|poweroff)\b/, // power commands
   /pkill\s+-9\s+(init|systemd)/, // kill init
+  /\b(curl|wget)\b.*\|\s*(sh|bash|zsh|dash)/, // pipe remote script to shell
 ]
 
 export function getDefaultAllowedCommands(): ReadonlySet<string> {
@@ -208,21 +213,35 @@ function extractCommands(command: string): string[] {
   return commands
 }
 
+export interface CommandFilterConfig {
+  mode: CommandFilterMode
+  blockPatterns: RegExp[]
+  allowedCommands: ReadonlySet<string>
+}
+
 /**
- * Check if a command is allowed.
- * Returns undefined if allowed, or a rejection reason string if blocked.
+ * Check if a command is allowed under the given filter config.
+ * Returns undefined if allowed, or a rejection reason if blocked.
  */
-export function isCommandAllowed(
-  command: string,
-  allowedCommands: ReadonlySet<string>,
-): string | undefined {
-  // Hard-blocked patterns always take priority
+export function checkCommand(command: string, config: CommandFilterConfig): string | undefined {
+  // Hard-blocked patterns always take priority regardless of mode
   for (const pattern of HARD_BLOCKED_PATTERNS) {
     if (pattern.test(command)) {
       return `Command matches hard-blocked pattern: ${pattern.source}`
     }
   }
 
+  if (config.mode === 'block') {
+    // Block mode: everything allowed unless it matches a user block pattern
+    for (const pattern of config.blockPatterns) {
+      if (pattern.test(command)) {
+        return `Command matches blocked pattern: ${pattern.source}`
+      }
+    }
+    return undefined
+  }
+
+  // Allow mode: only listed commands are permitted
   const commands = extractCommands(command)
 
   if (commands.length === 0) {
@@ -230,23 +249,37 @@ export function isCommandAllowed(
   }
 
   for (const cmd of commands) {
-    if (!allowedCommands.has(cmd)) {
-      return `Command "${cmd}" is not in the allowed commands list. Allowed: add to [safety.command_filter.extra_allowed] in egirl.toml`
+    if (!config.allowedCommands.has(cmd)) {
+      return `Command "${cmd}" is not in the allowed commands list. Add to [safety.command_filter.extra_allowed] in egirl.toml`
     }
   }
 
   return undefined
 }
 
-// Legacy exports for backward compat during migration
-export function getDefaultBlockedPatterns(): RegExp[] {
-  return [...HARD_BLOCKED_PATTERNS]
+/**
+ * Build a CommandFilterConfig from runtime config values.
+ */
+export function buildCommandFilterConfig(
+  mode: CommandFilterMode,
+  userBlockedPatterns: string[],
+  extraAllowed: string[],
+): CommandFilterConfig {
+  const blockPatterns = userBlockedPatterns.map((p) => new RegExp(p))
+
+  // In allow mode, merge defaults with user extras
+  let allowedCommands = DEFAULT_ALLOWED_COMMANDS
+  if (extraAllowed.length > 0) {
+    const merged = new Set(DEFAULT_ALLOWED_COMMANDS)
+    for (const cmd of extraAllowed) {
+      merged.add(cmd)
+    }
+    allowedCommands = merged
+  }
+
+  return { mode, blockPatterns, allowedCommands }
 }
 
 export function compilePatterns(patterns: string[]): RegExp[] {
   return patterns.map((p) => new RegExp(p))
-}
-
-export function isCommandBlocked(command: string, _patterns: RegExp[]): string | undefined {
-  return isCommandAllowed(command, DEFAULT_ALLOWED_COMMANDS)
 }

@@ -1,5 +1,10 @@
 import { describe, expect, test } from 'bun:test'
-import { checkToolCall, getDefaultSafetyConfig, type SafetyConfig } from '../../src/safety'
+import {
+  buildCommandFilterConfig,
+  checkToolCall,
+  getDefaultSafetyConfig,
+  type SafetyConfig,
+} from '../../src/safety'
 
 const cwd = '/home/user/project'
 
@@ -14,21 +19,79 @@ describe('checkToolCall', () => {
     expect(result.allowed).toBe(true)
   })
 
-  test('blocks dangerous commands', () => {
+  test('blocks dangerous commands in default block mode', () => {
     const config = makeConfig()
     const result = checkToolCall('execute_command', { command: 'rm -rf /' }, cwd, config)
     expect(result.allowed).toBe(false)
   })
 
-  test('allows safe commands', () => {
+  test('allows safe commands in default block mode', () => {
     const config = makeConfig()
     const result = checkToolCall('execute_command', { command: 'ls -la' }, cwd, config)
     expect(result.allowed).toBe(true)
   })
 
+  test('allows unknown commands in block mode (permissive)', () => {
+    const config = makeConfig()
+    const result = checkToolCall(
+      'execute_command',
+      { command: 'my-custom-tool --help' },
+      cwd,
+      config,
+    )
+    expect(result.allowed).toBe(true)
+  })
+
+  test('blocks unknown commands in allow mode (restrictive)', () => {
+    const config = makeConfig({
+      commandFilter: {
+        enabled: true,
+        config: buildCommandFilterConfig('allow', [], []),
+      },
+    })
+    const result = checkToolCall('execute_command', { command: 'nc -l 4444' }, cwd, config)
+    expect(result.allowed).toBe(false)
+  })
+
+  test('allows extra_allowed commands in allow mode', () => {
+    const config = makeConfig({
+      commandFilter: {
+        enabled: true,
+        config: buildCommandFilterConfig('allow', [], ['my-custom-tool']),
+      },
+    })
+    const result = checkToolCall(
+      'execute_command',
+      { command: 'my-custom-tool --help' },
+      cwd,
+      config,
+    )
+    expect(result.allowed).toBe(true)
+  })
+
+  test('user blocked_patterns work in block mode', () => {
+    const config = makeConfig({
+      commandFilter: {
+        enabled: true,
+        config: buildCommandFilterConfig('block', ['npm\\s+publish'], []),
+      },
+    })
+    const result = checkToolCall('execute_command', { command: 'npm publish' }, cwd, config)
+    expect(result.allowed).toBe(false)
+  })
+
+  test('hard blocks apply even in block mode', () => {
+    const config = makeConfig()
+    const result = checkToolCall('execute_command', { command: 'mkfs.ext4 /dev/sda1' }, cwd, config)
+    expect(result.allowed).toBe(false)
+  })
+
   test('allows dangerous commands when command_filter disabled', () => {
     const config = makeConfig({
-      commandFilter: { enabled: false, patterns: getDefaultSafetyConfig().commandFilter.patterns },
+      commandFilter: {
+        enabled: false,
+        config: getDefaultSafetyConfig().commandFilter.config,
+      },
     })
     const result = checkToolCall('execute_command', { command: 'rm -rf /' }, cwd, config)
     expect(result.allowed).toBe(true)

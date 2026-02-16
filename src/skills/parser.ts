@@ -13,7 +13,7 @@ export function parseSkillMarkdown(markdown: string): ParsedSkill {
   const match = markdown.match(FRONTMATTER_REGEX)
 
   if (!match) {
-    // No frontmatter, return content only
+    // No frontmatter — still a valid skill (OpenClaw only requires SKILL.md)
     return {
       metadata: {},
       content: markdown.trim(),
@@ -28,7 +28,7 @@ export function parseSkillMarkdown(markdown: string): ParsedSkill {
   try {
     metadata = YAML.parse(frontmatterStr) ?? {}
   } catch (error) {
-    log.warn('skills', 'Failed to parse skill frontmatter:', error)
+    log.warn('skills', `Failed to parse skill frontmatter: ${error}`)
   }
 
   return {

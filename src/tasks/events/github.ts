@@ -124,7 +124,7 @@ function getToolForEvent(eventType: GitHubEventType): string {
     case 'issue_comment':
       return 'gh_issue_list'
     case 'release':
-      return 'gh_issue_list' // fallback — release tool doesn't exist yet
+      return 'gh_release_list'
   }
 }
 

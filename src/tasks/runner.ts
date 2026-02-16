@@ -199,6 +199,21 @@ export class TaskRunner {
     // Check for due scheduled/oneshot tasks
     const due = this.deps.store.getDueTasks(Date.now())
     for (const task of due) {
+      // Enforce dependency ordering: skip if dependency hasn't completed successfully
+      if (task.dependsOn) {
+        const dep = this.deps.store.get(task.dependsOn)
+        if (dep) {
+          const lastRun = this.deps.store.getLastSuccessfulRun(dep.id)
+          if (
+            !lastRun ||
+            (task.lastRunAt && lastRun.completedAt && lastRun.completedAt <= task.lastRunAt)
+          ) {
+            // Dependency hasn't run (or hasn't run since our last run) — skip for now
+            continue
+          }
+        }
+      }
+
       // Check business hours constraint before running
       if (task.businessHours) {
         const hours = parseBusinessHours(task.businessHours)

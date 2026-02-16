@@ -162,7 +162,9 @@ export function loadConfig(): RuntimeConfig {
       enabled: toml.safety?.enabled ?? true,
       commandFilter: {
         enabled: toml.safety?.command_filter?.enabled ?? true,
+        mode: (toml.safety?.command_filter?.mode as 'block' | 'allow') ?? 'block',
         blockedPatterns: toml.safety?.command_filter?.blocked_patterns ?? [],
+        extraAllowed: toml.safety?.command_filter?.extra_allowed ?? [],
       },
       pathSandbox: {
         enabled: toml.safety?.path_sandbox?.enabled ?? true,

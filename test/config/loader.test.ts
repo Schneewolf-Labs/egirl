@@ -153,4 +153,14 @@ describe('Config loading', () => {
     expect(config.workspace.path).not.toContain('~')
     expect(config.workspace.path).toContain(homedir())
   })
+
+  test('safety defaults to block mode with empty patterns', async () => {
+    const { loadConfig } = await import('../../src/config/index')
+    const config = loadConfig()
+
+    expect(config.safety.commandFilter.enabled).toBe(true)
+    expect(config.safety.commandFilter.mode).toBe('block')
+    expect(config.safety.commandFilter.blockedPatterns).toEqual([])
+    expect(config.safety.commandFilter.extraAllowed).toEqual([])
+  })
 })
