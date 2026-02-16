@@ -213,10 +213,12 @@ export interface RuntimeConfig {
   remote: {
     anthropic?: {
       apiKey: string
+      apiKeys: string[]
       model: string
     }
     openai?: {
       apiKey: string
+      apiKeys: string[]
       model: string
       baseUrl?: string
     }

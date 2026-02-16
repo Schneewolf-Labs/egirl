@@ -136,7 +136,7 @@ export class CLIChannel implements Channel {
       `\n${c.primary}egirl CLI${RESET} ${DIM}— Type your message and press Enter. Type "exit" to quit.${RESET}`,
     )
     console.log(
-      `${DIM}Commands: /think <off|low|medium|high>, /plan <message>, clear, exit${RESET}\n`,
+      `${DIM}Commands: /think <off|low|medium|high>, /plan <message>, /context, /compact, clear, exit${RESET}\n`,
     )
 
     this.prompt()
@@ -191,6 +191,20 @@ export class CLIChannel implements Channel {
           return
         }
         await this.handlePlanCommand(message)
+        this.prompt()
+        return
+      }
+
+      // Handle /context command
+      if (trimmed === '/context') {
+        await this.handleContextCommand()
+        this.prompt()
+        return
+      }
+
+      // Handle /compact command
+      if (trimmed === '/compact') {
+        await this.handleCompactCommand()
         this.prompt()
         return
       }
@@ -305,6 +319,60 @@ export class CLIChannel implements Channel {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error)
       console.error(`\n${c.error}Error:${RESET} ${errorMessage}\n`)
+    }
+  }
+
+  private async handleContextCommand(): Promise<void> {
+    const c = colors()
+    try {
+      const status = await this.agent.contextStatus()
+      const pct = Math.round(status.utilization * 100)
+
+      // Color the utilization bar based on how full the context is
+      let barColor = c.success
+      if (pct > 80) barColor = c.error
+      else if (pct > 60) barColor = c.warning
+
+      const barWidth = 30
+      const filled = Math.round((pct / 100) * barWidth)
+      const bar = `${barColor}${'█'.repeat(filled)}${DIM}${'░'.repeat(barWidth - filled)}${RESET}`
+
+      console.log(`\n${c.primary}Context Window${RESET}`)
+      console.log(`  ${bar} ${barColor}${pct}%${RESET}`)
+      console.log(`${DIM}  Session:        ${status.sessionId}${RESET}`)
+      console.log(`${DIM}  Budget:         ${status.contextLength.toLocaleString()} tokens${RESET}`)
+      console.log(`${DIM}  System prompt:  ~${status.systemPromptTokens.toLocaleString()}t${RESET}`)
+      console.log(
+        `${DIM}  Messages:       ${status.messageCount} (~${status.messageTokens.toLocaleString()}t)${RESET}`,
+      )
+      if (status.hasSummary) {
+        console.log(
+          `${DIM}  Summary:        ~${status.summaryTokens.toLocaleString()}t (compacted)${RESET}`,
+        )
+      }
+      console.log(`${DIM}  Available:      ~${status.available.toLocaleString()}t${RESET}`)
+      console.log()
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error)
+      console.error(`${c.error}Failed to get context status:${RESET} ${msg}\n`)
+    }
+  }
+
+  private async handleCompactCommand(): Promise<void> {
+    const c = colors()
+    try {
+      const result = await this.agent.compactNow()
+      if (result.messagesBefore === result.messagesAfter) {
+        console.log(`\n${c.muted}Nothing to compact (${result.messagesBefore} messages).${RESET}\n`)
+      } else {
+        const dropped = result.messagesBefore - result.messagesAfter
+        console.log(
+          `\n${c.success}Compacted:${RESET} ${dropped} messages summarized, ${result.messagesAfter} kept.\n`,
+        )
+      }
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error)
+      console.error(`${c.error}Compaction failed:${RESET} ${msg}\n`)
     }
   }
 

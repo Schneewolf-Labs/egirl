@@ -4,6 +4,7 @@ import type { MemoryManager } from '../memory'
 import { flushBeforeCompaction } from '../memory/compaction-flush'
 import { extractMemories } from '../memory/extractor'
 import { retrieveForContext } from '../memory/retrieval'
+import { classifyProviderError, isRetryable, retryDelay } from '../providers/error-classify'
 import { createLlamaCppTokenizer } from '../providers/llamacpp-tokenizer'
 import type {
   ChatMessage,
@@ -630,8 +631,9 @@ export class AgentLoop {
   }
 
   /**
-   * Call provider.chat with retry on transient errors (network failures, 5xx).
-   * Retries up to 2 times with exponential backoff (1s, 2s).
+   * Call provider.chat with classified retry logic.
+   * Retries on transient/rate-limit errors with appropriate backoff.
+   * Fails fast on auth, billing, and other non-retryable errors.
    */
   private async chatWithRetry(
     provider: LLMProvider,
@@ -649,43 +651,28 @@ export class AgentLoop {
       } catch (error) {
         lastError = error
 
-        // Don't retry on ContextSizeError or other non-transient errors
+        // ContextSizeError has its own handling in chatWithContextWindow
         if (error instanceof ContextSizeError) throw error
 
-        const isTransient = this.isTransientError(error)
-        if (!isTransient || attempt >= maxRetries) throw error
+        const errorMsg = error instanceof Error ? error.message : String(error)
+        const errorKind = classifyProviderError(errorMsg)
 
-        const delayMs = 1000 * (attempt + 1)
+        // Fail fast on non-retryable errors
+        if (!isRetryable(errorKind) || attempt >= maxRetries) {
+          log.warn('agent', `Provider error (${errorKind}): ${errorMsg}`)
+          throw error
+        }
+
+        const delayMs = retryDelay(errorKind, attempt)
         log.warn(
           'agent',
-          `Provider error (attempt ${attempt + 1}/${maxRetries + 1}), retrying in ${delayMs}ms: ${error instanceof Error ? error.message : String(error)}`,
+          `Provider error (${errorKind}, attempt ${attempt + 1}/${maxRetries + 1}), retrying in ${delayMs}ms: ${errorMsg}`,
         )
         await new Promise((resolve) => setTimeout(resolve, delayMs))
       }
     }
 
     throw lastError
-  }
-
-  private isTransientError(error: unknown): boolean {
-    if (!(error instanceof Error)) return false
-    const msg = error.message.toLowerCase()
-    // Network failures
-    if (
-      msg.includes('fetch failed') ||
-      msg.includes('econnrefused') ||
-      msg.includes('econnreset') ||
-      msg.includes('etimedout') ||
-      msg.includes('network') ||
-      msg.includes('socket')
-    ) {
-      return true
-    }
-    // HTTP 5xx errors
-    if (/\b5\d{2}\b/.test(msg)) return true
-    // Rate limiting (429)
-    if (msg.includes('429') || msg.includes('rate limit')) return true
-    return false
   }
 
   private async executeTools(toolCalls: ToolCall[]): Promise<Map<string, ToolResult>> {
@@ -779,6 +766,72 @@ export class AgentLoop {
     return this.context
   }
 
+  /** Get a snapshot of the current context window usage */
+  async contextStatus(): Promise<ContextStatus> {
+    const contextLength = this.config.local.contextLength
+    const systemTokens = await this.tokenizer.countTokens(this.context.systemPrompt)
+    let messageTokens = 0
+    for (const msg of this.context.messages) {
+      const text = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)
+      messageTokens += await this.tokenizer.countTokens(text)
+    }
+    const summaryTokens = this.context.conversationSummary
+      ? await this.tokenizer.countTokens(this.context.conversationSummary)
+      : 0
+    const totalUsed = systemTokens + messageTokens + summaryTokens
+    const reserveForOutput = 2048
+
+    return {
+      contextLength,
+      systemPromptTokens: systemTokens,
+      messageCount: this.context.messages.length,
+      messageTokens,
+      summaryTokens,
+      totalUsed,
+      available: contextLength - totalUsed - reserveForOutput,
+      utilization: totalUsed / contextLength,
+      hasSummary: !!this.context.conversationSummary,
+      sessionId: this.context.sessionId,
+    }
+  }
+
+  /** Manually trigger context compaction on the current conversation */
+  async compactNow(): Promise<{ messagesBefore: number; messagesAfter: number }> {
+    const messagesBefore = this.context.messages.length
+
+    if (messagesBefore < 4) {
+      return { messagesBefore, messagesAfter: messagesBefore }
+    }
+
+    // Keep the last 4 messages, compact everything before them
+    const keepCount = 4
+    const dropCount = messagesBefore - keepCount
+    const droppedMessages = this.context.messages.slice(0, dropCount)
+    const keptMessages = this.context.messages.slice(dropCount)
+
+    // Flush durable facts + summarize (uses local provider, no API cost)
+    this.triggerCompaction(droppedMessages)
+
+    // Trim context immediately
+    this.context.messages = keptMessages
+    this.persistedIndex = 0
+
+    // Re-persist the trimmed history
+    if (this.conversationStore) {
+      try {
+        this.conversationStore.deleteSession(this.context.sessionId)
+        if (keptMessages.length > 0) {
+          this.conversationStore.appendMessages(this.context.sessionId, keptMessages)
+          this.persistedIndex = keptMessages.length
+        }
+      } catch (error) {
+        log.warn('agent', 'Failed to re-persist after compaction:', error)
+      }
+    }
+
+    return { messagesBefore, messagesAfter: keptMessages.length }
+  }
+
   clearContext(): void {
     this.context = createAgentContext(this.config, this.context.sessionId, this.promptOptions)
     this.persistedIndex = 0
@@ -790,6 +843,20 @@ export class AgentLoop {
     }
     this.clearContext()
   }
+}
+
+export interface ContextStatus {
+  contextLength: number
+  systemPromptTokens: number
+  messageCount: number
+  messageTokens: number
+  summaryTokens: number
+  totalUsed: number
+  available: number
+  /** 0–1 fraction of context used */
+  utilization: number
+  hasSummary: boolean
+  sessionId: string
 }
 
 export type AgentFactory = (sessionId: string) => AgentLoop
