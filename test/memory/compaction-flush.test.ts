@@ -27,12 +27,14 @@ describe('flushBeforeCompaction', () => {
       JSON.stringify([
         {
           key: 'task_auth_migration_status',
-          value: 'Migrating auth from sessions to JWT. Backend endpoints updated, frontend pending.',
+          value:
+            'Migrating auth from sessions to JWT. Backend endpoints updated, frontend pending.',
           category: 'project',
         },
         {
           key: 'error_redis_timeout',
-          value: 'Redis connection timeout at redis://prod:6379 — increased timeout to 5000ms as workaround.',
+          value:
+            'Redis connection timeout at redis://prod:6379 — increased timeout to 5000ms as workaround.',
           category: 'fact',
         },
       ]),

@@ -16,6 +16,7 @@ import {
   type SearchResult,
 } from './search'
 
+export { type CompactionExtraction, flushBeforeCompaction } from './compaction-flush'
 export {
   createEmbeddingProvider,
   type EmbeddingInput,
@@ -25,7 +26,6 @@ export {
   OpenAIEmbeddings,
   Qwen3VLEmbeddings,
 } from './embeddings/index'
-export { type CompactionExtraction, flushBeforeCompaction } from './compaction-flush'
 export { type ExtractionResult, extractMemories } from './extractor'
 export { createMemoryFiles, type MemoryEntry, MemoryFiles } from './files'
 export {
