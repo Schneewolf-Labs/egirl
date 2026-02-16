@@ -4,7 +4,7 @@ import { createAppServices } from '../bootstrap'
 import { createCLIChannel } from '../channels'
 import type { RuntimeConfig } from '../config'
 import { gatherStandup } from '../standup'
-import { createDiscovery, createTaskRunner } from '../tasks'
+import { createDiscovery, createTaskRunner, seedHeartbeatTask } from '../tasks'
 import { createTaskTools } from '../tools/builtin/tasks'
 import { applyLogLevel } from '../util/args'
 import { log } from '../util/logger'
@@ -128,6 +128,17 @@ export async function runCLI(config: RuntimeConfig, args: string[]): Promise<voi
         transcript,
       })
     }
+
+    // Seed built-in heartbeat task if enabled
+    seedHeartbeatTask({
+      store: taskStore,
+      runner: taskRunner,
+      tasksConfig: config.tasks,
+      heartbeatConfig: config.tasks.heartbeat,
+      workspacePath: config.workspace.path,
+      channel: 'cli',
+      channelTarget: 'stdout',
+    })
 
     log.info('main', 'Background task system initialized')
   }
