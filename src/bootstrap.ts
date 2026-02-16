@@ -2,7 +2,12 @@ import { join } from 'path'
 import { BrowserManager, type BrowserManager as BrowserManagerType } from './browser'
 import type { RuntimeConfig } from './config'
 import { type ConversationStore, createConversationStore } from './conversation'
-import { createMemoryManager, indexDailyLogs, type MemoryManager, Qwen3VLEmbeddings } from './memory'
+import {
+  createMemoryManager,
+  indexDailyLogs,
+  type MemoryManager,
+  Qwen3VLEmbeddings,
+} from './memory'
 import { createProviderRegistry, type ProviderRegistry } from './providers'
 import { createRouter, type Router } from './routing'
 import { buildSafetyConfig } from './safety/config-bridge'
