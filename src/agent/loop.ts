@@ -4,8 +4,8 @@ import type { MemoryManager } from '../memory'
 import { flushBeforeCompaction } from '../memory/compaction-flush'
 import { extractMemories } from '../memory/extractor'
 import { retrieveForContext } from '../memory/retrieval'
-import { classifyProviderError, isRetryable, retryDelay } from '../providers/error-classify'
 import type { ProviderRegistry } from '../providers'
+import { classifyProviderError, isRetryable, retryDelay } from '../providers/error-classify'
 import { createLlamaCppTokenizer } from '../providers/llamacpp-tokenizer'
 import type {
   ChatMessage,

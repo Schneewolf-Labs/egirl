@@ -94,26 +94,37 @@ export function createProviderRegistry(config: RuntimeConfig): ProviderRegistry 
   let remote: LLMProvider | null = null
   if (config.remote.anthropic) {
     const { apiKeys, model } = config.remote.anthropic
+    remote = makeAnthropicProvider(apiKeys, model)
     if (apiKeys.length > 1) {
-      const pool = new KeyPool(apiKeys)
-      remote = new PooledProvider(`anthropic/${model}`, pool, (key) =>
-        createAnthropicProvider(key, model),
-      )
       log.info('provider', `Anthropic provider with ${apiKeys.length} keys in pool`)
-    } else {
-      remote = createAnthropicProvider(apiKeys[0] ?? '', model)
     }
   } else if (config.remote.openai) {
     const { apiKeys, model, baseUrl } = config.remote.openai
+    remote = makeOpenAIProvider(apiKeys, model, baseUrl)
+    if (apiKeys.length > 1) {
+      log.info('provider', `OpenAI provider with ${apiKeys.length} keys in pool`)
+    }
+  }
+
+  // Helper: create a provider with key pooling when multiple keys are available
+  function makeAnthropicProvider(apiKeys: string[], model: string): LLMProvider {
     if (apiKeys.length > 1) {
       const pool = new KeyPool(apiKeys)
-      remote = new PooledProvider(`openai/${model}`, pool, (key) =>
+      return new PooledProvider(`anthropic/${model}`, pool, (key) =>
+        createAnthropicProvider(key, model),
+      )
+    }
+    return createAnthropicProvider(apiKeys[0] ?? '', model)
+  }
+
+  function makeOpenAIProvider(apiKeys: string[], model: string, baseUrl?: string): LLMProvider {
+    if (apiKeys.length > 1) {
+      const pool = new KeyPool(apiKeys)
+      return new PooledProvider(`openai/${model}`, pool, (key) =>
         createOpenAIProvider(key, model, baseUrl),
       )
-      log.info('provider', `OpenAI provider with ${apiKeys.length} keys in pool`)
-    } else {
-      remote = createOpenAIProvider(apiKeys[0] ?? '', model, baseUrl)
     }
+    return createOpenAIProvider(apiKeys[0] ?? '', model, baseUrl)
   }
 
   // Cache for model-specific provider overrides (e.g. "anthropic/claude-opus-4-20250514")
@@ -135,7 +146,7 @@ export function createProviderRegistry(config: RuntimeConfig): ProviderRegistry 
       const cached = overrideCache.get(ref)
       if (cached) return cached
       const { apiKeys, model, baseUrl } = config.remote.openai
-      const provider = createOpenAIProvider(apiKeys[0] ?? '', model, baseUrl)
+      const provider = makeOpenAIProvider(apiKeys, model, baseUrl)
       overrideCache.set(ref, provider)
       return provider
     }
@@ -156,8 +167,7 @@ export function createProviderRegistry(config: RuntimeConfig): ProviderRegistry 
       if (modelName === config.remote.anthropic.model && remote?.name.startsWith('anthropic/')) {
         return remote
       }
-      const key = config.remote.anthropic.apiKeys[0] ?? ''
-      const provider = createAnthropicProvider(key, modelName)
+      const provider = makeAnthropicProvider(config.remote.anthropic.apiKeys, modelName)
       overrideCache.set(ref, provider)
       return provider
     }
@@ -166,8 +176,11 @@ export function createProviderRegistry(config: RuntimeConfig): ProviderRegistry 
       if (modelName === config.remote.openai.model && remote?.name.startsWith('openai/')) {
         return remote
       }
-      const key = config.remote.openai.apiKeys[0] ?? ''
-      const provider = createOpenAIProvider(key, modelName, config.remote.openai.baseUrl)
+      const provider = makeOpenAIProvider(
+        config.remote.openai.apiKeys,
+        modelName,
+        config.remote.openai.baseUrl,
+      )
       overrideCache.set(ref, provider)
       return provider
     }
