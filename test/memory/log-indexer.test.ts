@@ -35,7 +35,9 @@ describe('chunkDailyLog', () => {
     // Create entries that exceed 1500 chars total
     const lines: string[] = []
     for (let i = 0; i < 30; i++) {
-      lines.push(`[2026-02-16T10:${String(i).padStart(2, '0')}:00.000Z] SET key${i} [general]: ${'x'.repeat(80)}`)
+      lines.push(
+        `[2026-02-16T10:${String(i).padStart(2, '0')}:00.000Z] SET key${i} [general]: ${'x'.repeat(80)}`,
+      )
     }
     const chunks = chunkDailyLog('2026-02-16', lines.join('\n'))
 

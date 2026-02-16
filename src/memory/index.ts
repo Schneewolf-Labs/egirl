@@ -17,7 +17,6 @@ import {
 } from './search'
 
 export { type CompactionExtraction, flushBeforeCompaction } from './compaction-flush'
-export { chunkDailyLog, indexDailyLogs } from './log-indexer'
 export {
   createEmbeddingProvider,
   type EmbeddingInput,
@@ -37,6 +36,7 @@ export {
   MemoryIndexer,
   type MemorySource,
 } from './indexer'
+export { chunkDailyLog, indexDailyLogs } from './log-indexer'
 export { type RetrievalConfig, retrieveForContext } from './retrieval'
 export { createMemorySearch, MemorySearch, type SearchOptions, type SearchResult } from './search'
 

@@ -1,6 +1,6 @@
 import { log } from '../util/logger'
-import type { MemoryManager } from './index'
 import type { MemoryFiles } from './files'
+import type { MemoryManager } from './index'
 
 /**
  * Indexes daily conversation logs into the memory vector store (Tier 2).
@@ -100,8 +100,7 @@ export async function indexDailyLogs(
     const content = await files.readDailyLog(date)
     const chunks = chunkDailyLog(date, content)
 
-    for (let i = 0; i < chunks.length; i++) {
-      const chunk = chunks[i]
+    for (const [i, chunk] of chunks.entries()) {
       const key = chunkKey(date, i)
 
       try {
