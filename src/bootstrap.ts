@@ -11,7 +11,7 @@ import {
 import { createProviderRegistry, type ProviderRegistry } from './providers'
 import { createRouter, type Router } from './routing'
 import { buildSafetyConfig } from './safety/config-bridge'
-import { createSkillManager } from './skills'
+import { loadSkillsFromDirectories } from './skills'
 import type { Skill } from './skills/types'
 import { createTaskStore, type TaskStore } from './tasks'
 import {
@@ -134,13 +134,12 @@ export function getGitHubConfig(config: RuntimeConfig): GitHubConfig | undefined
  * Bundled skills are loaded first so user directories can override them.
  */
 async function loadSkills(config: RuntimeConfig): Promise<Skill[]> {
-  const skillManager = createSkillManager()
   const bundledDir = join(import.meta.dir, 'skills', 'bundled')
   const allDirs = [bundledDir, ...config.skills.dirs]
 
   try {
-    await skillManager.loadFromDirectories(allDirs)
-    const enabled = skillManager.getEnabled()
+    const skills = await loadSkillsFromDirectories(allDirs)
+    const enabled = skills.filter((s) => s.enabled)
     if (enabled.length > 0) {
       log.info('main', `Skills loaded: ${enabled.map((s) => s.name).join(', ')}`)
     }

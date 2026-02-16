@@ -21,7 +21,7 @@ async function main() {
     config = loadConfig()
     log.info('main', `Loaded config: workspace=${config.workspace.path}`)
   } catch (error) {
-    console.error('Failed to load config:', error)
+    log.error('main', 'Failed to load config:', error)
     process.exit(1)
   }
 
@@ -65,7 +65,7 @@ async function main() {
       break
 
     default:
-      console.error(`Unknown command: ${command}`)
+      log.error('main', `Unknown command: ${command}`)
       showHelp()
       process.exit(1)
   }
@@ -115,6 +115,6 @@ ${c.primary}Examples${RESET}
 }
 
 main().catch((error) => {
-  console.error('Fatal error:', error)
+  log.error('main', 'Fatal error:', error)
   process.exit(1)
 })
