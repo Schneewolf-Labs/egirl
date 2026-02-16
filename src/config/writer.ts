@@ -23,7 +23,7 @@ function tomlValue(val: unknown): string {
   if (typeof val === 'boolean') return val ? 'true' : 'false'
   if (typeof val === 'number') return String(val)
   if (Array.isArray(val)) {
-    return '[' + val.map(v => tomlValue(v)).join(', ') + ']'
+    return `[${val.map((v) => tomlValue(v)).join(', ')}]`
   }
   return String(val)
 }
@@ -72,7 +72,7 @@ function serializeToml(obj: Record<string, unknown>, prefix = ''): string {
     }
   }
 
-  return lines.join('\n') + '\n'
+  return `${lines.join('\n')}\n`
 }
 
 export async function writeConfigToml(config: Record<string, unknown>): Promise<void> {
