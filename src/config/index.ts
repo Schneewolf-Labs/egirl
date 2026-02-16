@@ -3,9 +3,9 @@ import { homedir } from 'os'
 import { join, resolve } from 'path'
 import { parse } from 'smol-toml'
 import { setTheme } from '../ui/theme'
-import type { EgirlConfig, RuntimeConfig } from './schema'
+import type { EgirlConfig, RuntimeConfig, ThinkingLevel } from './schema'
 
-export type { EgirlConfig, RuntimeConfig } from './schema'
+export type { EgirlConfig, RuntimeConfig, ThinkingLevel } from './schema'
 
 function getDomain(service: string): string {
   try {
@@ -101,6 +101,11 @@ export function loadConfig(): RuntimeConfig {
   // Build runtime config with snake_case from TOML mapped to camelCase
   const config: RuntimeConfig = {
     theme: themeName,
+    thinking: {
+      level: (toml.thinking?.level ?? 'off') as ThinkingLevel,
+      budgetTokens: toml.thinking?.budget_tokens,
+      showThinking: toml.thinking?.show_thinking ?? true,
+    },
     workspace: {
       path: workspacePath,
     },

@@ -1,7 +1,7 @@
 import * as readline from 'readline'
 import type { AgentLoop } from '../agent'
 import type { AgentEventHandler } from '../agent/events'
-import type { ToolCall } from '../providers/types'
+import type { ThinkingConfig, ToolCall } from '../providers/types'
 import type { ToolResult } from '../tools/types'
 import { colors, DIM, RESET } from '../ui/theme'
 import { log } from '../util/logger'
@@ -28,15 +28,30 @@ function formatArgs(args: Record<string, unknown>): string {
 
 interface CLIEventState {
   streamed: boolean
+  showThinking: boolean
 }
 
-function createCLIEventHandler(): { handler: AgentEventHandler; state: CLIEventState } {
-  const state: CLIEventState = { streamed: false }
+function createCLIEventHandler(showThinking: boolean): {
+  handler: AgentEventHandler
+  state: CLIEventState
+} {
+  const state: CLIEventState = { streamed: false, showThinking }
 
   const handler: AgentEventHandler = {
     onThinking(text: string) {
+      if (!state.showThinking) return
       if (text.trim()) {
-        process.stdout.write(`${DIM}${text.trim()}${RESET}\n`)
+        const c = colors()
+        // Truncate long thinking output for display
+        const lines = text.trim().split('\n')
+        const maxLines = 20
+        const display =
+          lines.length > maxLines
+            ? [...lines.slice(0, maxLines), `  ... (${lines.length - maxLines} more lines)`].join(
+                '\n',
+              )
+            : text.trim()
+        process.stdout.write(`${DIM}${c.info}[thinking]${RESET}${DIM}\n${display}${RESET}\n`)
       }
     },
 
@@ -85,14 +100,19 @@ function createCLIEventHandler(): { handler: AgentEventHandler; state: CLIEventS
   return { handler, state }
 }
 
+const THINKING_LEVELS = ['off', 'low', 'medium', 'high'] as const
+
 export class CLIChannel implements Channel {
   readonly name = 'cli'
   private rl: readline.Interface | null = null
   private agent: AgentLoop
   private running = false
+  private thinkingOverride: ThinkingConfig | undefined
+  private showThinking: boolean
 
-  constructor(agent: AgentLoop) {
+  constructor(agent: AgentLoop, options?: { showThinking?: boolean }) {
     this.agent = agent
+    this.showThinking = options?.showThinking ?? true
   }
 
   /** Outbound: print a background task result to stdout */
@@ -111,7 +131,10 @@ export class CLIChannel implements Channel {
 
     const c = colors()
     console.log(
-      `\n${c.primary}egirl CLI${RESET} ${DIM}— Type your message and press Enter. Type "exit" to quit.${RESET}\n`,
+      `\n${c.primary}egirl CLI${RESET} ${DIM}— Type your message and press Enter. Type "exit" to quit.${RESET}`,
+    )
+    console.log(
+      `${DIM}Commands: /think <off|low|medium|high>, /plan <message>, clear, exit${RESET}\n`,
     )
 
     this.prompt()
@@ -150,10 +173,33 @@ export class CLIChannel implements Channel {
         return
       }
 
+      // Handle /think command
+      if (trimmed.startsWith('/think')) {
+        this.handleThinkCommand(trimmed)
+        this.prompt()
+        return
+      }
+
+      // Handle /plan command
+      if (trimmed.startsWith('/plan')) {
+        const message = trimmed.slice(5).trim()
+        if (!message) {
+          console.log(`${DIM}Usage: /plan <your request>${RESET}\n`)
+          this.prompt()
+          return
+        }
+        await this.handlePlanCommand(message)
+        this.prompt()
+        return
+      }
+
       try {
         console.log()
-        const { handler, state } = createCLIEventHandler()
-        const response = await this.agent.run(trimmed, { events: handler })
+        const { handler, state } = createCLIEventHandler(this.showThinking)
+        const response = await this.agent.run(trimmed, {
+          events: handler,
+          thinking: this.thinkingOverride,
+        })
 
         // If streaming didn't happen, print the response directly
         if (!state.streamed && response.content) {
@@ -174,8 +220,111 @@ export class CLIChannel implements Channel {
       this.prompt()
     })
   }
+
+  private handleThinkCommand(input: string): void {
+    const c = colors()
+    const parts = input.split(/\s+/)
+    const level = parts[1]?.toLowerCase()
+
+    if (!level) {
+      const current = this.thinkingOverride?.level ?? 'config default'
+      console.log(`\n${c.info}Thinking level:${RESET} ${current}`)
+      console.log(`${DIM}Usage: /think <off|low|medium|high>${RESET}\n`)
+      return
+    }
+
+    if (!THINKING_LEVELS.includes(level as (typeof THINKING_LEVELS)[number])) {
+      console.log(`\n${c.error}Invalid thinking level:${RESET} ${level}`)
+      console.log(`${DIM}Valid levels: off, low, medium, high${RESET}\n`)
+      return
+    }
+
+    const thinkingLevel = level as ThinkingConfig['level']
+
+    if (thinkingLevel === 'off') {
+      this.thinkingOverride = { level: 'off' }
+      console.log(`\n${c.muted}Thinking disabled${RESET}\n`)
+    } else {
+      this.thinkingOverride = { level: thinkingLevel }
+      console.log(`\n${c.success}Thinking level set to ${thinkingLevel}${RESET}\n`)
+    }
+  }
+
+  private async handlePlanCommand(message: string): Promise<void> {
+    const c = colors()
+
+    try {
+      console.log()
+      const { handler, state } = createCLIEventHandler(this.showThinking)
+      const response = await this.agent.run(message, {
+        events: handler,
+        thinking: this.thinkingOverride,
+        planningMode: true,
+      })
+
+      if (!state.streamed && response.content) {
+        console.log(`\n${c.secondary}egirl>${RESET} ${response.content}\n`)
+      }
+
+      if (!response.isPlan) return
+
+      // Prompt for plan approval
+      const approved = await this.askApproval()
+
+      if (approved) {
+        console.log(`\n${c.success}Plan approved.${RESET} Executing...\n`)
+
+        const { handler: execHandler, state: execState } = createCLIEventHandler(this.showThinking)
+        const execResponse = await this.agent.run(
+          'Approved. Execute the plan above step by step.',
+          {
+            events: execHandler,
+            thinking: this.thinkingOverride,
+            maxTurns: 20,
+          },
+        )
+
+        if (!execState.streamed && execResponse.content) {
+          console.log(`\n${c.secondary}egirl>${RESET} ${execResponse.content}\n`)
+        }
+      } else {
+        console.log(
+          `\n${c.warning}Plan rejected.${RESET} You can modify your request and try again.\n`,
+        )
+        // Add a note to context so the agent knows the plan was rejected
+        this.agent
+          .run('[User rejected the plan. Awaiting new instructions.]', {
+            maxTurns: 1,
+          })
+          .catch(() => {
+            // Swallow — this is just to add context
+          })
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      console.error(`\n${c.error}Error:${RESET} ${errorMessage}\n`)
+    }
+  }
+
+  private askApproval(): Promise<boolean> {
+    return new Promise((resolve) => {
+      if (!this.rl) {
+        resolve(false)
+        return
+      }
+
+      const c = colors()
+      this.rl.question(`${c.warning}Execute this plan?${RESET} ${DIM}(y/n)${RESET} `, (answer) => {
+        const lower = answer.trim().toLowerCase()
+        resolve(lower === 'y' || lower === 'yes')
+      })
+    })
+  }
 }
 
-export function createCLIChannel(agent: AgentLoop): CLIChannel {
-  return new CLIChannel(agent)
+export function createCLIChannel(
+  agent: AgentLoop,
+  options?: { showThinking?: boolean },
+): CLIChannel {
+  return new CLIChannel(agent, options)
 }

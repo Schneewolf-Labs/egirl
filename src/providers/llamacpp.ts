@@ -1,8 +1,32 @@
 import { parseToolCalls } from '../tools/format'
 import { log } from '../util/logger'
 import { formatMessagesForQwen3 } from './qwen3-format'
-import type { ChatMessage, ChatRequest, ChatResponse, ContentPart, LLMProvider } from './types'
+import type {
+  ChatMessage,
+  ChatRequest,
+  ChatResponse,
+  ContentPart,
+  LLMProvider,
+  ThinkingConfig,
+} from './types'
 import { ContextSizeError } from './types'
+
+/**
+ * Extract `<think>...</think>` blocks from Qwen3 response content.
+ * Returns the cleaned content and extracted thinking text.
+ */
+function extractThinkingTags(content: string): { content: string; thinking: string } {
+  const thinkPattern = /<think>([\s\S]*?)<\/think>/g
+  const thinkingParts: string[] = []
+  const cleaned = content.replace(thinkPattern, (_match, inner: string) => {
+    thinkingParts.push(inner.trim())
+    return ''
+  })
+  return {
+    content: cleaned.trim(),
+    thinking: thinkingParts.join('\n\n'),
+  }
+}
 
 type FormattedContent = string | ContentPart[]
 type FormattedMessage = { role: string; content: FormattedContent }
@@ -59,7 +83,7 @@ export class LlamaCppProvider implements LLMProvider {
   }
 
   async chat(req: ChatRequest): Promise<ChatResponse> {
-    const messages = this.formatMessages(req.messages)
+    const messages = this.formatMessages(req.messages, req.thinking)
 
     // Format tools for llama.cpp (Qwen3 template expects this format)
     const tools = req.tools?.map((tool) => ({
@@ -72,6 +96,7 @@ export class LlamaCppProvider implements LLMProvider {
     }))
 
     const shouldStream = !!req.onToken
+    const isThinkingEnabled = req.thinking && req.thinking.level !== 'off'
 
     const response = await fetch(`${this.endpoint}/v1/chat/completions`, {
       method: 'POST',
@@ -82,6 +107,8 @@ export class LlamaCppProvider implements LLMProvider {
         temperature: req.temperature,
         max_tokens: req.max_tokens,
         stream: shouldStream,
+        // Qwen3 supports enable_thinking parameter via llama.cpp
+        ...(isThinkingEnabled !== undefined && { enable_thinking: isThinkingEnabled }),
       }),
     })
 
@@ -147,8 +174,11 @@ export class LlamaCppProvider implements LLMProvider {
       }
     }
 
+    // Extract thinking blocks before parsing tool calls
+    const { content: withoutThinking, thinking } = extractThinkingTags(content)
+
     // Parse tool calls from response
-    const { content: cleanContent, toolCalls } = parseToolCalls(content)
+    const { content: cleanContent, toolCalls } = parseToolCalls(withoutThinking)
 
     if (toolCalls.length > 0) {
       log.debug(
@@ -165,12 +195,13 @@ export class LlamaCppProvider implements LLMProvider {
         output_tokens: usage.completion_tokens,
       },
       model,
+      thinking: thinking || undefined,
     }
   }
 
   /**
    * Read an SSE stream from llama.cpp, emitting tokens via callback.
-   * Buffers text near `<tool_call>` tags to avoid leaking raw XML to the user.
+   * Buffers text near `<tool_call>` and `<think>` tags to avoid leaking raw XML to the user.
    */
   private async readStream(
     body: ReadableStream<Uint8Array>,
@@ -187,10 +218,13 @@ export class LlamaCppProvider implements LLMProvider {
     let fullContent = ''
     let buffer = ''
     let inToolCall = false
+    let inThink = false
     let usage = { prompt_tokens: 0, completion_tokens: 0 }
     let model: string | undefined
 
     const TOOL_OPEN = '<tool_call>'
+    const THINK_OPEN = '<think>'
+    const THINK_CLOSE = '</think>'
 
     const flushBuffer = () => {
       if (buffer) {
@@ -230,33 +264,60 @@ export class LlamaCppProvider implements LLMProvider {
             fullContent += token
 
             if (inToolCall) {
-              // Already inside a tool call, don't emit
+              continue
+            }
+
+            if (inThink) {
+              // Check if the think block is closing
+              buffer += token
+              if (buffer.includes(THINK_CLOSE)) {
+                inThink = false
+                buffer = ''
+              }
+              continue
+            }
+
+            // Buffer tokens to detect <think> or <tool_call> tags
+            buffer += token
+
+            // Check for <think> tag
+            const thinkIdx = buffer.indexOf(THINK_OPEN)
+            if (thinkIdx !== -1) {
+              const before = buffer.substring(0, thinkIdx)
+              if (before) onToken(before)
+              buffer = ''
+              inThink = true
               continue
             }
 
             if (hasTools) {
-              // Buffer tokens to detect <tool_call> tag
-              buffer += token
               const openIdx = buffer.indexOf(TOOL_OPEN)
               if (openIdx !== -1) {
-                // Emit everything before the tag
                 const before = buffer.substring(0, openIdx)
                 if (before) onToken(before)
                 buffer = ''
                 inToolCall = true
-              } else if (!TOOL_OPEN.startsWith(buffer.slice(-TOOL_OPEN.length))) {
-                // Buffer doesn't look like a partial match, flush it
-                // Keep only trailing chars that could be a partial match
-                const safeEnd = this.findPartialMatchLength(buffer, TOOL_OPEN)
-                if (safeEnd > 0) {
-                  onToken(buffer.substring(0, buffer.length - safeEnd))
-                  buffer = buffer.substring(buffer.length - safeEnd)
+              } else {
+                // Check partial matches against both tags
+                const toolPartial = this.findPartialMatchLength(buffer, TOOL_OPEN)
+                const thinkPartial = this.findPartialMatchLength(buffer, THINK_OPEN)
+                const maxPartial = Math.max(toolPartial, thinkPartial)
+                if (maxPartial > 0) {
+                  onToken(buffer.substring(0, buffer.length - maxPartial))
+                  buffer = buffer.substring(buffer.length - maxPartial)
                 } else {
                   flushBuffer()
                 }
               }
             } else {
-              onToken(token)
+              // No tools — only need to buffer for <think> tags
+              const thinkPartial = this.findPartialMatchLength(buffer, THINK_OPEN)
+              if (thinkPartial > 0) {
+                onToken(buffer.substring(0, buffer.length - thinkPartial))
+                buffer = buffer.substring(buffer.length - thinkPartial)
+              } else {
+                flushBuffer()
+              }
             }
           } catch {
             // Invalid JSON line, skip
@@ -267,8 +328,8 @@ export class LlamaCppProvider implements LLMProvider {
       reader.releaseLock()
     }
 
-    // Flush any remaining buffer (not a tool call tag)
-    if (!inToolCall && buffer) {
+    // Flush any remaining buffer (not inside a tag)
+    if (!inToolCall && !inThink && buffer) {
       onToken(buffer)
     }
 
@@ -287,8 +348,22 @@ export class LlamaCppProvider implements LLMProvider {
     return 0
   }
 
-  private formatMessages(messages: ChatMessage[]): FormattedMessage[] {
-    return formatMessagesForQwen3(messages)
+  private formatMessages(messages: ChatMessage[], thinking?: ThinkingConfig): FormattedMessage[] {
+    const formatted = formatMessagesForQwen3(messages)
+
+    // Qwen3 uses /think and /no_think tags to control thinking mode.
+    // Prepend the directive to the first user message content.
+    if (thinking) {
+      const directive = thinking.level !== 'off' ? '/think' : '/no_think'
+      for (const msg of formatted) {
+        if (msg.role === 'user' && typeof msg.content === 'string') {
+          msg.content = `${directive}\n${msg.content}`
+          break
+        }
+      }
+    }
+
+    return formatted
   }
 }
 

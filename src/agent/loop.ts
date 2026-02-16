@@ -8,6 +8,7 @@ import type {
   ChatMessage,
   ChatResponse,
   LLMProvider,
+  ThinkingConfig,
   Tokenizer,
   ToolCall,
   ToolDefinition,
@@ -62,6 +63,10 @@ function sanitizeRecalledMemory(content: string): string {
 export interface AgentLoopOptions {
   maxTurns?: number
   events?: AgentEventHandler
+  /** Override thinking level for this run */
+  thinking?: ThinkingConfig
+  /** Planning mode: first response is a plan (no tools), user approves before execution */
+  planningMode?: boolean
 }
 
 export interface AgentResponse {
@@ -74,6 +79,10 @@ export interface AgentResponse {
   }
   escalated: boolean
   turns: number
+  /** True if the response is a plan awaiting approval (planning mode) */
+  isPlan?: boolean
+  /** Extended thinking content from the model */
+  thinking?: string
 }
 
 export interface AgentLoopDeps {
@@ -146,14 +155,26 @@ export class AgentLoop {
   }
 
   private async doRun(userMessage: string, options: AgentLoopOptions): Promise<AgentResponse> {
-    const { maxTurns = 10, events } = options
+    const { maxTurns = 10, events, planningMode } = options
     const turnStartedAt = Date.now()
+
+    // Resolve thinking config: per-request override > global config
+    const thinking: ThinkingConfig | undefined =
+      options.thinking ??
+      (this.config.thinking.level !== 'off'
+        ? { level: this.config.thinking.level, budgetTokens: this.config.thinking.budgetTokens }
+        : undefined)
+
+    // Planning mode: prepend instruction to create a plan first
+    const userContent = planningMode
+      ? `[PLANNING MODE] Create a detailed step-by-step plan for the following request. Do NOT execute any tools yet — only output a numbered plan with clear steps. After the plan is approved, you will execute it.\n\n${userMessage}`
+      : userMessage
 
     // Log turn start to transcript
     this.transcript?.turnStart(this.context.sessionId, userMessage)
 
     // Add user message to context
-    addMessage(this.context, { role: 'user', content: userMessage })
+    addMessage(this.context, { role: 'user', content: userContent })
 
     // Proactive memory retrieval — inject relevant memories as reference context.
     // Framed as user-role to prevent prompt injection via poisoned memories.
@@ -211,10 +232,13 @@ export class AgentLoop {
     let currentProvider = provider
     let currentTarget: 'local' | 'remote' = routingDecision.target
 
+    let lastThinking: string | undefined
+
     while (turns < maxTurns) {
       turns++
 
-      const tools = this.toolExecutor.getDefinitions()
+      // In planning mode on the first turn, don't provide tools so the model must produce text
+      const tools = planningMode && turns === 1 ? [] : this.toolExecutor.getDefinitions()
 
       let response: ChatResponse
       const inferenceStart = Date.now()
@@ -224,6 +248,7 @@ export class AgentLoop {
           tools,
           currentTarget,
           events?.onToken,
+          thinking,
         )
       } catch (error) {
         const err = error instanceof Error ? error : new Error(String(error))
@@ -243,6 +268,12 @@ export class AgentLoop {
         duration_ms: inferenceDuration,
         has_tool_calls: (response.tool_calls?.length ?? 0) > 0,
       })
+
+      // Emit extended thinking content if present
+      if (response.thinking) {
+        lastThinking = response.thinking
+        events?.onThinking?.(response.thinking)
+      }
 
       // Check for escalation if we're using local
       if (currentTarget === 'local' && this.remoteProvider) {
@@ -338,6 +369,34 @@ export class AgentLoop {
       finalContent = response.content
       addMessage(this.context, { role: 'assistant', content: finalContent })
       events?.onResponseComplete?.()
+
+      // In planning mode, return after the first text response (the plan)
+      if (planningMode && turns === 1) {
+        // Persist and return early — the plan needs approval before execution
+        if (this.conversationStore) {
+          try {
+            const newMessages = this.context.messages.slice(this.persistedIndex)
+            if (newMessages.length > 0) {
+              this.conversationStore.appendMessages(this.context.sessionId, newMessages)
+              this.persistedIndex = this.context.messages.length
+            }
+          } catch (error) {
+            log.warn('agent', 'Failed to persist conversation:', error)
+          }
+        }
+
+        return {
+          content: finalContent,
+          target: currentTarget,
+          provider: currentProvider.name,
+          usage: totalUsage,
+          escalated,
+          turns,
+          isPlan: true,
+          thinking: lastThinking,
+        }
+      }
+
       break
     }
 
@@ -402,6 +461,7 @@ export class AgentLoop {
       usage: totalUsage,
       escalated,
       turns,
+      thinking: lastThinking,
     }
   }
 
@@ -418,6 +478,7 @@ export class AgentLoop {
     tools: ToolDefinition[],
     target: 'local' | 'remote',
     onToken?: (token: string) => void,
+    thinking?: ThinkingConfig,
   ): Promise<ChatResponse> {
     const contextLength =
       target === 'local' ? this.config.local.contextLength : REMOTE_CONTEXT_LENGTH
@@ -465,7 +526,7 @@ export class AgentLoop {
     )
 
     try {
-      return await this.chatWithRetry(provider, messages, tools, onToken)
+      return await this.chatWithRetry(provider, messages, tools, onToken, thinking)
     } catch (error) {
       if (!(error instanceof ContextSizeError)) throw error
 
@@ -488,7 +549,7 @@ export class AgentLoop {
         ...refitResult.messages,
       ]
 
-      return await this.chatWithRetry(provider, retryMessages, tools, onToken)
+      return await this.chatWithRetry(provider, retryMessages, tools, onToken, thinking)
     }
   }
 
@@ -530,13 +591,14 @@ export class AgentLoop {
     messages: ChatMessage[],
     tools: ToolDefinition[],
     onToken?: (token: string) => void,
+    thinking?: ThinkingConfig,
     maxRetries = 2,
   ): Promise<ChatResponse> {
     let lastError: unknown
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
-        return await provider.chat({ messages, tools, onToken })
+        return await provider.chat({ messages, tools, onToken, thinking })
       } catch (error) {
         lastError = error
 
