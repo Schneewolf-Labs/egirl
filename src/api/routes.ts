@@ -1,3 +1,4 @@
+import { join } from 'path'
 import type { AgentLoop, AgentResponse } from '../agent'
 import type { RuntimeConfig } from '../config'
 import type { MemoryManager, SearchResult } from '../memory'
@@ -5,8 +6,9 @@ import type { ProviderRegistry } from '../providers'
 import type { ToolExecutor } from '../tools'
 import type { StatsTracker } from '../tracking/stats'
 import { log } from '../util/logger'
-import { buildFrontendHTML } from './frontend'
 import type { OpenAPISpec } from './openapi'
+
+const STATIC_DIR = join(import.meta.dir, '../../static')
 
 export interface RouteDeps {
   agent: AgentLoop
@@ -52,9 +54,16 @@ export function createRoutes(deps: RouteDeps): Map<string, Map<string, RouteHand
 
   // GET / — HTML dashboard
   route('GET', '/', async () => {
-    return new Response(buildFrontendHTML(), {
-      headers: { 'Content-Type': 'text/html; charset=utf-8' },
-    })
+    return new Response(Bun.file(join(STATIC_DIR, 'dashboard.html')))
+  })
+
+  // Static assets
+  route('GET', '/static/dashboard.css', async () => {
+    return new Response(Bun.file(join(STATIC_DIR, 'dashboard.css')))
+  })
+
+  route('GET', '/static/dashboard.js', async () => {
+    return new Response(Bun.file(join(STATIC_DIR, 'dashboard.js')))
   })
 
   // GET /health
