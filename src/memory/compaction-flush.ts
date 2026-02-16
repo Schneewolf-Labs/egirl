@@ -129,10 +129,7 @@ function condenseForFlush(messages: ChatMessage[]): string {
 /**
  * Parse the LLM's JSON response into validated extraction results.
  */
-function parseFlushExtractions(
-  content: string,
-  maxExtractions: number,
-): CompactionExtraction[] {
+function parseFlushExtractions(content: string, maxExtractions: number): CompactionExtraction[] {
   let jsonStr = content.trim()
 
   // Strip markdown code fences if present
