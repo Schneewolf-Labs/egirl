@@ -4,6 +4,24 @@ egirl is configured through two files: `egirl.toml` for application settings and
 
 ## egirl.toml
 
+### Top-level
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `theme` | string | `"egirl"` | CLI color theme. Options: `"egirl"` (purple/pink), `"midnight"` (blue/teal), `"neon"` (green/cyan), `"mono"` (grayscale) |
+
+### `[thinking]`
+
+Controls extended thinking / reasoning for Anthropic (extended thinking) and Qwen3 (`/think` mode).
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `level` | `"off"` \| `"low"` \| `"medium"` \| `"high"` | `"off"` | Thinking level. Higher levels allocate more tokens for reasoning |
+| `budget_tokens` | number | (auto from level) | Override the thinking token budget directly |
+| `show_thinking` | bool | `true` | Display thinking output in CLI |
+
+Override per-session in CLI with: `/think <level>`
+
 ### `[workspace]`
 
 | Key | Type | Default | Description |
@@ -145,6 +163,46 @@ Master switch and per-feature toggles for the safety layer. See [docs/safety.md]
 | `enabled` | bool | `false` | Require confirmation before executing destructive tools |
 | `tools` | string[] | `["execute_command", "write_file", "edit_file"]` | Tools that require confirmation |
 
+### `[github]`
+
+Optional. Configures defaults for the GitHub tools. The `GITHUB_TOKEN` environment variable must be set for GitHub tools to work.
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `default_owner` | string | (auto-detected from git remote) | Default repository owner for GitHub API calls |
+| `default_repo` | string | (auto-detected from git remote) | Default repository name for GitHub API calls |
+
+### `[tasks]`
+
+Optional. Configures the [background task framework](background-tasks.md).
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `enabled` | bool | `true` | Enable background task system |
+| `tick_interval_ms` | number | `30000` | How often to check for due scheduled tasks (ms) |
+| `max_active_tasks` | number | `20` | Maximum number of active tasks at once |
+| `task_timeout_ms` | number | `300000` | Maximum duration per task run (5 min default) |
+| `discovery_enabled` | bool | `true` | Agent looks for useful work during idle time |
+| `discovery_interval_ms` | number | `1800000` | Time between discovery runs (30 min default) |
+| `idle_threshold_ms` | number | `600000` | Idle time before discovery kicks in (10 min default) |
+
+#### `[tasks.heartbeat]`
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `enabled` | bool | `true` | Enable periodic heartbeat task |
+| `schedule` | string | `"*/30 * * * *"` | Cron expression for heartbeat frequency |
+| `business_hours` | string | (none) | Restrict heartbeat to hours, e.g. `"9-17 Mon-Fri"` |
+
+### `[transcript]`
+
+Optional. Configures conversation transcript logging.
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `enabled` | bool | `true` | Log conversations to JSONL files |
+| `path` | string | (workspace default) | Path to the transcript log file. Supports `{workspace}` |
+
 ### `[skills]`
 
 | Key | Type | Default | Description |
@@ -160,6 +218,7 @@ Create from the template: `cp .env.example .env`
 | `ANTHROPIC_API_KEY` | No | Anthropic API key for Claude (escalation provider) |
 | `OPENAI_API_KEY` | No | OpenAI API key (fallback escalation provider) |
 | `DISCORD_TOKEN` | For Discord mode | Discord bot token |
+| `GITHUB_TOKEN` | For GitHub tools | GitHub personal access token (for PR, issue, CI tools) |
 | `XMPP_USERNAME` | For XMPP mode | XMPP account username (local part, without domain) |
 | `XMPP_PASSWORD` | For XMPP mode | XMPP account password |
 
@@ -177,6 +236,11 @@ This priority is hardcoded in `src/providers/index.ts`.
 
 ```toml
 # egirl.toml
+theme = "egirl"
+
+[thinking]
+level = "off"
+show_thinking = true
 
 [workspace]
 path = "~/.egirl/workspace"
@@ -236,6 +300,23 @@ enabled = false
 [safety.confirmation]
 enabled = false
 
+[github]
+# default_owner and default_repo are auto-detected from git remote
+
+[tasks]
+enabled = true
+tick_interval_ms = 30000
+max_active_tasks = 20
+task_timeout_ms = 300000
+discovery_enabled = true
+
+[tasks.heartbeat]
+enabled = true
+schedule = "*/30 * * * *"
+
+[transcript]
+enabled = true
+
 [skills]
 dirs = ["~/.egirl/skills", "{workspace}/skills"]
 ```
@@ -245,6 +326,7 @@ dirs = ["~/.egirl/skills", "{workspace}/skills"]
 ANTHROPIC_API_KEY=sk-ant-...
 OPENAI_API_KEY=sk-...
 DISCORD_TOKEN=...
+GITHUB_TOKEN=ghp_...
 XMPP_USERNAME=egirl
 XMPP_PASSWORD=...
 ```

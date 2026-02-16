@@ -122,16 +122,21 @@ Mid-conversation escalation can happen two ways:
 ## Module Dependency Graph
 
 ```
-src/index.ts (entry point)
-├── config/          → loads egirl.toml + .env → RuntimeConfig
-├── workspace/       → bootstraps ~/.egirl/workspace with templates
-├── providers/       → creates LLMProvider instances from config
-├── routing/         → creates Router from config rules
-├── tools/           → creates ToolExecutor with builtin tools
-├── memory/          → creates MemoryManager (SQLite + embeddings)
-├── tracking/        → creates StatsTracker for usage metrics
+src/index.ts (entry point — parses command, dispatches to runner)
+├── commands/        → command runners (cli, discord, xmpp, api, claude-code, status)
+├── bootstrap.ts     → shared AppServices factory
+│   ├── config/      → loads egirl.toml + .env → RuntimeConfig
+│   ├── workspace/   → bootstraps ~/.egirl/workspace with templates
+│   ├── providers/   → creates LLMProvider instances from config
+│   ├── routing/     → creates Router from config rules
+│   ├── tools/       → creates ToolExecutor with builtin tools (48 tools)
+│   ├── memory/      → creates MemoryManager (SQLite + embeddings)
+│   ├── tracking/    → creates StatsTracker for usage metrics
+│   ├── tasks/       → creates TaskStore + TaskRunner for background work
+│   └── conversation/→ creates ConversationStore for persistence
 ├── agent/           → creates AgentLoop (orchestrates everything above)
-└── channels/        → creates channel (CLI/Discord/Claude Code/XMPP/API)
+├── channels/        → creates channel (CLI/Discord/Claude Code/XMPP/API)
+└── workflows/       → workflow engine for structured multi-step tasks
 ```
 
 Dependencies flow downward. The agent loop depends on the router, tools, and providers. Channels depend on the agent loop. Nothing depends on channels — they are leaf nodes.
@@ -185,60 +190,137 @@ interface ToolResult {
 ```
 egirl/
 ├── src/
-│   ├── index.ts              # Entry point, CLI command routing
+│   ├── index.ts              # Entry point — parses command, dispatches to runner
+│   ├── bootstrap.ts          # Shared AppServices factory
 │   ├── agent/
 │   │   ├── loop.ts           # Core agent loop
 │   │   ├── context.ts        # System prompt + conversation state
 │   │   ├── context-window.ts # Token-aware context trimming
+│   │   ├── context-summarizer.ts # Conversation summary for long contexts
+│   │   ├── session-mutex.ts  # Serializes concurrent agent runs
 │   │   └── events.ts         # Lifecycle event handlers
+│   ├── api/
+│   │   ├── server.ts         # Bun HTTP server
+│   │   ├── routes.ts         # Chat, tools, memory, stats endpoints
+│   │   └── openapi.ts        # OpenAPI specification
+│   ├── browser/
+│   │   ├── manager.ts        # Playwright session management
+│   │   └── targeting.ts      # Accessibility-based element targeting
 │   ├── channels/
 │   │   ├── cli.ts            # Terminal interface
 │   │   ├── discord.ts        # Discord bot
+│   │   ├── discord/          # Discord submodules
+│   │   │   ├── events.ts     # Event state management
+│   │   │   └── formatting.ts # Message formatting, tool call rendering
 │   │   ├── claude-code.ts    # Claude Code bridge
 │   │   └── xmpp.ts           # XMPP/Jabber chat
+│   ├── commands/
+│   │   ├── cli.ts            # CLI channel runner
+│   │   ├── discord.ts        # Discord bot runner
+│   │   ├── xmpp.ts           # XMPP bot runner
+│   │   ├── api.ts            # HTTP API server runner
+│   │   ├── claude-code.ts    # Claude Code bridge runner
+│   │   └── status.ts         # Config status checker
 │   ├── config/
 │   │   ├── schema.ts         # TypeBox schema for egirl.toml
 │   │   ├── index.ts          # Config loading + validation
-│   │   └── defaults.ts       # Default values
+│   │   └── writer.ts         # Config persistence
+│   ├── conversation/
+│   │   └── store.ts          # SQLite conversation persistence
 │   ├── memory/
 │   │   ├── index.ts          # MemoryManager (public API)
 │   │   ├── files.ts          # MEMORY.md + daily logs + images
 │   │   ├── indexer.ts        # SQLite storage + FTS
 │   │   ├── search.ts         # Hybrid search (FTS + vector)
-│   │   └── embeddings.ts     # Embedding providers
+│   │   ├── retrieval.ts      # Proactive memory retrieval for context
+│   │   ├── extractor.ts      # Auto-extraction of facts from conversations
+│   │   ├── log-indexer.ts    # Indexes stdout logs as memories
+│   │   ├── compaction-flush.ts # Database maintenance
+│   │   └── embeddings/       # Embedding providers
+│   │       ├── qwen3-vl.ts   # Qwen3-VL multimodal embeddings
+│   │       ├── llamacpp.ts   # llama.cpp text embeddings
+│   │       └── openai.ts     # OpenAI text embeddings
 │   ├── providers/
 │   │   ├── types.ts          # LLMProvider, ChatMessage, etc.
+│   │   ├── index.ts          # Provider registry
 │   │   ├── llamacpp.ts       # Local model via llama.cpp
 │   │   ├── anthropic.ts      # Claude API
-│   │   └── openai.ts         # OpenAI API
+│   │   ├── openai.ts         # OpenAI API
+│   │   ├── qwen3-format.ts   # Qwen3 tool call parsing
+│   │   ├── error-classify.ts # API error categorization
+│   │   └── key-pool.ts       # API key rotation
 │   ├── routing/
 │   │   ├── model-router.ts   # Router class
 │   │   ├── heuristics.ts     # Keyword-based analysis
 │   │   ├── rules.ts          # Priority-based routing rules
 │   │   └── escalation.ts     # Post-response escalation checks
+│   ├── safety/
+│   │   ├── index.ts          # Safety check orchestration
+│   │   ├── command-filter.ts # Dangerous command blocking
+│   │   ├── path-guard.ts     # Path sandboxing
+│   │   ├── sensitive-files.ts # Sensitive file access guard
+│   │   └── audit.ts          # JSONL audit logging
 │   ├── skills/
 │   │   ├── types.ts          # Skill, SkillMetadata interfaces
 │   │   ├── parser.ts         # Markdown + YAML frontmatter parsing
 │   │   ├── loader.ts         # Filesystem skill discovery
 │   │   └── index.ts          # SkillManager registry
+│   ├── standup/
+│   │   ├── gather.ts         # Workspace context gathering
+│   │   └── index.ts          # Exports
+│   ├── tasks/
+│   │   ├── store.ts          # SQLite-backed task CRUD
+│   │   ├── runner.ts         # Task execution engine
+│   │   ├── discovery.ts      # Idle-time work finding
+│   │   ├── heartbeat.ts      # Periodic task pulse
+│   │   ├── schedule.ts       # Interval parsing, business hours
+│   │   ├── cron.ts           # Cron expression support
+│   │   └── events/           # Event sources
+│   │       ├── file-watcher.ts # File change monitoring
+│   │       ├── webhook.ts     # HTTP webhook receiver
+│   │       ├── github.ts      # GitHub polling
+│   │       └── command.ts     # Shell command output diffing
 │   ├── tools/
 │   │   ├── types.ts          # Tool, ToolResult interfaces
 │   │   ├── executor.ts       # ToolExecutor registry + execution
 │   │   ├── format.ts         # Qwen3 <tool_call> parsing
-│   │   ├── loader.ts         # Tool loading
-│   │   └── builtin/          # 10 built-in tools
+│   │   └── builtin/          # 48 built-in tools
+│   │       ├── read.ts       # File reading
+│   │       ├── write.ts      # File writing
+│   │       ├── edit.ts       # String replacement editing
+│   │       ├── exec.ts       # Shell command execution
+│   │       ├── glob.ts       # File pattern matching
+│   │       ├── memory.ts     # Memory CRUD (5 tools)
+│   │       ├── git.ts        # Git operations (5 tools)
+│   │       ├── github.ts     # GitHub API (11 tools)
+│   │       ├── browser.ts    # Browser automation (11 tools)
+│   │       ├── tasks.ts      # Background task management (8 tools)
+│   │       ├── screenshot.ts # Screen capture
+│   │       ├── web-research.ts # Web page fetching
+│   │       └── code-agent.ts # Claude Code delegation
 │   ├── tracking/
 │   │   ├── stats.ts          # Request/token/cost tracking
-│   │   └── costs.ts          # Model pricing lookup
-│   └── util/
-│       ├── logger.ts         # Colored, leveled console logging
-│       ├── tokens.ts         # Token counting utilities
-│       └── async.ts          # Async helpers
+│   │   ├── costs.ts          # Model pricing lookup
+│   │   └── transcript.ts     # Conversation logging to JSONL
+│   ├── ui/
+│   │   └── theme.ts          # 256-color ANSI theme system (4 themes)
+│   ├── util/
+│   │   ├── logger.ts         # Colored, leveled console logging
+│   │   ├── tokens.ts         # Token counting utilities
+│   │   ├── args.ts           # CLI argument parsing
+│   │   └── async.ts          # Async helpers
+│   └── workflows/
+│       ├── engine.ts         # Workflow execution engine
+│       ├── builtin.ts        # Pre-built workflows
+│       ├── tool.ts           # Workflow tool definitions
+│       └── types.ts          # Workflow types
 ├── services/
 │   └── embeddings/           # Python embedding service (optional)
-├── test/                     # bun:test suite
-├── workspace/                # Runtime data (templates)
+├── test/                     # bun:test suite (mirroring src/)
+├── workspace/                # Default personality templates
 ├── docs/                     # Documentation
+├── static/                   # Dashboard HTML/CSS/JS
+├── scripts/                  # Utility scripts
 ├── egirl.toml                # Main configuration
 └── .env                      # API keys (not committed)
 ```
