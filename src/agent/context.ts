@@ -48,6 +48,7 @@ export function buildSystemPrompt(
   const soul = loadWorkspaceFile(workspaceDir, 'SOUL.md')
   const agents = loadWorkspaceFile(workspaceDir, 'AGENTS.md')
   const user = loadWorkspaceFile(workspaceDir, 'USER.md')
+  const memory = loadWorkspaceFile(workspaceDir, 'MEMORY.md')
 
   // Build prompt from loaded files
   const sections: string[] = []
@@ -67,6 +68,12 @@ export function buildSystemPrompt(
   if (user?.includes(':') && !user.includes(':\n\n')) {
     // Only include USER.md if it has actual content (not just template)
     sections.push(user)
+  }
+
+  // Tier 1 memory: MEMORY.md is always-on working memory loaded every message.
+  // Keep this file small and curated — everything else is Tier 2 (vector search).
+  if (memory.trim()) {
+    sections.push(`## Working Memory\n\n${memory.trim()}`)
   }
 
   // Add tool capabilities

@@ -17,6 +17,7 @@ import {
 } from './search'
 
 export { type CompactionExtraction, flushBeforeCompaction } from './compaction-flush'
+export { chunkDailyLog, indexDailyLogs } from './log-indexer'
 export {
   createEmbeddingProvider,
   type EmbeddingInput,
@@ -317,6 +318,13 @@ export class MemoryManager {
    */
   hasMultimodalEmbeddings(): boolean {
     return this.embeddings?.supportsImages ?? false
+  }
+
+  /**
+   * Access underlying file operations (for log indexing, etc.)
+   */
+  getFiles(): MemoryFiles {
+    return this.files
   }
 
   close(): void {
