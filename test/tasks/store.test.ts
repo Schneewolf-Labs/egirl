@@ -63,17 +63,19 @@ describe('TaskStore', () => {
       }),
     )
 
-    const fetched = store.get(task.id)!
-    expect(fetched.cronExpression).toBe('0 9 * * MON-FRI')
-    expect(fetched.businessHours).toBe('9-17 Mon-Fri')
+    const fetched = store.get(task.id)
+    expect(fetched).toBeDefined()
+    expect(fetched?.cronExpression).toBe('0 9 * * MON-FRI')
+    expect(fetched?.businessHours).toBe('9-17 Mon-Fri')
   })
 
   test('stores task dependency', () => {
     const parent = store.create(makeTask({ name: 'parent' }))
     const child = store.create(makeTask({ name: 'child', dependsOn: parent.id }))
 
-    const fetched = store.get(child.id)!
-    expect(fetched.dependsOn).toBe(parent.id)
+    const fetched = store.get(child.id)
+    expect(fetched).toBeDefined()
+    expect(fetched?.dependsOn).toBe(parent.id)
   })
 
   test('getDependents returns tasks that depend on a given task', () => {
@@ -91,8 +93,9 @@ describe('TaskStore', () => {
     const task = store.create(makeTask())
     store.update(task.id, { lastErrorKind: 'rate_limit' as const })
 
-    const fetched = store.get(task.id)!
-    expect(fetched.lastErrorKind).toBe('rate_limit')
+    const fetched = store.get(task.id)
+    expect(fetched).toBeDefined()
+    expect(fetched?.lastErrorKind).toBe('rate_limit')
   })
 
   test('completeRun stores errorKind', () => {
@@ -143,14 +146,16 @@ describe('TaskStore', () => {
 
   test('stores triggerMode', () => {
     const task = store.create(makeTask({ kind: 'event', triggerMode: 'create_task' }))
-    const fetched = store.get(task.id)!
-    expect(fetched.triggerMode).toBe('create_task')
+    const fetched = store.get(task.id)
+    expect(fetched).toBeDefined()
+    expect(fetched?.triggerMode).toBe('create_task')
   })
 
   test('triggerMode defaults to execute', () => {
     const task = store.create(makeTask())
-    const fetched = store.get(task.id)!
-    expect(fetched.triggerMode).toBe('execute')
+    const fetched = store.get(task.id)
+    expect(fetched).toBeDefined()
+    expect(fetched?.triggerMode).toBe('execute')
   })
 
   test('records initial transition on create', () => {
