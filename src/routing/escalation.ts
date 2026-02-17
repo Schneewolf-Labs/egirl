@@ -6,7 +6,10 @@ export interface EscalationDecision {
   confidence: number
 }
 
-// Patterns in responses that suggest the local model is struggling
+// Patterns in responses that suggest the local model is struggling.
+// Removed "let me think" and "this is complex" — these are normal thinking
+// phrases, not indicators of inability. Remaining patterns require compound
+// signals (multiple matches OR single match + short response) to trigger.
 const UNCERTAINTY_PATTERNS = [
   /i('m| am) not sure/i,
   /i don't know/i,
@@ -16,8 +19,6 @@ const UNCERTAINTY_PATTERNS = [
   /i would need more/i,
   /this requires/i,
   /i('m| am) having trouble/i,
-  /let me think/i,
-  /this is complex/i,
 ]
 
 const ERROR_PATTERNS = [/error:/i, /failed to/i, /cannot parse/i, /invalid/i, /syntax error/i]
@@ -41,9 +42,12 @@ export function analyzeResponseForEscalation(
   // the model's own words, not code it's quoting
   const prose = content.replace(/```[\s\S]*?```/g, '').replace(/`[^`]+`/g, '')
 
-  // Check for uncertainty patterns in the model's prose
-  const hasUncertainty = UNCERTAINTY_PATTERNS.some((p) => p.test(prose))
-  if (hasUncertainty) {
+  // Check for uncertainty patterns in the model's prose.
+  // Require compound signal: multiple patterns OR single pattern + short response.
+  // A single "I'm not sure" buried in a long detailed answer is hedging, not struggling.
+  const matchedUncertainty = UNCERTAINTY_PATTERNS.filter((p) => p.test(prose))
+  const isShortResponse = content.length < 200
+  if (matchedUncertainty.length >= 2 || (matchedUncertainty.length >= 1 && isShortResponse)) {
     return {
       shouldEscalate: true,
       reason: 'uncertainty_detected',

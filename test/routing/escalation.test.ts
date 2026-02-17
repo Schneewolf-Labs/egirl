@@ -93,6 +93,38 @@ describe('analyzeResponseForEscalation', () => {
     expect(result.shouldEscalate).toBe(false)
     expect(result.confidence).toBe(0.9)
   })
+
+  test('does not escalate for removed false-positive patterns', () => {
+    const falsePositives = ['Let me think about this for a moment.', 'This is complex but manageable.']
+
+    for (const content of falsePositives) {
+      const response = makeResponse({ content })
+      const result = analyzeResponseForEscalation(response, 0.4)
+      expect(result.reason).not.toBe('uncertainty_detected')
+    }
+  })
+
+  test('does not escalate for single uncertainty pattern in long response', () => {
+    const longResponse =
+      "I'm not sure about the exact version number, but here's what I know about the library. " +
+      'It was first released in 2019 and has since gained significant traction in the community. ' +
+      'The API surface is well-documented and the maintainers are responsive to issues. ' +
+      'You can find the full changelog on their GitHub repository.'
+    const response = makeResponse({ content: longResponse })
+    const result = analyzeResponseForEscalation(response, 0.4)
+    expect(result.shouldEscalate).toBe(false)
+  })
+
+  test('escalates for multiple uncertainty patterns regardless of length', () => {
+    const longUncertain =
+      "I'm not sure about this approach and I don't know if it will work correctly. " +
+      'There are several considerations to keep in mind when implementing this pattern ' +
+      'and the documentation is somewhat unclear on the expected behavior in edge cases.'
+    const response = makeResponse({ content: longUncertain })
+    const result = analyzeResponseForEscalation(response, 0.4)
+    expect(result.shouldEscalate).toBe(true)
+    expect(result.reason).toBe('uncertainty_detected')
+  })
 })
 
 describe('shouldRetryWithRemote', () => {
