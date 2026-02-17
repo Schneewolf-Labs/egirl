@@ -2,36 +2,23 @@
 
 Audit of the egirl codebase against the conventions in CLAUDE.md, identifying maintainability issues and concrete refactoring suggestions.
 
----
-
-## 1. Broken Imports (Runtime Failures)
-
-Three files reference `../utils/logger` instead of `../util/logger`:
-
-| File | Line | Broken Import |
-|------|------|---------------|
-| `src/tools/loader.ts` | 2 | `../utils/logger` |
-| `src/skills/index.ts` | 7 | `../utils/logger` |
-| `src/skills/loader.ts` | 5 | `../utils/logger` |
-
-**Impact**: These modules will throw `MODULE_NOT_FOUND` at runtime.
-**Fix**: Replace `../utils/logger` with `../util/logger` in all three files. One-line fix each.
+Items marked with **[DONE]** have been completed.
 
 ---
 
-## 2. `src/index.ts` Does Too Much (581 lines)
+## 1. ~~Broken Imports (Runtime Failures)~~ **[DONE]**
 
-The main entry point contains 6 independent command runners (`runCLI`, `runDiscord`, `runXMPP`, `runClaudeCode`, `runAPI`, `showStatus`) plus shared setup helpers. This violates the ~200 line convention and mixes unrelated concerns.
+Three files referenced `../utils/logger` instead of `../util/logger`. All three have been fixed. The dead `src/tools/loader.ts` file was removed entirely.
 
-Each runner follows the same pattern: parse args, create providers, create memory, create router, create agent, create channel, wire shutdown. This boilerplate is duplicated 4 times.
+---
 
-### Suggested refactor
+## 2. ~~`src/index.ts` Does Too Much~~ **[DONE]**
 
-**Extract a shared bootstrap function** to eliminate duplication:
+The entry point has been reduced from 581 lines to ~120 lines. A shared bootstrap function was extracted to `src/bootstrap.ts`, and each command runner was moved to its own file under `src/commands/`:
 
 ```
 src/
-  bootstrap.ts              # createAppContext() → { providers, memory, router, toolExecutor, conversations }
+  bootstrap.ts              # createAppServices() → shared context
   commands/
     cli.ts                  # runCLI()
     discord.ts              # runDiscord()
@@ -39,81 +26,35 @@ src/
     claude-code.ts          # runClaudeCode()
     api.ts                  # runAPI()
     status.ts               # showStatus()
-  index.ts                  # ~50 lines: parse args, switch on command, call runner
+  index.ts                  # ~120 lines: parse args, switch on command, call runner
 ```
-
-The bootstrap function centralizes the repeated pattern:
-
-```typescript
-interface AppContext {
-  config: RuntimeConfig
-  providers: ProviderRegistry
-  memory: MemoryManager | undefined
-  conversations: ConversationStore | undefined
-  router: Router
-  toolExecutor: ToolExecutor
-}
-
-function createAppContext(config: RuntimeConfig): AppContext { ... }
-```
-
-Each command file becomes a focused ~60-80 line module that receives the shared context and wires up its channel-specific logic.
-
-**Lines saved**: ~300 (duplicated provider/memory/router setup across 4 runners).
 
 ---
 
-## 3. `src/providers/llamacpp.ts` — Two Unrelated Classes (422 lines)
+## 3. ~~`src/providers/llamacpp.ts` — Two Unrelated Classes~~ **[DONE]**
 
-This file contains both `LlamaCppProvider` (the chat completion provider) and `LlamaCppTokenizer` (a caching tokenizer). These are independent concerns that happen to share an endpoint.
-
-### Suggested refactor
-
-```
-src/providers/
-  llamacpp.ts               # LlamaCppProvider only (~340 lines)
-  llamacpp-tokenizer.ts     # LlamaCppTokenizer + factory (~65 lines)
-```
-
-The provider is still borderline at ~340 lines, but the stream-reading logic is inherently complex and cohesive. The `formatMessagesForQwen3` function (lines 363-418) could also be extracted to a dedicated `src/providers/qwen3-format.ts` if desired, bringing the provider under 300 lines.
+`LlamaCppTokenizer` has been extracted to `src/providers/llamacpp-tokenizer.ts`. The provider file (`llamacpp.ts`) is now ~372 lines — still above the 200-line guideline but the stream-reading logic is inherently complex and cohesive.
 
 ---
 
-## 4. `src/memory/embeddings.ts` — Three Providers in One File (308 lines)
+## 4. ~~`src/memory/embeddings.ts` — Three Providers in One File~~ **[DONE]**
 
-Contains `Qwen3VLEmbeddings`, `LlamaCppEmbeddings`, and `OpenAIEmbeddings` plus a factory function. Each class is independent.
-
-### Suggested refactor
+Embedding providers have been split into separate files:
 
 ```
 src/memory/embeddings/
   types.ts                  # EmbeddingInput, EmbeddingProvider interface, config types
-  qwen3-vl.ts              # Qwen3VLEmbeddings (~50 lines)
-  llamacpp.ts              # LlamaCppEmbeddings (~120 lines)
-  openai.ts                # OpenAIEmbeddings (~70 lines)
+  qwen3-vl.ts              # Qwen3VLEmbeddings
+  llamacpp.ts              # LlamaCppEmbeddings
+  openai.ts                # OpenAIEmbeddings
   index.ts                 # createEmbeddingProvider factory + re-exports
 ```
 
-Each provider file becomes self-contained and independently testable.
-
 ---
 
-## 5. `src/channels/discord.ts` — Mixed Concerns (442 lines)
+## 5. `src/channels/discord.ts` — Mixed Concerns (481 lines)
 
-The Discord channel mixes client lifecycle, message handling, event state tracking, message formatting, and message splitting. The helper functions at the top (formatting, event handler factory) are logically separate from the channel class.
-
-### Suggested refactor
-
-```
-src/channels/discord/
-  channel.ts               # DiscordChannel class (~250 lines)
-  formatting.ts            # formatToolCallsMarkdown, buildToolCallPrefix, truncateResult (~50 lines)
-  events.ts                # createDiscordEventHandler, DiscordEventState (~40 lines)
-  message-split.ts         # splitMessage logic (~30 lines)
-  index.ts                 # re-export createDiscordChannel
-```
-
-This keeps each file focused and makes the formatting/splitting logic independently testable.
+Formatting and event handler helpers have been partially extracted to `src/channels/discord/formatting.ts` and `src/channels/discord/events.ts`. The main `discord.ts` file is still 481 lines. The message splitting logic and some formatting functions could still be extracted further.
 
 ---
 
@@ -156,53 +97,22 @@ The `ToolExecutor` validates parameters against the schema before calling `execu
 
 ---
 
-## 7. Duplicated Arg Parsing Pattern
+## 7. ~~Duplicated Arg Parsing Pattern~~ **[DONE]**
 
-Every command runner duplicates the same log-level-from-args logic:
-
-```typescript
-if (args.includes('--quiet') || args.includes('-q')) {
-  log.setLevel('error')
-} else if (args.includes('--verbose') || args.includes('-v') || args.includes('--debug') || args.includes('-d')) {
-  log.setLevel('debug')
-}
-```
-
-This appears in `runCLI`, `runDiscord`, `runXMPP`, `runClaudeCode`, and `runAPI` (5 copies).
-
-### Suggested refactor
-
-Extract to `src/util/args.ts`:
-
-```typescript
-export function applyLogLevel(args: string[]): void {
-  if (args.includes('--quiet') || args.includes('-q')) {
-    log.setLevel('error')
-  } else if (args.includes('--verbose') || args.includes('-v') || args.includes('--debug') || args.includes('-d')) {
-    log.setLevel('debug')
-  }
-}
-```
+Shared log-level-from-args logic has been extracted to `applyLogLevel()` in `src/util/args.ts`.
 
 ---
 
-## 8. Dead / Stub Code
+## 8. ~~Dead / Stub Code~~ **[DONE]**
 
-### `src/tools/loader.ts`
-The `ToolLoader` interface and `createToolLoader()` factory are placeholders that return empty arrays. No code calls them. Remove the file entirely until dynamic tool loading is actually implemented.
-
-### `src/skills/index.ts` — `SkillManager` class
-The `SkillManager` class is defined and exported but never instantiated in the application. The `main()` function doesn't use skills at all. If skills aren't wired into the agent loop yet, this is dead code.
-
-**Recommendation**: Either wire `SkillManager` into the agent bootstrap or remove the class and keep only the parsing/loading exports that tests exercise.
+- `src/tools/loader.ts` — Removed entirely. The dead `ToolLoader` stub no longer exists.
+- `src/skills/index.ts` — `SkillManager` class has been removed. Only the parsing/loading exports remain.
 
 ---
 
 ## 9. Unused Dependency: `yaml`
 
-The `yaml` package is only imported in `src/skills/parser.ts` to parse YAML frontmatter in skill markdown files. Since the skill system itself isn't wired into the application (see item 8), this dependency is effectively unused at runtime.
-
-If skills are planned for near-term implementation, keep it. Otherwise, remove from `package.json`.
+The `yaml` package is only imported in `src/skills/parser.ts` to parse YAML frontmatter in skill markdown files. Skills are loaded at startup via `loadSkillsFromDirectories()` — the dependency is used at runtime, so this is no longer a concern.
 
 ---
 
@@ -218,9 +128,9 @@ If skills are planned for near-term implementation, keep it. Otherwise, remove f
 | `src/api/routes.ts` | Medium — HTTP endpoint logic |
 | `src/api/server.ts` | Low — thin Bun.serve wrapper |
 | `src/memory/indexer.ts` | Medium — SQLite operations |
-| `src/memory/embeddings.ts` | Medium — HTTP calls to external services |
+| `src/memory/embeddings/` | Medium — HTTP calls to external services |
 | `src/conversation/store.ts` | Medium — SQLite persistence |
-| `src/agent/loop.ts` | High — core agent logic, escalation, tool execution |
+| `src/agent/loop.ts` | High — core agent logic, escalation, tool execution (958 lines) |
 
 ### Tests that would add the most value:
 1. **Agent loop** — mock providers and tool executor, test escalation flow, max-turns recovery, conversation persistence
@@ -231,24 +141,24 @@ If skills are planned for near-term implementation, keep it. Otherwise, remove f
 
 ## 11. Files Over 200 Lines (Convention Violations)
 
-14 files exceed the ~200 line guideline from CLAUDE.md:
+Updated line counts after refactoring:
 
-| File | Lines | Actionable? |
-|------|-------|-------------|
-| `src/index.ts` | 581 | Yes — extract commands (item 2) |
-| `src/channels/discord.ts` | 442 | Yes — extract helpers (item 5) |
-| `src/agent/loop.ts` | 441 | Borderline — class is cohesive, but could extract retry logic |
-| `src/channels/claude-code.ts` | 431 | Borderline — protocol handling is inherently complex |
-| `src/providers/llamacpp.ts` | 422 | Yes — extract tokenizer + formatter (item 3) |
-| `src/api/openapi.ts` | 388 | No — declarative spec, splitting would hurt readability |
-| `src/tools/builtin/git.ts` | 359 | No — 4 independent tools, but they share helpers; could split into per-tool files |
-| `src/tools/builtin/memory.ts` | 321 | Same as git.ts |
-| `src/agent/context-window.ts` | 315 | No — cohesive algorithm with clear sections |
-| `src/memory/embeddings.ts` | 308 | Yes — extract per-provider files (item 4) |
-| `src/memory/indexer.ts` | 266 | Borderline — SQLite + vector ops are intertwined |
-| `src/memory/index.ts` | 246 | Borderline |
-| `src/api/routes.ts` | 237 | Borderline — could split into route groups |
-| `src/config/index.ts` | 205 | No — just over limit, cohesive |
+| File | Lines | Status |
+|------|-------|--------|
+| `src/agent/loop.ts` | 958 | Largest file — could extract retry logic, tool dispatch |
+| `src/channels/discord.ts` | 481 | Partially extracted — formatting/events split out, main file still large |
+| `src/channels/claude-code.ts` | ~430 | Protocol handling is inherently complex |
+| `src/providers/llamacpp.ts` | 372 | Tokenizer extracted, stream logic is cohesive |
+| `src/api/openapi.ts` | ~388 | Declarative spec, splitting would hurt readability |
+| `src/tools/builtin/git.ts` | ~359 | Independent tools sharing helpers; could split per-tool |
+| `src/tools/builtin/memory.ts` | ~446 | Grew with `memory_recall` addition |
+| `src/agent/context-window.ts` | ~315 | Cohesive algorithm with clear sections |
+| `src/memory/indexer.ts` | ~266 | SQLite + vector ops are intertwined |
+| `src/memory/index.ts` | ~246 | Borderline |
+| `src/api/routes.ts` | ~237 | Borderline — could split into route groups |
+| `src/config/index.ts` | ~205 | Just over limit, cohesive |
+| `src/index.ts` | 120 | **[DONE]** — extracted to bootstrap + commands |
+| `src/memory/embeddings.ts` | — | **[DONE]** — split into `embeddings/` directory |
 
 ---
 
@@ -286,16 +196,16 @@ interface AgentLoopDeps {
 
 ## Priority Summary
 
-| Priority | Item | Effort |
+| Priority | Item | Status |
 |----------|------|--------|
-| **P0** | Fix 3 broken imports (`utils` → `util`) | 5 min |
-| **P1** | Extract command runners from `index.ts` + shared bootstrap | Small |
-| **P1** | Extract `LlamaCppTokenizer` to its own file | Small |
-| **P2** | Split embedding providers into separate files | Small |
-| **P2** | Extract Discord channel helpers | Small |
-| **P2** | Add TypeBox validation to tool parameters | Medium |
-| **P2** | Add agent loop and Discord channel tests | Medium |
-| **P3** | Remove dead `ToolLoader` stub | Small |
-| **P3** | Wire or remove `SkillManager` | Small |
-| **P3** | Extract shared arg parsing | Small |
-| **P3** | Refactor `AgentLoop` constructor to options object | Small |
+| ~~**P0**~~ | ~~Fix 3 broken imports (`utils` → `util`)~~ | **Done** |
+| ~~**P1**~~ | ~~Extract command runners from `index.ts` + shared bootstrap~~ | **Done** |
+| ~~**P1**~~ | ~~Extract `LlamaCppTokenizer` to its own file~~ | **Done** |
+| ~~**P2**~~ | ~~Split embedding providers into separate files~~ | **Done** |
+| **P2** | Extract Discord channel helpers further | Partial |
+| **P2** | Add TypeBox validation to tool parameters | Open |
+| **P2** | Add agent loop and Discord channel tests | Open |
+| ~~**P3**~~ | ~~Remove dead `ToolLoader` stub~~ | **Done** |
+| ~~**P3**~~ | ~~Wire or remove `SkillManager`~~ | **Done** |
+| ~~**P3**~~ | ~~Extract shared arg parsing~~ | **Done** |
+| **P3** | Refactor `AgentLoop` constructor to options object | Open |
