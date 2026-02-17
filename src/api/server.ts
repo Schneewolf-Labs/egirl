@@ -1,3 +1,4 @@
+import { timingSafeEqual } from 'crypto'
 import type { AgentLoop } from '../agent'
 import type { BrowserManager } from '../browser'
 import type { RuntimeConfig } from '../config'
@@ -16,6 +17,7 @@ export interface APIServerConfig {
   bearerToken?: string
   maxRequestBytes?: number
   rateLimitPerMinute?: number
+  corsOrigins?: string[]
 }
 
 export interface APIServerDeps {
@@ -75,16 +77,43 @@ class RateLimiter {
 const DEFAULT_MAX_REQUEST_BYTES = 64 * 1024 // 64 KB
 const DEFAULT_RATE_LIMIT = 30 // requests per minute
 
+/** Auth-exempt paths that return minimal info */
+const PUBLIC_PATHS = new Set(['/health'])
+
+/** Security headers applied to every response */
+const SECURITY_HEADERS: Record<string, string> = {
+  'X-Content-Type-Options': 'nosniff',
+  'X-Frame-Options': 'DENY',
+  'Cache-Control': 'no-store',
+}
+
+/**
+ * Constant-time string comparison to prevent timing attacks on token auth.
+ * Returns true if a === b without leaking length/content via timing.
+ */
+function safeEqual(a: string, b: string): boolean {
+  const bufA = Buffer.from(a)
+  const bufB = Buffer.from(b)
+  if (bufA.length !== bufB.length) {
+    // Still do comparison to avoid leaking length info via timing
+    timingSafeEqual(bufA, bufA)
+    return false
+  }
+  return timingSafeEqual(bufA, bufB)
+}
+
 export class APIServer {
   private server: ReturnType<typeof Bun.serve> | null = null
   private serverConfig: APIServerConfig
   private routes: ReturnType<typeof createRoutes>
   private rateLimiter: RateLimiter
   private cleanupInterval: ReturnType<typeof setInterval> | null = null
+  private allowedOrigins: Set<string>
 
   constructor(serverConfig: APIServerConfig, deps: APIServerDeps) {
     this.serverConfig = serverConfig
     this.rateLimiter = new RateLimiter(serverConfig.rateLimitPerMinute ?? DEFAULT_RATE_LIMIT)
+    this.allowedOrigins = new Set(serverConfig.corsOrigins ?? [])
 
     const spec = buildOpenAPISpec(serverConfig.host, serverConfig.port)
 
@@ -107,6 +136,12 @@ export class APIServer {
           this.routes.get(path)?.set(method, handler)
         }
       }
+    }
+
+    if (serverConfig.bearerToken) {
+      log.info('api', 'API key authentication enabled')
+    } else {
+      log.warn('api', 'No API key configured — all requests are unauthenticated')
     }
   }
 
@@ -140,11 +175,31 @@ export class APIServer {
   private corsHeaders(req: Request): Record<string, string> {
     const origin = req.headers.get('origin')
     if (!origin) return {}
+
+    // If no origins configured, reject all cross-origin requests
+    if (this.allowedOrigins.size === 0) return {}
+
+    // Only allow explicitly whitelisted origins
+    if (!this.allowedOrigins.has(origin)) return {}
+
     return {
       'Access-Control-Allow-Origin': origin,
       'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     }
+  }
+
+  private applyHeaders(res: Response, req: Request): Response {
+    // Security headers
+    for (const [k, v] of Object.entries(SECURITY_HEADERS)) {
+      res.headers.set(k, v)
+    }
+    // CORS headers
+    const cors = this.corsHeaders(req)
+    for (const [k, v] of Object.entries(cors)) {
+      res.headers.set(k, v)
+    }
+    return res
   }
 
   private async handleRequest(req: Request): Promise<Response> {
@@ -157,17 +212,14 @@ export class APIServer {
 
     // CORS preflight
     if (method === 'OPTIONS') {
-      return new Response(null, { status: 204, headers: this.corsHeaders(req) })
+      return new Response(null, {
+        status: 204,
+        headers: { ...SECURITY_HEADERS, ...this.corsHeaders(req) },
+      })
     }
 
     const res = await this.routeRequest(req, method, path, ip)
-    const cors = this.corsHeaders(req)
-    if (Object.keys(cors).length > 0) {
-      for (const [k, v] of Object.entries(cors)) {
-        res.headers.set(k, v)
-      }
-    }
-    return res
+    return this.applyHeaders(res, req)
   }
 
   private async routeRequest(
@@ -176,12 +228,12 @@ export class APIServer {
     path: string,
     ip: string,
   ): Promise<Response> {
-    // Bearer token auth (skip for health check)
-    if (this.serverConfig.bearerToken && path !== '/health') {
+    // Bearer token auth (skip for public paths)
+    if (this.serverConfig.bearerToken && !PUBLIC_PATHS.has(path)) {
       const authHeader = req.headers.get('authorization')
       const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : undefined
 
-      if (token !== this.serverConfig.bearerToken) {
+      if (!token || !safeEqual(token, this.serverConfig.bearerToken)) {
         return new Response(JSON.stringify({ error: 'Unauthorized' }), {
           status: 401,
           headers: { 'Content-Type': 'application/json' },

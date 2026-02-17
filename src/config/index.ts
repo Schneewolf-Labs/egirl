@@ -283,9 +283,14 @@ export function loadConfig(): RuntimeConfig {
   }
 
   if (toml.channels?.api) {
+    const egirlApiKey = process.env.EGIRL_API_KEY
     config.channels.api = {
       port: toml.channels.api.port ?? 3000,
       host: toml.channels.api.host ?? '127.0.0.1',
+      ...(egirlApiKey && { apiKey: egirlApiKey }),
+      rateLimit: toml.channels.api.rate_limit ?? 30,
+      maxRequestBytes: toml.channels.api.max_request_bytes ?? 65536,
+      corsOrigins: toml.channels.api.cors_origins ?? [],
     }
   }
 

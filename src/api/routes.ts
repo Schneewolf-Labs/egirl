@@ -66,10 +66,9 @@ export function createRoutes(deps: RouteDeps): Map<string, Map<string, RouteHand
     return new Response(Bun.file(join(STATIC_DIR, 'dashboard.js')))
   })
 
-  // GET /health
+  // GET /health — public, minimal info
   route('GET', '/health', async () => {
-    const uptime = (Date.now() - deps.startTime) / 1000
-    return json({ status: 'ok', uptime })
+    return json({ status: 'ok' })
   })
 
   // GET /openapi.json
