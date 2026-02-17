@@ -42,8 +42,16 @@ export async function runAPI(config: RuntimeConfig, args: string[]): Promise<voi
     sessionMutex,
   })
 
+  const apiConf = config.channels.api
   const api = createAPIServer(
-    { port, host },
+    {
+      port,
+      host,
+      bearerToken: apiConf?.apiKey,
+      rateLimitPerMinute: apiConf?.rateLimit ?? 30,
+      maxRequestBytes: apiConf?.maxRequestBytes ?? 65536,
+      corsOrigins: apiConf?.corsOrigins ?? [],
+    },
     {
       config,
       agent,

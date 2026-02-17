@@ -85,6 +85,9 @@ export const EgirlConfigSchema = Type.Object({
         Type.Object({
           port: Type.Number({ default: 3000 }),
           host: Type.String({ default: '127.0.0.1' }),
+          rate_limit: Type.Optional(Type.Number({ default: 30 })),
+          max_request_bytes: Type.Optional(Type.Number({ default: 65536 })),
+          cors_origins: Type.Optional(Type.Array(Type.String())),
         }),
       ),
     }),
@@ -275,6 +278,10 @@ export interface RuntimeConfig {
     api?: {
       port: number
       host: string
+      apiKey?: string
+      rateLimit: number
+      maxRequestBytes: number
+      corsOrigins: string[]
     }
   }
   conversation: {
