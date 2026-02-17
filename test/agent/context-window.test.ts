@@ -1,5 +1,9 @@
 import { describe, expect, test } from 'bun:test'
-import { estimateMessageTokens, fitToContextWindow } from '../../src/agent/context-window'
+import {
+  estimateMessageTokens,
+  fitToContextWindow,
+  truncateToolResultSync,
+} from '../../src/agent/context-window'
 import type { ChatMessage } from '../../src/providers/types'
 
 describe('estimateMessageTokens', () => {
@@ -45,6 +49,26 @@ describe('estimateMessageTokens', () => {
     const msg: ChatMessage = { role: 'user', content: '' }
     const tokens = estimateMessageTokens(msg)
     expect(tokens).toBe(4) // just overhead
+  })
+})
+
+describe('truncateToolResultSync', () => {
+  test('returns content unchanged when within budget', () => {
+    const content = 'short result'
+    expect(truncateToolResultSync(content, 1000)).toBe(content)
+  })
+
+  test('truncates content exceeding token budget', () => {
+    const content = 'x'.repeat(50000) // ~14286 tokens at 3.5 chars/token
+    const result = truncateToolResultSync(content, 100)
+    // 100 tokens * 3.5 chars/token = 350 chars max
+    expect(result.length).toBeLessThan(1000)
+    expect(result).toContain('[Output truncated')
+    expect(result).toContain('estimated tokens exceeded 100 token limit')
+  })
+
+  test('preserves empty content', () => {
+    expect(truncateToolResultSync('', 100)).toBe('')
   })
 })
 
