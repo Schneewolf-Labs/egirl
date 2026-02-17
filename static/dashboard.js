@@ -271,6 +271,18 @@ function populateForms(c) {
   document.getElementById('cfg-hb-schedule').value = c.tasks?.heartbeat?.schedule || '';
   document.getElementById('cfg-hb-hours').value = c.tasks?.heartbeat?.businessHours || '';
 
+  // Tools
+  document.getElementById('cfg-tools-files').checked = c.tools?.files !== false;
+  document.getElementById('cfg-tools-exec').checked = c.tools?.exec !== false;
+  document.getElementById('cfg-tools-git').checked = c.tools?.git !== false;
+  document.getElementById('cfg-tools-memory').checked = c.tools?.memory !== false;
+  document.getElementById('cfg-tools-web').checked = c.tools?.webResearch !== false;
+  document.getElementById('cfg-tools-screenshot').checked = c.tools?.screenshot !== false;
+  document.getElementById('cfg-tools-browser').checked = c.tools?.browser === true;
+  document.getElementById('cfg-tools-github').checked = c.tools?.github === true;
+  document.getElementById('cfg-tools-tasks').checked = c.tools?.tasks === true;
+  document.getElementById('cfg-tools-codeagent').checked = c.tools?.codeAgent === true;
+
   // Thinking
   document.getElementById('cfg-think-level').value = c.thinking?.level || 'off';
   document.getElementById('cfg-think-budget').value = c.thinking?.budgetTokens || '';
@@ -367,6 +379,18 @@ async function saveConfig() {
         schedule: document.getElementById('cfg-hb-schedule').value || '*/30 * * * *',
         business_hours: document.getElementById('cfg-hb-hours').value || undefined,
       },
+    },
+    tools: {
+      files: document.getElementById('cfg-tools-files').checked,
+      exec: document.getElementById('cfg-tools-exec').checked,
+      git: document.getElementById('cfg-tools-git').checked,
+      memory: document.getElementById('cfg-tools-memory').checked,
+      browser: document.getElementById('cfg-tools-browser').checked,
+      github: document.getElementById('cfg-tools-github').checked,
+      tasks: document.getElementById('cfg-tools-tasks').checked,
+      code_agent: document.getElementById('cfg-tools-codeagent').checked,
+      web_research: document.getElementById('cfg-tools-web').checked,
+      screenshot: document.getElementById('cfg-tools-screenshot').checked,
     },
     skills: { dirs: getTagValues('cfg-skill-dirs') },
     thinking: {

@@ -216,6 +216,18 @@ export function loadConfig(): RuntimeConfig {
         ? expandPath(toml.transcript.path, workspacePath)
         : join(workspacePath, 'transcripts'),
     },
+    tools: {
+      files: toml.tools?.files ?? true,
+      exec: toml.tools?.exec ?? true,
+      git: toml.tools?.git ?? true,
+      memory: toml.tools?.memory ?? true,
+      browser: toml.tools?.browser ?? false,
+      github: toml.tools?.github ?? false,
+      tasks: toml.tools?.tasks ?? false,
+      codeAgent: toml.tools?.code_agent ?? false,
+      webResearch: toml.tools?.web_research ?? true,
+      screenshot: toml.tools?.screenshot ?? true,
+    },
     skills: {
       dirs: (toml.skills?.dirs ?? defaultToml.skills.dirs).map((d) => expandPath(d, workspacePath)),
     },

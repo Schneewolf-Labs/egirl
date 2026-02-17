@@ -196,6 +196,7 @@ export async function createAppServices(config: RuntimeConfig): Promise<AppServi
   const router = createRouter(config, skills)
   const browser = new BrowserManager()
   const toolExecutor = createDefaultToolExecutor(
+    config,
     memory,
     getCodeAgentConfig(config),
     getGitHubConfig(config),

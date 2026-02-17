@@ -185,6 +185,21 @@ export const EgirlConfigSchema = Type.Object({
     }),
   ),
 
+  tools: Type.Optional(
+    Type.Object({
+      files: Type.Boolean({ default: true }),
+      exec: Type.Boolean({ default: true }),
+      git: Type.Boolean({ default: true }),
+      memory: Type.Boolean({ default: true }),
+      browser: Type.Boolean({ default: false }),
+      github: Type.Boolean({ default: false }),
+      tasks: Type.Boolean({ default: false }),
+      code_agent: Type.Boolean({ default: false }),
+      web_research: Type.Boolean({ default: true }),
+      screenshot: Type.Boolean({ default: true }),
+    }),
+  ),
+
   skills: Type.Object({
     dirs: Type.Array(Type.String(), { default: ['~/.egirl/skills', '{workspace}/skills'] }),
   }),
@@ -325,6 +340,18 @@ export interface RuntimeConfig {
   transcript: {
     enabled: boolean
     path: string
+  }
+  tools: {
+    files: boolean
+    exec: boolean
+    git: boolean
+    memory: boolean
+    browser: boolean
+    github: boolean
+    tasks: boolean
+    codeAgent: boolean
+    webResearch: boolean
+    screenshot: boolean
   }
   skills: {
     dirs: string[]

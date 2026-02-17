@@ -28,6 +28,7 @@
     <a href="#" data-section="tasks-cfg">Tasks</a>
     <a href="#" data-section="thinking">Thinking</a>
     <a href="#" data-section="transcript">Transcript</a>
+    <a href="#" data-section="tools-cfg">Tools</a>
     <a href="#" data-section="github">GitHub</a>
     <div class="nav-group">Explore</div>
     <a href="#" data-section="api">API Explorer</a>
@@ -585,6 +586,63 @@
           <label>Transcript Path</label>
           <input type="text" id="cfg-transcript-path" placeholder="{workspace}/transcripts">
           <div class="hint">Directory for saved transcripts</div>
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn primary" onclick="saveConfig()">Save Configuration</button>
+      </div>
+    </section>
+
+    <!-- TOOLS CONFIG -->
+    <section id="sec-tools-cfg" class="section">
+      <h2>Tools</h2>
+      <p style="color:var(--text-dim);font-size:12px;margin-bottom:16px">
+        Toggle tool categories to control which tools are loaded into the system prompt.
+        Disabling unused categories saves context window tokens for local models.
+      </p>
+      <div class="card">
+        <div class="toggle-row">
+          <div><div class="toggle-label">Files</div><div class="toggle-desc">read_file, write_file, edit_file, glob_files — ~570 tokens</div></div>
+          <label class="switch"><input type="checkbox" id="cfg-tools-files"><span class="slider"></span></label>
+        </div>
+        <div class="toggle-row">
+          <div><div class="toggle-label">Execute</div><div class="toggle-desc">execute_command — ~134 tokens</div></div>
+          <label class="switch"><input type="checkbox" id="cfg-tools-exec"><span class="slider"></span></label>
+        </div>
+        <div class="toggle-row">
+          <div><div class="toggle-label">Git</div><div class="toggle-desc">git_status, git_diff, git_log, git_commit, git_show — ~818 tokens</div></div>
+          <label class="switch"><input type="checkbox" id="cfg-tools-git"><span class="slider"></span></label>
+        </div>
+        <div class="toggle-row">
+          <div><div class="toggle-label">Memory</div><div class="toggle-desc">memory_search, memory_get, memory_set, memory_delete, memory_list, memory_recall — ~1020 tokens</div></div>
+          <label class="switch"><input type="checkbox" id="cfg-tools-memory"><span class="slider"></span></label>
+        </div>
+        <div class="toggle-row">
+          <div><div class="toggle-label">Web Research</div><div class="toggle-desc">web_research — ~130 tokens</div></div>
+          <label class="switch"><input type="checkbox" id="cfg-tools-web"><span class="slider"></span></label>
+        </div>
+        <div class="toggle-row">
+          <div><div class="toggle-label">Screenshot</div><div class="toggle-desc">screenshot — ~168 tokens</div></div>
+          <label class="switch"><input type="checkbox" id="cfg-tools-screenshot"><span class="slider"></span></label>
+        </div>
+      </div>
+      <h3>Optional Categories</h3>
+      <div class="card">
+        <div class="toggle-row">
+          <div><div class="toggle-label">Browser</div><div class="toggle-desc">11 browser_* tools (navigate, click, fill, etc.) — ~1373 tokens</div></div>
+          <label class="switch"><input type="checkbox" id="cfg-tools-browser"><span class="slider"></span></label>
+        </div>
+        <div class="toggle-row">
+          <div><div class="toggle-label">GitHub</div><div class="toggle-desc">12 gh_* tools (PRs, issues, CI, releases) — ~1926 tokens</div></div>
+          <label class="switch"><input type="checkbox" id="cfg-tools-github"><span class="slider"></span></label>
+        </div>
+        <div class="toggle-row">
+          <div><div class="toggle-label">Tasks</div><div class="toggle-desc">8 task_* tools (add, propose, list, cancel, etc.) — ~1650 tokens</div></div>
+          <label class="switch"><input type="checkbox" id="cfg-tools-tasks"><span class="slider"></span></label>
+        </div>
+        <div class="toggle-row">
+          <div><div class="toggle-label">Code Agent</div><div class="toggle-desc">code_agent (Claude Code sub-agent) — ~202 tokens</div></div>
+          <label class="switch"><input type="checkbox" id="cfg-tools-codeagent"><span class="slider"></span></label>
         </div>
       </div>
       <div class="btn-row">
