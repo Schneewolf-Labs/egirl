@@ -1,10 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import {
-  buildCommandFilterConfig,
-  checkCommand,
-  getDefaultAllowedCommands,
-  getHardBlockedPatterns,
-} from '../../src/safety/command-filter'
+import { buildCommandFilterConfig, checkCommand } from '../../src/safety/command-filter'
 
 // Default block mode config (permissive — blocks only hard-blocked patterns)
 const blockConfig = buildCommandFilterConfig('block', [], [])
@@ -148,21 +143,6 @@ describe('command-filter', () => {
 
     test('still hard-blocks dangerous commands', () => {
       expect(checkCommand('rm -rf /', customAllowConfig)).toBeDefined()
-    })
-  })
-
-  describe('exports', () => {
-    test('getDefaultAllowedCommands returns a set', () => {
-      const cmds = getDefaultAllowedCommands()
-      expect(cmds.has('git')).toBe(true)
-      expect(cmds.has('ls')).toBe(true)
-      expect(cmds.has('bun')).toBe(true)
-    })
-
-    test('getHardBlockedPatterns returns array of RegExp', () => {
-      const patterns = getHardBlockedPatterns()
-      expect(patterns.length).toBeGreaterThan(0)
-      expect(patterns[0]).toBeInstanceOf(RegExp)
     })
   })
 })

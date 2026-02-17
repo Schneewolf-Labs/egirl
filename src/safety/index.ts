@@ -2,8 +2,8 @@ import { type AuditEntry, appendAuditLog } from './audit-log'
 import { buildCommandFilterConfig, type CommandFilterConfig, checkCommand } from './command-filter'
 import { getDefaultSensitivePatterns, isPathAllowed, isSensitivePath } from './path-guard'
 
-export type { AuditAPIEntry, AuditEntry, AuditMemoryEntry } from './audit-log'
-export { appendAuditLog, auditAPIRequest, auditMemoryOperation } from './audit-log'
+export type { AuditEntry, AuditMemoryEntry } from './audit-log'
+export { appendAuditLog, auditMemoryOperation } from './audit-log'
 export {
   buildCommandFilterConfig,
   type CommandFilterConfig,

@@ -161,14 +161,6 @@ const HARD_BLOCKED_PATTERNS: RegExp[] = [
   /\b(curl|wget)\b.*\|\s*(sh|bash|zsh|dash)/, // pipe remote script to shell
 ]
 
-export function getDefaultAllowedCommands(): ReadonlySet<string> {
-  return DEFAULT_ALLOWED_COMMANDS
-}
-
-export function getHardBlockedPatterns(): RegExp[] {
-  return [...HARD_BLOCKED_PATTERNS]
-}
-
 /**
  * Extract base command names from a shell command string.
  * Handles pipes, &&, ||, ;, and $() subshells.
