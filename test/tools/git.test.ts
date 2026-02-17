@@ -3,10 +3,26 @@ import { execSync } from 'child_process'
 import { mkdir, rm, writeFile } from 'fs/promises'
 import { tmpdir } from 'os'
 import { join } from 'path'
+import type { RuntimeConfig } from '../../src/config'
 import { createDefaultToolExecutor } from '../../src/tools'
 
+const toolsConfig = {
+  tools: {
+    files: true,
+    exec: true,
+    git: true,
+    memory: true,
+    browser: false,
+    github: false,
+    tasks: false,
+    codeAgent: false,
+    webResearch: true,
+    screenshot: true,
+  },
+} as unknown as RuntimeConfig
+
 describe('git tools', () => {
-  const executor = createDefaultToolExecutor()
+  const executor = createDefaultToolExecutor(toolsConfig)
   const testDir = join(tmpdir(), `egirl-git-test-${Date.now()}`)
 
   function exec(cmd: string): string {

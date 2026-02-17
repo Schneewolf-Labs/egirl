@@ -318,6 +318,7 @@ export function createRoutes(deps: RouteDeps): Map<string, Map<string, RouteHand
       memory: c.memory,
       safety: c.safety,
       tasks: c.tasks,
+      tools: c.tools,
       skills: { dirs: c.skills.dirs },
       transcript: c.transcript,
       hasGithub: !!c.github,

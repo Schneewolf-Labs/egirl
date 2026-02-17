@@ -52,7 +52,7 @@ export async function runDiscord(config: RuntimeConfig, args: string[]): Promise
   let taskRunner: ReturnType<typeof createTaskRunner> | undefined
   let discovery: ReturnType<typeof createDiscovery> | undefined
 
-  if (taskStore && config.tasks.enabled) {
+  if (taskStore && config.tasks.enabled && config.tools.tasks) {
     const outbound = new Map<string, { send(target: string, message: string): Promise<void> }>()
     outbound.set('discord', discord)
 

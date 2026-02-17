@@ -24,6 +24,7 @@ export * from './format'
 export * from './types'
 
 import type { BrowserManager } from '../browser'
+import type { RuntimeConfig } from '../config'
 import type { MemoryManager } from '../memory'
 import { builtinWorkflows, createWorkflowTool } from '../workflows'
 import {
@@ -70,61 +71,77 @@ function memoryStub(name: string, description: string, requiredParam: string): T
 }
 
 /**
- * Create tool executor with all default tools.
- * If MemoryManager is provided, memory tools will be functional.
- * If CodeAgentConfig is provided, the code_agent tool will be available.
- * If GitHubConfig is provided, GitHub integration tools will be available.
+ * Create tool executor with tools gated by config toggles.
+ * Each tool category can be enabled/disabled via [tools] in egirl.toml.
+ * System-level gates (MemoryManager, GitHubConfig, etc.) still apply on top.
  */
 export function createDefaultToolExecutor(
+  config: RuntimeConfig,
   memory?: MemoryManager,
   codeAgent?: CodeAgentConfig,
   github?: GitHubConfig,
   browser?: BrowserManager,
 ) {
   const executor = createToolExecutor()
+  const t = config.tools
 
-  // Base tools (always available)
-  executor.registerAll([
-    readTool,
-    writeTool,
-    editTool,
-    execTool,
-    globTool,
-    screenshotTool,
-    webResearchTool,
-    gitStatusTool,
-    gitDiffTool,
-    gitLogTool,
-    gitCommitTool,
-    gitShowTool,
-  ])
+  // File tools (read, write, edit, glob)
+  if (t.files) {
+    executor.registerAll([readTool, writeTool, editTool, globTool])
+  }
+
+  // Shell execution
+  if (t.exec) {
+    executor.register(execTool)
+  }
+
+  // Git tools
+  if (t.git) {
+    executor.registerAll([gitStatusTool, gitDiffTool, gitLogTool, gitCommitTool, gitShowTool])
+  }
+
+  // Screenshot
+  if (t.screenshot) {
+    executor.register(screenshotTool)
+  }
+
+  // Web research
+  if (t.webResearch) {
+    executor.register(webResearchTool)
+  }
 
   // Memory tools (functional if MemoryManager provided)
-  if (memory) {
-    const tools = createMemoryTools(memory)
-    executor.registerAll([
-      tools.memorySearchTool,
-      tools.memoryGetTool,
-      tools.memorySetTool,
-      tools.memoryDeleteTool,
-      tools.memoryListTool,
-      tools.memoryRecallTool,
-    ])
-  } else {
-    // Register stubs that return helpful error messages
-    executor.registerAll([
-      memoryStub('memory_search', 'Search through stored memories using semantic search', 'query'),
-      memoryStub('memory_get', 'Retrieve a specific memory by key', 'key'),
-    ])
+  if (t.memory) {
+    if (memory) {
+      const tools = createMemoryTools(memory)
+      executor.registerAll([
+        tools.memorySearchTool,
+        tools.memoryGetTool,
+        tools.memorySetTool,
+        tools.memoryDeleteTool,
+        tools.memoryListTool,
+        tools.memoryRecallTool,
+      ])
+    } else {
+      // Register stubs that return helpful error messages
+      executor.registerAll([
+        memoryStub(
+          'memory_search',
+          'Search through stored memories using semantic search',
+          'query',
+        ),
+        memoryStub('memory_get', 'Retrieve a specific memory by key', 'key'),
+      ])
+    }
   }
 
   // Code agent tool (available if claude code config provided)
-  if (codeAgent) {
+  if (t.codeAgent && codeAgent) {
     executor.register(createCodeAgentTool(codeAgent))
   }
 
   // GitHub tools (available if GITHUB_TOKEN is set)
-  if (github) {
+  if (t.github && github) {
     const gh = createGitHubTools(github)
     executor.registerAll([
       gh.ghPrListTool,
@@ -143,7 +160,7 @@ export function createDefaultToolExecutor(
   }
 
   // Browser tools (available if BrowserManager provided)
-  if (browser) {
+  if (t.browser && browser) {
     const bt = createBrowserTools(browser)
     executor.registerAll([
       bt.browserNavigateTool,
