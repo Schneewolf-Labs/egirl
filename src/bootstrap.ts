@@ -3,10 +3,10 @@ import { BrowserManager, type BrowserManager as BrowserManagerType } from './bro
 import type { RuntimeConfig } from './config'
 import { type ConversationStore, createConversationStore } from './conversation'
 import {
+  createEmbeddingProvider,
   createMemoryManager,
   indexDailyLogs,
   type MemoryManager,
-  Qwen3VLEmbeddings,
 } from './memory'
 import { createProviderRegistry, type ProviderRegistry } from './providers'
 import { createRouter, type Router } from './routing'
@@ -84,7 +84,14 @@ export function createMemory(config: RuntimeConfig): MemoryManager | undefined {
   }
 
   try {
-    const embeddings = new Qwen3VLEmbeddings(embeddingsConfig.endpoint, embeddingsConfig.dimensions)
+    const embeddings = createEmbeddingProvider(embeddingsConfig.provider, {
+      endpoint: embeddingsConfig.endpoint,
+      model: embeddingsConfig.model,
+      dimensions: embeddingsConfig.dimensions,
+      multimodal: embeddingsConfig.multimodal,
+      apiKey: embeddingsConfig.apiKey,
+      baseUrl: embeddingsConfig.baseUrl,
+    })
 
     const memory = createMemoryManager({
       workspaceDir: config.workspace.path,
@@ -94,7 +101,7 @@ export function createMemory(config: RuntimeConfig): MemoryManager | undefined {
 
     log.info(
       'main',
-      `Memory system initialized: ${embeddingsConfig.model} @ ${embeddingsConfig.endpoint}`,
+      `Memory system initialized: ${embeddingsConfig.provider}/${embeddingsConfig.model} @ ${embeddingsConfig.endpoint}`,
     )
     return memory
   } catch (error) {

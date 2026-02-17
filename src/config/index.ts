@@ -134,10 +134,13 @@ export function loadConfig(): RuntimeConfig {
       maxConcurrent: toml.local?.max_concurrent ?? defaultToml.local.max_concurrent,
       ...(toml.local?.embeddings && {
         embeddings: {
+          provider: toml.local.embeddings.provider ?? 'qwen3-vl',
           endpoint: toml.local.embeddings.endpoint,
           model: toml.local.embeddings.model,
           dimensions: toml.local.embeddings.dimensions ?? 2048,
           multimodal: toml.local.embeddings.multimodal ?? true,
+          apiKey: toml.local.embeddings.api_key,
+          baseUrl: toml.local.embeddings.base_url,
         },
       }),
     },

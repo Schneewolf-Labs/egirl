@@ -27,10 +27,17 @@ export const EgirlConfigSchema = Type.Object({
     max_concurrent: Type.Number({ default: 2 }),
     embeddings: Type.Optional(
       Type.Object({
+        provider: Type.Optional(
+          Type.Union([Type.Literal('qwen3-vl'), Type.Literal('llamacpp'), Type.Literal('openai')], {
+            default: 'qwen3-vl',
+          }),
+        ),
         endpoint: Type.String({ default: 'http://localhost:8082' }),
         model: Type.String({ default: 'qwen3-vl-embedding-2b' }),
         dimensions: Type.Number({ default: 2048 }),
         multimodal: Type.Boolean({ default: true }),
+        api_key: Type.Optional(Type.String()),
+        base_url: Type.Optional(Type.String()),
       }),
     ),
   }),
@@ -227,10 +234,13 @@ export interface RuntimeConfig {
     contextLength: number
     maxConcurrent: number
     embeddings?: {
+      provider: 'qwen3-vl' | 'llamacpp' | 'openai'
       endpoint: string
       model: string
       dimensions: number
       multimodal: boolean
+      apiKey?: string
+      baseUrl?: string
     }
   }
   remote: {
