@@ -251,12 +251,17 @@ export class AgentLoop {
     const remainingFallbacks = [...fallbackProviders]
 
     let lastThinking: string | undefined
+    // Planning phase flag — stays true until the model produces the plan text.
+    // Unlike `turns === 1`, this survives retries caused by fallback/escalation.
+    let isPlanning = !!planningMode
+    // Tool loop detection: track seen (name, args) pairs to warn on repeats
+    const seenToolCalls = new Set<string>()
 
     while (turns < maxTurns) {
       turns++
 
-      // In planning mode on the first turn, don't provide tools so the model must produce text
-      const tools = planningMode && turns === 1 ? [] : this.toolExecutor.getDefinitions()
+      // In planning phase, don't provide tools so the model must produce text
+      const tools = isPlanning ? [] : this.toolExecutor.getDefinitions()
 
       let response: ChatResponse
       const inferenceStart = Date.now()
@@ -340,6 +345,16 @@ export class AgentLoop {
 
       // Handle tool calls
       if (response.tool_calls && response.tool_calls.length > 0) {
+        // Tool loop detection: check for repeated (name, args) pairs
+        const duplicateNames: string[] = []
+        for (const call of response.tool_calls) {
+          const key = `${call.name}:${JSON.stringify(call.arguments)}`
+          if (seenToolCalls.has(key)) {
+            duplicateNames.push(call.name)
+          }
+          seenToolCalls.add(key)
+        }
+
         addMessage(this.context, {
           role: 'assistant',
           content: response.content,
@@ -398,6 +413,16 @@ export class AgentLoop {
           }
         }
 
+        // Inject a warning if the model repeated identical tool calls
+        if (duplicateNames.length > 0) {
+          const names = [...new Set(duplicateNames)].join(', ')
+          log.warn('agent', `Tool loop detected: repeated call(s) to ${names}`)
+          addMessage(this.context, {
+            role: 'user',
+            content: `[Warning: You called ${names} with the same arguments as a previous turn. This may indicate a loop. Try a different approach or respond with your current findings.]`,
+          })
+        }
+
         continue
       }
 
@@ -406,8 +431,9 @@ export class AgentLoop {
       addMessage(this.context, { role: 'assistant', content: finalContent })
       events?.onResponseComplete?.()
 
-      // In planning mode, return after the first text response (the plan)
-      if (planningMode && turns === 1) {
+      // In planning mode, return after the plan text is produced
+      if (isPlanning) {
+        isPlanning = false
         // Persist and return early — the plan needs approval before execution
         if (this.conversationStore) {
           try {
