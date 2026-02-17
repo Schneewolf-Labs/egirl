@@ -34,6 +34,7 @@ function rowToTask(row: Record<string, unknown>): Task {
     eventSource: (row.event_source as Task['eventSource']) ?? undefined,
     eventConfig: row.event_config ? JSON.parse(row.event_config as string) : undefined,
     triggerMode: ((row.trigger_mode as string) ?? 'execute') as Task['triggerMode'],
+    persistConversation: (row.persist_conversation as number) === 1,
     nextRunAt: (row.next_run_at as number) ?? undefined,
     lastRunAt: (row.last_run_at as number) ?? undefined,
     runCount: (row.run_count as number) ?? 0,
@@ -105,6 +106,7 @@ export class TaskStore {
         depends_on TEXT,
         event_source TEXT,
         event_config TEXT,
+        persist_conversation INTEGER DEFAULT 0,
         next_run_at INTEGER,
         last_run_at INTEGER,
         run_count INTEGER DEFAULT 0,
@@ -191,6 +193,10 @@ export class TaskStore {
       ['depends_on', 'ALTER TABLE tasks ADD COLUMN depends_on TEXT'],
       ['last_error_kind', 'ALTER TABLE tasks ADD COLUMN last_error_kind TEXT'],
       ['trigger_mode', "ALTER TABLE tasks ADD COLUMN trigger_mode TEXT DEFAULT 'execute'"],
+      [
+        'persist_conversation',
+        'ALTER TABLE tasks ADD COLUMN persist_conversation INTEGER DEFAULT 0',
+      ],
     ]
 
     for (const [col, sql] of migrations) {
@@ -235,10 +241,10 @@ export class TaskStore {
         id, name, description, kind, status, prompt, workflow,
         memory_context, memory_category, interval_ms,
         cron_expression, business_hours, depends_on,
-        event_source, event_config, trigger_mode, next_run_at,
-        max_runs, notify, channel, channel_target, created_by,
-        created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        event_source, event_config, trigger_mode, persist_conversation,
+        next_run_at, max_runs, notify, channel, channel_target,
+        created_by, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
       [
         id,
@@ -257,6 +263,7 @@ export class TaskStore {
         input.eventSource ?? null,
         input.eventConfig ? JSON.stringify(input.eventConfig) : null,
         input.triggerMode ?? 'execute',
+        input.persistConversation ? 1 : 0,
         nextRunAt ?? null,
         input.maxRuns ?? null,
         input.notify ?? 'on_change',
@@ -337,6 +344,11 @@ export class TaskStore {
     if ('eventConfig' in changes) {
       sets.push('event_config = ?')
       values.push(changes.eventConfig ? JSON.stringify(changes.eventConfig) : null)
+    }
+    // Boolean field — handle separately to avoid false ?? null → null
+    if ('persistConversation' in changes) {
+      sets.push('persist_conversation = ?')
+      values.push(changes.persistConversation ? 1 : 0)
     }
 
     if (sets.length === 0) return

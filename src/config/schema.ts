@@ -174,6 +174,7 @@ export const EgirlConfigSchema = Type.Object({
       enabled: Type.Boolean({ default: true }),
       tick_interval_ms: Type.Number({ default: 30000 }),
       max_active_tasks: Type.Number({ default: 20 }),
+      max_concurrent_tasks: Type.Number({ default: 1 }),
       task_timeout_ms: Type.Number({ default: 300000 }),
       discovery_enabled: Type.Boolean({ default: true }),
       discovery_interval_ms: Type.Number({ default: 1800000 }),
@@ -344,6 +345,7 @@ export interface RuntimeConfig {
     enabled: boolean
     tickIntervalMs: number
     maxActiveTasks: number
+    maxConcurrentTasks: number
     taskTimeoutMs: number
     discoveryEnabled: boolean
     discoveryIntervalMs: number

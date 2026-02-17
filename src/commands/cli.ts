@@ -96,6 +96,7 @@ export async function runCLI(config: RuntimeConfig, args: string[]): Promise<voi
       memory,
       transcript,
       outbound,
+      conversationStore: conversations,
       sessionMutex,
     })
 

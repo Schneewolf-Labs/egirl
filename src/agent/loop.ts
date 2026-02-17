@@ -73,6 +73,8 @@ export interface AgentLoopOptions {
   thinking?: ThinkingConfig
   /** Planning mode: first response is a plan (no tools), user approves before execution */
   planningMode?: boolean
+  /** Abort signal — checked between turns and after tool execution */
+  signal?: AbortSignal
 }
 
 export interface AgentResponse {
@@ -170,7 +172,7 @@ export class AgentLoop {
   }
 
   private async doRun(userMessage: string, options: AgentLoopOptions): Promise<AgentResponse> {
-    const { maxTurns = 10, events, planningMode } = options
+    const { maxTurns = 10, events, planningMode, signal } = options
     const turnStartedAt = Date.now()
 
     // Resolve thinking config: per-request override > global config
@@ -258,6 +260,12 @@ export class AgentLoop {
     const seenToolCalls = new Set<string>()
 
     while (turns < maxTurns) {
+      // Check abort signal before each turn
+      if (signal?.aborted) {
+        log.info('agent', 'Agent run aborted by signal')
+        break
+      }
+
       turns++
 
       // In planning phase, don't provide tools so the model must produce text
@@ -421,6 +429,12 @@ export class AgentLoop {
             role: 'user',
             content: `[Warning: You called ${names} with the same arguments as a previous turn. This may indicate a loop. Try a different approach or respond with your current findings.]`,
           })
+        }
+
+        // Check abort signal after tool execution
+        if (signal?.aborted) {
+          log.info('agent', 'Agent run aborted after tool execution')
+          break
         }
 
         continue

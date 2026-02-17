@@ -203,6 +203,7 @@ export function loadConfig(): RuntimeConfig {
       enabled: toml.tasks?.enabled ?? true,
       tickIntervalMs: toml.tasks?.tick_interval_ms ?? 30000,
       maxActiveTasks: toml.tasks?.max_active_tasks ?? 20,
+      maxConcurrentTasks: toml.tasks?.max_concurrent_tasks ?? 1,
       taskTimeoutMs: toml.tasks?.task_timeout_ms ?? 300000,
       discoveryEnabled: toml.tasks?.discovery_enabled ?? true,
       discoveryIntervalMs: toml.tasks?.discovery_interval_ms ?? 1800000,
