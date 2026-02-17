@@ -129,6 +129,19 @@ export function estimateMessageTokens(message: ChatMessage): number {
 // ---------------------------------------------------------------------------
 
 /**
+ * Truncate a tool result string synchronously using char-ratio estimation.
+ * Used at ingestion time to prevent oversized results from bloating context.
+ * Returns the original string if within budget, otherwise truncates.
+ */
+export function truncateToolResultSync(content: string, maxTokens: number): string {
+  const estimatedTokens = estimateStringTokens(content)
+  if (estimatedTokens <= maxTokens) return content
+
+  const maxChars = Math.floor(maxTokens * 3.5)
+  return `${content.slice(0, maxChars)}\n\n[Output truncated — ${estimatedTokens} estimated tokens exceeded ${maxTokens} token limit]`
+}
+
+/**
  * Truncate a single tool result message if it exceeds the token budget.
  */
 async function truncateToolResult(
