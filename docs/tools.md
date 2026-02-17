@@ -1,14 +1,14 @@
 # Built-in Tools Reference
 
-egirl ships with 48 built-in tools across 8 categories that the agent can invoke during conversations. Tools are registered in the `ToolExecutor` at startup and described in the system prompt so the model knows how to use them.
+egirl ships with 50 built-in tools across 8 categories that the agent can invoke during conversations. Tools are registered in the `ToolExecutor` at startup and described in the system prompt so the model knows how to use them.
 
 | Category | Count | Tools |
 |----------|-------|-------|
 | File ops | 4 | `read_file`, `write_file`, `edit_file`, `glob_files` |
 | Commands | 1 | `execute_command` |
-| Memory | 5 | `memory_search`, `memory_get`, `memory_set`, `memory_delete`, `memory_list` |
+| Memory | 6 | `memory_search`, `memory_get`, `memory_set`, `memory_delete`, `memory_list`, `memory_recall` |
 | Git | 5 | `git_status`, `git_diff`, `git_log`, `git_commit`, `git_show` |
-| GitHub | 11 | `gh_pr_list`, `gh_pr_view`, `gh_pr_create`, `gh_pr_review`, `gh_pr_comment`, `gh_issue_list`, `gh_issue_view`, `gh_issue_comment`, `gh_issue_update`, `gh_ci_status`, `gh_branch_create` |
+| GitHub | 12 | `gh_pr_list`, `gh_pr_view`, `gh_pr_create`, `gh_pr_review`, `gh_pr_comment`, `gh_issue_list`, `gh_issue_view`, `gh_issue_comment`, `gh_issue_update`, `gh_ci_status`, `gh_branch_create`, `gh_release_list` |
 | Browser | 11 | `browser_navigate`, `browser_click`, `browser_fill`, `browser_snapshot`, `browser_screenshot`, `browser_select`, `browser_check`, `browser_hover`, `browser_wait`, `browser_eval`, `browser_close` |
 | Tasks | 8 | `task_add`, `task_propose`, `task_list`, `task_pause`, `task_resume`, `task_cancel`, `task_run_now`, `task_history` |
 | Other | 3 | `screenshot`, `web_research`, `code_agent` |
@@ -280,6 +280,34 @@ List all stored memories with their keys, content types, and previews.
 **Example:**
 ```json
 {"name": "memory_list", "arguments": {"limit": 20}}
+```
+
+---
+
+## memory_recall
+
+Recall memories from a specific time period. Use this for temporal queries like "what did we discuss last week" or "what decisions were made this month".
+
+**Source:** `src/tools/builtin/memory.ts`
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `since` | string | Yes | Start of time range (ISO date like `"2025-01-15"`, or relative like `"7 days ago"`, `"last week"`, `"this month"`) |
+| `until` | string | No | End of time range (ISO date or relative expression). Defaults to now. |
+| `query` | string | No | Optional search query to further filter results within the time range |
+| `category` | string | No | Filter by category: `general`, `fact`, `preference`, `decision`, `project`, `entity`, `conversation` |
+| `limit` | number | No | Maximum results (default: 20) |
+
+**Behavior:**
+- Parses relative time expressions (`"7 days ago"`, `"last week"`, `"this month"`, `"yesterday"`) and ISO dates
+- When `query` is provided, runs a filtered semantic search within the time range
+- When only `since` is provided, returns all memories from that time period
+- Can filter by memory category for scoped recall
+- Requires the memory system to be initialized
+
+**Example:**
+```json
+{"name": "memory_recall", "arguments": {"since": "last week", "query": "deployment decisions"}}
 ```
 
 ---
@@ -618,6 +646,24 @@ Create a new branch on the GitHub remote.
 | `from` | string | No | Source ref to branch from (default: `main`) |
 | `owner` | string | No | Repository owner |
 | `repo` | string | No | Repository name |
+
+### gh_release_list
+
+List recent releases for a GitHub repository.
+
+**Source:** `src/tools/builtin/github/release.ts`
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `owner` | string | No | Repository owner (auto-detected from git remote) |
+| `repo` | string | No | Repository name (auto-detected from git remote) |
+| `limit` | number | No | Maximum number of releases to return (default: 5, max: 30) |
+
+**Behavior:**
+- Lists releases with tag name, title, publish date, author, and URL
+- Flags draft and pre-release entries
+- Includes the first 3 lines of each release body as a summary
+- Repository owner/repo are auto-detected from the git remote when not specified
 
 ---
 

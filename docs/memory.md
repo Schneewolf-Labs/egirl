@@ -156,7 +156,7 @@ Database maintenance for the memory store. Removes stale embeddings, compacts th
 
 ## Tool Integration
 
-The memory system is exposed to the agent through five tools:
+The memory system is exposed to the agent through six tools:
 
 | Tool | Description |
 |------|-------------|
@@ -165,6 +165,7 @@ The memory system is exposed to the agent through five tools:
 | `memory_set` | Store a new memory — generates embedding automatically |
 | `memory_delete` | Remove a memory by key — deletes entry and embedding |
 | `memory_list` | List all stored memories with previews |
+| `memory_recall` | Temporal recall — finds memories from a specific time period with optional category filtering |
 
 These tools are created via factory function `createMemoryTools(memory)` in `src/tools/builtin/memory.ts`. If the memory system is not initialized (no embeddings configured), stub implementations return an error message.
 
