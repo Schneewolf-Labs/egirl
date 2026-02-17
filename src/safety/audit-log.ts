@@ -20,15 +20,6 @@ export interface AuditMemoryEntry {
   sessionId?: string
 }
 
-export interface AuditAPIEntry {
-  timestamp: string
-  action: 'api_request'
-  method: string
-  path: string
-  ip: string
-  status: number
-}
-
 export async function appendAuditLog(entry: AuditEntry, logPath: string): Promise<void> {
   try {
     await mkdir(dirname(logPath), { recursive: true })
@@ -49,15 +40,5 @@ export async function auditMemoryOperation(
     await appendFile(logPath, line, 'utf-8')
   } catch (error) {
     log.warn('safety', `Failed to write memory audit log: ${error}`)
-  }
-}
-
-export async function auditAPIRequest(entry: AuditAPIEntry, logPath: string): Promise<void> {
-  try {
-    await mkdir(dirname(logPath), { recursive: true })
-    const line = `${JSON.stringify(entry)}\n`
-    await appendFile(logPath, line, 'utf-8')
-  } catch (error) {
-    log.warn('safety', `Failed to write API audit log: ${error}`)
   }
 }

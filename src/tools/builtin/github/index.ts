@@ -15,6 +15,7 @@ import {
   createGhPrReview,
   createGhPrView,
 } from './pr'
+import { createGhReleaseList } from './release'
 
 export type { GitHubConfig } from './helpers'
 
@@ -30,6 +31,7 @@ export function createGitHubTools(config: GitHubConfig): {
   ghIssueUpdateTool: Tool
   ghCiStatusTool: Tool
   ghBranchCreateTool: Tool
+  ghReleaseListTool: Tool
 } {
   return {
     ghPrListTool: createGhPrList(config),
@@ -43,5 +45,6 @@ export function createGitHubTools(config: GitHubConfig): {
     ghIssueUpdateTool: createGhIssueUpdate(config),
     ghCiStatusTool: createGhCiStatus(config),
     ghBranchCreateTool: createGhBranchCreate(config),
+    ghReleaseListTool: createGhReleaseList(config),
   }
 }

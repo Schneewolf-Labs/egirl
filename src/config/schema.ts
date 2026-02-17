@@ -118,7 +118,11 @@ export const EgirlConfigSchema = Type.Object({
       command_filter: Type.Optional(
         Type.Object({
           enabled: Type.Boolean({ default: true }),
+          mode: Type.Optional(
+            Type.Union([Type.Literal('block'), Type.Literal('allow')], { default: 'block' }),
+          ),
           blocked_patterns: Type.Optional(Type.Array(Type.String())),
+          extra_allowed: Type.Optional(Type.Array(Type.String())),
         }),
       ),
       path_sandbox: Type.Optional(
@@ -278,7 +282,9 @@ export interface RuntimeConfig {
     enabled: boolean
     commandFilter: {
       enabled: boolean
+      mode: 'block' | 'allow'
       blockedPatterns: string[]
+      extraAllowed: string[]
     }
     pathSandbox: {
       enabled: boolean

@@ -1,13 +1,13 @@
 import { type AuditEntry, appendAuditLog } from './audit-log'
-import { getDefaultBlockedPatterns, isCommandBlocked } from './command-filter'
+import { buildCommandFilterConfig, type CommandFilterConfig, checkCommand } from './command-filter'
 import { getDefaultSensitivePatterns, isPathAllowed, isSensitivePath } from './path-guard'
 
-export type { AuditAPIEntry, AuditEntry, AuditMemoryEntry } from './audit-log'
-export { appendAuditLog, auditAPIRequest, auditMemoryOperation } from './audit-log'
+export type { AuditEntry, AuditMemoryEntry } from './audit-log'
+export { appendAuditLog, auditMemoryOperation } from './audit-log'
 export {
+  buildCommandFilterConfig,
+  type CommandFilterConfig,
   compilePatterns,
-  getDefaultAllowedCommands,
-  getDefaultBlockedPatterns,
 } from './command-filter'
 export { getDefaultSensitivePatterns } from './path-guard'
 
@@ -15,7 +15,7 @@ export interface SafetyConfig {
   enabled: boolean
   commandFilter: {
     enabled: boolean
-    patterns: RegExp[]
+    config: CommandFilterConfig
   }
   pathSandbox: {
     enabled: boolean
@@ -47,7 +47,7 @@ export function getDefaultSafetyConfig(): SafetyConfig {
     enabled: true,
     commandFilter: {
       enabled: true,
-      patterns: getDefaultBlockedPatterns(),
+      config: buildCommandFilterConfig('block', [], []),
     },
     pathSandbox: {
       enabled: true,
@@ -83,9 +83,9 @@ export function checkToolCall(
 ): SafetyCheckResult {
   if (!config.enabled) return { allowed: true }
 
-  // Command blocklist
+  // Command filter
   if (config.commandFilter.enabled && toolName === 'execute_command' && args.command) {
-    const blocked = isCommandBlocked(args.command as string, config.commandFilter.patterns)
+    const blocked = checkCommand(args.command as string, config.commandFilter.config)
     if (blocked) return { allowed: false, reason: blocked }
   }
 

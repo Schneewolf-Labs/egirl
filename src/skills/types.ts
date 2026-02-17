@@ -27,9 +27,3 @@ export interface Skill {
   baseDir: string
   enabled: boolean
 }
-
-export interface SkillMatch {
-  skill: Skill
-  confidence: number
-  reason: string
-}

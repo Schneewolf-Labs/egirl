@@ -138,6 +138,7 @@ export function createDefaultToolExecutor(
       gh.ghIssueUpdateTool,
       gh.ghCiStatusTool,
       gh.ghBranchCreateTool,
+      gh.ghReleaseListTool,
     ])
   }
 
