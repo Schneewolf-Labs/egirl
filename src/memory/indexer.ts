@@ -27,10 +27,20 @@ export interface IndexedMemory {
   embedding?: Float32Array
   createdAt: number
   updatedAt: number
+  lastAccessedAt: number
+  accessCount: number
+}
+
+export interface FTSResult {
+  memory: IndexedMemory
+  /** Raw BM25 rank from FTS5 (negative, more negative = better match) */
+  rank: number
 }
 
 export class MemoryIndexer {
   private db: Database
+  /** Lazy-loaded cache of memories with embeddings, keyed by memory key */
+  private embeddingCache: Map<string, IndexedMemory> | null = null
 
   constructor(dbPath: string, _dimensions = 2048) {
     this.db = new Database(dbPath)
@@ -51,7 +61,9 @@ export class MemoryIndexer {
         image_path TEXT,
         embedding BLOB,
         created_at INTEGER NOT NULL,
-        updated_at INTEGER NOT NULL
+        updated_at INTEGER NOT NULL,
+        last_accessed_at INTEGER NOT NULL DEFAULT 0,
+        access_count INTEGER NOT NULL DEFAULT 0
       )
     `)
 
@@ -116,6 +128,14 @@ export class MemoryIndexer {
       this.db.run('ALTER TABLE memories ADD COLUMN session_id TEXT')
       log.info('memory', 'Migrated: added session_id column')
     }
+    if (!columnNames.has('last_accessed_at')) {
+      this.db.run('ALTER TABLE memories ADD COLUMN last_accessed_at INTEGER NOT NULL DEFAULT 0')
+      log.info('memory', 'Migrated: added last_accessed_at column')
+    }
+    if (!columnNames.has('access_count')) {
+      this.db.run('ALTER TABLE memories ADD COLUMN access_count INTEGER NOT NULL DEFAULT 0')
+      log.info('memory', 'Migrated: added access_count column')
+    }
   }
 
   set(
@@ -166,12 +186,23 @@ export class MemoryIndexer {
       now,
       now,
     )
+
+    // Update embedding cache incrementally
+    if (this.embeddingCache) {
+      if (embedding) {
+        // Re-read from DB to get the canonical row (includes id, timestamps)
+        const updated = this.get(key)
+        if (updated) this.embeddingCache.set(key, updated)
+      } else {
+        this.embeddingCache.delete(key)
+      }
+    }
   }
 
   get(key: string): IndexedMemory | null {
     const row = this.db
       .query(`
-      SELECT id, key, value, content_type, category, source, session_id, image_path, embedding, created_at, updated_at
+      SELECT id, key, value, content_type, category, source, session_id, image_path, embedding, created_at, updated_at, last_accessed_at, access_count
       FROM memories WHERE key = ?
     `)
       .get(key) as MemoryRow | null
@@ -181,18 +212,27 @@ export class MemoryIndexer {
   }
 
   /**
-   * Get all memories with embeddings for vector search
+   * Get all memories with embeddings for vector search.
+   * Results are cached in memory after the first call and updated incrementally.
    */
   getAllWithEmbeddings(): IndexedMemory[] {
-    const rows = this.db
-      .query(`
-      SELECT id, key, value, content_type, category, source, session_id, image_path, embedding, created_at, updated_at
-      FROM memories
-      WHERE embedding IS NOT NULL
-    `)
-      .all() as MemoryRow[]
+    if (!this.embeddingCache) {
+      this.embeddingCache = new Map()
+      const rows = this.db
+        .query(`
+        SELECT id, key, value, content_type, category, source, session_id, image_path, embedding, created_at, updated_at, last_accessed_at, access_count
+        FROM memories
+        WHERE embedding IS NOT NULL
+      `)
+        .all() as MemoryRow[]
 
-    return rows.map(rowToMemory)
+      for (const row of rows) {
+        const memory = rowToMemory(row)
+        this.embeddingCache.set(memory.key, memory)
+      }
+      log.debug('memory', `Loaded ${this.embeddingCache.size} embeddings into cache`)
+    }
+    return Array.from(this.embeddingCache.values())
   }
 
   /**
@@ -201,7 +241,7 @@ export class MemoryIndexer {
   getByContentType(contentType: ContentType, limit = 100): IndexedMemory[] {
     const rows = this.db
       .query(`
-      SELECT id, key, value, content_type, category, source, session_id, image_path, embedding, created_at, updated_at
+      SELECT id, key, value, content_type, category, source, session_id, image_path, embedding, created_at, updated_at, last_accessed_at, access_count
       FROM memories
       WHERE content_type = ?
       ORDER BY updated_at DESC
@@ -212,20 +252,23 @@ export class MemoryIndexer {
     return rows.map(rowToMemory)
   }
 
-  searchFTS(query: string, limit = 10): IndexedMemory[] {
+  searchFTS(query: string, limit = 10): FTSResult[] {
     const rows = this.db
       .query(`
       SELECT m.id, m.key, m.value, m.content_type, m.category, m.source, m.session_id,
-             m.image_path, m.created_at, m.updated_at
+             m.image_path, m.created_at, m.updated_at, m.last_accessed_at, m.access_count, fts.rank
       FROM memories m
       JOIN memories_fts fts ON m.id = fts.rowid
       WHERE memories_fts MATCH ?
-      ORDER BY rank
+      ORDER BY fts.rank
       LIMIT ?
     `)
-      .all(query, limit) as MemoryRow[]
+      .all(query, limit) as (MemoryRow & { rank: number })[]
 
-    return rows.map(rowToMemory)
+    return rows.map((row) => ({
+      memory: rowToMemory(row),
+      rank: row.rank,
+    }))
   }
 
   list(
@@ -289,7 +332,7 @@ export class MemoryIndexer {
   getByCategory(category: MemoryCategory, limit = 100): IndexedMemory[] {
     const rows = this.db
       .query(`
-      SELECT id, key, value, content_type, category, source, session_id, image_path, embedding, created_at, updated_at
+      SELECT id, key, value, content_type, category, source, session_id, image_path, embedding, created_at, updated_at, last_accessed_at, access_count
       FROM memories
       WHERE category = ?
       ORDER BY updated_at DESC
@@ -304,7 +347,7 @@ export class MemoryIndexer {
     const untilTs = until ?? Date.now()
     const rows = this.db
       .query(`
-      SELECT id, key, value, content_type, category, source, session_id, image_path, embedding, created_at, updated_at
+      SELECT id, key, value, content_type, category, source, session_id, image_path, embedding, created_at, updated_at, last_accessed_at, access_count
       FROM memories
       WHERE created_at >= ? AND created_at <= ?
       ORDER BY created_at DESC
@@ -322,7 +365,27 @@ export class MemoryIndexer {
 
   delete(key: string): boolean {
     const result = this.db.run(`DELETE FROM memories WHERE key = ?`, [key])
-    return result.changes > 0
+    if (result.changes > 0) {
+      this.embeddingCache?.delete(key)
+      return true
+    }
+    return false
+  }
+
+  /**
+   * Record an access event for one or more memory keys.
+   * Updates last_accessed_at and increments access_count.
+   */
+  recordAccess(keys: string[]): void {
+    if (keys.length === 0) return
+    const now = Date.now()
+    const stmt = this.db.prepare(`
+      UPDATE memories SET last_accessed_at = ?, access_count = access_count + 1
+      WHERE key = ?
+    `)
+    for (const key of keys) {
+      stmt.run(now, key)
+    }
   }
 
   close(): void {
@@ -343,6 +406,8 @@ interface MemoryRow {
   embedding: Buffer | null
   created_at: number
   updated_at: number
+  last_accessed_at: number
+  access_count: number
 }
 
 function rowToMemory(row: MemoryRow): IndexedMemory {
@@ -358,6 +423,8 @@ function rowToMemory(row: MemoryRow): IndexedMemory {
     embedding: row.embedding ? new Float32Array(row.embedding.buffer) : undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    lastAccessedAt: row.last_accessed_at ?? 0,
+    accessCount: row.access_count ?? 0,
   }
 }
 

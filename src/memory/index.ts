@@ -28,9 +28,11 @@ export {
 } from './embeddings/index'
 export { type ExtractionResult, extractMemories } from './extractor'
 export { createMemoryFiles, type MemoryEntry, MemoryFiles } from './files'
+export { collectGarbage, type GCConfig, type GCResult } from './gc'
 export {
   type ContentType,
   createMemoryIndexer,
+  type FTSResult,
   type IndexedMemory,
   type MemoryCategory,
   MemoryIndexer,
@@ -203,21 +205,27 @@ export class MemoryManager {
    * Search memories by text (FTS)
    */
   async searchText(query: string, limit = 10): Promise<SearchResult[]> {
-    return this.search.searchText(query, { limit })
+    const results = await this.search.searchText(query, { limit })
+    this.trackAccess(results)
+    return results
   }
 
   /**
    * Search memories semantically (vector similarity)
    */
   async searchSemantic(query: string, limit = 10): Promise<SearchResult[]> {
-    return this.search.searchSemantic(query, { limit })
+    const results = await this.search.searchSemantic(query, { limit })
+    this.trackAccess(results)
+    return results
   }
 
   /**
    * Search memories by image similarity
    */
   async searchByImage(imageData: string, limit = 10): Promise<SearchResult[]> {
-    return this.search.searchByImage(imageData, { limit })
+    const results = await this.search.searchByImage(imageData, { limit })
+    this.trackAccess(results)
+    return results
   }
 
   /**
@@ -225,14 +233,23 @@ export class MemoryManager {
    */
   async searchHybrid(query: string, limit?: number | SearchOptions): Promise<SearchResult[]> {
     const options: SearchOptions = typeof limit === 'number' ? { limit } : (limit ?? {})
-    return this.search.searchHybrid(query, options)
+    const results = await this.search.searchHybrid(query, options)
+    this.trackAccess(results)
+    return results
   }
 
   /**
    * Find memories similar to a given memory
    */
   async findSimilar(key: string, limit = 10): Promise<SearchResult[]> {
-    return this.search.findSimilar(key, { limit })
+    const results = await this.search.findSimilar(key, { limit })
+    this.trackAccess(results)
+    return results
+  }
+
+  private trackAccess(results: SearchResult[]): void {
+    if (results.length === 0) return
+    this.indexer.recordAccess(results.map((r) => r.memory.key))
   }
 
   /**
@@ -275,12 +292,14 @@ export class MemoryManager {
     query: string,
     options?: { limit?: number; categories?: MemoryCategory[]; since?: number; until?: number },
   ): Promise<SearchResult[]> {
-    return this.search.searchHybrid(query, {
+    const results = await this.search.searchHybrid(query, {
       limit: options?.limit,
       categories: options?.categories,
       since: options?.since,
       until: options?.until,
     })
+    this.trackAccess(results)
+    return results
   }
 
   /**
@@ -311,6 +330,28 @@ export class MemoryManager {
    */
   delete(key: string): boolean {
     return this.indexer.delete(key)
+  }
+
+  /**
+   * Check if a value is semantically duplicate of an existing memory.
+   * Returns the similar memory's key if above threshold, undefined otherwise.
+   * Uses the cached embedding index for fast lookups.
+   */
+  async checkDuplicate(value: string, threshold = 0.92): Promise<string | undefined> {
+    if (!this.embeddings) return undefined
+
+    let queryEmbedding: Float32Array
+    try {
+      queryEmbedding = await this.embeddings.embed({ type: 'text', text: value })
+    } catch {
+      return undefined
+    }
+
+    const results = await this.search.searchVector(queryEmbedding, { limit: 1 })
+    if (results.length > 0 && results[0]?.score !== undefined && results[0].score >= threshold) {
+      return results[0].memory.key
+    }
+    return undefined
   }
 
   /**

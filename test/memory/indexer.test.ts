@@ -122,4 +122,44 @@ describe('MemoryIndexer — categories and time ranges', () => {
     expect(mem?.source).toBe('auto')
     expect(mem?.sessionId).toBe('test:session')
   })
+
+  test('new memories default to zero access tracking', () => {
+    indexer.set('fresh', 'just created')
+
+    const mem = indexer.get('fresh')
+    expect(mem?.lastAccessedAt).toBe(0)
+    expect(mem?.accessCount).toBe(0)
+  })
+
+  test('recordAccess updates last_accessed_at and access_count', () => {
+    indexer.set('tracked', 'track me')
+
+    indexer.recordAccess(['tracked'])
+    const after1 = indexer.get('tracked')
+    expect(after1?.accessCount).toBe(1)
+    expect(after1?.lastAccessedAt).toBeGreaterThan(0)
+
+    indexer.recordAccess(['tracked'])
+    const after2 = indexer.get('tracked')
+    expect(after2?.accessCount).toBe(2)
+    expect(after2?.lastAccessedAt).toBeGreaterThanOrEqual(after1?.lastAccessedAt ?? 0)
+  })
+
+  test('recordAccess handles multiple keys', () => {
+    indexer.set('a', 'alpha')
+    indexer.set('b', 'beta')
+    indexer.set('c', 'gamma')
+
+    indexer.recordAccess(['a', 'c'])
+
+    expect(indexer.get('a')?.accessCount).toBe(1)
+    expect(indexer.get('b')?.accessCount).toBe(0)
+    expect(indexer.get('c')?.accessCount).toBe(1)
+  })
+
+  test('recordAccess with empty array is a no-op', () => {
+    indexer.set('untouched', 'should not change')
+    indexer.recordAccess([])
+    expect(indexer.get('untouched')?.accessCount).toBe(0)
+  })
 })

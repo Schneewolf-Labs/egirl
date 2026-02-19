@@ -886,6 +886,16 @@ export class AgentLoop {
 
         for (const extraction of extractions) {
           try {
+            // Skip if semantically duplicate of an existing memory
+            const duplicate = await this.memory?.checkDuplicate(extraction.value)
+            if (duplicate) {
+              log.debug(
+                'agent',
+                `Skipping duplicate extraction "${extraction.key}" (similar to ${duplicate})`,
+              )
+              continue
+            }
+
             // Prefix auto-extracted keys to distinguish from manual ones
             const key = `auto/${extraction.key}`
             await this.memory?.set(key, extraction.value, {

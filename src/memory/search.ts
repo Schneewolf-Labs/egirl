@@ -18,6 +18,16 @@ export interface SearchOptions {
 }
 
 /**
+ * Normalize a BM25 rank (negative, more negative = better) to a [0, 1) score.
+ * Uses the formula |rank| / (1 + |rank|) which provides a monotonic mapping
+ * where better BM25 matches get higher scores.
+ */
+function normalizeBM25(rank: number): number {
+  const abs = Math.abs(rank)
+  return abs / (1 + abs)
+}
+
+/**
  * Compute cosine similarity between two vectors
  */
 function cosineSimilarity(a: Float32Array, b: Float32Array): number {
@@ -60,9 +70,9 @@ export class MemorySearch {
 
     const ftsResults = this.indexer.searchFTS(query, limit)
 
-    return ftsResults.map((memory, index) => ({
-      memory,
-      score: 1 - index / ftsResults.length, // Rank-based score
+    return ftsResults.map((result) => ({
+      memory: result.memory,
+      score: normalizeBM25(result.rank),
       matchType: 'fts' as const,
     }))
   }
