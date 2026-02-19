@@ -26,6 +26,7 @@ export interface Task {
   eventSource: EventSourceType | undefined
   eventConfig: unknown | undefined
   triggerMode: TriggerMode
+  persistConversation: boolean
   nextRunAt: number | undefined
   lastRunAt: number | undefined
   runCount: number
@@ -56,6 +57,7 @@ export interface NewTask {
   eventSource?: EventSourceType
   eventConfig?: unknown
   triggerMode?: TriggerMode
+  persistConversation?: boolean
   maxRuns?: number
   notify?: TaskNotify
   channel: string
@@ -125,6 +127,7 @@ export interface TasksConfig {
   enabled: boolean
   tickIntervalMs: number
   maxActiveTasks: number
+  maxConcurrentTasks: number
   taskTimeoutMs: number
   discoveryEnabled: boolean
   discoveryIntervalMs: number

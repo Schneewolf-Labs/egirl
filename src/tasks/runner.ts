@@ -2,6 +2,7 @@ import type { AgentLoopDeps } from '../agent/loop'
 import { AgentLoop } from '../agent/loop'
 import type { SessionMutex } from '../agent/session-mutex'
 import type { RuntimeConfig } from '../config'
+import type { ConversationStore } from '../conversation'
 import type { MemoryManager } from '../memory'
 import { extractLessonsFromTask, extractMemories } from '../memory/extractor'
 import { retrieveForContext } from '../memory/retrieval'
@@ -51,6 +52,8 @@ export interface TaskRunnerDeps {
   transcript?: TranscriptLogger
   outbound: Map<string, OutboundChannel>
   webhookRouter?: WebhookRouter
+  /** Conversation store for tasks with persist_conversation enabled */
+  conversationStore?: ConversationStore
   /** Shared mutex to serialize agent runs across entry points */
   sessionMutex?: SessionMutex
 }
@@ -60,9 +63,8 @@ export class TaskRunner {
   private tickTimer: ReturnType<typeof setInterval> | undefined
   private eventSources: Map<string, EventSource> = new Map()
   private eventQueue: QueuedEvent[] = []
-  private isExecuting = false
-  private currentTaskId: string | undefined
-  private abortController: AbortController | undefined
+  private runningCount = 0
+  private runningTasks: Map<string, AbortController> = new Map()
   private lastInteractionAt: number = Date.now()
   /** Track last event timestamp per task for deduplication */
   private lastEventAt: Map<string, number> = new Map()
@@ -99,9 +101,10 @@ export class TaskRunner {
     }
     this.eventSources.clear()
 
-    if (this.abortController) {
-      this.abortController.abort()
+    for (const [, controller] of this.runningTasks) {
+      controller.abort()
     }
+    this.runningTasks.clear()
 
     log.info('tasks', 'Task runner stopped')
   }
@@ -120,11 +123,18 @@ export class TaskRunner {
   }
 
   isIdle(): boolean {
-    return !this.isExecuting
+    return this.runningCount === 0
   }
 
   getCurrentTaskId(): string | undefined {
-    return this.currentTaskId
+    // Return the first running task (for backward compatibility)
+    const first = this.runningTasks.keys().next()
+    return first.done ? undefined : first.value
+  }
+
+  /** All currently executing task IDs */
+  getRunningTaskIds(): string[] {
+    return [...this.runningTasks.keys()]
   }
 
   /** Activate a task — start event sources if event-driven, set next_run for scheduled */
@@ -183,15 +193,18 @@ export class TaskRunner {
   }
 
   private async tick(): Promise<void> {
-    if (this.isExecuting) return
+    const maxConcurrent = this.deps.tasksConfig.maxConcurrentTasks
+    if (this.runningCount >= maxConcurrent) return
 
     // Process queued events first (deduplicated)
     if (this.eventQueue.length > 0) {
       const event = this.eventQueue.shift()
       if (!event) return
       const task = this.deps.store.get(event.taskId)
-      if (task && task.status === 'active') {
-        await this.executeTask(task, event.payload)
+      if (task && task.status === 'active' && !this.runningTasks.has(task.id)) {
+        this.executeTask(task, event.payload).catch((err) =>
+          log.error('tasks', `Event-triggered task ${task.id} failed: ${err}`),
+        )
       }
       return
     }
@@ -199,6 +212,11 @@ export class TaskRunner {
     // Check for due scheduled/oneshot tasks
     const due = this.deps.store.getDueTasks(Date.now())
     for (const task of due) {
+      if (this.runningCount >= maxConcurrent) return
+
+      // Skip tasks already running
+      if (this.runningTasks.has(task.id)) continue
+
       // Enforce dependency ordering: skip if dependency hasn't completed successfully
       if (task.dependsOn) {
         const dep = this.deps.store.get(task.dependsOn)
@@ -225,8 +243,10 @@ export class TaskRunner {
         }
       }
 
-      await this.executeTask(task)
-      return // One task per tick
+      // Fire concurrently — don't await
+      this.executeTask(task).catch((err) =>
+        log.error('tasks', `Scheduled task ${task.id} failed: ${err}`),
+      )
     }
   }
 
@@ -290,8 +310,8 @@ export class TaskRunner {
         return
       }
 
-      // Default: execute directly
-      if (this.isExecuting) {
+      // Default: execute directly, or queue if at capacity
+      if (this.runningCount >= this.deps.tasksConfig.maxConcurrentTasks) {
         this.eventQueue = this.eventQueue.filter((e) => e.taskId !== task.id)
         this.eventQueue.push({ taskId: task.id, payload, queuedAt: now })
         return
@@ -316,18 +336,22 @@ export class TaskRunner {
   }
 
   private async executeTask(task: Task, eventPayload?: EventPayload): Promise<TaskRun> {
-    this.isExecuting = true
-    this.currentTaskId = task.id
-    this.abortController = new AbortController()
+    this.runningCount++
+    const abortController = new AbortController()
+    this.runningTasks.set(task.id, abortController)
 
     const run = this.deps.store.createRun(task.id, eventPayload)
     const timeoutMs = this.deps.tasksConfig.taskTimeoutMs
+    const signal = abortController.signal
+
+    // Abort the agent loop when the timeout fires
+    const timeoutId = setTimeout(() => abortController.abort('timeout'), timeoutMs)
 
     log.info('tasks', `Executing task: ${task.name} (${task.id})`)
 
     try {
       const result = await Promise.race([
-        this.doExecute(task, eventPayload),
+        this.doExecute(task, eventPayload, signal),
         this.timeout(timeoutMs),
       ])
 
@@ -412,9 +436,9 @@ export class TaskRunner {
       this.deps.store.completeRun(run.id, { status: 'failure', error: errorMsg, errorKind })
       return { ...run, status: 'failure', error: errorMsg, errorKind, completedAt: Date.now() }
     } finally {
-      this.isExecuting = false
-      this.currentTaskId = undefined
-      this.abortController = undefined
+      clearTimeout(timeoutId)
+      this.runningCount--
+      this.runningTasks.delete(task.id)
     }
   }
 
@@ -476,7 +500,11 @@ export class TaskRunner {
     )
   }
 
-  private async doExecute(task: Task, eventPayload?: EventPayload): Promise<string> {
+  private async doExecute(
+    task: Task,
+    eventPayload?: EventPayload,
+    signal?: AbortSignal,
+  ): Promise<string> {
     // Heartbeat pre-check: deterministic file parsing, skip LLM if nothing to do
     if (task.name === HEARTBEAT_TASK_NAME) {
       const prompt = await heartbeatPreCheck(this.deps.config.workspace.path)
@@ -484,7 +512,7 @@ export class TaskRunner {
         return 'No unchecked items in HEARTBEAT.md'
       }
       // Override the empty prompt with the dynamically built one
-      return this.executePrompt({ ...task, prompt }, eventPayload)
+      return this.executePrompt({ ...task, prompt }, eventPayload, undefined, signal)
     }
 
     // If task has a workflow definition, try workflow-first execution
@@ -494,14 +522,14 @@ export class TaskRunner {
       // Hybrid mode: if workflow failed and there's a prompt, fall through to agent
       if (!workflowResult.success && task.prompt) {
         const context = `Workflow "${workflowResult.workflow}" failed.\n\nStep results:\n${workflowResult.output}`
-        return this.executePrompt(task, eventPayload, context)
+        return this.executePrompt(task, eventPayload, context, signal)
       }
 
       return workflowResult.output
     }
 
     // Prompt-based execution
-    return this.executePrompt(task, eventPayload)
+    return this.executePrompt(task, eventPayload, undefined, signal)
   }
 
   private async executeWorkflow(
@@ -534,6 +562,7 @@ export class TaskRunner {
     task: Task,
     eventPayload?: EventPayload,
     additionalContext?: string,
+    signal?: AbortSignal,
   ): Promise<string> {
     const cwd = this.deps.config.workspace.path
 
@@ -597,13 +626,17 @@ export class TaskRunner {
       sessionId: `task:${task.id}`,
       memory: this.deps.memory,
       transcript: this.deps.transcript,
-      // No conversation store — task conversations are ephemeral
+      // Persist conversation across runs when the task opts in
+      conversationStore:
+        task.persistConversation && this.deps.conversationStore
+          ? this.deps.conversationStore
+          : undefined,
       additionalContext: `${TASK_SYSTEM_PROMPT}\n\nTask: ${task.description}\n\n${contextParts.join('\n\n')}`,
       sessionMutex: this.deps.sessionMutex,
     }
 
     const agent = new AgentLoop(deps)
-    const response = await agent.run(userMessage, { maxTurns: 10 })
+    const response = await agent.run(userMessage, { maxTurns: 10, signal })
 
     // Fire-and-forget auto-extraction
     if (this.deps.memory) {

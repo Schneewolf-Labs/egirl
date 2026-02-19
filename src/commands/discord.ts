@@ -67,6 +67,7 @@ export async function runDiscord(config: RuntimeConfig, args: string[]): Promise
       memory,
       transcript,
       outbound,
+      conversationStore: conversations,
       sessionMutex,
     })
 
