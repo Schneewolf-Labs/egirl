@@ -4,10 +4,10 @@ import { getTextContent } from '../providers/types'
 import type { Skill } from '../skills/types'
 import { log } from '../util/logger'
 import {
-  STRONG_CODE_INDICATORS,
-  WEAK_CODE_SIGNALS,
   analyzeMessageHeuristics,
   estimateComplexity,
+  STRONG_CODE_INDICATORS,
+  WEAK_CODE_SIGNALS,
 } from './heuristics'
 import { applyRules, createRoutingRules, type RuleContext } from './rules'
 

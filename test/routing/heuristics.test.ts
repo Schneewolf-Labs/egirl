@@ -142,17 +142,18 @@ describe('analyzeMessageHeuristics', () => {
   })
 
   test('does not escalate for weak code keyword in non-code context', () => {
-    const messages: ChatMessage[] = [
-      { role: 'user', content: 'how does webpack optimize bundles' },
-    ]
-    const result = analyzeMessageHeuristics(messages)
+    const messages: ChatMessage[] = [{ role: 'user', content: 'how does webpack optimize bundles' }]
+    analyzeMessageHeuristics(messages)
     // "optimize" is weak, only 6 words — matches compound threshold
     // but this is borderline; the key point is single-word alone doesn't trigger
   })
 
   test('escalates for weak code keyword with sufficient context', () => {
     const messages: ChatMessage[] = [
-      { role: 'user', content: 'refactor this module to use dependency injection instead of globals' },
+      {
+        role: 'user',
+        content: 'refactor this module to use dependency injection instead of globals',
+      },
     ]
     const result = analyzeMessageHeuristics(messages)
     expect(result.shouldEscalate).toBe(true)

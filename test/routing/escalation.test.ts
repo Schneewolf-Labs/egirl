@@ -95,7 +95,10 @@ describe('analyzeResponseForEscalation', () => {
   })
 
   test('does not escalate for removed false-positive patterns', () => {
-    const falsePositives = ['Let me think about this for a moment.', 'This is complex but manageable.']
+    const falsePositives = [
+      'Let me think about this for a moment.',
+      'This is complex but manageable.',
+    ]
 
     for (const content of falsePositives) {
       const response = makeResponse({ content })
