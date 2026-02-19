@@ -3,7 +3,12 @@ import type { ChatMessage } from '../providers/types'
 import { getTextContent } from '../providers/types'
 import type { Skill } from '../skills/types'
 import { log } from '../util/logger'
-import { analyzeMessageHeuristics, estimateComplexity } from './heuristics'
+import {
+  analyzeMessageHeuristics,
+  estimateComplexity,
+  STRONG_CODE_INDICATORS,
+  WEAK_CODE_SIGNALS,
+} from './heuristics'
 import { applyRules, createRoutingRules, type RuleContext } from './rules'
 
 export interface RoutingDecision {
@@ -201,17 +206,19 @@ export class Router {
 
   private detectTaskType(content: string): TaskAnalysis['type'] {
     const lower = content.toLowerCase()
+    const wordCount = lower.split(/\s+/).length
 
     if (lower.includes('remember') || lower.includes('recall') || lower.includes('what did i')) {
       return 'memory_op'
     }
 
-    if (
-      lower.includes('write code') ||
-      lower.includes('implement') ||
-      lower.includes('create a function') ||
-      lower.includes('```')
-    ) {
+    // Strong code indicators or code blocks — single signal sufficient
+    const hasStrongCode = STRONG_CODE_INDICATORS.some((k) => lower.includes(k))
+    const hasCodeBlocks = lower.includes('```')
+    // Weak code signals — require compound signal (keyword + length)
+    const hasWeakCode = WEAK_CODE_SIGNALS.some((k) => lower.includes(k))
+
+    if (hasStrongCode || hasCodeBlocks || (hasWeakCode && wordCount > 5)) {
       return 'code_generation'
     }
 

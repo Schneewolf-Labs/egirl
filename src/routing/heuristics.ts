@@ -7,23 +7,30 @@ export interface HeuristicResult {
   confidence: number
 }
 
-// Keywords that suggest code generation or complex reasoning
-const CODE_KEYWORDS = [
+// Multi-word phrases that unambiguously indicate code generation — single match sufficient
+export const STRONG_CODE_INDICATORS = [
   'write code',
-  'implement',
   'create a function',
-  'build a',
-  'develop',
-  'refactor',
-  'debug',
   'fix this code',
-  'optimize',
-  'code review',
   'write a script',
   'create a class',
   'write tests',
   'unit test',
+  'code review',
 ]
+
+// Single-word signals that appear in non-code contexts — require compound signal
+export const WEAK_CODE_SIGNALS = [
+  'implement',
+  'build a',
+  'develop',
+  'refactor',
+  'debug',
+  'optimize',
+]
+
+// Combined list used by estimateComplexity
+const CODE_KEYWORDS = [...STRONG_CODE_INDICATORS, ...WEAK_CODE_SIGNALS]
 
 const REASONING_KEYWORDS = [
   'explain in detail',
@@ -81,10 +88,16 @@ export function analyzeMessageHeuristics(messages: ChatMessage[]): HeuristicResu
     }
   }
 
-  // Check for code-related keywords
-  const hasCodeKeywords = CODE_KEYWORDS.some((k) => content.includes(k))
-  if (hasCodeKeywords) {
+  // Check for strong code indicators — single match is sufficient
+  const hasStrongCode = STRONG_CODE_INDICATORS.some((k) => content.includes(k))
+  if (hasStrongCode) {
     return { shouldEscalate: true, reason: 'code_generation', confidence: 0.8 }
+  }
+
+  // Check for weak code signals — require compound signal (keyword + length)
+  const hasWeakCode = WEAK_CODE_SIGNALS.some((k) => content.includes(k))
+  if (hasWeakCode && wordCount > 5) {
+    return { shouldEscalate: true, reason: 'code_generation', confidence: 0.75 }
   }
 
   // Check for complex reasoning keywords
