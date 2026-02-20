@@ -21,6 +21,7 @@ export {
 } from './builtin'
 export { type ConfirmCallback, createToolExecutor, ToolExecutor } from './executor'
 export * from './format'
+export { levenshtein, remapParams, resolveToolName } from './fuzzy-match'
 export * from './types'
 
 import type { BrowserManager } from '../browser'
