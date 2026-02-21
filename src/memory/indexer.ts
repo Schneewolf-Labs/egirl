@@ -163,7 +163,7 @@ export class MemoryIndexer {
       importance?: number
       confidence?: number
     } = {},
-  ): void {
+  ): string {
     const now = Date.now()
     const {
       contentType = 'text',
@@ -175,6 +175,13 @@ export class MemoryIndexer {
       importance = 0.5,
       confidence = 0.5,
     } = options
+
+    // Resolve key collisions for auto-extracted memories from different sessions.
+    // Without this, ON CONFLICT silently overwrites memories from earlier sessions
+    // when the LLM generates the same key name (e.g., "auto/preferred_language").
+    if ((source === 'auto' || source === 'compaction') && sessionId) {
+      key = this.resolveKeyCollision(key, sessionId)
+    }
 
     const stmt = this.db.prepare(`
       INSERT INTO memories (key, value, content_type, category, source, session_id, image_path, embedding, importance, confidence, created_at, updated_at)
@@ -217,6 +224,8 @@ export class MemoryIndexer {
         this.embeddingCache.delete(key)
       }
     }
+
+    return key
   }
 
   get(key: string): IndexedMemory | null {
@@ -407,6 +416,30 @@ export class MemoryIndexer {
     for (const key of keys) {
       stmt.run(now, key)
     }
+  }
+
+  /**
+   * Resolve key collisions for auto-extracted memories from different sessions.
+   *
+   * If the key already exists and belongs to a different session, appends a
+   * numeric suffix (_2, _3, ...) to avoid silently overwriting. Same-session
+   * writes are allowed to overwrite (they're updates within one conversation).
+   */
+  private resolveKeyCollision(key: string, sessionId: string): string {
+    const existing = this.get(key)
+    if (!existing) return key
+    if (existing.sessionId === sessionId) return key
+
+    // Different session owns this key — find an available suffix
+    for (let suffix = 2; suffix <= 100; suffix++) {
+      const candidate = `${key}_${suffix}`
+      const check = this.get(candidate)
+      if (!check) return candidate
+      if (check.sessionId === sessionId) return candidate
+    }
+
+    // Fallback: timestamp guarantees uniqueness
+    return `${key}_${Date.now()}`
   }
 
   close(): void {
