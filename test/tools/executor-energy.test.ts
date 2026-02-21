@@ -8,7 +8,11 @@ import type { Tool } from '../../src/tools/types'
 
 function stubTool(name: string): Tool {
   return {
-    definition: { name, description: `stub ${name}`, parameters: { type: 'object', properties: {} } },
+    definition: {
+      name,
+      description: `stub ${name}`,
+      parameters: { type: 'object', properties: {} },
+    },
     execute: async () => ({ success: true, output: `${name} done` }),
   }
 }
