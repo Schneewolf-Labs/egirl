@@ -83,7 +83,7 @@ export class MemoryManager {
       }
     }
 
-    this.indexer.set(key, value, {
+    const actualKey = this.indexer.set(key, value, {
       contentType: 'text',
       embedding,
       category: options?.category,
@@ -91,11 +91,11 @@ export class MemoryManager {
       sessionId: options?.sessionId,
     })
     await this.files.appendToDailyLog(
-      `SET ${key} [${options?.category ?? 'general'}]: ${value.slice(0, 100)}...`,
+      `SET ${actualKey} [${options?.category ?? 'general'}]: ${value.slice(0, 100)}...`,
     )
     log.debug(
       'memory',
-      `Set memory: ${key} (category=${options?.category ?? 'general'}, source=${options?.source ?? 'manual'})`,
+      `Set memory: ${actualKey} (category=${options?.category ?? 'general'}, source=${options?.source ?? 'manual'})`,
     )
   }
 

@@ -163,3 +163,173 @@ describe('MemoryIndexer — categories and time ranges', () => {
     expect(indexer.get('untouched')?.accessCount).toBe(0)
   })
 })
+
+describe('MemoryIndexer — key collision resolution', () => {
+  let tmpDir: string
+  let indexer: MemoryIndexer
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), 'egirl-indexer-collision-'))
+    const dbPath = join(tmpDir, 'test.db')
+    indexer = new MemoryIndexer(dbPath, 4)
+  })
+
+  afterEach(() => {
+    indexer.close()
+    rmSync(tmpDir, { recursive: true, force: true })
+  })
+
+  test('auto key from same session overwrites normally', () => {
+    indexer.set('auto/preferred_language', 'Python', {
+      source: 'auto',
+      sessionId: 'session-a',
+      category: 'preference',
+    })
+    indexer.set('auto/preferred_language', 'Rust', {
+      source: 'auto',
+      sessionId: 'session-a',
+      category: 'preference',
+    })
+
+    const mem = indexer.get('auto/preferred_language')
+    expect(mem?.value).toBe('Rust')
+    expect(indexer.count()).toBe(1)
+  })
+
+  test('auto key from different session gets suffixed instead of overwriting', () => {
+    indexer.set('auto/preferred_language', 'Python', {
+      source: 'auto',
+      sessionId: 'session-a',
+      category: 'preference',
+    })
+    const actualKey = indexer.set('auto/preferred_language', 'Rust', {
+      source: 'auto',
+      sessionId: 'session-b',
+      category: 'preference',
+    })
+
+    // Original preserved
+    const original = indexer.get('auto/preferred_language')
+    expect(original?.value).toBe('Python')
+    expect(original?.sessionId).toBe('session-a')
+
+    // New value stored under suffixed key
+    expect(actualKey).toBe('auto/preferred_language_2')
+    const suffixed = indexer.get('auto/preferred_language_2')
+    expect(suffixed?.value).toBe('Rust')
+    expect(suffixed?.sessionId).toBe('session-b')
+
+    expect(indexer.count()).toBe(2)
+  })
+
+  test('multiple collisions increment suffix', () => {
+    indexer.set('auto/editor', 'vim', {
+      source: 'auto',
+      sessionId: 'session-a',
+      category: 'preference',
+    })
+    indexer.set('auto/editor', 'emacs', {
+      source: 'auto',
+      sessionId: 'session-b',
+      category: 'preference',
+    })
+    const thirdKey = indexer.set('auto/editor', 'nano', {
+      source: 'auto',
+      sessionId: 'session-c',
+      category: 'preference',
+    })
+
+    expect(indexer.get('auto/editor')?.value).toBe('vim')
+    expect(indexer.get('auto/editor_2')?.value).toBe('emacs')
+    expect(thirdKey).toBe('auto/editor_3')
+    expect(indexer.get('auto/editor_3')?.value).toBe('nano')
+    expect(indexer.count()).toBe(3)
+  })
+
+  test('suffixed key reused by same session updates in place', () => {
+    indexer.set('auto/lang', 'Python', {
+      source: 'auto',
+      sessionId: 'session-a',
+      category: 'preference',
+    })
+    indexer.set('auto/lang', 'Rust', {
+      source: 'auto',
+      sessionId: 'session-b',
+      category: 'preference',
+    })
+    // session-b writes again — should reuse auto/lang_2
+    const key = indexer.set('auto/lang', 'Go', {
+      source: 'auto',
+      sessionId: 'session-b',
+      category: 'preference',
+    })
+
+    expect(key).toBe('auto/lang_2')
+    expect(indexer.get('auto/lang_2')?.value).toBe('Go')
+    expect(indexer.count()).toBe(2)
+  })
+
+  test('compaction keys also get collision resolution', () => {
+    indexer.set('compaction/task_status', 'building feature X', {
+      source: 'compaction',
+      sessionId: 'session-a',
+      category: 'project',
+    })
+    const actualKey = indexer.set('compaction/task_status', 'debugging feature Y', {
+      source: 'compaction',
+      sessionId: 'session-b',
+      category: 'project',
+    })
+
+    expect(indexer.get('compaction/task_status')?.value).toBe('building feature X')
+    expect(actualKey).toBe('compaction/task_status_2')
+    expect(indexer.get('compaction/task_status_2')?.value).toBe('debugging feature Y')
+  })
+
+  test('manual source keys are not affected by collision resolution', () => {
+    indexer.set('my_key', 'value 1', {
+      source: 'manual',
+      sessionId: 'session-a',
+    })
+    indexer.set('my_key', 'value 2', {
+      source: 'manual',
+      sessionId: 'session-b',
+    })
+
+    // Manual keys always overwrite (existing behavior)
+    expect(indexer.get('my_key')?.value).toBe('value 2')
+    expect(indexer.count()).toBe(1)
+  })
+
+  test('auto key without sessionId overwrites normally', () => {
+    indexer.set('auto/key', 'first', {
+      source: 'auto',
+      sessionId: 'session-a',
+      category: 'fact',
+    })
+    indexer.set('auto/key', 'second', {
+      source: 'auto',
+      category: 'fact',
+    })
+
+    // No sessionId on second write — collision resolution skipped, overwrites
+    expect(indexer.get('auto/key')?.value).toBe('second')
+    expect(indexer.count()).toBe(1)
+  })
+
+  test('set returns the actual key used', () => {
+    const key1 = indexer.set('auto/thing', 'first', {
+      source: 'auto',
+      sessionId: 'session-a',
+      category: 'fact',
+    })
+    const key2 = indexer.set('auto/thing', 'second', {
+      source: 'auto',
+      sessionId: 'session-b',
+      category: 'fact',
+    })
+
+    expect(key1).toBe('auto/thing')
+    expect(key2).toBe('auto/thing_2')
+  })
+})
