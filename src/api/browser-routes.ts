@@ -1,26 +1,6 @@
 import type { BrowserManager } from '../browser'
 import { log } from '../util/logger'
-
-type RouteHandler = (req: Request, params: Record<string, string>) => Promise<Response>
-
-function json(data: unknown, status = 200): Response {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  })
-}
-
-function error(message: string, status = 400): Response {
-  return json({ error: message }, status)
-}
-
-async function parseBody(req: Request): Promise<unknown> {
-  try {
-    return await req.json()
-  } catch {
-    return null
-  }
-}
+import { error, json, parseBody, type RouteHandler } from './http'
 
 /**
  * Create browser automation HTTP routes.
