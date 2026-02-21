@@ -2,6 +2,7 @@ export {
   type CodeAgentConfig,
   createBrowserTools,
   createCodeAgentTool,
+  createExecTool,
   createGitHubTools,
   createMemoryTools,
   createTaskTools,
@@ -45,10 +46,10 @@ import {
   type CodeAgentConfig,
   createBrowserTools,
   createCodeAgentTool,
+  createExecTool,
   createGitHubTools,
   createMemoryTools,
   editTool,
-  execTool,
   type GitHubConfig,
   gitCommitTool,
   gitDiffTool,
@@ -106,7 +107,7 @@ export function createDefaultToolExecutor(
 
   // Shell execution
   if (t.exec) {
-    executor.register(execTool)
+    executor.register(createExecTool(t.commandTimeoutMs))
   }
 
   // Git tools

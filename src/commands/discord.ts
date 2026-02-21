@@ -26,7 +26,7 @@ export async function runDiscord(config: RuntimeConfig, args: string[]): Promise
   const standup = await gatherStandup(config.workspace.path)
 
   // Shared mutex serializes agent runs across Discord messages and background tasks
-  const sessionMutex = new SessionMutex()
+  const sessionMutex = new SessionMutex(config.agentRunTimeoutMs)
 
   // Create agent factory for per-session loops
   const agentFactory: AgentFactory = (sessionId: string) =>

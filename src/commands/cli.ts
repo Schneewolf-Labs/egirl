@@ -32,7 +32,7 @@ export async function runCLI(config: RuntimeConfig, args: string[]): Promise<voi
   const standup = await gatherStandup(config.workspace.path)
 
   // Shared mutex serializes agent runs across CLI input and background tasks
-  const sessionMutex = new SessionMutex()
+  const sessionMutex = new SessionMutex(config.agentRunTimeoutMs)
 
   // Create agent loop with conversation persistence and memory
   const sessionId = singleMessage ? crypto.randomUUID() : 'cli:default'
