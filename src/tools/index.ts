@@ -25,8 +25,17 @@ export {
   type ExecutionContext,
   ToolExecutor,
 } from './executor'
-export * from './format'
-export * from './types'
+export {
+  buildToolsSection,
+  createToolResponseMessage,
+  formatToolCall,
+  formatToolDefinition,
+  formatToolResponse,
+  formatToolResponses,
+  hasToolCalls,
+  parseToolCalls,
+} from './format'
+export type { Tool, ToolDefinition, ToolResult } from './types'
 
 import type { BrowserManager } from '../browser'
 import type { RuntimeConfig } from '../config'

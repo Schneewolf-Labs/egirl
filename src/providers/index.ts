@@ -12,7 +12,22 @@ export { createLlamaCppProvider } from './llamacpp'
 export { createLlamaCppTokenizer } from './llamacpp-tokenizer'
 export { createOpenAIProvider } from './openai'
 export { formatMessagesForQwen3 } from './qwen3-format'
-export * from './types'
+export {
+  type ChatMessage,
+  type ChatRequest,
+  type ChatResponse,
+  type ContentPart,
+  ContextSizeError,
+  getTextContent,
+  type ImageContent,
+  type LLMProvider,
+  type TextContent,
+  type ThinkingConfig,
+  type Tokenizer,
+  type ToolCall,
+  type ToolDefinition,
+  thinkingBudget,
+} from './types'
 
 export interface ProviderRegistry {
   local: LLMProvider
