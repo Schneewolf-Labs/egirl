@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { SessionMutex } from '../../src/agent/session-mutex'
+import { MutexTimeoutError, SessionMutex } from '../../src/agent/session-mutex'
 
 describe('SessionMutex', () => {
   test('allows a single run through immediately', async () => {
@@ -110,6 +110,68 @@ describe('SessionMutex', () => {
     const result = await succeeding
     expect(result).toBe('ok')
     expect(order).toEqual(['fail-start', 'success'])
+  })
+  test('run() times out and releases lock when function hangs', async () => {
+    const mutex = new SessionMutex(100) // 100ms timeout
+
+    await expect(
+      mutex.run(async () => {
+        await sleep(500) // hangs longer than timeout
+        return 'should not reach'
+      }),
+    ).rejects.toThrow(MutexTimeoutError)
+
+    // Lock should be released so the next run proceeds
+    expect(mutex.isLocked()).toBe(false)
+    const result = await mutex.run(async () => 'recovered')
+    expect(result).toBe('recovered')
+  })
+
+  test('per-call timeout overrides constructor default', async () => {
+    const mutex = new SessionMutex(5000) // generous default
+
+    await expect(
+      mutex.run(async () => {
+        await sleep(500)
+        return 'nope'
+      }, 50), // tight per-call override
+    ).rejects.toThrow(MutexTimeoutError)
+
+    expect(mutex.isLocked()).toBe(false)
+  })
+
+  test('no timeout when not configured', async () => {
+    const mutex = new SessionMutex() // no timeout
+
+    const result = await mutex.run(async () => {
+      await sleep(50)
+      return 'completed'
+    })
+
+    expect(result).toBe('completed')
+  })
+
+  test('queued run proceeds after timed-out run', async () => {
+    const mutex = new SessionMutex(100)
+    const order: string[] = []
+
+    const hanging = mutex.run(async () => {
+      order.push('hang-start')
+      await sleep(500)
+      order.push('hang-end')
+      return 'hung'
+    })
+
+    // Queue a second run that should proceed after the first times out
+    const next = mutex.run(async () => {
+      order.push('next')
+      return 'ok'
+    })
+
+    await expect(hanging).rejects.toThrow(MutexTimeoutError)
+    const result = await next
+    expect(result).toBe('ok')
+    expect(order).toContain('next')
   })
 })
 

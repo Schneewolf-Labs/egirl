@@ -119,6 +119,7 @@ export function loadConfig(): RuntimeConfig {
   // Build runtime config with snake_case from TOML mapped to camelCase
   const config: RuntimeConfig = {
     theme: themeName,
+    agentRunTimeoutMs: toml.agent_run_timeout_ms,
     thinking: {
       level: (toml.thinking?.level ?? 'off') as ThinkingLevel,
       budgetTokens: toml.thinking?.budget_tokens,
@@ -236,6 +237,7 @@ export function loadConfig(): RuntimeConfig {
       codeAgent: toml.tools?.code_agent ?? false,
       webResearch: toml.tools?.web_research ?? true,
       screenshot: toml.tools?.screenshot ?? true,
+      commandTimeoutMs: toml.tools?.command_timeout_ms ?? 30000,
     },
     skills: {
       dirs: (toml.skills?.dirs ?? defaultToml.skills.dirs).map((d) => expandPath(d, workspacePath)),

@@ -22,7 +22,7 @@ export async function runXMPP(config: RuntimeConfig, args: string[]): Promise<vo
   // Gather workspace standup for agent context
   const standup = await gatherStandup(config.workspace.path)
 
-  const sessionMutex = new SessionMutex()
+  const sessionMutex = new SessionMutex(config.agentRunTimeoutMs)
 
   const agent = createAgentLoop({
     config,

@@ -4,6 +4,7 @@ export type ThinkingLevel = 'off' | 'low' | 'medium' | 'high'
 
 export const EgirlConfigSchema = Type.Object({
   theme: Type.Optional(Type.String({ default: 'egirl' })),
+  agent_run_timeout_ms: Type.Optional(Type.Number()),
 
   thinking: Type.Optional(
     Type.Object({
@@ -216,6 +217,7 @@ export const EgirlConfigSchema = Type.Object({
       code_agent: Type.Boolean({ default: false }),
       web_research: Type.Boolean({ default: true }),
       screenshot: Type.Boolean({ default: true }),
+      command_timeout_ms: Type.Optional(Type.Number({ default: 30000 })),
     }),
   ),
 
@@ -229,6 +231,8 @@ export type EgirlConfig = Static<typeof EgirlConfigSchema>
 // Runtime config with resolved paths and secrets from .env
 export interface RuntimeConfig {
   theme: string
+  /** Hard timeout for a single agent run (ms). Undefined = no timeout. */
+  agentRunTimeoutMs?: number
   thinking: {
     level: ThinkingLevel
     budgetTokens?: number
@@ -384,6 +388,7 @@ export interface RuntimeConfig {
     codeAgent: boolean
     webResearch: boolean
     screenshot: boolean
+    commandTimeoutMs: number
   }
   skills: {
     dirs: string[]

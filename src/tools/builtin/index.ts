@@ -1,7 +1,7 @@
 export { createBrowserTools } from './browser'
 export { type CodeAgentConfig, createCodeAgentTool } from './code-agent'
 export { editTool } from './edit'
-export { execTool } from './exec'
+export { createExecTool, execTool } from './exec'
 export { gitCommitTool, gitDiffTool, gitLogTool, gitShowTool, gitStatusTool } from './git'
 export { createGitHubTools, type GitHubConfig } from './github/index'
 export { globTool } from './glob'
