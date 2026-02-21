@@ -169,6 +169,14 @@ export const EgirlConfigSchema = Type.Object({
     }),
   ),
 
+  energy: Type.Optional(
+    Type.Object({
+      enabled: Type.Boolean({ default: true }),
+      max_energy: Type.Number({ default: 20 }),
+      regen_per_hour: Type.Number({ default: 10 }),
+    }),
+  ),
+
   tasks: Type.Optional(
     Type.Object({
       enabled: Type.Boolean({ default: true }),
@@ -340,6 +348,11 @@ export interface RuntimeConfig {
     token: string
     defaultOwner?: string
     defaultRepo?: string
+  }
+  energy: {
+    enabled: boolean
+    maxEnergy: number
+    regenPerHour: number
   }
   tasks: {
     enabled: boolean

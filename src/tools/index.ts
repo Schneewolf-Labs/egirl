@@ -19,7 +19,12 @@ export {
   webResearchTool,
   writeTool,
 } from './builtin'
-export { type ConfirmCallback, createToolExecutor, ToolExecutor } from './executor'
+export {
+  type ConfirmCallback,
+  createToolExecutor,
+  type ExecutionContext,
+  ToolExecutor,
+} from './executor'
 export * from './format'
 export * from './types'
 
