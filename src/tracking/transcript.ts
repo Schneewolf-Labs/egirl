@@ -58,6 +58,14 @@ export interface ToolCallEntry extends BaseEntry {
   duration_ms: number
 }
 
+export interface TokenBudgetEntry extends BaseEntry {
+  type: 'token_budget'
+  level: 'high' | 'critical'
+  utilization: number
+  input_tokens: number
+  context_length: number
+}
+
 export interface TurnEndEntry extends BaseEntry {
   type: 'turn_end'
   content_length: number
@@ -77,6 +85,7 @@ export type TranscriptEntry =
   | InferenceEntry
   | EscalationEntry
   | ToolCallEntry
+  | TokenBudgetEntry
   | TurnEndEntry
 
 export interface TranscriptConfig {
@@ -186,6 +195,23 @@ export class TranscriptLogger {
       ts: new Date().toISOString(),
       session,
       type: 'tool_call',
+      ...data,
+    })
+  }
+
+  tokenBudget(
+    session: string,
+    data: {
+      level: 'high' | 'critical'
+      utilization: number
+      input_tokens: number
+      context_length: number
+    },
+  ): Promise<void> {
+    return this.append({
+      ts: new Date().toISOString(),
+      session,
+      type: 'token_budget',
       ...data,
     })
   }

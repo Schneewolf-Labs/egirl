@@ -33,6 +33,7 @@ import { formatSummaryMessage, summarizeMessages } from './context-summarizer'
 import { fitToContextWindow, truncateToolResultSync } from './context-window'
 import type { AgentEventHandler } from './events'
 import type { SessionMutex } from './session-mutex'
+import { TokenBudgetTracker } from './token-budget'
 
 /** Default context limits for remote providers */
 const REMOTE_CONTEXT_LENGTH = 200_000
@@ -252,6 +253,11 @@ export class AgentLoop {
     // Track remaining fallbacks for this run
     const remainingFallbacks = [...fallbackProviders]
 
+    // Token budget tracking — monitors context utilization across turns
+    const contextLengthForTarget =
+      currentTarget === 'local' ? this.config.local.contextLength : REMOTE_CONTEXT_LENGTH
+    const budgetTracker = new TokenBudgetTracker(contextLengthForTarget)
+
     let lastThinking: string | undefined
     // Planning phase flag — stays true until the model produces the plan text.
     // Unlike `turns === 1`, this survives retries caused by fallback/escalation.
@@ -287,6 +293,9 @@ export class AgentLoop {
         if (fallback) {
           currentProvider = fallback.provider
           currentTarget = fallback.target
+          budgetTracker.setContextLength(
+            fallback.target === 'local' ? this.config.local.contextLength : REMOTE_CONTEXT_LENGTH,
+          )
           log.info(
             'agent',
             `Provider ${currentProvider.name} failed, falling back to ${fallback.provider.name}: ${error instanceof Error ? error.message : String(error)}`,
@@ -310,6 +319,45 @@ export class AgentLoop {
         duration_ms: inferenceDuration,
         has_tool_calls: (response.tool_calls?.length ?? 0) > 0,
       })
+
+      // Track token budget utilization
+      const budgetStatus = budgetTracker.record(
+        response.usage.input_tokens,
+        response.usage.output_tokens,
+      )
+
+      if (budgetTracker.shouldWarnCritical()) {
+        log.warn(
+          'agent',
+          `Token budget critical: ${Math.round(budgetStatus.utilization * 100)}% of ${budgetStatus.contextLength}t context used`,
+        )
+        events?.onTokenBudgetWarning?.('critical', budgetStatus)
+        this.transcript?.tokenBudget(this.context.sessionId, {
+          level: 'critical',
+          utilization: budgetStatus.utilization,
+          input_tokens: budgetStatus.lastInputTokens,
+          context_length: budgetStatus.contextLength,
+        })
+
+        // Inject a wrap-up hint so the model can finish before context is trimmed
+        addMessage(this.context, {
+          role: 'user',
+          content:
+            '[System: Context window is nearly full. Wrap up your current task and provide a final response. Avoid further tool calls unless absolutely necessary.]',
+        })
+      } else if (budgetTracker.shouldWarnHigh()) {
+        log.info(
+          'agent',
+          `Token budget high: ${Math.round(budgetStatus.utilization * 100)}% of ${budgetStatus.contextLength}t context used`,
+        )
+        events?.onTokenBudgetWarning?.('high', budgetStatus)
+        this.transcript?.tokenBudget(this.context.sessionId, {
+          level: 'high',
+          utilization: budgetStatus.utilization,
+          input_tokens: budgetStatus.lastInputTokens,
+          context_length: budgetStatus.contextLength,
+        })
+      }
 
       // Emit extended thinking content if present
       if (response.thinking) {
@@ -346,6 +394,7 @@ export class AgentLoop {
             currentProvider = remoteProvider
             currentTarget = 'remote'
             escalated = true
+            budgetTracker.setContextLength(REMOTE_CONTEXT_LENGTH)
             continue
           }
         }
@@ -417,6 +466,7 @@ export class AgentLoop {
               currentProvider = remoteProvider
               currentTarget = 'remote'
               escalated = true
+              budgetTracker.setContextLength(REMOTE_CONTEXT_LENGTH)
             }
           }
         }

@@ -2,6 +2,7 @@ import type { ToolCall } from '../providers/types'
 import type { RoutingDecision } from '../routing'
 import type { EscalationDecision } from '../routing/escalation'
 import type { ToolResult } from '../tools/types'
+import type { BudgetLevel, BudgetStatus } from './token-budget'
 
 /**
  * Event handler for agent loop transparency.
@@ -30,4 +31,6 @@ export interface AgentEventHandler {
   onBeforeToolExec?(call: ToolCall): boolean | Promise<boolean>
   /** Called after a single tool finishes executing */
   onAfterToolExec?(call: ToolCall, result: ToolResult): void
+  /** Called when token budget utilization crosses a threshold (high or critical) */
+  onTokenBudgetWarning?(level: BudgetLevel, status: BudgetStatus): void
 }
