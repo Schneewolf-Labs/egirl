@@ -1,8 +1,6 @@
-export interface ToolDefinition {
-  name: string
-  description: string
-  parameters: Record<string, unknown> // JSON Schema
-}
+import type { ToolDefinition } from '../providers/types'
+
+export type { ToolDefinition } from '../providers/types'
 
 export interface ToolResult {
   success: boolean

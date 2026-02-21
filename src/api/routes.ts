@@ -6,6 +6,7 @@ import type { ProviderRegistry } from '../providers'
 import type { ToolExecutor } from '../tools'
 import type { StatsTracker } from '../tracking/stats'
 import { log } from '../util/logger'
+import { error, json, parseBody, type RouteHandler } from './http'
 import type { OpenAPISpec } from './openapi'
 
 const STATIC_DIR = join(import.meta.dir, '../../static')
@@ -19,27 +20,6 @@ export interface RouteDeps {
   stats: StatsTracker
   spec: OpenAPISpec
   startTime: number
-}
-
-type RouteHandler = (req: Request, params: Record<string, string>) => Promise<Response>
-
-function json(data: unknown, status = 200): Response {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  })
-}
-
-function error(message: string, status = 400): Response {
-  return json({ error: message }, status)
-}
-
-async function parseBody(req: Request): Promise<unknown> {
-  try {
-    return await req.json()
-  } catch {
-    return null
-  }
 }
 
 export function createRoutes(deps: RouteDeps): Map<string, Map<string, RouteHandler>> {

@@ -1,5 +1,5 @@
 import { join } from 'path'
-import { BrowserManager, type BrowserManager as BrowserManagerType } from './browser'
+import { BrowserManager } from './browser'
 import type { RuntimeConfig } from './config'
 import { type ConversationStore, createConversationStore } from './conversation'
 import { createEnergyBudget, type EnergyBudget } from './energy'
@@ -44,7 +44,7 @@ export interface AppServices {
   stats: StatsTracker
   transcript: TranscriptLogger | undefined
   skills: Skill[]
-  browser: BrowserManagerType
+  browser: BrowserManager
 }
 
 /**
