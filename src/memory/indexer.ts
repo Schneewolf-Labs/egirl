@@ -25,6 +25,8 @@ export interface IndexedMemory {
   sessionId?: string
   imagePath?: string // Path to stored image file
   embedding?: Float32Array
+  importance: number // 0.0-1.0, higher = more important. Default 0.5
+  confidence: number // 0.0-1.0, how confident we are in this memory. Default 0.5
   createdAt: number
   updatedAt: number
   lastAccessedAt: number
@@ -60,6 +62,8 @@ export class MemoryIndexer {
         session_id TEXT,
         image_path TEXT,
         embedding BLOB,
+        importance REAL NOT NULL DEFAULT 0.5,
+        confidence REAL NOT NULL DEFAULT 0.5,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL,
         last_accessed_at INTEGER NOT NULL DEFAULT 0,
@@ -136,6 +140,14 @@ export class MemoryIndexer {
       this.db.run('ALTER TABLE memories ADD COLUMN access_count INTEGER NOT NULL DEFAULT 0')
       log.info('memory', 'Migrated: added access_count column')
     }
+    if (!columnNames.has('importance')) {
+      this.db.run('ALTER TABLE memories ADD COLUMN importance REAL NOT NULL DEFAULT 0.5')
+      log.info('memory', 'Migrated: added importance column')
+    }
+    if (!columnNames.has('confidence')) {
+      this.db.run('ALTER TABLE memories ADD COLUMN confidence REAL NOT NULL DEFAULT 0.5')
+      log.info('memory', 'Migrated: added confidence column')
+    }
   }
 
   set(
@@ -148,6 +160,8 @@ export class MemoryIndexer {
       sessionId?: string
       imagePath?: string
       embedding?: Float32Array
+      importance?: number
+      confidence?: number
     } = {},
   ): void {
     const now = Date.now()
@@ -158,11 +172,13 @@ export class MemoryIndexer {
       sessionId,
       imagePath,
       embedding,
+      importance = 0.5,
+      confidence = 0.5,
     } = options
 
     const stmt = this.db.prepare(`
-      INSERT INTO memories (key, value, content_type, category, source, session_id, image_path, embedding, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO memories (key, value, content_type, category, source, session_id, image_path, embedding, importance, confidence, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(key) DO UPDATE SET
         value = excluded.value,
         content_type = excluded.content_type,
@@ -171,6 +187,8 @@ export class MemoryIndexer {
         session_id = excluded.session_id,
         image_path = excluded.image_path,
         embedding = excluded.embedding,
+        importance = excluded.importance,
+        confidence = excluded.confidence,
         updated_at = excluded.updated_at
     `)
 
@@ -183,6 +201,8 @@ export class MemoryIndexer {
       sessionId ?? null,
       imagePath ?? null,
       embedding ? Buffer.from(embedding.buffer) : null,
+      importance,
+      confidence,
       now,
       now,
     )
@@ -202,7 +222,7 @@ export class MemoryIndexer {
   get(key: string): IndexedMemory | null {
     const row = this.db
       .query(`
-      SELECT id, key, value, content_type, category, source, session_id, image_path, embedding, created_at, updated_at, last_accessed_at, access_count
+      SELECT id, key, value, content_type, category, source, session_id, image_path, embedding, importance, confidence, created_at, updated_at, last_accessed_at, access_count
       FROM memories WHERE key = ?
     `)
       .get(key) as MemoryRow | null
@@ -220,7 +240,7 @@ export class MemoryIndexer {
       this.embeddingCache = new Map()
       const rows = this.db
         .query(`
-        SELECT id, key, value, content_type, category, source, session_id, image_path, embedding, created_at, updated_at, last_accessed_at, access_count
+        SELECT id, key, value, content_type, category, source, session_id, image_path, embedding, importance, confidence, created_at, updated_at, last_accessed_at, access_count
         FROM memories
         WHERE embedding IS NOT NULL
       `)
@@ -241,7 +261,7 @@ export class MemoryIndexer {
   getByContentType(contentType: ContentType, limit = 100): IndexedMemory[] {
     const rows = this.db
       .query(`
-      SELECT id, key, value, content_type, category, source, session_id, image_path, embedding, created_at, updated_at, last_accessed_at, access_count
+      SELECT id, key, value, content_type, category, source, session_id, image_path, embedding, importance, confidence, created_at, updated_at, last_accessed_at, access_count
       FROM memories
       WHERE content_type = ?
       ORDER BY updated_at DESC
@@ -256,7 +276,8 @@ export class MemoryIndexer {
     const rows = this.db
       .query(`
       SELECT m.id, m.key, m.value, m.content_type, m.category, m.source, m.session_id,
-             m.image_path, m.created_at, m.updated_at, m.last_accessed_at, m.access_count, fts.rank
+             m.image_path, m.importance, m.confidence,
+             m.created_at, m.updated_at, m.last_accessed_at, m.access_count, fts.rank
       FROM memories m
       JOIN memories_fts fts ON m.id = fts.rowid
       WHERE memories_fts MATCH ?
@@ -332,7 +353,7 @@ export class MemoryIndexer {
   getByCategory(category: MemoryCategory, limit = 100): IndexedMemory[] {
     const rows = this.db
       .query(`
-      SELECT id, key, value, content_type, category, source, session_id, image_path, embedding, created_at, updated_at, last_accessed_at, access_count
+      SELECT id, key, value, content_type, category, source, session_id, image_path, embedding, importance, confidence, created_at, updated_at, last_accessed_at, access_count
       FROM memories
       WHERE category = ?
       ORDER BY updated_at DESC
@@ -347,7 +368,7 @@ export class MemoryIndexer {
     const untilTs = until ?? Date.now()
     const rows = this.db
       .query(`
-      SELECT id, key, value, content_type, category, source, session_id, image_path, embedding, created_at, updated_at, last_accessed_at, access_count
+      SELECT id, key, value, content_type, category, source, session_id, image_path, embedding, importance, confidence, created_at, updated_at, last_accessed_at, access_count
       FROM memories
       WHERE created_at >= ? AND created_at <= ?
       ORDER BY created_at DESC
@@ -404,6 +425,8 @@ interface MemoryRow {
   session_id: string | null
   image_path: string | null
   embedding: Buffer | null
+  importance: number
+  confidence: number
   created_at: number
   updated_at: number
   last_accessed_at: number
@@ -421,6 +444,8 @@ function rowToMemory(row: MemoryRow): IndexedMemory {
     sessionId: row.session_id ?? undefined,
     imagePath: row.image_path ?? undefined,
     embedding: row.embedding ? new Float32Array(row.embedding.buffer) : undefined,
+    importance: row.importance ?? 0.5,
+    confidence: row.confidence ?? 0.5,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     lastAccessedAt: row.last_accessed_at ?? 0,

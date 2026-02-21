@@ -18,6 +18,33 @@ export interface SearchOptions {
 }
 
 /**
+ * Weights for composite recall scoring.
+ *
+ * Inspired by Hexis's fast_recall: instead of pure similarity matching,
+ * blend multiple signals to surface the most useful memories.
+ */
+export interface RecallWeights {
+  /** Weight for text/vector match quality. Default: 0.50 */
+  matchQuality: number
+  /** Weight for temporal recency (newer = higher). Default: 0.15 */
+  recency: number
+  /** Weight for memory importance (0-1 field). Default: 0.15 */
+  importance: number
+  /** Weight for access frequency (more accessed = more useful). Default: 0.10 */
+  accessFrequency: number
+  /** Weight for memory confidence (0-1 field). Default: 0.10 */
+  confidence: number
+}
+
+const DEFAULT_RECALL_WEIGHTS: RecallWeights = {
+  matchQuality: 0.5,
+  recency: 0.15,
+  importance: 0.15,
+  accessFrequency: 0.1,
+  confidence: 0.1,
+}
+
+/**
  * Normalize a BM25 rank (negative, more negative = better) to a [0, 1) score.
  * Uses the formula |rank| / (1 + |rank|) which provides a monotonic mapping
  * where better BM25 matches get higher scores.
@@ -51,6 +78,45 @@ function cosineSimilarity(a: Float32Array, b: Float32Array): number {
   if (magnitude === 0) return 0
 
   return dotProduct / magnitude
+}
+
+/**
+ * Compute temporal recency score (0-1).
+ * Uses exponential decay: memories from the last hour score ~1.0,
+ * memories from a week ago score ~0.3, memories from a month score ~0.1.
+ */
+function recencyScore(createdAt: number): number {
+  const ageMs = Date.now() - createdAt
+  const ageHours = ageMs / 3_600_000
+  // Half-life of ~48 hours: recent memories are strongly preferred
+  return Math.exp(-0.015 * ageHours)
+}
+
+/**
+ * Normalize access count to 0-1 using logarithmic scaling.
+ * 0 accesses = 0, 1 access = 0.3, 10 accesses = 0.7, 100+ = ~1.0
+ */
+function accessScore(accessCount: number): number {
+  if (accessCount <= 0) return 0
+  return Math.min(1, Math.log10(accessCount + 1) / 2)
+}
+
+/**
+ * Compute weighted composite score for a memory given its match quality.
+ * Blends match quality with recency, importance, access frequency, and confidence.
+ */
+function compositeScore(
+  matchQuality: number,
+  memory: IndexedMemory,
+  weights: RecallWeights,
+): number {
+  return (
+    weights.matchQuality * matchQuality +
+    weights.recency * recencyScore(memory.createdAt) +
+    weights.importance * memory.importance +
+    weights.accessFrequency * accessScore(memory.accessCount) +
+    weights.confidence * memory.confidence
+  )
 }
 
 export class MemorySearch {
@@ -149,7 +215,12 @@ export class MemorySearch {
   }
 
   /**
-   * Hybrid search combining FTS and vector similarity
+   * Hybrid search combining FTS, vector similarity, and composite recall signals.
+   *
+   * Inspired by Hexis's fast_recall: blends match quality (FTS + vector) with
+   * temporal recency, memory importance, access frequency, and confidence.
+   * This surfaces memories that are not just similar but also recent, trusted,
+   * and frequently useful.
    */
   async searchHybrid(query: string, options: SearchOptions = {}): Promise<SearchResult[]> {
     const { limit = 10, ftsWeight = 0.3, vectorWeight = 0.7, categories, since, until } = options
@@ -170,14 +241,14 @@ export class MemorySearch {
       vectorScoreMap = new Map(vectorResults.map((r) => [r.memory.key, r.score]))
     }
 
-    // Combine scores
+    // Combine scores with composite recall
     const allKeys = new Set([...ftsScoreMap.keys(), ...vectorScoreMap.keys()])
     const combined: SearchResult[] = []
 
     for (const key of allKeys) {
       const ftsScore = ftsScoreMap.get(key) ?? 0
       const vectorScore = vectorScoreMap.get(key) ?? 0
-      const hybridScore = ftsScore * ftsWeight + vectorScore * vectorWeight
+      const matchQuality = ftsScore * ftsWeight + vectorScore * vectorWeight
 
       const memory = this.indexer.get(key)
       if (!memory) continue
@@ -187,9 +258,12 @@ export class MemorySearch {
       if (since !== undefined && memory.createdAt < since) continue
       if (until !== undefined && memory.createdAt > until) continue
 
+      // Apply weighted composite scoring
+      const score = compositeScore(matchQuality, memory, DEFAULT_RECALL_WEIGHTS)
+
       combined.push({
         memory,
-        score: hybridScore,
+        score,
         matchType: 'hybrid',
       })
     }

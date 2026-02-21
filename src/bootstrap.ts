@@ -2,11 +2,14 @@ import { join } from 'path'
 import { BrowserManager, type BrowserManager as BrowserManagerType } from './browser'
 import type { RuntimeConfig } from './config'
 import { type ConversationStore, createConversationStore } from './conversation'
+import { createEnergyBudget, type EnergyBudget } from './energy'
 import {
   createEmbeddingProvider,
   createMemoryManager,
+  createWorkingMemory,
   indexDailyLogs,
   type MemoryManager,
+  type WorkingMemory,
 } from './memory'
 import { createProviderRegistry, type ProviderRegistry } from './providers'
 import { createRouter, type Router } from './routing'
@@ -32,6 +35,8 @@ export interface AppServices {
   config: RuntimeConfig
   providers: ProviderRegistry
   memory: MemoryManager | undefined
+  workingMemory: WorkingMemory | undefined
+  energy: EnergyBudget | undefined
   conversations: ConversationStore | undefined
   taskStore: TaskStore | undefined
   router: Router
@@ -197,6 +202,35 @@ export async function createAppServices(config: RuntimeConfig): Promise<AppServi
     })
   }
 
+  // Working memory (transient context with TTL)
+  let workingMemory: WorkingMemory | undefined
+  try {
+    const wmDbPath = join(config.workspace.path, 'working-memory.db')
+    workingMemory = createWorkingMemory(wmDbPath)
+    log.info('main', 'Working memory initialized')
+  } catch (error) {
+    log.warn('main', 'Failed to initialize working memory:', error)
+  }
+
+  // Energy budget (constrains autonomous actions)
+  let energy: EnergyBudget | undefined
+  if (config.energy.enabled) {
+    try {
+      const energyDbPath = join(config.workspace.path, 'energy.db')
+      energy = createEnergyBudget(energyDbPath, {
+        maxEnergy: config.energy.maxEnergy,
+        regenPerHour: config.energy.regenPerHour,
+      })
+      const state = energy.getState()
+      log.info(
+        'main',
+        `Energy budget initialized (${state.current.toFixed(1)}/${state.max} energy, +${state.regenPerHour}/hr)`,
+      )
+    } catch (error) {
+      log.warn('main', 'Failed to initialize energy budget:', error)
+    }
+  }
+
   const conversations = createConversations(config)
   const taskStore = createTasks(config)
   const skills = await loadSkills(config)
@@ -210,6 +244,9 @@ export async function createAppServices(config: RuntimeConfig): Promise<AppServi
     browser,
   )
   toolExecutor.setSafety(buildSafetyConfig(config))
+  if (energy) {
+    toolExecutor.setEnergy(energy)
+  }
   const stats = createStatsTracker()
   const transcript = createTranscriptLogger(config.transcript)
 
@@ -221,6 +258,8 @@ export async function createAppServices(config: RuntimeConfig): Promise<AppServi
     config,
     providers,
     memory,
+    workingMemory,
+    energy,
     conversations,
     taskStore,
     router,

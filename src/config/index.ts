@@ -199,6 +199,11 @@ export function loadConfig(): RuntimeConfig {
       extractionMinMessages: toml.memory?.extraction_min_messages ?? 2,
       extractionMaxPerTurn: toml.memory?.extraction_max_per_turn ?? 5,
     },
+    energy: {
+      enabled: toml.energy?.enabled ?? true,
+      maxEnergy: toml.energy?.max_energy ?? 20,
+      regenPerHour: toml.energy?.regen_per_hour ?? 10,
+    },
     tasks: {
       enabled: toml.tasks?.enabled ?? true,
       tickIntervalMs: toml.tasks?.tick_interval_ms ?? 30000,
