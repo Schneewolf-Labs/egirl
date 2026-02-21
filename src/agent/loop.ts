@@ -131,6 +131,8 @@ export class AgentLoop {
   private extractionWatermark: number = 0
   private promptOptions: SystemPromptOptions
   private mutex: SessionMutex | null
+  /** Tracks in-flight compaction so the next turn can await it before reading summary */
+  private pendingCompaction: Promise<void> | null = null
 
   constructor(deps: AgentLoopDeps) {
     this.config = deps.config
@@ -173,6 +175,13 @@ export class AgentLoop {
   }
 
   private async doRun(userMessage: string, options: AgentLoopOptions): Promise<AgentResponse> {
+    // Await any in-flight compaction so conversationSummary is up-to-date
+    // and we don't trigger duplicate compaction on stale context.
+    if (this.pendingCompaction) {
+      await this.pendingCompaction
+      this.pendingCompaction = null
+    }
+
     const { maxTurns = 10, events, planningMode, signal } = options
     const turnStartedAt = Date.now()
 
@@ -773,14 +782,13 @@ export class AgentLoop {
     const provider = this.localProvider
     const existingSummary = this.context.conversationSummary
 
-    // Flush durable facts to memory before summarization (fire and forget).
-    // Runs in parallel with summarization — both use the local provider.
-    if (this.memory) {
-      this.flushDroppedToMemory(droppedMessages)
-    }
+    // Flush durable facts to memory in parallel with summarization.
+    const flushPromise = this.memory
+      ? this.flushDroppedToMemory(droppedMessages)
+      : Promise.resolve()
 
-    // Fire and forget — don't block the current response
-    summarizeMessages(droppedMessages, provider, existingSummary)
+    // Summarize dropped messages to update the conversation summary.
+    const summaryPromise = summarizeMessages(droppedMessages, provider, existingSummary)
       .then((summary) => {
         this.context.conversationSummary = summary
         log.info('agent', `Context compacted: summary updated (${summary.length} chars)`)
@@ -797,6 +805,10 @@ export class AgentLoop {
       .catch((error) => {
         log.warn('agent', 'Context compaction failed:', error)
       })
+
+    // Track the combined promise so the next turn awaits completion
+    // before reading conversationSummary or triggering another compaction.
+    this.pendingCompaction = Promise.all([flushPromise, summaryPromise]).then(() => {})
   }
 
   /**
@@ -804,11 +816,11 @@ export class AgentLoop {
    * Prevents silent context loss — facts survive in durable memory even if
    * the LLM summary is lossy or compaction fails entirely.
    */
-  private flushDroppedToMemory(droppedMessages: ChatMessage[]): void {
+  private flushDroppedToMemory(droppedMessages: ChatMessage[]): Promise<void> {
     const provider = this.localProvider
     const sessionId = this.context.sessionId
 
-    flushBeforeCompaction(droppedMessages, provider)
+    return flushBeforeCompaction(droppedMessages, provider)
       .then(async (extractions) => {
         if (extractions.length === 0) return
 
@@ -1013,6 +1025,12 @@ export class AgentLoop {
 
   /** Manually trigger context compaction on the current conversation */
   async compactNow(): Promise<{ messagesBefore: number; messagesAfter: number }> {
+    // Await any in-flight compaction before starting a new one
+    if (this.pendingCompaction) {
+      await this.pendingCompaction
+      this.pendingCompaction = null
+    }
+
     const messagesBefore = this.context.messages.length
 
     if (messagesBefore < 4) {
@@ -1053,6 +1071,7 @@ export class AgentLoop {
     this.persistedIndex = 0
     this.lastRecallIndex = -1
     this.extractionWatermark = 0
+    this.pendingCompaction = null
   }
 
   resetSession(): void {
