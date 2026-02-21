@@ -158,6 +158,32 @@ export class ToolExecutor {
   async executeAll(calls: ToolCall[], cwd: string): Promise<Map<string, ToolResult>> {
     const results = new Map<string, ToolResult>()
 
+    // Pre-check energy budget for the entire batch to avoid partial completion.
+    // Without this, parallel tools race to spend energy and some succeed while
+    // others fail — leaving the batch in an inconsistent half-done state.
+    if (this.energy && this.executionContext === 'autonomous' && calls.length > 1) {
+      const toolNames = calls.map((c) => c.name)
+      const batch = this.energy.checkBatch(toolNames)
+      if (!batch.allowed) {
+        log.info(
+          'energy',
+          `Blocked batch of ${calls.length} tools: total cost ${batch.totalCost}, balance ${batch.current.toFixed(1)}`,
+        )
+        for (const call of calls) {
+          this.audit(call.name, call.arguments, {
+            success: false,
+            blocked: true,
+            reason: 'Batch energy budget exceeded',
+          })
+          results.set(call.id, {
+            success: false,
+            output: `Energy budget exceeded for batch: ${calls.length} tools cost ${batch.totalCost} total energy, current balance is ${batch.current.toFixed(1)}. Wait for energy to regenerate.`,
+          })
+        }
+        return results
+      }
+    }
+
     const executions = calls.map(async (call) => {
       const result = await this.execute(call, cwd)
       return { id: call.id, result }
