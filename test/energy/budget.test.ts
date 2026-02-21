@@ -106,6 +106,41 @@ describe('EnergyBudget', () => {
     disabled.close()
   })
 
+  test('checkBatch sums costs and validates total', () => {
+    const check = budget.checkBatch(['read_file', 'write_file', 'execute_command'])
+    // 0.5 + 2.5 + 4.0 = 7.0
+    expect(check.totalCost).toBe(7.0)
+    expect(check.allowed).toBe(true)
+    expect(check.current).toBe(20)
+  })
+
+  test('checkBatch rejects when total exceeds balance', () => {
+    // Drain to 4.0 remaining
+    for (let i = 0; i < 4; i++) {
+      budget.spend('execute_command') // 4.0 each = 16.0 spent
+    }
+
+    // 3 × execute_command = 12.0, but only 4.0 left
+    const check = budget.checkBatch(['execute_command', 'execute_command', 'execute_command'])
+    expect(check.totalCost).toBe(12.0)
+    expect(check.allowed).toBe(false)
+  })
+
+  test('checkBatch does not deduct energy', () => {
+    const before = budget.getState().current
+    budget.checkBatch(['execute_command', 'gh_pr_create'])
+    const after = budget.getState().current
+    expect(after).toBe(before)
+  })
+
+  test('checkBatch allows when disabled', () => {
+    const disabled = new EnergyBudget(join(tmpDir, 'disabled-batch.db'), { enabled: false })
+    const check = disabled.checkBatch(['gh_pr_create', 'gh_pr_create', 'gh_pr_create'])
+    expect(check.allowed).toBe(true)
+    expect(check.totalCost).toBe(0)
+    disabled.close()
+  })
+
   test('state persists across instances', () => {
     const dbPath = join(tmpDir, 'persist.db')
     const b1 = new EnergyBudget(dbPath)

@@ -128,6 +128,30 @@ export class EnergyBudget {
   }
 
   /**
+   * Check if a batch of tool executions can be afforded without spending.
+   * Sums all costs and checks against the current balance.
+   * Use this before parallel execution to avoid partial completion.
+   */
+  checkBatch(toolNames: string[]): { allowed: boolean; totalCost: number; current: number } {
+    if (!this.config.enabled) {
+      return { allowed: true, totalCost: 0, current: this.config.maxEnergy }
+    }
+
+    this.applyRegen()
+    const state = this.readState()
+    let totalCost = 0
+    for (const name of toolNames) {
+      totalCost += getToolCost(name).cost
+    }
+
+    return {
+      allowed: state.current >= totalCost,
+      totalCost,
+      current: state.current,
+    }
+  }
+
+  /**
    * Attempt to spend energy for a tool execution.
    * Returns whether the spend was allowed and the remaining balance.
    */
