@@ -126,15 +126,15 @@ The first pass uses `chars/3.5` estimation, the second uses the real tokenizer. 
 
 **Severity**: Low. The double-pass is defensive and doesn't cause bugs, but the sync pass could be more aggressive for better context utilization.
 
-### 2.3 No Tool Execution Timeout
+### 2.3 No Executor-Level Tool Timeout
 
 **Location**: `tools/executor.ts:137–155`
 
-Individual tool executions have no timeout. If `execute_command` spawns a process that hangs, or `web_research` hits a slow endpoint, the entire agent loop blocks indefinitely. The only escape is the `AbortSignal` checked between turns — but it's never checked *during* tool execution.
+Individual tools implement their own timeouts (`execute_command`: 30s, `web_research`: 15s, `browser`: 30s), but the `ToolExecutor` itself has no upper bound. If a tool's internal timeout fails or a tool doesn't implement one (e.g., `read_file` on an NFS mount, custom tools), the entire agent loop blocks indefinitely. The `AbortSignal` is checked between turns but never during tool execution.
 
-**Severity**: High. A single hanging tool call freezes the agent for all channels (due to the `SessionMutex`).
+**Severity**: Medium. Most built-in tools are covered, but the executor should enforce a hard ceiling as defense-in-depth.
 
-**Recommendation**: Add a configurable per-tool timeout (default 60s). The `execute_command` tool likely already has one, but the executor should enforce a hard upper bound.
+**Recommendation**: Add a configurable executor-level timeout (default 120s) that wraps every `tool.execute()` call with `Promise.race` against a timer.
 
 ### 2.4 Energy Budget Not Checked Before Tool Batch
 
@@ -289,13 +289,13 @@ Each unique Discord conversation creates a new `AgentLoop` instance stored in a 
 | # | Gap | Severity | Effort |
 |---|-----|----------|--------|
 | 3.1 | Working memory is dead code | High | Medium |
-| 2.3 | No tool execution timeout | High | Low |
 | 1.1 | Compaction race condition | Medium | Medium |
 | 1.2 | No hard loop termination | Medium | Low |
 | 2.1 | Parallel tool exec disabled | Medium | Medium |
 | 3.2 | Memory GC never runs | Medium | Low |
 | 3.3 | No incremental persistence | Medium | Medium |
 | 3.4 | Auto-extraction key collisions | Medium | Low |
+| 2.3 | No executor-level tool timeout | Medium | Low |
 | 3.5 | Retrieval char/token mismatch | Low-Med | Low |
 | 3.6 | Embedding cache unbounded | Medium | Medium |
 | 4.1 | Mutex doesn't cover bg work | Medium | Medium |
