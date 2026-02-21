@@ -1,3 +1,4 @@
+import type { EnergyBudget } from '../energy'
 import type { ToolCall } from '../providers/types'
 import type { SafetyConfig } from '../safety'
 import { checkToolCall, getAuditLogPath, logToolExecution } from '../safety'
@@ -6,13 +7,26 @@ import type { Tool, ToolDefinition, ToolResult } from './types'
 
 export type ConfirmCallback = (toolName: string, args: Record<string, unknown>) => Promise<boolean>
 
+/** Execution context: interactive calls bypass energy checks, autonomous calls are gated */
+export type ExecutionContext = 'interactive' | 'autonomous'
+
 export class ToolExecutor {
   private tools: Map<string, Tool> = new Map()
   private safety?: SafetyConfig
   private confirmCallback?: ConfirmCallback
+  private energy?: EnergyBudget
+  private executionContext: ExecutionContext = 'interactive'
 
   setSafety(config: SafetyConfig): void {
     this.safety = config
+  }
+
+  setEnergy(budget: EnergyBudget): void {
+    this.energy = budget
+  }
+
+  setExecutionContext(context: ExecutionContext): void {
+    this.executionContext = context
   }
 
   setConfirmCallback(callback: ConfirmCallback): void {
@@ -97,6 +111,23 @@ export class ToolExecutor {
           })
           log.warn('safety', `Blocked tool call: ${call.name}`, { reason: check.reason })
           return { success: false, output: `Safety check failed: ${check.reason}` }
+        }
+      }
+    }
+
+    // Energy check (only for autonomous context — interactive calls bypass)
+    if (this.energy && this.executionContext === 'autonomous') {
+      const spend = this.energy.spend(call.name, `tool:${call.name}`)
+      if (!spend.allowed) {
+        this.audit(call.name, call.arguments, {
+          success: false,
+          blocked: true,
+          reason: spend.reason,
+        })
+        log.info('energy', `Blocked ${call.name}: ${spend.reason}`)
+        return {
+          success: false,
+          output: `Energy budget exceeded: ${call.name} costs ${spend.cost} energy, current balance is ${spend.remaining.toFixed(1)}. Wait for energy to regenerate.`,
         }
       }
     }
