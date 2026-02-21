@@ -6,10 +6,8 @@ import { createEnergyBudget, type EnergyBudget } from './energy'
 import {
   createEmbeddingProvider,
   createMemoryManager,
-  createWorkingMemory,
   indexDailyLogs,
   type MemoryManager,
-  type WorkingMemory,
 } from './memory'
 import { createProviderRegistry, type ProviderRegistry } from './providers'
 import { createRouter, type Router } from './routing'
@@ -35,7 +33,6 @@ export interface AppServices {
   config: RuntimeConfig
   providers: ProviderRegistry
   memory: MemoryManager | undefined
-  workingMemory: WorkingMemory | undefined
   energy: EnergyBudget | undefined
   conversations: ConversationStore | undefined
   taskStore: TaskStore | undefined
@@ -202,16 +199,6 @@ export async function createAppServices(config: RuntimeConfig): Promise<AppServi
     })
   }
 
-  // Working memory (transient context with TTL)
-  let workingMemory: WorkingMemory | undefined
-  try {
-    const wmDbPath = join(config.workspace.path, 'working-memory.db')
-    workingMemory = createWorkingMemory(wmDbPath)
-    log.info('main', 'Working memory initialized')
-  } catch (error) {
-    log.warn('main', 'Failed to initialize working memory:', error)
-  }
-
   // Energy budget (constrains autonomous actions)
   let energy: EnergyBudget | undefined
   if (config.energy.enabled) {
@@ -258,7 +245,6 @@ export async function createAppServices(config: RuntimeConfig): Promise<AppServi
     config,
     providers,
     memory,
-    workingMemory,
     energy,
     conversations,
     taskStore,

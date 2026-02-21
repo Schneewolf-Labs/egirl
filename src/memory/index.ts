@@ -41,7 +41,6 @@ export {
 export { chunkDailyLog, indexDailyLogs } from './log-indexer'
 export { type RetrievalConfig, retrieveForContext } from './retrieval'
 export { createMemorySearch, MemorySearch, type SearchOptions, type SearchResult } from './search'
-export { createWorkingMemory, WorkingMemory, type WorkingMemoryEntry } from './working'
 
 export interface MemoryManagerConfig {
   workspaceDir: string
