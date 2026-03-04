@@ -282,6 +282,9 @@ export class MemoryIndexer {
   }
 
   searchFTS(query: string, limit = 10): FTSResult[] {
+    const sanitized = sanitizeFTSQuery(query)
+    if (!sanitized) return []
+
     const rows = this.db
       .query(`
       SELECT m.id, m.key, m.value, m.content_type, m.category, m.source, m.session_id,
@@ -293,7 +296,7 @@ export class MemoryIndexer {
       ORDER BY fts.rank
       LIMIT ?
     `)
-      .all(query, limit) as (MemoryRow & { rank: number })[]
+      .all(sanitized, limit) as (MemoryRow & { rank: number })[]
 
     return rows.map((row) => ({
       memory: rowToMemory(row),
@@ -488,4 +491,20 @@ function rowToMemory(row: MemoryRow): IndexedMemory {
 
 export function createMemoryIndexer(dbPath: string, dimensions?: number): MemoryIndexer {
   return new MemoryIndexer(dbPath, dimensions)
+}
+
+/**
+ * Sanitize a user query for FTS5 MATCH.
+ *
+ * FTS5's query syntax treats characters like `!`, `*`, `(`, `)`, `"`, etc. as
+ * operators. Wrapping each whitespace-separated token in double quotes causes
+ * FTS5 to tokenize the contents rather than parse them as query syntax.
+ * Returns an empty string if no valid tokens remain.
+ */
+function sanitizeFTSQuery(query: string): string {
+  const tokens = query
+    .split(/\s+/)
+    .filter((t) => t.length > 0)
+    .map((t) => `"${t.replace(/"/g, '')}"`)
+  return tokens.join(' ')
 }

@@ -40,7 +40,13 @@ export async function loadSkillsFromDirectory(directory: string): Promise<Skill[
       }
     }
   } catch (error) {
-    log.warn('skills', `Failed to read skills directory: ${directory}`, error)
+    const isNotFound =
+      typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT'
+    if (isNotFound) {
+      log.debug('skills', `Skills directory not found (skipping): ${directory}`)
+    } else {
+      log.warn('skills', `Failed to read skills directory: ${directory}`, error)
+    }
   }
 
   return skills

@@ -133,10 +133,10 @@ export class CLIChannel implements Channel {
 
     const c = colors()
     console.log(
-      `\n${c.primary}egirl CLI${RESET} ${DIM}— Type your message and press Enter. Type "exit" to quit.${RESET}`,
+      `\n${c.primary}egirl CLI${RESET} ${DIM}— Type your message and press Enter. Type "/exit" to quit.${RESET}`,
     )
     console.log(
-      `${DIM}Commands: /think <off|low|medium|high>, /plan <message>, /context, /compact, clear, exit${RESET}\n`,
+      `${DIM}Commands: /think <off|low|medium|high>, /plan <message>, /context, /compact, /clear, /exit${RESET}\n`,
     )
 
     this.prompt()
@@ -157,14 +157,14 @@ export class CLIChannel implements Channel {
 
       const trimmed = input.trim()
 
-      if (trimmed.toLowerCase() === 'exit' || trimmed.toLowerCase() === 'quit') {
+      if (trimmed === '/exit' || trimmed === '/quit' || trimmed.toLowerCase() === 'exit' || trimmed.toLowerCase() === 'quit') {
         console.log('Goodbye!')
         await this.stop()
         process.exit(0)
         return
       }
 
-      if (trimmed.toLowerCase() === 'clear') {
+      if (trimmed === '/clear' || trimmed.toLowerCase() === 'clear') {
         console.clear()
         this.prompt()
         return
