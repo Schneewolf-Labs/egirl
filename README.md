@@ -46,10 +46,10 @@ llama-server -m your-model.gguf -c 32768 --port 8080
 cd services/embeddings && ./run.sh
 
 # Run CLI
-bun run start cli
+bun run cli
 
 # Or Discord bot (see DISCORD.md for setup)
-bun run start discord
+bun run discord
 ```
 
 ## Configuration
@@ -95,14 +95,14 @@ DISCORD_TOKEN=...              # Required for Discord bot
 ## Commands
 
 ```bash
-bun run start cli              # Interactive CLI
-bun run start cli -m "hello"   # Single message
-bun run start discord          # Discord bot
-bun run start claude-code      # Claude Code bridge (or: cc)
-bun run start xmpp             # XMPP/Jabber chat
-bun run start api              # HTTP REST API server
-bun run start status           # Check config and connections
-bun run start help             # Show all commands
+bun run cli                         # Interactive CLI
+bun run src/index.ts cli -m "hello" # Single message
+bun run src/index.ts discord        # Discord bot
+bun run src/index.ts claude-code    # Claude Code bridge (or: cc)
+bun run src/index.ts xmpp          # XMPP/Jabber chat
+bun run api                         # HTTP REST API server
+bun run src/index.ts status         # Check config and connections
+bun run src/index.ts help           # Show all commands
 ```
 
 ## Architecture
