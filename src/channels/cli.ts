@@ -157,7 +157,12 @@ export class CLIChannel implements Channel {
 
       const trimmed = input.trim()
 
-      if (trimmed === '/exit' || trimmed === '/quit' || trimmed.toLowerCase() === 'exit' || trimmed.toLowerCase() === 'quit') {
+      if (
+        trimmed === '/exit' ||
+        trimmed === '/quit' ||
+        trimmed.toLowerCase() === 'exit' ||
+        trimmed.toLowerCase() === 'quit'
+      ) {
         console.log('Goodbye!')
         await this.stop()
         process.exit(0)

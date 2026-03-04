@@ -19,7 +19,8 @@ context_length = 32768
 max_concurrent = 2                       # you have the VRAM for parallel requests
 
 [local.embeddings]
-endpoint = "http://localhost:8082"       # Qwen3-VL-Embedding Python service
+provider = "qwen3-vl"                    # Python service using transformers
+endpoint = "http://localhost:8083"       # separate port from main model (8082)
 model = "qwen3-vl-embedding-2b"
 dimensions = 2048
 multimodal = true                        # supports text + image embeddings
