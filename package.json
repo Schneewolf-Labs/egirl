@@ -17,7 +17,8 @@
     "lint:fix": "biome check --fix src/ test/",
     "typecheck": "tsc --noEmit",
     "check": "bun run lint && bun run typecheck",
-    "dashboard": "bun run scripts/serve-dashboard.ts"
+    "dashboard": "bun run scripts/serve-dashboard.ts",
+    "embeddings": "python /opt/jupyter/models/qwen3vl/serve-embedding.py"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.39",
