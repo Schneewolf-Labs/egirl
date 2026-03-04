@@ -174,6 +174,6 @@ Prefixes:
 
 ## Requirements
 
-- `ANTHROPIC_API_KEY` in `.env` (Claude Code requires Anthropic API access)
+- Claude Code subscription login: run `claude auth login` (no API key needed)
 - `@anthropic-ai/claude-agent-sdk` package (included in dependencies)
 - A running local llama.cpp server (for permission decisions in `default` mode)

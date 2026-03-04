@@ -13,7 +13,7 @@ show_thinking = true                     # display thinking output in CLI
 path = "~/.egirl/workspace"
 
 [local]
-endpoint = "http://localhost:8080"      # llama.cpp server
+endpoint = "http://0.0.0.0:8082"        # llama.cpp server
 model = "qwen3-vl-32b"                   # for display/logging only
 context_length = 32768
 max_concurrent = 2                       # you have the VRAM for parallel requests
@@ -28,7 +28,7 @@ multimodal = true                        # supports text + image embeddings
 default = "local"
 escalation_threshold = 0.4               # confidence below this triggers escalation
 always_local = ["memory_search", "memory_get", "greeting", "acknowledgment"]
-always_remote = ["code_generation", "code_review", "complex_reasoning"]
+always_remote = []                       # no remote API provider; use code_agent tool instead
 
 [channels.discord]
 allowed_channels = ["dm"]                # or specific channel IDs
@@ -66,6 +66,9 @@ path = "{workspace}/audit.log"
 [safety.confirmation]
 enabled = false                            # require confirmation for destructive ops
 # tools = ["execute_command", "write_file", "edit_file"]
+
+[tools]
+code_agent = true                        # enable Claude Code delegation (uses subscription auth)
 
 [skills]
 dirs = ["~/.egirl/skills", "{workspace}/skills"]
