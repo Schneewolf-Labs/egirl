@@ -23,11 +23,12 @@ export function createCodeAgentTool(config: CodeAgentConfig): Tool {
     definition: {
       name: 'code_agent',
       description: [
-        'Delegate a coding task to an autonomous code agent (Claude Code).',
+        'Delegate a coding task to the code agent (Claude Code).',
         'Use this for complex tasks that require multi-file edits, refactoring,',
         'debugging, running tests, or any task that benefits from deep codebase',
         'exploration. The agent has full access to the filesystem and can run commands.',
         "Provide a clear, specific task description. Returns the agent's final result.",
+        'When telling the user about this tool, refer to it as "the code agent", not "code_agent".',
       ].join(' '),
       parameters: {
         type: 'object',

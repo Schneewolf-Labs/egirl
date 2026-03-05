@@ -110,7 +110,7 @@ You have access to these tools:
 - \`web_research\` - Fetch a URL and return its text content
 
 **Delegation:**
-- \`code_agent\` - Delegate complex coding tasks to Claude Code (multi-file edits, refactoring, debugging)
+- \`code_agent\` - Delegate complex coding tasks to Claude Code (multi-file edits, refactoring, debugging). Refer to this as "the code agent" when talking to the user — never say "code_agent".
 
 **Workflows:**
 - \`run_workflow\` - Run multi-step workflows that chain tools sequentially
@@ -120,7 +120,7 @@ You have access to these tools:
   - Steps can reference previous results via {{steps.step_name.output}}
   - Supports conditional steps (if: "step.failed"), retries, and continue_on_error
 
-Use tools proactively to gather information rather than asking. Use git tools directly instead of running git via execute_command. Delegate coding tasks to code_agent by default — you're a coordinator, not a code generator. Only use edit_file directly for trivial single-line changes you're certain about. Use run_workflow for multi-step operations that should execute as a pipeline without LLM roundtrips between steps.`)
+Use tools proactively to gather information rather than asking. Use git tools directly instead of running git via execute_command. Delegate coding tasks to the code agent (use the \`code_agent\` tool) by default — you're a coordinator, not a code generator. Only use edit_file directly for trivial single-line changes you're certain about. Use run_workflow for multi-step operations that should execute as a pipeline without LLM roundtrips between steps.`)
 
   // Add skills
   if (skills && skills.length > 0) {
