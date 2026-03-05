@@ -4,8 +4,9 @@ import { describe, expect, test } from 'bun:test'
  * extraction. Since formatMessages is a private method, we test via the
  * exported helper: formatMessagesForQwen3.
  */
+import { buildToolsSection } from '../../src/tools/format'
 import { formatMessagesForQwen3 } from '../../src/providers/qwen3-format'
-import type { ChatMessage } from '../../src/providers/types'
+import type { ChatMessage, ToolDefinition } from '../../src/providers/types'
 
 describe('formatMessagesForQwen3', () => {
   test('reconstructs tool call XML in assistant messages', () => {
@@ -120,7 +121,73 @@ describe('formatMessagesForQwen3', () => {
     expect(formatted[1]).toEqual({ role: 'user', content: 'Hello' })
     expect(formatted[2]).toEqual({ role: 'assistant', content: 'Hi there!' })
   })
+})
 
+describe('buildToolsSection (system prompt injection)', () => {
+  const tools: ToolDefinition[] = [
+    {
+      name: 'read_file',
+      description: 'Read a file',
+      parameters: {
+        type: 'object',
+        properties: { path: { type: 'string', description: 'File path' } },
+        required: ['path'],
+      },
+    },
+  ]
+
+  test('returns empty string when no tools provided', () => {
+    expect(buildToolsSection(undefined)).toBe('')
+    expect(buildToolsSection([])).toBe('')
+  })
+
+  test('includes tool definitions in <tools> tags', () => {
+    const section = buildToolsSection(tools)
+    expect(section).toContain('<tools>')
+    expect(section).toContain('</tools>')
+    expect(section).toContain('read_file')
+    expect(section).toContain('Read a file')
+  })
+
+  test('includes <tool_call> format instructions', () => {
+    const section = buildToolsSection(tools)
+    expect(section).toContain('<tool_call>')
+    expect(section).toContain('</tool_call>')
+    expect(section).toContain('"name"')
+    expect(section).toContain('"arguments"')
+  })
+
+  test('tool definitions are valid JSON', () => {
+    const section = buildToolsSection(tools)
+    const toolsMatch = section.match(/<tools>([\s\S]*?)<\/tools>/)
+    expect(toolsMatch).toBeTruthy()
+    const toolsContent = toolsMatch![1]!.trim()
+    // Each line should be parseable JSON
+    for (const line of toolsContent.split('\n').filter((l) => l.trim())) {
+      expect(() => JSON.parse(line)).not.toThrow()
+    }
+  })
+
+  test('system prompt with injected tools is well-formed', () => {
+    const systemContent = 'You are helpful.'
+    const withTools = systemContent + buildToolsSection(tools)
+    expect(withTools).toContain('You are helpful.')
+    expect(withTools).toContain('# Tools')
+    expect(withTools).toContain('read_file')
+  })
+
+  test('includes multiple tools', () => {
+    const multiTools: ToolDefinition[] = [
+      { name: 'read_file', description: 'Read a file', parameters: { type: 'object', properties: {}, required: [] } },
+      { name: 'write_file', description: 'Write a file', parameters: { type: 'object', properties: {}, required: [] } },
+    ]
+    const section = buildToolsSection(multiTools)
+    expect(section).toContain('read_file')
+    expect(section).toContain('write_file')
+  })
+})
+
+describe('formatMessagesForQwen3 multiturn', () => {
   test('handles multiturn tool use conversation', () => {
     const messages: ChatMessage[] = [
       { role: 'user', content: 'What files are in this directory?' },

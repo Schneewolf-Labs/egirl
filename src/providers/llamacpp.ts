@@ -1,4 +1,4 @@
-import { parseToolCalls } from '../tools/format'
+import { buildToolsSection, parseToolCalls } from '../tools/format'
 import { log } from '../util/logger'
 import { formatMessagesForQwen3 } from './qwen3-format'
 import type {
@@ -8,8 +8,9 @@ import type {
   ContentPart,
   LLMProvider,
   ThinkingConfig,
+  ToolDefinition,
 } from './types'
-import { ContextSizeError } from './types'
+import { ContextSizeError, getTextContent } from './types'
 
 /**
  * Extract `<think>...</think>` blocks from Qwen3 response content.
@@ -83,17 +84,11 @@ export class LlamaCppProvider implements LLMProvider {
   }
 
   async chat(req: ChatRequest): Promise<ChatResponse> {
-    const messages = this.formatMessages(req.messages, req.thinking)
-
-    // Format tools for llama.cpp (Qwen3 template expects this format)
-    const tools = req.tools?.map((tool) => ({
-      type: 'function' as const,
-      function: {
-        name: tool.name,
-        description: tool.description,
-        parameters: tool.parameters,
-      },
-    }))
+    // Embed tool definitions in the system prompt in Qwen3 native format.
+    // We do NOT send tools via the API tools param — llama.cpp would parse
+    // <tool_call> XML server-side and return structured tool_calls instead of
+    // raw content, breaking our parseToolCalls() extraction.
+    const messages = this.formatMessages(req.messages, req.thinking, req.tools)
 
     const shouldStream = !!req.onToken
     const isThinkingEnabled = req.thinking && req.thinking.level !== 'off'
@@ -103,7 +98,6 @@ export class LlamaCppProvider implements LLMProvider {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         messages,
-        tools: tools?.length ? tools : undefined,
         temperature: req.temperature,
         max_tokens: req.max_tokens,
         stream: shouldStream,
@@ -348,8 +342,25 @@ export class LlamaCppProvider implements LLMProvider {
     return 0
   }
 
-  private formatMessages(messages: ChatMessage[], thinking?: ThinkingConfig): FormattedMessage[] {
-    const formatted = formatMessagesForQwen3(messages)
+  private formatMessages(
+    messages: ChatMessage[],
+    thinking?: ThinkingConfig,
+    tools?: ToolDefinition[],
+  ): FormattedMessage[] {
+    // Inject Qwen3 tool definitions into the system prompt so the model sees them
+    // in the native <tools> format without llama.cpp intercepting them server-side.
+    let msgsToFormat = messages
+    if (tools?.length) {
+      const toolsSection = buildToolsSection(tools)
+      msgsToFormat = messages.map((msg, idx) => {
+        if (idx === 0 && msg.role === 'system') {
+          return { ...msg, content: getTextContent(msg.content) + toolsSection }
+        }
+        return msg
+      })
+    }
+
+    const formatted = formatMessagesForQwen3(msgsToFormat)
 
     // Qwen3 uses /think and /no_think tags to control thinking mode.
     // Prepend the directive to the first user message content.

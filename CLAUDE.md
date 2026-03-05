@@ -8,6 +8,8 @@ This is a single-user tool, not a general-purpose framework. No auth, no multi-u
 
 ## Purpose
 
+**The core value proposition of egirl is giving a local LLM the ability to control a code agent (Claude Code).** The local model coordinates, plans, and delegates — the code agent does the actual code changes. egirl is the bridge between natural language intent and real engineering actions.
+
 egirl is built to be a productive employee for Schneewolf Labs — not a generic personal assistant. Feature development should prioritize workflows that help get real work done: code review, research, file management, task automation, and technical problem-solving.
 
 This is not OpenClaw. OpenClaw is a general-purpose agent framework. egirl is a purpose-built tool for a specific team's needs. When deciding what to build:
