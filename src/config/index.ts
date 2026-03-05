@@ -283,7 +283,7 @@ export function loadConfig(): RuntimeConfig {
     config.channels.claudeCode = {
       permissionMode: cc.permission_mode ?? 'bypassPermissions',
       model: cc.model,
-      workingDir: cc.working_dir ? expandPath(cc.working_dir, workspacePath) : process.cwd(),
+      workingDir: cc.working_dir ? expandPath(cc.working_dir, workspacePath) : workspacePath,
       maxTurns: cc.max_turns,
     }
   }
