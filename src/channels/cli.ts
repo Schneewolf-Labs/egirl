@@ -136,7 +136,7 @@ export class CLIChannel implements Channel {
       `\n${c.primary}egirl CLI${RESET} ${DIM}— Type your message and press Enter. Type "/exit" to quit.${RESET}`,
     )
     console.log(
-      `${DIM}Commands: /think <off|low|medium|high>, /plan <message>, /context, /compact, /prompt, /debug, /clear, /exit${RESET}\n`,
+      `${DIM}Commands: /think <off|low|medium|high>, /plan <message>, /context, /compact, /wipe, /prompt, /debug, /clear, /exit${RESET}\n`,
     )
 
     this.prompt()
@@ -210,6 +210,16 @@ export class CLIChannel implements Channel {
       // Handle /compact command
       if (trimmed === '/compact') {
         await this.handleCompactCommand()
+        this.prompt()
+        return
+      }
+
+      // Handle /wipe command — reset session and clear display
+      if (trimmed === '/wipe') {
+        this.agent.resetSession()
+        console.clear()
+        const c = colors()
+        console.log(`${c.muted}Session wiped.${RESET}\n`)
         this.prompt()
         return
       }
