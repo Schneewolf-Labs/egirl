@@ -43,6 +43,7 @@ export const EgirlConfigSchema = Type.Object({
   }),
 
   routing: Type.Object({
+    disabled: Type.Optional(Type.Boolean({ default: false })),
     default: Type.Union([Type.Literal('local'), Type.Literal('remote')], { default: 'local' }),
     escalation_threshold: Type.Number({ default: 0.4 }),
     always_local: Type.Array(Type.String(), {
@@ -266,6 +267,7 @@ export interface RuntimeConfig {
     }
   }
   routing: {
+    disabled: boolean
     default: 'local' | 'remote'
     escalationThreshold: number
     alwaysLocal: string[]

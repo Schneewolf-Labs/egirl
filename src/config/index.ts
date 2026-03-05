@@ -146,6 +146,7 @@ export function loadConfig(): RuntimeConfig {
     },
     remote: {},
     routing: {
+      disabled: toml.routing?.disabled ?? false,
       default: toml.routing?.default ?? defaultToml.routing.default,
       escalationThreshold:
         toml.routing?.escalation_threshold ?? defaultToml.routing.escalation_threshold,

@@ -136,7 +136,7 @@ export class CLIChannel implements Channel {
       `\n${c.primary}egirl CLI${RESET} ${DIM}— Type your message and press Enter. Type "/exit" to quit.${RESET}`,
     )
     console.log(
-      `${DIM}Commands: /think <off|low|medium|high>, /plan <message>, /context, /compact, /clear, /exit${RESET}\n`,
+      `${DIM}Commands: /think <off|low|medium|high>, /plan <message>, /context, /compact, /prompt, /debug, /clear, /exit${RESET}\n`,
     )
 
     this.prompt()
@@ -210,6 +210,20 @@ export class CLIChannel implements Channel {
       // Handle /compact command
       if (trimmed === '/compact') {
         await this.handleCompactCommand()
+        this.prompt()
+        return
+      }
+
+      // Handle /prompt command — print the system prompt
+      if (trimmed === '/prompt') {
+        this.handlePromptCommand()
+        this.prompt()
+        return
+      }
+
+      // Handle /debug command — print routing config and message count
+      if (trimmed === '/debug') {
+        this.handleDebugCommand()
         this.prompt()
         return
       }
@@ -379,6 +393,54 @@ export class CLIChannel implements Channel {
       const msg = error instanceof Error ? error.message : String(error)
       console.error(`${c.error}Compaction failed:${RESET} ${msg}\n`)
     }
+  }
+
+  private handlePromptCommand(): void {
+    const c = colors()
+    const ctx = this.agent.getContext()
+    console.log(
+      `\n${c.primary}System Prompt${RESET} ${DIM}(${ctx.systemPrompt.length} chars)${RESET}\n`,
+    )
+    console.log(`${DIM}${'─'.repeat(60)}${RESET}`)
+    console.log(ctx.systemPrompt)
+    console.log(`${DIM}${'─'.repeat(60)}${RESET}\n`)
+  }
+
+  private handleDebugCommand(): void {
+    const c = colors()
+    const ctx = this.agent.getContext()
+    const cfg = (this.agent as unknown as { config: import('../config').RuntimeConfig }).config
+    const routing = cfg?.routing
+
+    console.log(`\n${c.primary}Debug Info${RESET}\n`)
+
+    console.log(`${c.accent}Session${RESET}`)
+    console.log(`${DIM}  id:       ${ctx.sessionId}${RESET}`)
+    console.log(`${DIM}  messages: ${ctx.messages.length}${RESET}`)
+    console.log(`${DIM}  prompt:   ${ctx.systemPrompt.length} chars${RESET}`)
+
+    if (routing) {
+      console.log(`\n${c.accent}Routing${RESET}`)
+      console.log(`${DIM}  disabled: ${routing.disabled}${RESET}`)
+      console.log(`${DIM}  default:  ${routing.default}${RESET}`)
+      if (!routing.disabled) {
+        console.log(`${DIM}  threshold: ${routing.escalationThreshold}${RESET}`)
+        console.log(`${DIM}  always_local: ${routing.alwaysLocal.join(', ')}${RESET}`)
+        console.log(`${DIM}  always_remote: ${routing.alwaysRemote.join(', ') || '(none)'}${RESET}`)
+      }
+    }
+
+    console.log(`\n${c.accent}Messages${RESET}`)
+    for (const [i, msg] of ctx.messages.entries()) {
+      const content =
+        typeof msg.content === 'string'
+          ? msg.content.slice(0, 80).replace(/\n/g, ' ')
+          : JSON.stringify(msg.content).slice(0, 80)
+      console.log(
+        `${DIM}  [${i}] ${msg.role}: ${content}${content.length >= 80 ? '...' : ''}${RESET}`,
+      )
+    }
+    console.log()
   }
 
   private askApproval(): Promise<boolean> {

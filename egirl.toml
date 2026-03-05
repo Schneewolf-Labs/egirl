@@ -26,10 +26,11 @@ dimensions = 2048
 multimodal = true                        # supports text + image embeddings
 
 [routing]
+disabled = true                          # always use local; no escalation or heuristics
 default = "local"
-escalation_threshold = 0.4               # confidence below this triggers escalation
+escalation_threshold = 0.4
 always_local = ["memory_search", "memory_get", "greeting", "acknowledgment"]
-always_remote = []                       # no remote API provider; use code_agent tool instead
+always_remote = []
 
 [channels.discord]
 allowed_channels = ["dm"]                # or specific channel IDs

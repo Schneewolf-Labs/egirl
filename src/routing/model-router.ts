@@ -45,6 +45,15 @@ export class Router {
   }
 
   route(messages: ChatMessage[], toolsAvailable?: string[]): RoutingDecision {
+    if (this.config.routing.disabled) {
+      return {
+        target: 'local',
+        provider: `llamacpp/${this.config.local.model}`,
+        reason: 'routing_disabled',
+        confidence: 1.0,
+      }
+    }
+
     const lastMessage = messages[messages.length - 1]
     if (!lastMessage) {
       return {
