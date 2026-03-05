@@ -1,0 +1,9 @@
+torch
+torchvision
+transformers
+fastapi
+uvicorn[standard]
+Pillow
+pydantic
+requests
+accelerate

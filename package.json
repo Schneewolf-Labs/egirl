@@ -18,7 +18,7 @@
     "typecheck": "tsc --noEmit",
     "check": "bun run lint && bun run typecheck",
     "dashboard": "bun run scripts/serve-dashboard.ts",
-    "embeddings": "python /opt/jupyter/models/qwen3vl/serve-embedding.py"
+    "embeddings": "./scripts/serve-embeddings.sh"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.39",
