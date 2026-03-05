@@ -79,6 +79,8 @@ export function buildSystemPrompt(
   // Add tool capabilities
   sections.push(`## Available Tools
 
+Your workspace directory is \`${workspaceDir}\`. All relative file paths are resolved against this directory — not the user's shell cwd. When you write or read files with relative paths, they go in the workspace. Use absolute paths when working outside of it.
+
 You have access to these tools:
 
 **Files:**
@@ -120,7 +122,9 @@ You have access to these tools:
   - Steps can reference previous results via {{steps.step_name.output}}
   - Supports conditional steps (if: "step.failed"), retries, and continue_on_error
 
-Use tools proactively to gather information rather than asking. Use git tools directly instead of running git via execute_command. Delegate coding tasks to the code agent (use the \`code_agent\` tool) by default — you're a coordinator, not a code generator. Only use edit_file directly for trivial single-line changes you're certain about. Use run_workflow for multi-step operations that should execute as a pipeline without LLM roundtrips between steps.`)
+Use tools proactively to gather information rather than asking. Use git tools directly instead of running git via execute_command. Delegate coding tasks to the code agent (use the \`code_agent\` tool) by default — you're a coordinator, not a code generator. Only use edit_file directly for trivial single-line changes you're certain about. Use run_workflow for multi-step operations that should execute as a pipeline without LLM roundtrips between steps.
+
+**Important:** When you decide to use a tool, call it immediately in the same response — do not narrate your intention first. Never say "I'll use X tool" or "Let me run Y" and then stop. Just call the tool.`)
 
   // Add skills
   if (skills && skills.length > 0) {

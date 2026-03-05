@@ -1,12 +1,12 @@
 import { describe, expect, test } from 'bun:test'
+import { formatMessagesForQwen3 } from '../../src/providers/qwen3-format'
+import type { ChatMessage, ToolDefinition } from '../../src/providers/types'
 /**
  * Test the LlamaCppProvider.formatMessages logic by importing a testable
  * extraction. Since formatMessages is a private method, we test via the
  * exported helper: formatMessagesForQwen3.
  */
 import { buildToolsSection } from '../../src/tools/format'
-import { formatMessagesForQwen3 } from '../../src/providers/qwen3-format'
-import type { ChatMessage, ToolDefinition } from '../../src/providers/types'
 
 describe('formatMessagesForQwen3', () => {
   test('reconstructs tool call XML in assistant messages', () => {
@@ -161,7 +161,7 @@ describe('buildToolsSection (system prompt injection)', () => {
     const section = buildToolsSection(tools)
     const toolsMatch = section.match(/<tools>([\s\S]*?)<\/tools>/)
     expect(toolsMatch).toBeTruthy()
-    const toolsContent = toolsMatch![1]!.trim()
+    const toolsContent = toolsMatch?.[1]?.trim() ?? ''
     // Each line should be parseable JSON
     for (const line of toolsContent.split('\n').filter((l) => l.trim())) {
       expect(() => JSON.parse(line)).not.toThrow()
@@ -178,8 +178,16 @@ describe('buildToolsSection (system prompt injection)', () => {
 
   test('includes multiple tools', () => {
     const multiTools: ToolDefinition[] = [
-      { name: 'read_file', description: 'Read a file', parameters: { type: 'object', properties: {}, required: [] } },
-      { name: 'write_file', description: 'Write a file', parameters: { type: 'object', properties: {}, required: [] } },
+      {
+        name: 'read_file',
+        description: 'Read a file',
+        parameters: { type: 'object', properties: {}, required: [] },
+      },
+      {
+        name: 'write_file',
+        description: 'Write a file',
+        parameters: { type: 'object', properties: {}, required: [] },
+      },
     ]
     const section = buildToolsSection(multiTools)
     expect(section).toContain('read_file')
