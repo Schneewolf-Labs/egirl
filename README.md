@@ -101,6 +101,7 @@ bun run src/index.ts discord        # Discord bot
 bun run src/index.ts claude-code    # Claude Code bridge (or: cc)
 bun run src/index.ts xmpp          # XMPP/Jabber chat
 bun run api                         # HTTP REST API server
+bun run src/index.ts serve          # All configured channels in one process
 bun run src/index.ts status         # Check config and connections
 bun run src/index.ts help           # Show all commands
 ```

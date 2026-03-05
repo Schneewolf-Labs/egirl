@@ -4,6 +4,7 @@ import { runAPI } from './commands/api'
 import { runClaudeCode } from './commands/claude-code'
 import { runCLI } from './commands/cli'
 import { runDiscord } from './commands/discord'
+import { runServe } from './commands/serve'
 import { showStatus } from './commands/status'
 import { runXMPP } from './commands/xmpp'
 import { loadConfig, type RuntimeConfig } from './config'
@@ -58,6 +59,10 @@ async function main() {
       await runAPI(config, args.slice(1))
       break
 
+    case 'serve':
+      await runServe(config, args.slice(1))
+      break
+
     case 'help':
     case '--help':
     case '-h':
@@ -85,6 +90,7 @@ ${c.primary}Commands${RESET}
   ${c.accent}discord${RESET}        Start Discord bot
   ${c.accent}xmpp${RESET}           Start XMPP bot
   ${c.accent}api${RESET}            Start HTTP API server
+  ${c.accent}serve${RESET}          Start all configured channels (Discord, API, XMPP) in one process
   ${c.accent}claude-code${RESET}    Bridge to Claude Code with local model supervision ${DIM}(alias: cc)${RESET}
   ${c.accent}status${RESET}         Show current configuration and status
   ${c.accent}help${RESET}           Show this help message
