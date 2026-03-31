@@ -190,6 +190,10 @@ export function loadConfig(): RuntimeConfig {
         enabled: toml.safety?.confirmation?.enabled ?? false,
         tools: toml.safety?.confirmation?.tools ?? ['execute_command', 'write_file', 'edit_file'],
       },
+      permissionRules: {
+        allow: toml.safety?.permission_rules?.allow ?? [],
+        deny: toml.safety?.permission_rules?.deny ?? [],
+      },
     },
     memory: {
       proactiveRetrieval: toml.memory?.proactive_retrieval ?? true,

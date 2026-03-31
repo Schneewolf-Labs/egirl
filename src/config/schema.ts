@@ -160,6 +160,12 @@ export const EgirlConfigSchema = Type.Object({
           tools: Type.Optional(Type.Array(Type.String())),
         }),
       ),
+      permission_rules: Type.Optional(
+        Type.Object({
+          allow: Type.Array(Type.String(), { default: [] }),
+          deny: Type.Array(Type.String(), { default: [] }),
+        }),
+      ),
     }),
   ),
 
@@ -344,6 +350,10 @@ export interface RuntimeConfig {
     confirmation: {
       enabled: boolean
       tools: string[]
+    }
+    permissionRules: {
+      allow: string[]
+      deny: string[]
     }
   }
   github?: {

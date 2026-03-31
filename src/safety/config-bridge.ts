@@ -2,6 +2,7 @@ import type { RuntimeConfig } from '../config'
 import { buildCommandFilterConfig, compilePatterns } from './command-filter'
 import type { SafetyConfig } from './index'
 import { getDefaultSensitivePatterns } from './path-guard'
+import { compilePermissionRules } from './permission-rules'
 
 export function buildSafetyConfig(config: RuntimeConfig): SafetyConfig {
   const safety = config.safety
@@ -35,5 +36,9 @@ export function buildSafetyConfig(config: RuntimeConfig): SafetyConfig {
       enabled: safety.confirmation.enabled,
       tools: safety.confirmation.tools,
     },
+    permissionRules: compilePermissionRules(
+      safety.permissionRules.allow,
+      safety.permissionRules.deny,
+    ),
   }
 }
