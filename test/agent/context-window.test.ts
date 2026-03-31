@@ -119,9 +119,12 @@ describe('fitToContextWindow', () => {
     } = await fitToContextWindow('System', messages, [], smallConfig)
     // Should have fewer messages than input
     expect(result.length).toBeLessThan(messages.length)
-    // Should include truncation notice
+    // Should include truncation/compaction notice
     const hasNotice = result.some(
-      (m) => m.role === 'user' && typeof m.content === 'string' && m.content.includes('trimmed'),
+      (m) =>
+        m.role === 'user' &&
+        typeof m.content === 'string' &&
+        (m.content.includes('trimmed') || m.content.includes('summarized')),
     )
     expect(hasNotice).toBe(true)
     expect(wasTrimmed).toBe(true)

@@ -292,24 +292,57 @@ export async function fitToContextWindow(
 
   const groups = buildMessageGroups(processed, tokenCounts)
 
-  // Walk backward through groups, fitting what we can
-  const fittedGroups: MessageGroup[] = []
-  let usedTokens = 0
+  // Interior compaction strategy:
+  // 1. Always protect the first group (first user message / task context)
+  // 2. Keep the most recent groups that fit from the end
+  // 3. The middle section gets dropped and summarized
 
-  for (let g = groups.length - 1; g >= 0; g--) {
+  // Reserve the first group (first user message) if it fits
+  const firstGroup = groups[0]
+  let headTokens = 0
+  let headGroupCount = 0
+
+  if (firstGroup && firstGroup.tokens <= availableTokens * 0.3) {
+    // Only protect head if it's ≤30% of budget — don't starve the tail
+    headTokens = firstGroup.tokens
+    headGroupCount = 1
+  }
+
+  // Walk backward through remaining groups, fitting what we can into the tail
+  const tailGroups: MessageGroup[] = []
+  let tailTokens = 0
+  const tailBudget = availableTokens - headTokens
+
+  for (let g = groups.length - 1; g >= headGroupCount; g--) {
     const group = groups[g]
     if (!group) continue
-    if (usedTokens + group.tokens <= availableTokens) {
-      fittedGroups.unshift(group)
-      usedTokens += group.tokens
+    if (tailTokens + group.tokens <= tailBudget) {
+      tailGroups.unshift(group)
+      tailTokens += group.tokens
     } else {
       break
     }
   }
 
-  // Collect fitted messages
+  // Collect fitted messages: head + tail (with middle dropped)
   const result: ChatMessage[] = []
-  for (const group of fittedGroups) {
+  const keptGroupIndices = new Set<number>()
+
+  // Add head groups
+  for (let g = 0; g < headGroupCount; g++) {
+    const group = groups[g]
+    if (!group) continue
+    keptGroupIndices.add(g)
+    for (let j = group.startIdx; j <= group.endIdx; j++) {
+      const msg = processed[j]
+      if (msg) result.push(msg)
+    }
+  }
+
+  // Add tail groups
+  for (const group of tailGroups) {
+    const gIdx = groups.indexOf(group)
+    keptGroupIndices.add(gIdx)
     for (let j = group.startIdx; j <= group.endIdx; j++) {
       const msg = processed[j]
       if (msg) result.push(msg)
@@ -318,22 +351,35 @@ export async function fitToContextWindow(
 
   // If we somehow fit nothing, include at least the last user message
   if (result.length === 0) {
-    const lastUser = [...processed].reverse().find((m) => m.role === 'user')
+    const lastUser = [...processed].reverse().find((m: ChatMessage) => m.role === 'user')
     if (lastUser) {
       result.push(lastUser)
     }
   }
 
-  // Collect the dropped messages (original messages that didn't make it into result)
-  const keptStartIdx = fittedGroups.length > 0 ? fittedGroups[0]?.startIdx : messages.length
-  const dropped = messages.slice(0, keptStartIdx)
+  // Collect dropped messages from the middle (groups not in head or tail)
+  const dropped: ChatMessage[] = []
+  for (let g = 0; g < groups.length; g++) {
+    if (keptGroupIndices.has(g)) continue
+    const group = groups[g]
+    if (!group) continue
+    for (let j = group.startIdx; j <= group.endIdx; j++) {
+      const msg = messages[j]
+      if (msg) dropped.push(msg)
+    }
+  }
 
-  const droppedCount = messages.length - result.length
+  const droppedCount = dropped.length
   if (droppedCount > 0) {
-    log.info('context-window', `Dropped ${droppedCount} older messages, kept ${result.length}`)
-    result.unshift({
+    log.info(
+      'context-window',
+      `Interior compaction: dropped ${droppedCount} middle messages, kept ${headGroupCount > 0 ? 'head + ' : ''}${tailGroups.length} tail groups`,
+    )
+    // Insert truncation notice between head and tail
+    const insertIdx = headGroupCount > 0 ? (groups[0]?.endIdx ?? 0) - (groups[0]?.startIdx ?? 0) + 1 : 0
+    result.splice(insertIdx, 0, {
       role: 'user',
-      content: `[System notice: Earlier conversation (${droppedCount} messages) was trimmed to fit context window.]`,
+      content: `[System notice: ${droppedCount} middle messages were summarized to fit context window. See conversation summary for details.]`,
     })
   }
 
