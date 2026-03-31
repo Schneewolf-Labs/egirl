@@ -37,6 +37,11 @@ export interface ChatRequest {
   onToken?: (token: string) => void
   /** Extended thinking / reasoning configuration */
   thinking?: ThinkingConfig
+  /** Stable/volatile split for system prompt caching (Anthropic prefix caching) */
+  systemPromptParts?: {
+    stable: string
+    volatile: string
+  }
 }
 
 export interface ChatResponse {

@@ -771,8 +771,14 @@ export class AgentLoop {
       `Sending ${messages.length} messages to ${provider.name} (budget: ${contextLength}t)`,
     )
 
+    // Pass system prompt parts for Anthropic prefix caching when using remote
+    const promptParts =
+      target === 'remote' && this.context.stablePromptPrefix
+        ? { stable: this.context.stablePromptPrefix, volatile: this.context.volatilePromptSuffix }
+        : undefined
+
     try {
-      return await this.chatWithRetry(provider, messages, tools, onToken, thinking)
+      return await this.chatWithRetry(provider, messages, tools, onToken, thinking, promptParts)
     } catch (error) {
       if (!(error instanceof ContextSizeError)) throw error
 
@@ -795,7 +801,7 @@ export class AgentLoop {
         ...refitResult.messages,
       ]
 
-      return await this.chatWithRetry(provider, retryMessages, tools, onToken, thinking)
+      return await this.chatWithRetry(provider, retryMessages, tools, onToken, thinking, promptParts)
     }
   }
 
@@ -888,13 +894,14 @@ export class AgentLoop {
     tools: ToolDefinition[],
     onToken?: (token: string) => void,
     thinking?: ThinkingConfig,
+    systemPromptParts?: { stable: string; volatile: string },
     maxRetries = 2,
   ): Promise<ChatResponse> {
     let lastError: unknown
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
-        return await provider.chat({ messages, tools, onToken, thinking })
+        return await provider.chat({ messages, tools, onToken, thinking, systemPromptParts })
       } catch (error) {
         lastError = error
 

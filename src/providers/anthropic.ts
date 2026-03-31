@@ -27,12 +27,33 @@ export class AnthropicProvider implements LLMProvider {
     const isThinkingEnabled = budget > 0
 
     const maxTokens = req.max_tokens ?? 4096
+
+    // Build system prompt with cache_control markers when prompt parts are available.
+    // The stable prefix gets cache_control: ephemeral so Anthropic's prefix caching
+    // can reuse it across turns (up to ~75% input cost reduction).
+    let systemParam: string | Anthropic.Messages.TextBlockParam[] | undefined
+    if (req.systemPromptParts && req.systemPromptParts.stable) {
+      const blocks: Anthropic.Messages.TextBlockParam[] = [
+        {
+          type: 'text',
+          text: req.systemPromptParts.stable,
+          cache_control: { type: 'ephemeral' },
+        },
+      ]
+      if (req.systemPromptParts.volatile) {
+        blocks.push({ type: 'text', text: req.systemPromptParts.volatile })
+      }
+      systemParam = blocks
+    } else {
+      systemParam = systemPrompt
+    }
+
     const params: Anthropic.Messages.MessageCreateParamsNonStreaming = {
       model: this.model,
       // When thinking is enabled, max_tokens must accommodate the budget
       max_tokens: isThinkingEnabled ? Math.max(maxTokens, budget + 4096) : maxTokens,
       messages,
-      ...(systemPrompt && { system: systemPrompt }),
+      ...(systemParam && { system: systemParam }),
       // Temperature must not be set (or must be 1) when thinking is enabled
       ...(!isThinkingEnabled && req.temperature !== undefined && { temperature: req.temperature }),
     }
