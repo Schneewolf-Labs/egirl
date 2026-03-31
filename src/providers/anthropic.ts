@@ -91,6 +91,14 @@ export class AnthropicProvider implements LLMProvider {
       }
     }
 
+    // Map Anthropic stop_reason to our finish_reason
+    const finish_reason =
+      response.stop_reason === 'max_tokens'
+        ? 'length'
+        : response.stop_reason === 'tool_use'
+          ? 'tool_calls'
+          : response.stop_reason ?? 'stop'
+
     return {
       content,
       tool_calls: tool_calls.length > 0 ? tool_calls : undefined,
@@ -100,6 +108,7 @@ export class AnthropicProvider implements LLMProvider {
       },
       model: response.model,
       thinking: thinking || undefined,
+      finish_reason,
     }
   }
 

@@ -41,6 +41,9 @@ const REMOTE_CONTEXT_LENGTH = 200_000
 /** Default max tokens per tool result — matches context-window.ts default */
 const MAX_TOOL_RESULT_TOKENS = 8000
 
+/** Maximum number of continuation retries when response is truncated (finish_reason: length) */
+const MAX_CONTINUATION_RETRIES = 3
+
 /** Common prompt injection markers to strip from recalled memories */
 const INJECTION_PATTERNS: RegExp[] = [
   /<\|im_start\|>/gi,
@@ -92,6 +95,8 @@ export interface AgentResponse {
   isPlan?: boolean
   /** Extended thinking content from the model */
   thinking?: string
+  /** Number of continuation retries performed for truncated responses */
+  continuationRetries?: number
 }
 
 export interface AgentLoopDeps {
@@ -273,6 +278,9 @@ export class AgentLoop {
     let isPlanning = !!planningMode
     // Tool loop detection: track seen (name, args) pairs to warn on repeats
     const seenToolCalls = new Set<string>()
+    // Continuation retry tracking for truncated responses
+    let continuationRetries = 0
+    let accumulatedContent = ''
 
     while (turns < maxTurns) {
       // Check abort signal before each turn
@@ -499,9 +507,31 @@ export class AgentLoop {
         continue
       }
 
-      // No tool calls, we have a final response
-      finalContent = response.content
-      addMessage(this.context, { role: 'assistant', content: finalContent })
+      // No tool calls — check if response was truncated and needs continuation
+      if (
+        response.finish_reason === 'length' &&
+        continuationRetries < MAX_CONTINUATION_RETRIES &&
+        response.content.length > 0
+      ) {
+        continuationRetries++
+        accumulatedContent += response.content
+        log.info(
+          'agent',
+          `Response truncated (finish_reason: length), continuation retry ${continuationRetries}/${MAX_CONTINUATION_RETRIES}`,
+        )
+
+        // Add the partial response and a continuation prompt
+        addMessage(this.context, { role: 'assistant', content: response.content })
+        addMessage(this.context, {
+          role: 'user',
+          content: '[System: Your previous response was cut off. Continue exactly where you left off.]',
+        })
+        continue
+      }
+
+      // Final response — merge accumulated content from continuation retries
+      finalContent = accumulatedContent + response.content
+      addMessage(this.context, { role: 'assistant', content: response.content })
       events?.onResponseComplete?.()
 
       // In planning mode, return after the plan text is produced
@@ -602,6 +632,7 @@ export class AgentLoop {
       escalated,
       turns,
       thinking: lastThinking,
+      continuationRetries: continuationRetries > 0 ? continuationRetries : undefined,
     }
   }
 

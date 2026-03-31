@@ -71,6 +71,7 @@ export class OpenAIProvider implements LLMProvider {
         output_tokens: response.usage?.completion_tokens ?? 0,
       },
       model: response.model,
+      finish_reason: choice?.finish_reason ?? 'stop',
     }
   }
 
@@ -88,6 +89,7 @@ export class OpenAIProvider implements LLMProvider {
     const toolCallAccumulator = new Map<number, { id: string; name: string; arguments: string }>()
     let usage = { prompt_tokens: 0, completion_tokens: 0 }
     let model = this.model
+    let finish_reason: string | undefined
 
     for await (const chunk of stream) {
       model = chunk.model ?? model
@@ -98,6 +100,9 @@ export class OpenAIProvider implements LLMProvider {
           completion_tokens: chunk.usage.completion_tokens ?? 0,
         }
       }
+
+      const chunkFinish = chunk.choices?.[0]?.finish_reason
+      if (chunkFinish) finish_reason = chunkFinish
 
       const delta = chunk.choices?.[0]?.delta
       if (!delta) continue
@@ -140,6 +145,7 @@ export class OpenAIProvider implements LLMProvider {
         output_tokens: usage.completion_tokens,
       },
       model,
+      finish_reason: finish_reason ?? 'stop',
     }
   }
 

@@ -47,6 +47,8 @@ export interface ChatResponse {
   model: string
   /** Extended thinking / reasoning content from the model */
   thinking?: string
+  /** Why generation stopped: 'stop' (natural), 'length' (truncated), 'tool_calls', etc. */
+  finish_reason?: 'stop' | 'length' | 'tool_calls' | string
 }
 
 export interface LLMProvider {
