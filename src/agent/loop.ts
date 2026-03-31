@@ -31,7 +31,7 @@ import {
 } from './context'
 import { formatSummaryMessage, summarizeMessages } from './context-summarizer'
 import { fitToContextWindow, truncateToolResultSync } from './context-window'
-import type { AgentEventHandler } from './events'
+import type { AgentEventHandler, ValidationResult } from './events'
 import type { SessionMutex } from './session-mutex'
 import { TokenBudgetTracker } from './token-budget'
 
@@ -260,6 +260,8 @@ export class AgentLoop {
     // Continuation retry tracking for truncated responses
     let continuationRetries = 0
     let accumulatedContent = ''
+    // Post-response validation: only retry once to prevent infinite loops
+    let validationRetried = false
 
     while (turns < maxTurns) {
       // Check abort signal before each turn
@@ -511,6 +513,23 @@ export class AgentLoop {
       // Final response — merge accumulated content from continuation retries
       finalContent = accumulatedContent + response.content
       addMessage(this.context, { role: 'assistant', content: response.content })
+
+      // Post-response validation hook — reject and retry once if validation fails
+      if (events?.onPostResponseValidation && !validationRetried) {
+        const validation = await events.onPostResponseValidation(finalContent)
+        if (!validation.valid) {
+          validationRetried = true
+          const feedback =
+            validation.feedback ?? 'Your previous response did not pass validation. Please try again.'
+          log.info('agent', `Post-response validation failed: ${feedback.slice(0, 100)}`)
+          addMessage(this.context, { role: 'user', content: `[Validation failed]: ${feedback}` })
+          // Reset accumulated content since we're retrying from scratch
+          accumulatedContent = ''
+          continuationRetries = 0
+          continue
+        }
+      }
+
       events?.onResponseComplete?.()
 
       // In planning mode, return after the plan text is produced
