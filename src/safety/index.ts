@@ -10,6 +10,7 @@ export {
   compilePatterns,
 } from './command-filter'
 export { getDefaultSensitivePatterns } from './path-guard'
+export { scanForInjection, sanitizeContent, type ScanResult } from './injection-scanner'
 
 export interface SafetyConfig {
   enabled: boolean

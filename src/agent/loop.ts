@@ -18,7 +18,7 @@ import type {
 } from '../providers/types'
 import { ContextSizeError } from '../providers/types'
 import { analyzeResponseForEscalation, type Router } from '../routing'
-import { auditMemoryOperation } from '../safety'
+import { auditMemoryOperation, sanitizeContent } from '../safety'
 import type { Skill } from '../skills/types'
 import type { ToolExecutor, ToolResult } from '../tools'
 import type { TranscriptLogger } from '../tracking/transcript'
@@ -44,30 +44,9 @@ const MAX_TOOL_RESULT_TOKENS = 8000
 /** Maximum number of continuation retries when response is truncated (finish_reason: length) */
 const MAX_CONTINUATION_RETRIES = 3
 
-/** Common prompt injection markers to strip from recalled memories */
-const INJECTION_PATTERNS: RegExp[] = [
-  /<\|im_start\|>/gi,
-  /<\|im_end\|>/gi,
-  /\[SYSTEM\]/gi,
-  /\[INST\]/gi,
-  /\[\/INST\]/gi,
-  /<<SYS>>/gi,
-  /<<\/SYS>>/gi,
-  /IGNORE\s+(ALL\s+)?PREVIOUS\s+INSTRUCTIONS/gi,
-  /YOU\s+ARE\s+NOW\b/gi,
-  /NEW\s+INSTRUCTIONS?\s*:/gi,
-  /IMPORTANT\s+UPDATE\s+FROM/gi,
-]
-
+/** @deprecated Use sanitizeContent from '../safety' — kept as alias for readability */
 function sanitizeRecalledMemory(content: string): string {
-  let sanitized = content
-  for (const pattern of INJECTION_PATTERNS) {
-    sanitized = sanitized.replace(pattern, '[filtered]')
-  }
-  // Strip control characters except newlines and tabs
-  // biome-ignore lint/suspicious/noControlCharactersInRegex: intentional — stripping dangerous control chars from memory
-  sanitized = sanitized.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
-  return sanitized
+  return sanitizeContent(content)
 }
 
 export interface AgentLoopOptions {
