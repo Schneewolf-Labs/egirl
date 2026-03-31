@@ -44,7 +44,10 @@ describe('gatherStandup', () => {
     expect(report.isGitRepo).toBe(true)
     expect(report.context).toContain('Workspace Standup')
     expect(report.context).toContain('Branch')
-    expect(report.context).toContain('master')
+    // git init creates 'main' or 'master' depending on system config
+    expect(
+      report.context.includes('master') || report.context.includes('main'),
+    ).toBe(true)
     expect(report.context).toContain('clean')
     expect(report.context).toContain('Recent commits')
     expect(report.context).toContain('Add feature module')

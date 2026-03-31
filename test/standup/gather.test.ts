@@ -49,7 +49,8 @@ describe('standup gather', () => {
   test('gatherBranch returns current branch', async () => {
     const branch = await gatherBranch(testDir)
     expect(branch).toBeDefined()
-    expect(branch?.current).toBe('master')
+    // git init creates 'main' or 'master' depending on system config
+    expect(['main', 'master']).toContain(branch?.current)
     expect(branch?.tracking).toBeUndefined()
   })
 
