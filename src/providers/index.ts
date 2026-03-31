@@ -103,7 +103,11 @@ class PooledProvider implements LLMProvider {
 
 export function createProviderRegistry(config: RuntimeConfig): ProviderRegistry {
   // Create local provider (always llama.cpp)
-  const local = createLlamaCppProvider(config.local.endpoint, config.local.model)
+  const local = createLlamaCppProvider(
+    config.local.endpoint,
+    config.local.model,
+    config.local.staleStreamTimeoutMs,
+  )
 
   // Create remote provider (prefer Anthropic, fallback to OpenAI)
   let remote: LLMProvider | null = null
