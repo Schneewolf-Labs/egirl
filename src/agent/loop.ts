@@ -18,7 +18,7 @@ import type {
 } from '../providers/types'
 import { ContextSizeError } from '../providers/types'
 import { analyzeResponseForEscalation, type Router } from '../routing'
-import { auditMemoryOperation } from '../safety'
+import { auditMemoryOperation, sanitizeContent } from '../safety'
 import type { Skill } from '../skills/types'
 import type { ToolExecutor, ToolResult } from '../tools'
 import type { TranscriptLogger } from '../tracking/transcript'
@@ -41,30 +41,12 @@ const REMOTE_CONTEXT_LENGTH = 200_000
 /** Default max tokens per tool result — matches context-window.ts default */
 const MAX_TOOL_RESULT_TOKENS = 8000
 
-/** Common prompt injection markers to strip from recalled memories */
-const INJECTION_PATTERNS: RegExp[] = [
-  /<\|im_start\|>/gi,
-  /<\|im_end\|>/gi,
-  /\[SYSTEM\]/gi,
-  /\[INST\]/gi,
-  /\[\/INST\]/gi,
-  /<<SYS>>/gi,
-  /<<\/SYS>>/gi,
-  /IGNORE\s+(ALL\s+)?PREVIOUS\s+INSTRUCTIONS/gi,
-  /YOU\s+ARE\s+NOW\b/gi,
-  /NEW\s+INSTRUCTIONS?\s*:/gi,
-  /IMPORTANT\s+UPDATE\s+FROM/gi,
-]
+/** Maximum number of continuation retries when response is truncated (finish_reason: length) */
+const MAX_CONTINUATION_RETRIES = 3
 
+/** @deprecated Use sanitizeContent from '../safety' — kept as alias for readability */
 function sanitizeRecalledMemory(content: string): string {
-  let sanitized = content
-  for (const pattern of INJECTION_PATTERNS) {
-    sanitized = sanitized.replace(pattern, '[filtered]')
-  }
-  // Strip control characters except newlines and tabs
-  // biome-ignore lint/suspicious/noControlCharactersInRegex: intentional — stripping dangerous control chars from memory
-  sanitized = sanitized.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
-  return sanitized
+  return sanitizeContent(content)
 }
 
 export interface AgentLoopOptions {
@@ -92,6 +74,8 @@ export interface AgentResponse {
   isPlan?: boolean
   /** Extended thinking content from the model */
   thinking?: string
+  /** Number of continuation retries performed for truncated responses */
+  continuationRetries?: number
 }
 
 export interface AgentLoopDeps {
@@ -273,6 +257,11 @@ export class AgentLoop {
     let isPlanning = !!planningMode
     // Tool loop detection: track seen (name, args) pairs to warn on repeats
     const seenToolCalls = new Set<string>()
+    // Continuation retry tracking for truncated responses
+    let continuationRetries = 0
+    let accumulatedContent = ''
+    // Post-response validation: only retry once to prevent infinite loops
+    let validationRetried = false
 
     while (turns < maxTurns) {
       // Check abort signal before each turn
@@ -499,9 +488,50 @@ export class AgentLoop {
         continue
       }
 
-      // No tool calls, we have a final response
-      finalContent = response.content
-      addMessage(this.context, { role: 'assistant', content: finalContent })
+      // No tool calls — check if response was truncated and needs continuation
+      if (
+        response.finish_reason === 'length' &&
+        continuationRetries < MAX_CONTINUATION_RETRIES &&
+        response.content.length > 0
+      ) {
+        continuationRetries++
+        accumulatedContent += response.content
+        log.info(
+          'agent',
+          `Response truncated (finish_reason: length), continuation retry ${continuationRetries}/${MAX_CONTINUATION_RETRIES}`,
+        )
+
+        // Add the partial response and a continuation prompt
+        addMessage(this.context, { role: 'assistant', content: response.content })
+        addMessage(this.context, {
+          role: 'user',
+          content:
+            '[System: Your previous response was cut off. Continue exactly where you left off.]',
+        })
+        continue
+      }
+
+      // Final response — merge accumulated content from continuation retries
+      finalContent = accumulatedContent + response.content
+      addMessage(this.context, { role: 'assistant', content: response.content })
+
+      // Post-response validation hook — reject and retry once if validation fails
+      if (events?.onPostResponseValidation && !validationRetried) {
+        const validation = await events.onPostResponseValidation(finalContent)
+        if (!validation.valid) {
+          validationRetried = true
+          const feedback =
+            validation.feedback ??
+            'Your previous response did not pass validation. Please try again.'
+          log.info('agent', `Post-response validation failed: ${feedback.slice(0, 100)}`)
+          addMessage(this.context, { role: 'user', content: `[Validation failed]: ${feedback}` })
+          // Reset accumulated content since we're retrying from scratch
+          accumulatedContent = ''
+          continuationRetries = 0
+          continue
+        }
+      }
+
       events?.onResponseComplete?.()
 
       // In planning mode, return after the plan text is produced
@@ -602,6 +632,7 @@ export class AgentLoop {
       escalated,
       turns,
       thinking: lastThinking,
+      continuationRetries: continuationRetries > 0 ? continuationRetries : undefined,
     }
   }
 
@@ -742,8 +773,14 @@ export class AgentLoop {
       `Sending ${messages.length} messages to ${provider.name} (budget: ${contextLength}t)`,
     )
 
+    // Pass system prompt parts for Anthropic prefix caching when using remote
+    const promptParts =
+      target === 'remote' && this.context.stablePromptPrefix
+        ? { stable: this.context.stablePromptPrefix, volatile: this.context.volatilePromptSuffix }
+        : undefined
+
     try {
-      return await this.chatWithRetry(provider, messages, tools, onToken, thinking)
+      return await this.chatWithRetry(provider, messages, tools, onToken, thinking, promptParts)
     } catch (error) {
       if (!(error instanceof ContextSizeError)) throw error
 
@@ -766,7 +803,14 @@ export class AgentLoop {
         ...refitResult.messages,
       ]
 
-      return await this.chatWithRetry(provider, retryMessages, tools, onToken, thinking)
+      return await this.chatWithRetry(
+        provider,
+        retryMessages,
+        tools,
+        onToken,
+        thinking,
+        promptParts,
+      )
     }
   }
 
@@ -859,13 +903,14 @@ export class AgentLoop {
     tools: ToolDefinition[],
     onToken?: (token: string) => void,
     thinking?: ThinkingConfig,
+    systemPromptParts?: { stable: string; volatile: string },
     maxRetries = 2,
   ): Promise<ChatResponse> {
     let lastError: unknown
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
-        return await provider.chat({ messages, tools, onToken, thinking })
+        return await provider.chat({ messages, tools, onToken, thinking, systemPromptParts })
       } catch (error) {
         lastError = error
 

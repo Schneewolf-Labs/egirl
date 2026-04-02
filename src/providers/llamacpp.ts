@@ -37,14 +37,19 @@ export interface LlamaCppCapabilities {
   toolUse: boolean
 }
 
+/** Default stale-stream timeout in milliseconds (90 seconds) */
+const DEFAULT_STALE_STREAM_TIMEOUT_MS = 90_000
+
 export class LlamaCppProvider implements LLMProvider {
   readonly name: string
   private endpoint: string
   private capabilities: LlamaCppCapabilities | null = null
+  private staleStreamTimeoutMs: number
 
-  constructor(endpoint: string, model: string) {
+  constructor(endpoint: string, model: string, staleStreamTimeoutMs?: number) {
     this.endpoint = endpoint.replace(/\/$/, '')
     this.name = `llamacpp/${model}`
+    this.staleStreamTimeoutMs = staleStreamTimeoutMs ?? DEFAULT_STALE_STREAM_TIMEOUT_MS
   }
 
   /**
@@ -133,6 +138,7 @@ export class LlamaCppProvider implements LLMProvider {
     let content: string
     let usage = { prompt_tokens: 0, completion_tokens: 0 }
     let model = this.name
+    let finish_reason: string | undefined
 
     if (shouldStream && response.body) {
       const result = await this.readStream(
@@ -143,15 +149,17 @@ export class LlamaCppProvider implements LLMProvider {
       content = result.content
       usage = result.usage
       model = result.model ?? this.name
+      finish_reason = result.finish_reason
     } else {
       const data = (await response.json()) as {
-        choices: Array<{ message: { content: string } }>
+        choices: Array<{ message: { content: string }; finish_reason?: string }>
         usage: { prompt_tokens: number; completion_tokens: number }
         model: string
       }
       content = data.choices[0]?.message?.content ?? ''
       usage = data.usage ?? usage
       model = data.model ?? this.name
+      finish_reason = data.choices[0]?.finish_reason ?? undefined
     }
 
     log.debug(
@@ -190,6 +198,7 @@ export class LlamaCppProvider implements LLMProvider {
       },
       model,
       thinking: thinking || undefined,
+      finish_reason: toolCalls.length > 0 ? 'tool_calls' : (finish_reason ?? 'stop'),
     }
   }
 
@@ -205,6 +214,7 @@ export class LlamaCppProvider implements LLMProvider {
     content: string
     usage: { prompt_tokens: number; completion_tokens: number }
     model?: string
+    finish_reason?: string
   }> {
     const decoder = new TextDecoder()
     const reader = body.getReader()
@@ -215,6 +225,23 @@ export class LlamaCppProvider implements LLMProvider {
     let inThink = false
     let usage = { prompt_tokens: 0, completion_tokens: 0 }
     let model: string | undefined
+    let finish_reason: string | undefined
+
+    // Stale-stream detection: abort if no new content arrives within timeout
+    let staleTimer: ReturnType<typeof setTimeout> | null = null
+    let staleAborted = false
+    const resetStaleTimer = () => {
+      if (staleTimer) clearTimeout(staleTimer)
+      staleTimer = setTimeout(() => {
+        staleAborted = true
+        log.warn(
+          'llamacpp',
+          `Stream stale for ${this.staleStreamTimeoutMs}ms — aborting generation`,
+        )
+        reader.cancel().catch(() => {})
+      }, this.staleStreamTimeoutMs)
+    }
+    resetStaleTimer()
 
     const TOOL_OPEN = '<tool_call>'
     const THINK_OPEN = '<think>'
@@ -244,18 +271,21 @@ export class LlamaCppProvider implements LLMProvider {
 
           try {
             const parsed = JSON.parse(data) as {
-              choices?: Array<{ delta?: { content?: string } }>
+              choices?: Array<{ delta?: { content?: string }; finish_reason?: string | null }>
               usage?: { prompt_tokens: number; completion_tokens: number }
               model?: string
             }
 
             if (parsed.usage) usage = parsed.usage
             if (parsed.model) model = parsed.model
+            const chunkFinish = parsed.choices?.[0]?.finish_reason
+            if (chunkFinish) finish_reason = chunkFinish
 
             const token = parsed.choices?.[0]?.delta?.content
             if (!token) continue
 
             fullContent += token
+            resetStaleTimer()
 
             if (inToolCall) {
               continue
@@ -319,7 +349,12 @@ export class LlamaCppProvider implements LLMProvider {
         }
       }
     } finally {
+      if (staleTimer) clearTimeout(staleTimer)
       reader.releaseLock()
+    }
+
+    if (staleAborted) {
+      finish_reason = 'length' // Treat stale abort like truncation so continuation retries kick in
     }
 
     // Flush any remaining buffer (not inside a tag)
@@ -327,7 +362,7 @@ export class LlamaCppProvider implements LLMProvider {
       onToken(buffer)
     }
 
-    return { content: fullContent, usage, model }
+    return { content: fullContent, usage, model, finish_reason }
   }
 
   /**
@@ -378,6 +413,10 @@ export class LlamaCppProvider implements LLMProvider {
   }
 }
 
-export function createLlamaCppProvider(endpoint: string, model: string): LLMProvider {
-  return new LlamaCppProvider(endpoint, model)
+export function createLlamaCppProvider(
+  endpoint: string,
+  model: string,
+  staleStreamTimeoutMs?: number,
+): LLMProvider {
+  return new LlamaCppProvider(endpoint, model, staleStreamTimeoutMs)
 }

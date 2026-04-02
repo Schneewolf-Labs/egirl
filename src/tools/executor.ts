@@ -1,7 +1,7 @@
 import type { EnergyBudget } from '../energy'
 import type { ToolCall } from '../providers/types'
 import type { SafetyConfig } from '../safety'
-import { checkToolCall, getAuditLogPath, logToolExecution } from '../safety'
+import { checkToolCall, getAuditLogPath, logToolExecution, scanForInjection } from '../safety'
 import { log } from '../util/logger'
 import type { Tool, ToolDefinition, ToolResult } from './types'
 
@@ -9,6 +9,20 @@ export type ConfirmCallback = (toolName: string, args: Record<string, unknown>) 
 
 /** Execution context: interactive calls bypass energy checks, autonomous calls are gated */
 export type ExecutionContext = 'interactive' | 'autonomous'
+
+/**
+ * Tools whose output may contain untrusted external content
+ * and should be scanned for prompt injection patterns.
+ */
+const SCANNABLE_TOOLS = new Set([
+  'web_research',
+  'browser_navigate',
+  'browser_snapshot',
+  'browser_eval',
+  'execute_command',
+  'read_file',
+  'code_agent',
+])
 
 export class ToolExecutor {
   private tools: Map<string, Tool> = new Map()
@@ -140,6 +154,18 @@ export class ToolExecutor {
         success: result.success,
         outputLength: result.output.length,
       })
+
+      // Scan tool output for prompt injection if it handles external content
+      if (this.safety?.enabled && SCANNABLE_TOOLS.has(call.name) && result.output) {
+        const scan = scanForInjection(result.output)
+        if (scan.detected) {
+          log.warn(
+            'safety',
+            `Injection patterns detected in ${call.name} output: ${scan.matchedPatterns.join(', ')}`,
+          )
+          result.output = `[Warning: ${scan.matchCount} prompt injection pattern(s) detected and filtered in tool output]\n${scan.sanitized}`
+        }
+      }
 
       this.audit(call.name, call.arguments, { success: result.success })
       return result

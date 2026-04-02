@@ -25,6 +25,7 @@ export const EgirlConfigSchema = Type.Object({
     model: Type.String({ default: 'qwen2.5-32b-instruct' }),
     context_length: Type.Number({ default: 32768 }),
     max_concurrent: Type.Number({ default: 2 }),
+    stale_stream_timeout_ms: Type.Optional(Type.Number({ default: 90000 })),
     embeddings: Type.Optional(
       Type.Object({
         provider: Type.Optional(
@@ -160,6 +161,12 @@ export const EgirlConfigSchema = Type.Object({
           tools: Type.Optional(Type.Array(Type.String())),
         }),
       ),
+      permission_rules: Type.Optional(
+        Type.Object({
+          allow: Type.Array(Type.String(), { default: [] }),
+          deny: Type.Array(Type.String(), { default: [] }),
+        }),
+      ),
     }),
   ),
 
@@ -243,6 +250,7 @@ export interface RuntimeConfig {
     model: string
     contextLength: number
     maxConcurrent: number
+    staleStreamTimeoutMs: number
     embeddings?: {
       provider: 'qwen3-vl' | 'llamacpp' | 'openai'
       endpoint: string
@@ -344,6 +352,10 @@ export interface RuntimeConfig {
     confirmation: {
       enabled: boolean
       tools: string[]
+    }
+    permissionRules: {
+      allow: string[]
+      deny: string[]
     }
   }
   github?: {

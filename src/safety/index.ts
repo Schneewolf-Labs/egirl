@@ -1,6 +1,7 @@
 import { type AuditEntry, appendAuditLog } from './audit-log'
 import { buildCommandFilterConfig, type CommandFilterConfig, checkCommand } from './command-filter'
 import { getDefaultSensitivePatterns, isPathAllowed, isSensitivePath } from './path-guard'
+import { checkPermissionRules, type PermissionRule } from './permission-rules'
 
 export type { AuditEntry, AuditMemoryEntry } from './audit-log'
 export { appendAuditLog, auditMemoryOperation } from './audit-log'
@@ -9,7 +10,15 @@ export {
   type CommandFilterConfig,
   compilePatterns,
 } from './command-filter'
+export { type ScanResult, sanitizeContent, scanForInjection } from './injection-scanner'
 export { getDefaultSensitivePatterns } from './path-guard'
+export {
+  checkPermissionRules,
+  compilePermissionRules,
+  globToRegex,
+  type PermissionRule,
+  parseRule,
+} from './permission-rules'
 
 export interface SafetyConfig {
   enabled: boolean
@@ -33,6 +42,8 @@ export interface SafetyConfig {
     enabled: boolean
     tools: string[]
   }
+  /** Pattern-based permission rules — evaluated before other checks. First match wins. */
+  permissionRules: PermissionRule[]
 }
 
 const FILE_TOOLS = ['read_file', 'write_file', 'edit_file', 'glob_files']
@@ -68,6 +79,7 @@ export function getDefaultSafetyConfig(): SafetyConfig {
       enabled: false,
       tools: ['execute_command', 'write_file', 'edit_file'],
     },
+    permissionRules: [],
   }
 }
 
@@ -82,6 +94,18 @@ export function checkToolCall(
   config: SafetyConfig,
 ): SafetyCheckResult {
   if (!config.enabled) return { allowed: true }
+
+  // Pattern-based permission rules — first match wins, evaluated before other checks
+  if (config.permissionRules.length > 0) {
+    const ruleResult = checkPermissionRules(toolName, args, config.permissionRules)
+    if (ruleResult === 'deny') {
+      return { allowed: false, reason: `Denied by permission rule for tool "${toolName}"` }
+    }
+    if (ruleResult === 'allow') {
+      return { allowed: true }
+    }
+    // undefined = no rule matched, fall through to other checks
+  }
 
   // Command filter
   if (config.commandFilter.enabled && toolName === 'execute_command' && args.command) {

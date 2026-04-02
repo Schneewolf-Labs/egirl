@@ -7,6 +7,10 @@ import { log } from '../util/logger'
 
 export interface AgentContext {
   systemPrompt: string
+  /** Stable portion of the system prompt (personality, tools, skills) — cache-eligible */
+  stablePromptPrefix: string
+  /** Volatile portion (working memory, additional context) — changes per session */
+  volatilePromptSuffix: string
   messages: ChatMessage[]
   workspaceDir: string
   sessionId: string
@@ -33,13 +37,20 @@ export interface SystemPromptOptions {
   additionalContext?: string
 }
 
+export interface SystemPromptParts {
+  full: string
+  stable: string
+  volatile: string
+}
+
 /**
- * Build system prompt from workspace personality files
+ * Build system prompt from workspace personality files.
+ * Returns the full prompt and its stable/volatile parts for caching.
  */
 export function buildSystemPrompt(
   config: RuntimeConfig,
   options: SystemPromptOptions = {},
-): string {
+): SystemPromptParts {
   const { path: workspaceDir } = config.workspace
   const { skills, additionalContext } = options
 
@@ -50,34 +61,36 @@ export function buildSystemPrompt(
   const user = loadWorkspaceFile(workspaceDir, 'USER.md')
   const memory = loadWorkspaceFile(workspaceDir, 'MEMORY.md')
 
-  // Build prompt from loaded files
-  const sections: string[] = []
+  // Build prompt from loaded files — separated into stable (cache-eligible) and volatile parts
+  const stableSections: string[] = []
+  const volatileSections: string[] = []
 
   if (identity) {
-    sections.push(identity)
+    stableSections.push(identity)
   }
 
   if (soul) {
-    sections.push(soul)
+    stableSections.push(soul)
   }
 
   if (agents) {
-    sections.push(agents)
+    stableSections.push(agents)
   }
 
   if (user?.includes(':') && !user.includes(':\n\n')) {
     // Only include USER.md if it has actual content (not just template)
-    sections.push(user)
+    stableSections.push(user)
   }
 
   // Tier 1 memory: MEMORY.md is always-on working memory loaded every message.
   // Keep this file small and curated — everything else is Tier 2 (vector search).
+  // Classified as volatile since it can change between sessions.
   if (memory.trim()) {
-    sections.push(`## Working Memory\n\n${memory.trim()}`)
+    volatileSections.push(`## Working Memory\n\n${memory.trim()}`)
   }
 
   // Add tool capabilities
-  sections.push(`## Available Tools
+  stableSections.push(`## Available Tools
 
 Your workspace directory is \`${workspaceDir}\`. All relative file paths are resolved against this directory — not the user's shell cwd. When you write or read files with relative paths, they go in the workspace. Use absolute paths when working outside of it.
 
@@ -126,25 +139,31 @@ Use tools proactively to gather information rather than asking. Use git tools di
 
 **Important:** When you decide to use a tool, call it immediately in the same response — do not narrate your intention first. Never say "I'll use X tool" or "Let me run Y" and then stop. Just call the tool.`)
 
-  // Add skills
+  // Add skills (stable — loaded once from skill files)
   if (skills && skills.length > 0) {
-    sections.push(buildSkillsSection(skills))
+    stableSections.push(buildSkillsSection(skills))
   }
 
-  // Add any additional context
+  // Add any additional context (volatile — can change per session)
   if (additionalContext) {
-    sections.push(additionalContext)
+    volatileSections.push(additionalContext)
   }
+
+  const allSections = [...stableSections, ...volatileSections]
 
   // Fallback if no personality files loaded
-  if (sections.length === 1) {
+  if (allSections.length === 1) {
     log.warn('context', 'No personality files found, using minimal prompt')
-    return `You are Kira, a helpful AI assistant. Be concise, direct, and use tools when needed.
-
-${sections[0]}`
+    const full = `You are Kira, a helpful AI assistant. Be concise, direct, and use tools when needed.\n\n${allSections[0]}`
+    return { full, stable: full, volatile: '' }
   }
 
-  return sections.join('\n\n---\n\n')
+  const separator = '\n\n---\n\n'
+  const stable = stableSections.join(separator)
+  const volatile = volatileSections.join(separator)
+  const full = volatile ? `${stable}${separator}${volatile}` : stable
+
+  return { full, stable, volatile }
 }
 
 /**
@@ -173,12 +192,17 @@ export function createAgentContext(
   sessionId: string,
   options: SystemPromptOptions = {},
 ): AgentContext {
-  const systemPrompt = buildSystemPrompt(config, options)
+  const parts = buildSystemPrompt(config, options)
 
-  log.debug('context', `Built system prompt (${systemPrompt.length} chars)`)
+  log.debug(
+    'context',
+    `Built system prompt (${parts.full.length} chars, stable: ${parts.stable.length}, volatile: ${parts.volatile.length})`,
+  )
 
   return {
-    systemPrompt,
+    systemPrompt: parts.full,
+    stablePromptPrefix: parts.stable,
+    volatilePromptSuffix: parts.volatile,
     messages: [],
     workspaceDir: config.workspace.path,
     sessionId,

@@ -37,6 +37,11 @@ export interface ChatRequest {
   onToken?: (token: string) => void
   /** Extended thinking / reasoning configuration */
   thinking?: ThinkingConfig
+  /** Stable/volatile split for system prompt caching (Anthropic prefix caching) */
+  systemPromptParts?: {
+    stable: string
+    volatile: string
+  }
 }
 
 export interface ChatResponse {
@@ -47,6 +52,8 @@ export interface ChatResponse {
   model: string
   /** Extended thinking / reasoning content from the model */
   thinking?: string
+  /** Why generation stopped: 'stop' (natural), 'length' (truncated), 'tool_calls', etc. */
+  finish_reason?: 'stop' | 'length' | 'tool_calls' | string
 }
 
 export interface LLMProvider {

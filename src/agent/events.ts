@@ -5,6 +5,17 @@ import type { ToolResult } from '../tools/types'
 import type { BudgetLevel, BudgetStatus } from './token-budget'
 
 /**
+ * Result of post-response validation.
+ * Return { valid: true } to accept the response,
+ * or { valid: false, feedback } to reject and retry.
+ */
+export interface ValidationResult {
+  valid: boolean
+  /** Feedback injected as a user message when retrying */
+  feedback?: string
+}
+
+/**
  * Event handler for agent loop transparency.
  *
  * Channels implement this to display tool calls and stream
@@ -33,4 +44,11 @@ export interface AgentEventHandler {
   onAfterToolExec?(call: ToolCall, result: ToolResult): void
   /** Called when token budget utilization crosses a threshold (high or critical) */
   onTokenBudgetWarning?(level: BudgetLevel, status: BudgetStatus): void
+  /**
+   * Post-response validation hook. Called after the model produces a final text
+   * response (no tool calls). Return { valid: false, feedback } to reject the
+   * response and retry with the feedback injected as a user message.
+   * Only retried once to prevent infinite loops.
+   */
+  onPostResponseValidation?(response: string): ValidationResult | Promise<ValidationResult>
 }

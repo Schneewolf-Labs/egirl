@@ -132,6 +132,7 @@ export function loadConfig(): RuntimeConfig {
       model: toml.local?.model ?? defaultToml.local.model,
       contextLength: toml.local?.context_length ?? defaultToml.local.context_length,
       maxConcurrent: toml.local?.max_concurrent ?? defaultToml.local.max_concurrent,
+      staleStreamTimeoutMs: toml.local?.stale_stream_timeout_ms ?? 90000,
       ...(toml.local?.embeddings && {
         embeddings: {
           provider: toml.local.embeddings.provider ?? 'qwen3-vl',
@@ -189,6 +190,10 @@ export function loadConfig(): RuntimeConfig {
       confirmation: {
         enabled: toml.safety?.confirmation?.enabled ?? false,
         tools: toml.safety?.confirmation?.tools ?? ['execute_command', 'write_file', 'edit_file'],
+      },
+      permissionRules: {
+        allow: toml.safety?.permission_rules?.allow ?? [],
+        deny: toml.safety?.permission_rules?.deny ?? [],
       },
     },
     memory: {
