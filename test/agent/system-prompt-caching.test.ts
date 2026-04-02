@@ -1,9 +1,9 @@
 import { describe, expect, test } from 'bun:test'
+import { mkdtempSync, writeFileSync } from 'fs'
+import { tmpdir } from 'os'
+import { join } from 'path'
 import { buildSystemPrompt } from '../../src/agent/context'
 import type { RuntimeConfig } from '../../src/config'
-import { mkdtempSync, writeFileSync } from 'fs'
-import { join } from 'path'
-import { tmpdir } from 'os'
 
 function makeTempWorkspace(): string {
   const dir = mkdtempSync(join(tmpdir(), 'egirl-test-'))
@@ -190,11 +190,11 @@ describe('Anthropic cache_control integration', () => {
       { type: 'text', text: promptParts.stable, cache_control: { type: 'ephemeral' } },
     ]
     if (promptParts.volatile) {
-      blocks.push({ type: 'text', text: promptParts.volatile } as typeof blocks[0])
+      blocks.push({ type: 'text', text: promptParts.volatile } as (typeof blocks)[0])
     }
 
     expect(blocks).toHaveLength(2)
-    expect(blocks[0]!.cache_control).toEqual({ type: 'ephemeral' })
-    expect(blocks[1]!.text).toContain('Working memory')
+    expect(blocks[0]?.cache_control).toEqual({ type: 'ephemeral' })
+    expect(blocks[1]?.text).toContain('Working memory')
   })
 })

@@ -34,6 +34,7 @@ export const INJECTION_PATTERNS: RegExp[] = [
   // Hidden instruction markers
   /\[HIDDEN\]/gi,
   /<!--\s*(system|instruction|override|ignore)/gi,
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: intentional — detecting null byte injection
   /\x00/, // Null bytes used to confuse tokenizers
 ]
 

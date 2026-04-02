@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { scanForInjection, sanitizeContent } from '../../src/safety/injection-scanner'
+import { sanitizeContent, scanForInjection } from '../../src/safety/injection-scanner'
 
 describe('scanForInjection', () => {
   test('returns clean result for normal text', () => {

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import type { ChatMessage, ChatResponse, LLMProvider, ToolDefinition } from '../../src/providers/types'
+import type { ChatResponse } from '../../src/providers/types'
 
 /**
  * Tests for continuation retry logic.
@@ -129,9 +129,7 @@ describe('continuation retry detection', () => {
   })
 
   test('does not continue for empty truncated response', () => {
-    const result = simulateContinuation([
-      makeResponse({ content: '', finish_reason: 'length' }),
-    ])
+    const result = simulateContinuation([makeResponse({ content: '', finish_reason: 'length' })])
 
     expect(result.finalContent).toBe('')
     expect(result.retries).toBe(0)
@@ -177,7 +175,7 @@ describe('Anthropic stop_reason mapping', () => {
         ? 'length'
         : stopReason === 'tool_use'
           ? 'tool_calls'
-          : stopReason ?? 'stop'
+          : (stopReason ?? 'stop')
 
     expect(mapStopReason('max_tokens')).toBe('length')
     expect(mapStopReason('end_turn')).toBe('end_turn')

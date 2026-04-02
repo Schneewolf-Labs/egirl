@@ -31,7 +31,7 @@ import {
 } from './context'
 import { formatSummaryMessage, summarizeMessages } from './context-summarizer'
 import { fitToContextWindow, truncateToolResultSync } from './context-window'
-import type { AgentEventHandler, ValidationResult } from './events'
+import type { AgentEventHandler } from './events'
 import type { SessionMutex } from './session-mutex'
 import { TokenBudgetTracker } from './token-budget'
 
@@ -505,7 +505,8 @@ export class AgentLoop {
         addMessage(this.context, { role: 'assistant', content: response.content })
         addMessage(this.context, {
           role: 'user',
-          content: '[System: Your previous response was cut off. Continue exactly where you left off.]',
+          content:
+            '[System: Your previous response was cut off. Continue exactly where you left off.]',
         })
         continue
       }
@@ -520,7 +521,8 @@ export class AgentLoop {
         if (!validation.valid) {
           validationRetried = true
           const feedback =
-            validation.feedback ?? 'Your previous response did not pass validation. Please try again.'
+            validation.feedback ??
+            'Your previous response did not pass validation. Please try again.'
           log.info('agent', `Post-response validation failed: ${feedback.slice(0, 100)}`)
           addMessage(this.context, { role: 'user', content: `[Validation failed]: ${feedback}` })
           // Reset accumulated content since we're retrying from scratch
@@ -801,7 +803,14 @@ export class AgentLoop {
         ...refitResult.messages,
       ]
 
-      return await this.chatWithRetry(provider, retryMessages, tools, onToken, thinking, promptParts)
+      return await this.chatWithRetry(
+        provider,
+        retryMessages,
+        tools,
+        onToken,
+        thinking,
+        promptParts,
+      )
     }
   }
 

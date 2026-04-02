@@ -81,7 +81,10 @@ export function globToRegex(pattern: string): RegExp {
     } else if (char === '?') {
       result += '.'
       i++
-    } else if ('.+^${}()|[]\\'.includes(char as string)) {
+    } else if (
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: not a template — literal regex special chars
+      '.+^${}()|[]\\'.includes(char as string)
+    ) {
       result += `\\${char}`
       i++
     } else {
@@ -137,10 +140,7 @@ export function checkPermissionRules(
 /**
  * Parse allow/deny rule lists from config into compiled PermissionRule arrays.
  */
-export function compilePermissionRules(
-  allow: string[],
-  deny: string[],
-): PermissionRule[] {
+export function compilePermissionRules(allow: string[], deny: string[]): PermissionRule[] {
   // Deny rules are checked first (higher priority)
   const rules: PermissionRule[] = []
   for (const d of deny) {

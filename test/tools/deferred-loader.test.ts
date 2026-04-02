@@ -71,7 +71,7 @@ describe('buildDeferredIndex', () => {
     ])
 
     const index = buildDeferredIndex(tools)
-    const desc = index.entries.get('read_file')!
+    const desc = index.entries.get('read_file')
     // Should be first sentence only
     expect(desc).toBe('Read a file from disk')
   })

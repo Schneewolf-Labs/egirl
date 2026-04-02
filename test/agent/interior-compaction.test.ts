@@ -37,19 +37,13 @@ describe('interior compaction', () => {
         !m.content.startsWith('[System notice'),
     )
     expect(firstContent).toBeDefined()
-    expect(typeof firstContent!.content === 'string' && firstContent!.content).toContain(
-      'User message 0',
-    )
+    const content = firstContent?.content
+    expect(typeof content === 'string' && content).toContain('User message 0')
   })
 
   test('preserves most recent messages', async () => {
     const messages = makeConversation(15)
-    const { messages: result } = await fitToContextWindow(
-      'System prompt',
-      messages,
-      [],
-      tinyConfig,
-    )
+    const { messages: result } = await fitToContextWindow('System prompt', messages, [], tinyConfig)
 
     // Should contain the last message
     const contents = result
@@ -62,12 +56,7 @@ describe('interior compaction', () => {
 
   test('drops middle messages', async () => {
     const messages = makeConversation(15)
-    const { messages: result, droppedMessages } = await fitToContextWindow(
-      'System prompt',
-      messages,
-      [],
-      tinyConfig,
-    )
+    const { droppedMessages } = await fitToContextWindow('System prompt', messages, [], tinyConfig)
 
     // Dropped messages should be from the middle
     expect(droppedMessages.length).toBeGreaterThan(0)
@@ -84,18 +73,10 @@ describe('interior compaction', () => {
 
   test('inserts compaction notice between head and tail', async () => {
     const messages = makeConversation(15)
-    const { messages: result } = await fitToContextWindow(
-      'System prompt',
-      messages,
-      [],
-      tinyConfig,
-    )
+    const { messages: result } = await fitToContextWindow('System prompt', messages, [], tinyConfig)
 
     const noticeIdx = result.findIndex(
-      (m) =>
-        m.role === 'user' &&
-        typeof m.content === 'string' &&
-        m.content.includes('summarized'),
+      (m) => m.role === 'user' && typeof m.content === 'string' && m.content.includes('summarized'),
     )
 
     expect(noticeIdx).toBeGreaterThan(0) // After head
@@ -108,12 +89,14 @@ describe('interior compaction', () => {
       { role: 'assistant', content: 'Hi!' },
     ]
 
-    const { messages: result, wasTrimmed, droppedMessages } = await fitToContextWindow(
-      'System',
-      messages,
-      [],
-      { contextLength: 2000, reserveForOutput: 100 },
-    )
+    const {
+      messages: result,
+      wasTrimmed,
+      droppedMessages,
+    } = await fitToContextWindow('System', messages, [], {
+      contextLength: 2000,
+      reserveForOutput: 100,
+    })
 
     expect(wasTrimmed).toBe(false)
     expect(droppedMessages).toHaveLength(0)
@@ -134,12 +117,10 @@ describe('interior compaction', () => {
       { role: 'assistant', content: 'You are welcome!' },
     ]
 
-    const { messages: result } = await fitToContextWindow(
-      'System',
-      messages,
-      [],
-      { contextLength: 2000, reserveForOutput: 100 },
-    )
+    const { messages: result } = await fitToContextWindow('System', messages, [], {
+      contextLength: 2000,
+      reserveForOutput: 100,
+    })
 
     // Tool call and result should be kept together
     const hasToolCall = result.some((m) => m.tool_calls && m.tool_calls.length > 0)
@@ -160,12 +141,10 @@ describe('interior compaction', () => {
       { role: 'assistant', content: 'Short response' },
     ]
 
-    const { messages: result } = await fitToContextWindow(
-      'System',
-      messages,
-      [],
-      { contextLength: 300, reserveForOutput: 50 },
-    )
+    const { messages: result } = await fitToContextWindow('System', messages, [], {
+      contextLength: 300,
+      reserveForOutput: 50,
+    })
 
     // Large first message may be dropped if it exceeds 30% budget
     // The test verifies that we don't crash and still return valid messages

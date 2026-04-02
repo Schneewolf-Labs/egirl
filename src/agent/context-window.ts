@@ -376,7 +376,8 @@ export async function fitToContextWindow(
       `Interior compaction: dropped ${droppedCount} middle messages, kept ${headGroupCount > 0 ? 'head + ' : ''}${tailGroups.length} tail groups`,
     )
     // Insert truncation notice between head and tail
-    const insertIdx = headGroupCount > 0 ? (groups[0]?.endIdx ?? 0) - (groups[0]?.startIdx ?? 0) + 1 : 0
+    const insertIdx =
+      headGroupCount > 0 ? (groups[0]?.endIdx ?? 0) - (groups[0]?.startIdx ?? 0) + 1 : 0
     result.splice(insertIdx, 0, {
       role: 'user',
       content: `[System notice: ${droppedCount} middle messages were summarized to fit context window. See conversation summary for details.]`,

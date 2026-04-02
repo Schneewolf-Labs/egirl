@@ -1,10 +1,9 @@
 import { describe, expect, test } from 'bun:test'
 import {
-  parseRule,
-  globToRegex,
   checkPermissionRules,
   compilePermissionRules,
-  type PermissionRule,
+  globToRegex,
+  parseRule,
 } from '../../src/safety/permission-rules'
 
 describe('globToRegex', () => {
@@ -66,8 +65,8 @@ describe('parseRule', () => {
     expect(rule.action).toBe('allow')
     expect(rule.tool).toBe('execute_command')
     expect(rule.argPattern).toBe('git *')
-    expect(rule._argRegex!.test('git status')).toBe(true)
-    expect(rule._argRegex!.test('rm -rf /')).toBe(false)
+    expect(rule._argRegex?.test('git status')).toBe(true)
+    expect(rule._argRegex?.test('rm -rf /')).toBe(false)
   })
 
   test('parses wildcard tool', () => {
@@ -78,8 +77,8 @@ describe('parseRule', () => {
 
   test('parses path patterns in args', () => {
     const rule = parseRule('read_file(/home/**)', 'allow')
-    expect(rule._argRegex!.test('/home/user/file.ts')).toBe(true)
-    expect(rule._argRegex!.test('/etc/passwd')).toBe(false)
+    expect(rule._argRegex?.test('/home/user/file.ts')).toBe(true)
+    expect(rule._argRegex?.test('/etc/passwd')).toBe(false)
   })
 })
 
@@ -91,19 +90,13 @@ describe('checkPermissionRules', () => {
   })
 
   test('allows matching allow rule', () => {
-    const rules = compilePermissionRules(
-      ['execute_command(git *)'],
-      [],
-    )
+    const rules = compilePermissionRules(['execute_command(git *)'], [])
     const result = checkPermissionRules('execute_command', { command: 'git status' }, rules)
     expect(result).toBe('allow')
   })
 
   test('denies matching deny rule', () => {
-    const rules = compilePermissionRules(
-      [],
-      ['execute_command(rm **)'],
-    )
+    const rules = compilePermissionRules([], ['execute_command(rm **)'])
     const result = checkPermissionRules('execute_command', { command: 'rm -rf /tmp/foo' }, rules)
     expect(result).toBe('deny')
   })
@@ -118,46 +111,31 @@ describe('checkPermissionRules', () => {
   })
 
   test('allows when deny does not match but allow does', () => {
-    const rules = compilePermissionRules(
-      ['execute_command(git **)'],
-      ['execute_command(rm **)'],
-    )
+    const rules = compilePermissionRules(['execute_command(git **)'], ['execute_command(rm **)'])
     const result = checkPermissionRules('execute_command', { command: 'git push' }, rules)
     expect(result).toBe('allow')
   })
 
   test('matches tool name without arg pattern', () => {
-    const rules = compilePermissionRules(
-      ['read_file'],
-      [],
-    )
+    const rules = compilePermissionRules(['read_file'], [])
     const result = checkPermissionRules('read_file', { path: '/any/path' }, rules)
     expect(result).toBe('allow')
   })
 
   test('does not match wrong tool', () => {
-    const rules = compilePermissionRules(
-      ['read_file'],
-      [],
-    )
+    const rules = compilePermissionRules(['read_file'], [])
     const result = checkPermissionRules('write_file', { path: '/any/path' }, rules)
     expect(result).toBeUndefined()
   })
 
   test('wildcard tool matches any tool', () => {
-    const rules = compilePermissionRules(
-      [],
-      ['*'],
-    )
+    const rules = compilePermissionRules([], ['*'])
     expect(checkPermissionRules('read_file', {}, rules)).toBe('deny')
     expect(checkPermissionRules('execute_command', {}, rules)).toBe('deny')
   })
 
   test('path-based allow/deny works with read_file', () => {
-    const rules = compilePermissionRules(
-      ['read_file(/home/**)'],
-      ['read_file(/etc/**)'],
-    )
+    const rules = compilePermissionRules(['read_file(/home/**)'], ['read_file(/etc/**)'])
 
     expect(checkPermissionRules('read_file', { path: '/home/user/code.ts' }, rules)).toBe('allow')
     expect(checkPermissionRules('read_file', { path: '/etc/passwd' }, rules)).toBe('deny')
@@ -165,29 +143,20 @@ describe('checkPermissionRules', () => {
   })
 
   test('uses primary arg heuristic for different arg names', () => {
-    const rules = compilePermissionRules(
-      ['web_research(*)'],
-      [],
-    )
+    const rules = compilePermissionRules(['web_research(*)'], [])
     // web_research uses 'query' as its arg
     const result = checkPermissionRules('web_research', { query: 'how to code' }, rules)
     expect(result).toBe('allow')
   })
 
   test('falls back to first string arg', () => {
-    const rules = compilePermissionRules(
-      ['custom_tool(hello *)'],
-      [],
-    )
+    const rules = compilePermissionRules(['custom_tool(hello *)'], [])
     const result = checkPermissionRules('custom_tool', { data: 'hello world' }, rules)
     expect(result).toBe('allow')
   })
 
   test('handles empty args gracefully', () => {
-    const rules = compilePermissionRules(
-      ['read_file(/home/**)'],
-      [],
-    )
+    const rules = compilePermissionRules(['read_file(/home/**)'], [])
     // Tool matches but no arg to check, so arg pattern can't match
     const result = checkPermissionRules('read_file', {}, rules)
     expect(result).toBeUndefined()
@@ -196,13 +165,10 @@ describe('checkPermissionRules', () => {
 
 describe('compilePermissionRules', () => {
   test('compiles deny rules before allow rules', () => {
-    const rules = compilePermissionRules(
-      ['execute_command(git **)'],
-      ['execute_command(rm **)'],
-    )
+    const rules = compilePermissionRules(['execute_command(git **)'], ['execute_command(rm **)'])
     // First 1 rules should be deny, last 1 should be allow
-    expect(rules[0]!.action).toBe('deny')
-    expect(rules[1]!.action).toBe('allow')
+    expect(rules[0]?.action).toBe('deny')
+    expect(rules[1]?.action).toBe('allow')
   })
 
   test('handles empty arrays', () => {
@@ -217,10 +183,10 @@ describe('compilePermissionRules', () => {
     )
     expect(rules).toHaveLength(4)
     // Deny rules first
-    expect(rules[0]!.action).toBe('deny')
-    expect(rules[1]!.action).toBe('deny')
+    expect(rules[0]?.action).toBe('deny')
+    expect(rules[1]?.action).toBe('deny')
     // Then allow rules
-    expect(rules[2]!.action).toBe('allow')
-    expect(rules[3]!.action).toBe('allow')
+    expect(rules[2]?.action).toBe('allow')
+    expect(rules[3]?.action).toBe('allow')
   })
 })

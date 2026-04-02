@@ -22,7 +22,7 @@ function simulateValidation(
   let responseIdx = 0
 
   while (responseIdx < responses.length) {
-    const response = responses[responseIdx]!
+    const response = responses[responseIdx] as SimResponse
     turns++
     responseIdx++
 

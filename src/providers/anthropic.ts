@@ -32,7 +32,7 @@ export class AnthropicProvider implements LLMProvider {
     // The stable prefix gets cache_control: ephemeral so Anthropic's prefix caching
     // can reuse it across turns (up to ~75% input cost reduction).
     let systemParam: string | Anthropic.Messages.TextBlockParam[] | undefined
-    if (req.systemPromptParts && req.systemPromptParts.stable) {
+    if (req.systemPromptParts?.stable) {
       const blocks: Anthropic.Messages.TextBlockParam[] = [
         {
           type: 'text',
@@ -118,7 +118,7 @@ export class AnthropicProvider implements LLMProvider {
         ? 'length'
         : response.stop_reason === 'tool_use'
           ? 'tool_calls'
-          : response.stop_reason ?? 'stop'
+          : (response.stop_reason ?? 'stop')
 
     return {
       content,

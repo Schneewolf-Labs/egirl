@@ -1,7 +1,7 @@
 import { type AuditEntry, appendAuditLog } from './audit-log'
 import { buildCommandFilterConfig, type CommandFilterConfig, checkCommand } from './command-filter'
 import { getDefaultSensitivePatterns, isPathAllowed, isSensitivePath } from './path-guard'
-import { type PermissionRule, checkPermissionRules } from './permission-rules'
+import { checkPermissionRules, type PermissionRule } from './permission-rules'
 
 export type { AuditEntry, AuditMemoryEntry } from './audit-log'
 export { appendAuditLog, auditMemoryOperation } from './audit-log'
@@ -10,14 +10,14 @@ export {
   type CommandFilterConfig,
   compilePatterns,
 } from './command-filter'
+export { type ScanResult, sanitizeContent, scanForInjection } from './injection-scanner'
 export { getDefaultSensitivePatterns } from './path-guard'
-export { scanForInjection, sanitizeContent, type ScanResult } from './injection-scanner'
 export {
+  checkPermissionRules,
+  compilePermissionRules,
+  globToRegex,
   type PermissionRule,
   parseRule,
-  compilePermissionRules,
-  checkPermissionRules,
-  globToRegex,
 } from './permission-rules'
 
 export interface SafetyConfig {
