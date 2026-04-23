@@ -241,6 +241,7 @@ export function loadConfig(): RuntimeConfig {
       tasks: toml.tools?.tasks ?? false,
       codeAgent: toml.tools?.code_agent ?? false,
       webResearch: toml.tools?.web_research ?? true,
+      webSearch: toml.tools?.web_search ?? true,
       screenshot: toml.tools?.screenshot ?? true,
     },
     skills: {
@@ -328,6 +329,15 @@ export function loadConfig(): RuntimeConfig {
       token: githubToken,
       defaultOwner: toml.github?.default_owner,
       defaultRepo: toml.github?.default_repo,
+    }
+  }
+
+  // SearxNG (web search backend)
+  if (toml.searxng?.url) {
+    const searxngApiKey = process.env.SEARXNG_API_KEY
+    config.searxng = {
+      url: toml.searxng.url,
+      ...(searxngApiKey && { apiKey: searxngApiKey }),
     }
   }
 
