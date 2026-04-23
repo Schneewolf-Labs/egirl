@@ -3,7 +3,7 @@ import { formatInterval, parseInterval } from '../../tasks/parse-interval'
 import type { TaskRunner } from '../../tasks/runner'
 import { parseBusinessHours } from '../../tasks/schedule'
 import type { TaskStore } from '../../tasks/store'
-import type { EventSourceType, NewTask, TaskKind, TaskNotify } from '../../tasks/types'
+import type { NewTask, TaskKind, TaskNotify } from '../../tasks/types'
 import type { Tool, ToolResult } from '../types'
 
 interface TaskToolContext {
@@ -35,7 +35,6 @@ Schedule types:
 - interval: "30m", "2h", "1d" (simple repeating)
 - cron: "0 9 * * MON-FRI" (weekdays at 9am), "*/15 * * * *" (every 15 min)
 - time: "09:00", "17:30 Mon-Fri" (daily/weekly at specific time)
-- event: triggered by file changes, GitHub events, commands, or webhooks
 - oneshot: runs once immediately
 
 Options:
@@ -50,7 +49,7 @@ Options:
           },
           description: { type: 'string', description: 'What this task does' },
           prompt: { type: 'string', description: 'The agent prompt to execute each run' },
-          kind: { type: 'string', description: 'Task type: scheduled, event, or oneshot' },
+          kind: { type: 'string', description: 'Task type: scheduled or oneshot' },
           interval: {
             type: 'string',
             description: 'Run interval: "30m", "2h", "1d" (scheduled only)',
@@ -68,15 +67,6 @@ Options:
           depends_on: {
             type: 'string',
             description: 'Task ID this task depends on — runs after that task completes',
-          },
-          event_source: {
-            type: 'string',
-            description: 'Event source: file, webhook, github, command (event only)',
-          },
-          event_config: { type: 'object', description: 'Source-specific config (event only)' },
-          workflow: {
-            type: 'object',
-            description: 'Workflow definition for deterministic execution (optional)',
           },
           notify: {
             type: 'string',
@@ -96,10 +86,10 @@ Options:
 
     async execute(params: Record<string, unknown>): Promise<ToolResult> {
       const kind = params.kind as TaskKind
-      if (!['scheduled', 'event', 'oneshot'].includes(kind)) {
+      if (!['scheduled', 'oneshot'].includes(kind)) {
         return {
           success: false,
-          output: `Invalid kind: ${kind}. Must be scheduled, event, or oneshot.`,
+          output: `Invalid kind: ${kind}. Must be scheduled or oneshot.`,
         }
       }
 
@@ -145,13 +135,6 @@ Options:
         }
       }
 
-      if (kind === 'event' && !params.event_source) {
-        return {
-          success: false,
-          output: 'Event tasks require event_source (file, webhook, github, command).',
-        }
-      }
-
       // Validate business_hours
       const businessHoursStr = params.business_hours as string | undefined
       if (businessHoursStr) {
@@ -183,9 +166,6 @@ Options:
         cronExpression,
         businessHours: businessHoursStr,
         dependsOn,
-        eventSource: params.event_source as EventSourceType | undefined,
-        eventConfig: params.event_config,
-        workflow: params.workflow,
         notify: (params.notify as TaskNotify) ?? 'on_change',
         maxRuns: params.max_runs as number | undefined,
         memoryContext: params.memory_context as string[] | undefined,
@@ -208,7 +188,6 @@ Options:
         }
         if (businessHoursStr) parts.push(`Business hours: ${businessHoursStr}`)
         if (dependsOn) parts.push(`Depends on: ${dependsOn}`)
-        if (task.eventSource) parts.push(`Event source: ${task.eventSource}`)
         if (task.maxRuns) parts.push(`Max runs: ${task.maxRuns}`)
         parts.push(`Notify: ${task.notify}`)
         parts.push('Status: active')
@@ -232,13 +211,11 @@ Options:
           name: { type: 'string', description: 'Short identifier for the task' },
           description: { type: 'string', description: 'What this task does' },
           prompt: { type: 'string', description: 'The agent prompt to execute each run' },
-          kind: { type: 'string', description: 'Task type: scheduled, event, or oneshot' },
+          kind: { type: 'string', description: 'Task type: scheduled or oneshot' },
           interval: { type: 'string', description: 'Run interval (scheduled only)' },
           cron: { type: 'string', description: 'Cron expression or time (scheduled only)' },
           business_hours: { type: 'string', description: 'Business hours constraint' },
           depends_on: { type: 'string', description: 'Task ID dependency' },
-          event_source: { type: 'string', description: 'Event source type (event only)' },
-          event_config: { type: 'object', description: 'Source-specific config (event only)' },
           notify: { type: 'string', description: 'Notification mode (default: on_change)' },
           max_runs: { type: 'number', description: 'Maximum number of runs' },
           reason: { type: 'string', description: 'Why you think this task would be useful' },
@@ -285,8 +262,6 @@ Options:
         cronExpression,
         businessHours: params.business_hours as string | undefined,
         dependsOn: params.depends_on as string | undefined,
-        eventSource: params.event_source as EventSourceType | undefined,
-        eventConfig: params.event_config,
         notify: (params.notify as TaskNotify) ?? 'on_change',
         maxRuns: params.max_runs as number | undefined,
         channel: ctx.channel,
@@ -350,9 +325,6 @@ Options:
           const dep = store.get(t.dependsOn)
           parts.push(`  Depends on: ${dep ? dep.name : t.dependsOn}`)
         }
-        if (t.kind === 'event' && t.eventSource) {
-          parts.push(`  Event: ${t.eventSource}`)
-        }
         parts.push(`  Runs: ${t.runCount}${t.maxRuns ? `/${t.maxRuns}` : ''} | Notify: ${t.notify}`)
         if (t.consecutiveFailures > 0) {
           parts.push(
@@ -391,7 +363,6 @@ Options:
         return { success: false, output: `Task ${id} is not active (status: ${task.status}).` }
 
       store.update(id, { status: 'paused' })
-      runner.deactivateTask(id)
       return { success: true, output: `Paused task "${task.name}" (${id}).` }
     },
   }
@@ -443,7 +414,6 @@ Options:
       const task = store.get(id)
       if (!task) return { success: false, output: `Task ${id} not found.` }
 
-      runner.deactivateTask(id)
       store.delete(id)
       return { success: true, output: `Cancelled task "${task.name}" (${id}).` }
     },

@@ -14,4 +14,3 @@ export {
   type ReactionHandler,
 } from './discord'
 export type { Channel, ChannelFactory } from './types'
-export { createXMPPChannel, XMPPChannel, type XMPPConfig } from './xmpp'

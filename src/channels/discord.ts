@@ -304,10 +304,7 @@ export class DiscordChannel implements Channel {
       // Send response (split if too long)
       await this.sendResponse(message, fullResponse)
 
-      log.debug(
-        'discord',
-        `[${sessionKey}] Responded via ${response.provider}${response.escalated ? ' (escalated)' : ''}`,
-      )
+      log.debug('discord', `[${sessionKey}] Responded via ${response.provider}`)
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error)
       log.error('discord', `Error processing message:`, error)

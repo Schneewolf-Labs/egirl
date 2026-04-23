@@ -19,7 +19,7 @@ export async function runDiscord(config: RuntimeConfig, args: string[]): Promise
     process.exit(1)
   }
 
-  const { providers, memory, conversations, taskStore, router, toolExecutor, transcript, skills } =
+  const { providers, memory, conversations, taskStore, toolExecutor, transcript, skills } =
     await createAppServices(config)
 
   // Gather workspace standup for agent context
@@ -32,11 +32,8 @@ export async function runDiscord(config: RuntimeConfig, args: string[]): Promise
   const agentFactory: AgentFactory = (sessionId: string) =>
     createAgentLoop({
       config,
-      router,
       toolExecutor,
       localProvider: providers.local,
-      remoteProvider: providers.remote,
-      providers,
       sessionId,
       memory,
       conversationStore: conversations,
@@ -61,9 +58,7 @@ export async function runDiscord(config: RuntimeConfig, args: string[]): Promise
       tasksConfig: config.tasks,
       store: taskStore,
       toolExecutor,
-      router,
       localProvider: providers.local,
-      remoteProvider: providers.remote,
       memory,
       transcript,
       outbound,
@@ -115,7 +110,6 @@ export async function runDiscord(config: RuntimeConfig, args: string[]): Promise
         store: taskStore,
         runner: taskRunner,
         toolExecutor,
-        router,
         localProvider: providers.local,
         memory,
         transcript,

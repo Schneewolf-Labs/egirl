@@ -4,7 +4,6 @@ import type { RuntimeConfig } from '../config'
 import type { MemoryManager } from '../memory'
 import { retrieveForContext } from '../memory/retrieval'
 import type { LLMProvider } from '../providers/types'
-import type { Router } from '../routing'
 import { gatherStandup } from '../standup'
 import type { ToolExecutor } from '../tools'
 import type { TranscriptLogger } from '../tracking/transcript'
@@ -39,7 +38,6 @@ export interface DiscoveryDeps {
   store: TaskStore
   runner: TaskRunner
   toolExecutor: ToolExecutor
-  router: Router
   localProvider: LLMProvider
   memory: MemoryManager | undefined
   transcript?: TranscriptLogger
@@ -122,13 +120,10 @@ export class Discovery {
         if (recalled) contextParts.push(recalled)
       }
 
-      // Create a scoped agent loop — always local
       const agentDeps: AgentLoopDeps = {
         config: this.deps.config,
-        router: this.deps.router,
         toolExecutor: this.deps.toolExecutor,
         localProvider: this.deps.localProvider,
-        remoteProvider: null, // Force local only
         sessionId: 'discovery',
         memory: this.deps.memory,
         transcript: this.deps.transcript,

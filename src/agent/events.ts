@@ -1,6 +1,4 @@
 import type { ToolCall } from '../providers/types'
-import type { RoutingDecision } from '../routing'
-import type { EscalationDecision } from '../routing/escalation'
 import type { ToolResult } from '../tools/types'
 import type { BudgetLevel, BudgetStatus } from './token-budget'
 
@@ -34,10 +32,6 @@ export interface AgentEventHandler {
   onResponseComplete?(): void
   /** Called when an error occurs during agent processing */
   onError?(error: Error): void
-  /** Called when routing decides which provider to use */
-  onRoutingDecision?(decision: RoutingDecision): void
-  /** Called when the agent escalates from local to remote */
-  onEscalation?(decision: EscalationDecision, from: string, to: string): void
   /** Called before a single tool is executed. Return false to skip execution */
   onBeforeToolExec?(call: ToolCall): boolean | Promise<boolean>
   /** Called after a single tool finishes executing */

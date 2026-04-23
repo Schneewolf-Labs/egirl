@@ -1,13 +1,10 @@
 import type { TaskErrorKind } from './error-classify'
 
-export type TaskKind = 'scheduled' | 'event' | 'oneshot'
+export type TaskKind = 'scheduled' | 'oneshot'
 export type TaskStatus = 'proposed' | 'active' | 'paused' | 'done' | 'failed'
 export type TaskNotify = 'always' | 'on_change' | 'on_failure' | 'never'
-export type EventSourceType = 'file' | 'webhook' | 'github' | 'command'
 export type RunStatus = 'running' | 'success' | 'failure' | 'skipped'
 export type ProposalStatus = 'pending' | 'approved' | 'rejected'
-
-export type TriggerMode = 'execute' | 'create_task'
 
 export interface Task {
   id: string
@@ -16,16 +13,12 @@ export interface Task {
   kind: TaskKind
   status: TaskStatus
   prompt: string
-  workflow: unknown | undefined
   memoryContext: string[] | undefined
   memoryCategory: string | undefined
   intervalMs: number | undefined
   cronExpression: string | undefined
   businessHours: string | undefined
   dependsOn: string | undefined
-  eventSource: EventSourceType | undefined
-  eventConfig: unknown | undefined
-  triggerMode: TriggerMode
   persistConversation: boolean
   nextRunAt: number | undefined
   lastRunAt: number | undefined
@@ -47,16 +40,12 @@ export interface NewTask {
   description: string
   kind: TaskKind
   prompt: string
-  workflow?: unknown
   memoryContext?: string[]
   memoryCategory?: string
   intervalMs?: number
   cronExpression?: string
   businessHours?: string
   dependsOn?: string
-  eventSource?: EventSourceType
-  eventConfig?: unknown
-  triggerMode?: TriggerMode
   persistConversation?: boolean
   maxRuns?: number
   notify?: TaskNotify
@@ -74,7 +63,6 @@ export interface TaskRun {
   result: string | undefined
   error: string | undefined
   errorKind: TaskErrorKind | undefined
-  triggerInfo: unknown | undefined
   tokensUsed: number
 }
 
@@ -101,17 +89,6 @@ export interface TaskFilter {
   status?: TaskStatus
   kind?: TaskKind
   channel?: string
-}
-
-export interface EventPayload {
-  source: EventSourceType
-  summary: string
-  data: unknown
-}
-
-export interface EventSource {
-  start(onTrigger: (payload: EventPayload) => void): void
-  stop(): void
 }
 
 export interface TaskTransition {

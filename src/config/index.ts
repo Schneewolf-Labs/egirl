@@ -7,39 +7,6 @@ import type { EgirlConfig, RuntimeConfig, ThinkingLevel } from './schema'
 
 export type { EgirlConfig, RuntimeConfig, ThinkingLevel } from './schema'
 
-function getDomain(service: string): string {
-  try {
-    const url = new URL(service)
-    return url.hostname
-  } catch {
-    // Fallback: strip protocol and port
-    return (
-      service
-        .replace(/^[a-z]+:\/\//, '')
-        .split(':')[0]
-        ?.split('/')[0] ?? service
-    )
-  }
-}
-
-/**
- * Collect API keys from environment variables.
- * Looks for BASE_KEY, BASE_KEY_2, BASE_KEY_3, etc.
- */
-function collectApiKeys(baseEnvVar: string): string[] {
-  const keys: string[] = []
-  const primary = process.env[baseEnvVar]
-  if (primary) keys.push(primary)
-
-  // Check for numbered variants: _2, _3, ..., _10
-  for (let i = 2; i <= 10; i++) {
-    const key = process.env[`${baseEnvVar}_${i}`]
-    if (key) keys.push(key)
-  }
-
-  return keys
-}
-
 function expandPath(path: string, workspaceDir?: string): string {
   let result = path.replace(/^~/, homedir())
 
@@ -77,12 +44,6 @@ const defaultToml: EgirlConfig = {
     context_length: 32768,
     max_concurrent: 2,
   },
-  routing: {
-    default: 'local',
-    escalation_threshold: 0.4,
-    always_local: ['memory_search', 'memory_get', 'greeting', 'acknowledgment'],
-    always_remote: ['code_generation', 'code_review', 'complex_reasoning'],
-  },
   conversation: {
     enabled: true,
     max_age_days: 30,
@@ -96,19 +57,15 @@ const defaultToml: EgirlConfig = {
 }
 
 export function loadConfig(): RuntimeConfig {
-  // Load TOML config
   const configPath = findConfigFile()
   const toml: EgirlConfig = configPath ? loadTomlConfig(configPath) : defaultToml
 
-  // Resolve workspace path first (needed for other path expansions)
   const workspacePath = expandPath(toml.workspace?.path ?? defaultToml.workspace.path)
 
-  // Create workspace directory if it doesn't exist
   if (!existsSync(workspacePath)) {
     mkdirSync(workspacePath, { recursive: true })
   }
 
-  // Activate theme early so all subsequent output is themed
   const themeName = toml.theme ?? 'egirl'
   try {
     setTheme(themeName)
@@ -116,7 +73,6 @@ export function loadConfig(): RuntimeConfig {
     // Falls back to default 'egirl' theme
   }
 
-  // Build runtime config with snake_case from TOML mapped to camelCase
   const config: RuntimeConfig = {
     theme: themeName,
     thinking: {
@@ -144,16 +100,6 @@ export function loadConfig(): RuntimeConfig {
           baseUrl: toml.local.embeddings.base_url,
         },
       }),
-    },
-    remote: {},
-    routing: {
-      disabled: toml.routing?.disabled ?? false,
-      default: toml.routing?.default ?? defaultToml.routing.default,
-      escalationThreshold:
-        toml.routing?.escalation_threshold ?? defaultToml.routing.escalation_threshold,
-      alwaysLocal: toml.routing?.always_local ?? defaultToml.routing.always_local,
-      alwaysRemote: toml.routing?.always_remote ?? defaultToml.routing.always_remote,
-      models: ((toml.routing as Record<string, unknown>)?.models as Record<string, string[]>) ?? {},
     },
     conversation: {
       enabled: toml.conversation?.enabled ?? true,
@@ -249,30 +195,7 @@ export function loadConfig(): RuntimeConfig {
     },
   }
 
-  // Load secrets from environment
-  // Supports multiple keys: ANTHROPIC_API_KEY, ANTHROPIC_API_KEY_2, ANTHROPIC_API_KEY_3, etc.
-  const anthropicKeys = collectApiKeys('ANTHROPIC_API_KEY')
-  const openaiKeys = collectApiKeys('OPENAI_API_KEY')
   const discordToken = process.env.DISCORD_TOKEN
-
-  if (anthropicKeys.length > 0) {
-    const primaryKey = anthropicKeys[0] ?? ''
-    config.remote.anthropic = {
-      apiKey: primaryKey,
-      apiKeys: anthropicKeys,
-      model: process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-4-20250514',
-    }
-  }
-
-  if (openaiKeys.length > 0) {
-    const primaryKey = openaiKeys[0] ?? ''
-    config.remote.openai = {
-      apiKey: primaryKey,
-      apiKeys: openaiKeys,
-      model: process.env.OPENAI_MODEL ?? 'gpt-4o',
-      ...(process.env.OPENAI_BASE_URL && { baseUrl: process.env.OPENAI_BASE_URL }),
-    }
-  }
 
   if (discordToken && toml.channels?.discord) {
     config.channels.discord = {
@@ -294,35 +217,6 @@ export function loadConfig(): RuntimeConfig {
     }
   }
 
-  const xmppUsername = process.env.XMPP_USERNAME
-  const xmppPassword = process.env.XMPP_PASSWORD
-
-  if (xmppUsername && xmppPassword && toml.channels?.xmpp) {
-    const xmppConf = toml.channels.xmpp
-    const service = xmppConf.service ?? 'xmpp://localhost:5222'
-    config.channels.xmpp = {
-      service,
-      domain: xmppConf.domain ?? getDomain(service),
-      username: xmppUsername,
-      password: xmppPassword,
-      resource: xmppConf.resource,
-      allowedJids: xmppConf.allowed_jids ?? [],
-    }
-  }
-
-  if (toml.channels?.api) {
-    const egirlApiKey = process.env.EGIRL_API_KEY
-    config.channels.api = {
-      port: toml.channels.api.port ?? 3000,
-      host: toml.channels.api.host ?? '127.0.0.1',
-      ...(egirlApiKey && { apiKey: egirlApiKey }),
-      rateLimit: toml.channels.api.rate_limit ?? 30,
-      maxRequestBytes: toml.channels.api.max_request_bytes ?? 65536,
-      corsOrigins: toml.channels.api.cors_origins ?? [],
-    }
-  }
-
-  // GitHub integration
   const githubToken = process.env.GITHUB_TOKEN
   if (githubToken) {
     config.github = {
@@ -332,7 +226,6 @@ export function loadConfig(): RuntimeConfig {
     }
   }
 
-  // SearxNG (web search backend)
   if (toml.searxng?.url) {
     const searxngApiKey = process.env.SEARXNG_API_KEY
     config.searxng = {

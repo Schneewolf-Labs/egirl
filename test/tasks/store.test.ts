@@ -144,20 +144,6 @@ describe('TaskStore', () => {
     expect(store.get(task.id)?.cronExpression).toBe('0 9 * * *')
   })
 
-  test('stores triggerMode', () => {
-    const task = store.create(makeTask({ kind: 'event', triggerMode: 'create_task' }))
-    const fetched = store.get(task.id)
-    expect(fetched).toBeDefined()
-    expect(fetched?.triggerMode).toBe('create_task')
-  })
-
-  test('triggerMode defaults to execute', () => {
-    const task = store.create(makeTask())
-    const fetched = store.get(task.id)
-    expect(fetched).toBeDefined()
-    expect(fetched?.triggerMode).toBe('execute')
-  })
-
   test('records initial transition on create', () => {
     const task = store.create(makeTask())
     const transitions = store.getTransitions(task.id)

@@ -43,19 +43,6 @@ export const EgirlConfigSchema = Type.Object({
     ),
   }),
 
-  routing: Type.Object({
-    disabled: Type.Optional(Type.Boolean({ default: false })),
-    default: Type.Union([Type.Literal('local'), Type.Literal('remote')], { default: 'local' }),
-    escalation_threshold: Type.Number({ default: 0.4 }),
-    always_local: Type.Array(Type.String(), {
-      default: ['memory_search', 'memory_get', 'greeting', 'acknowledgment'],
-    }),
-    always_remote: Type.Array(Type.String(), {
-      default: ['code_generation', 'code_review', 'complex_reasoning'],
-    }),
-    models: Type.Optional(Type.Record(Type.String(), Type.Array(Type.String()))),
-  }),
-
   channels: Type.Optional(
     Type.Object({
       discord: Type.Optional(
@@ -80,23 +67,6 @@ export const EgirlConfigSchema = Type.Object({
           model: Type.Optional(Type.String()),
           working_dir: Type.Optional(Type.String()),
           max_turns: Type.Optional(Type.Number()),
-        }),
-      ),
-      xmpp: Type.Optional(
-        Type.Object({
-          service: Type.String({ default: 'xmpp://localhost:5222' }),
-          domain: Type.Optional(Type.String()),
-          resource: Type.Optional(Type.String()),
-          allowed_jids: Type.Array(Type.String(), { default: [] }),
-        }),
-      ),
-      api: Type.Optional(
-        Type.Object({
-          port: Type.Number({ default: 3000 }),
-          host: Type.String({ default: '127.0.0.1' }),
-          rate_limit: Type.Optional(Type.Number({ default: 30 })),
-          max_request_bytes: Type.Optional(Type.Number({ default: 65536 })),
-          cors_origins: Type.Optional(Type.Array(Type.String())),
         }),
       ),
     }),
@@ -268,27 +238,6 @@ export interface RuntimeConfig {
       baseUrl?: string
     }
   }
-  remote: {
-    anthropic?: {
-      apiKey: string
-      apiKeys: string[]
-      model: string
-    }
-    openai?: {
-      apiKey: string
-      apiKeys: string[]
-      model: string
-      baseUrl?: string
-    }
-  }
-  routing: {
-    disabled: boolean
-    default: 'local' | 'remote'
-    escalationThreshold: number
-    alwaysLocal: string[]
-    alwaysRemote: string[]
-    models: Record<string, string[]>
-  }
   channels: {
     discord?: {
       token: string
@@ -302,22 +251,6 @@ export interface RuntimeConfig {
       model?: string
       workingDir: string
       maxTurns?: number
-    }
-    xmpp?: {
-      service: string
-      domain: string
-      username: string
-      password: string
-      resource?: string
-      allowedJids: string[]
-    }
-    api?: {
-      port: number
-      host: string
-      apiKey?: string
-      rateLimit: number
-      maxRequestBytes: number
-      corsOrigins: string[]
     }
   }
   conversation: {

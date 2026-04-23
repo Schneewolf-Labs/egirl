@@ -251,12 +251,7 @@ export class CLIChannel implements Channel {
           console.log(`\n${c.secondary}egirl>${RESET} ${response.content}\n`)
         }
 
-        // Show routing info
-        const routingInfo = response.escalated
-          ? `[escalated to ${response.provider}]`
-          : `[${response.provider}]`
-
-        log.debug('cli', routingInfo)
+        log.debug('cli', `[${response.provider}]`)
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
         console.error(`\n${c.error}Error:${RESET} ${message}\n`)
@@ -419,8 +414,6 @@ export class CLIChannel implements Channel {
   private handleDebugCommand(): void {
     const c = colors()
     const ctx = this.agent.getContext()
-    const cfg = (this.agent as unknown as { config: import('../config').RuntimeConfig }).config
-    const routing = cfg?.routing
 
     console.log(`\n${c.primary}Debug Info${RESET}\n`)
 
@@ -428,17 +421,6 @@ export class CLIChannel implements Channel {
     console.log(`${DIM}  id:       ${ctx.sessionId}${RESET}`)
     console.log(`${DIM}  messages: ${ctx.messages.length}${RESET}`)
     console.log(`${DIM}  prompt:   ${ctx.systemPrompt.length} chars${RESET}`)
-
-    if (routing) {
-      console.log(`\n${c.accent}Routing${RESET}`)
-      console.log(`${DIM}  disabled: ${routing.disabled}${RESET}`)
-      console.log(`${DIM}  default:  ${routing.default}${RESET}`)
-      if (!routing.disabled) {
-        console.log(`${DIM}  threshold: ${routing.escalationThreshold}${RESET}`)
-        console.log(`${DIM}  always_local: ${routing.alwaysLocal.join(', ')}${RESET}`)
-        console.log(`${DIM}  always_remote: ${routing.alwaysRemote.join(', ') || '(none)'}${RESET}`)
-      }
-    }
 
     console.log(`\n${c.accent}Messages${RESET}`)
     for (const [i, msg] of ctx.messages.entries()) {
