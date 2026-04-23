@@ -5,6 +5,7 @@ export {
   createGitHubTools,
   createMemoryTools,
   createTaskTools,
+  createWebSearchTool,
   editTool,
   execTool,
   type GitHubConfig,
@@ -16,6 +17,7 @@ export {
   globTool,
   readTool,
   screenshotTool,
+  type WebSearchConfig,
   webResearchTool,
   writeTool,
 } from './builtin'
@@ -47,6 +49,7 @@ import {
   createCodeAgentTool,
   createGitHubTools,
   createMemoryTools,
+  createWebSearchTool,
   editTool,
   execTool,
   type GitHubConfig,
@@ -122,6 +125,16 @@ export function createDefaultToolExecutor(
   // Web research
   if (t.webResearch) {
     executor.register(webResearchTool)
+  }
+
+  // Web search (available if searxng is configured)
+  if (t.webSearch && config.searxng) {
+    executor.register(
+      createWebSearchTool({
+        url: config.searxng.url,
+        apiKey: config.searxng.apiKey,
+      }),
+    )
   }
 
   // Memory tools (functional if MemoryManager provided)

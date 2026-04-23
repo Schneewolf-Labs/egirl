@@ -177,6 +177,12 @@ export const EgirlConfigSchema = Type.Object({
     }),
   ),
 
+  searxng: Type.Optional(
+    Type.Object({
+      url: Type.String(),
+    }),
+  ),
+
   energy: Type.Optional(
     Type.Object({
       enabled: Type.Boolean({ default: true }),
@@ -223,6 +229,7 @@ export const EgirlConfigSchema = Type.Object({
       tasks: Type.Boolean({ default: false }),
       code_agent: Type.Boolean({ default: false }),
       web_research: Type.Boolean({ default: true }),
+      web_search: Type.Boolean({ default: true }),
       screenshot: Type.Boolean({ default: true }),
     }),
   ),
@@ -363,6 +370,10 @@ export interface RuntimeConfig {
     defaultOwner?: string
     defaultRepo?: string
   }
+  searxng?: {
+    url: string
+    apiKey?: string
+  }
   energy: {
     enabled: boolean
     maxEnergy: number
@@ -397,6 +408,7 @@ export interface RuntimeConfig {
     tasks: boolean
     codeAgent: boolean
     webResearch: boolean
+    webSearch: boolean
     screenshot: boolean
   }
   skills: {
