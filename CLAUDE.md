@@ -83,14 +83,12 @@ This list is load-bearing. When you catch yourself about to add one of these, st
 
 - **No model routing.** The local LLM is the only chooser. "Escalate" means "call a tool." If you find yourself writing a `Router` class, you've lost the plot.
 - **No remote LLM providers** (Anthropic API, OpenAI, etc.) for per-message routing. Claude Code accesses Anthropic via the Claude Agent SDK with subscription auth — that's the only sanctioned remote path.
-- **No HTTP API server.** Single user, local process. If you want to poke at it externally, use the CLI or Discord.
 - **No internal plugin system.** Channels, providers, tools are hardcoded. CLI, Discord, and XMPP are concrete `Channel` implementations, each optional via config. No dynamic registration, no discovery, no capability negotiation. If a fourth is genuinely wanted, hardcode it too; don't build a pluggable layer. Extensibility lives at the HTTP API boundary, not inside the process.
 - **External HTTP API is encouraged.** A small `Bun.serve` in `src/api.ts` lets scripts, mobile apps, automations, LAN clients, and external UIs talk to egirl without running in-process. Keep it tiny — no OpenAPI spec generation, no versioned routes, no tiered rate limits, no framework. Each endpoint should pay for itself; when in doubt delete rather than add.
 - **No workflow engine.** The LLM is the workflow engine. Don't build a second one.
 - **No event-driven task triggers** (file watchers, GitHub webhooks, inbound HTTP). Cron is enough. If you think you need webhooks, reconsider — almost always the right design is "check on a schedule."
 - **No plugin system for providers.** One local provider. That's the whole list.
 - **No skill gating/permissions.** You're the only user.
-- **No channel abstraction layer beyond `src/channels/types.ts`.** Hardcode CLI and Discord.
 - **No multi-user anything.**
 
 ## Rules for Working in This Codebase
