@@ -23,7 +23,7 @@ You are provided with function signatures within <tools></tools> XML tags:
 
 For each function call, return a json object with function name and arguments within <tool_call></tool_call> XML tags:
 <tool_call>
-{"name": <function-name>, "arguments": <args-json-object>}
+{"name": "<function-name>", "arguments": <args-json-object>}
 </tool_call>`
 
 /**
@@ -79,6 +79,21 @@ function tryParseToolCallJson(
       .replace(/:\s*'([^']*)'/g, ': "$1"')
     const parsed = JSON.parse(fixed)
     if (parsed && typeof parsed.name === 'string') return parsed
+  } catch {
+    // Fixup also failed
+  }
+
+  // Fixup: repair unquoted or half-quoted tool name values.
+  // Handles: "name":foo, "name":foo", "name":"foo (missing either or both quotes)
+  try {
+    const fixed = jsonStr.replace(
+      /"name"\s*:\s*"?([a-zA-Z_][a-zA-Z0-9_]*)"?\s*([,}])/,
+      '"name":"$1"$2',
+    )
+    if (fixed !== jsonStr) {
+      const parsed = JSON.parse(fixed)
+      if (parsed && typeof parsed.name === 'string') return parsed
+    }
   } catch {
     // Fixup also failed
   }
