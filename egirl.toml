@@ -34,6 +34,14 @@ permission_mode = "bypassPermissions"    # default, acceptEdits, bypassPermissio
 # working_dir = "~/projects/myrepo"      # defaults to workspace
 # max_turns = 30
 
+# XMPP bot — self-hosted chat (e.g. Prosody on localhost or a VPS).
+# Requires XMPP_USERNAME and XMPP_PASSWORD in .env.
+# [channels.xmpp]
+# service = "xmpp://localhost:5222"     # or "xmpps://chat.example.com:5223" for TLS
+# domain = "localhost"                   # inferred from service if omitted
+# resource = "egirl"
+# allowed_jids = ["you@localhost"]      # empty = allow all
+
 [safety]
 enabled = true
 

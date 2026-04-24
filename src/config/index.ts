@@ -7,6 +7,20 @@ import type { EgirlConfig, RuntimeConfig, ThinkingLevel } from './schema'
 
 export type { EgirlConfig, RuntimeConfig, ThinkingLevel } from './schema'
 
+function getXmppDomain(service: string): string {
+  try {
+    return new URL(service).hostname
+  } catch {
+    // Fallback: strip protocol and port
+    return (
+      service
+        .replace(/^[a-z]+:\/\//, '')
+        .split(':')[0]
+        ?.split('/')[0] ?? service
+    )
+  }
+}
+
 function expandPath(path: string, workspaceDir?: string): string {
   let result = path.replace(/^~/, homedir())
 
@@ -204,6 +218,22 @@ export function loadConfig(): RuntimeConfig {
       allowedUsers: toml.channels.discord.allowed_users ?? [],
       passiveChannels: toml.channels.discord.passive_channels ?? [],
       batchWindowMs: toml.channels.discord.batch_window_ms ?? 3000,
+    }
+  }
+
+  const xmppUsername = process.env.XMPP_USERNAME
+  const xmppPassword = process.env.XMPP_PASSWORD
+
+  if (xmppUsername && xmppPassword && toml.channels?.xmpp) {
+    const xmppConf = toml.channels.xmpp
+    const service = xmppConf.service ?? 'xmpp://localhost:5222'
+    config.channels.xmpp = {
+      service,
+      domain: xmppConf.domain ?? getXmppDomain(service),
+      username: xmppUsername,
+      password: xmppPassword,
+      resource: xmppConf.resource,
+      allowedJids: xmppConf.allowed_jids ?? [],
     }
   }
 

@@ -5,6 +5,7 @@ import { runCLI } from './commands/cli'
 import { runDiscord } from './commands/discord'
 import { runServe } from './commands/serve'
 import { showStatus } from './commands/status'
+import { runXMPP } from './commands/xmpp'
 import { loadConfig, type RuntimeConfig } from './config'
 import { BOLD, colors, DIM, RESET } from './ui/theme'
 import { log } from './util/logger'
@@ -47,6 +48,10 @@ async function main() {
       await runDiscord(config, args.slice(1))
       break
 
+    case 'xmpp':
+      await runXMPP(config, args.slice(1))
+      break
+
     case 'serve':
       await runServe(config, args.slice(1))
       break
@@ -76,7 +81,8 @@ ${c.primary}Usage${RESET}
 ${c.primary}Commands${RESET}
   ${c.accent}cli${RESET}            Start interactive CLI ${DIM}(default)${RESET}
   ${c.accent}discord${RESET}        Start Discord bot
-  ${c.accent}serve${RESET}          Discord + background task runner in one process
+  ${c.accent}xmpp${RESET}           Start XMPP bot (self-hosted chat)
+  ${c.accent}serve${RESET}          Discord + XMPP + background task runner in one process
   ${c.accent}claude-code${RESET}    Bridge to Claude Code with local model supervision ${DIM}(alias: cc)${RESET}
   ${c.accent}status${RESET}         Show current configuration and status
   ${c.accent}help${RESET}           Show this help message

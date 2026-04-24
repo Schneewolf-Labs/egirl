@@ -69,6 +69,14 @@ export const EgirlConfigSchema = Type.Object({
           max_turns: Type.Optional(Type.Number()),
         }),
       ),
+      xmpp: Type.Optional(
+        Type.Object({
+          service: Type.String({ default: 'xmpp://localhost:5222' }),
+          domain: Type.Optional(Type.String()),
+          resource: Type.Optional(Type.String()),
+          allowed_jids: Type.Array(Type.String(), { default: [] }),
+        }),
+      ),
     }),
   ),
 
@@ -251,6 +259,14 @@ export interface RuntimeConfig {
       model?: string
       workingDir: string
       maxTurns?: number
+    }
+    xmpp?: {
+      service: string
+      domain: string
+      username: string
+      password: string
+      resource?: string
+      allowedJids: string[]
     }
   }
   conversation: {
