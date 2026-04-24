@@ -56,6 +56,39 @@ describe('parseToolCalls', () => {
     expect(result.toolCalls).toHaveLength(0)
   })
 
+  test('repairs unquoted name with dangling closing quote', () => {
+    const content = `<tool_call>
+{"name":code_agent", "arguments": {"task": "hi"}}
+</tool_call>`
+
+    const result = parseToolCalls(content)
+    expect(result.toolCalls).toHaveLength(1)
+    expect(result.toolCalls[0].name).toBe('code_agent')
+    expect(result.toolCalls[0].arguments).toEqual({ task: 'hi' })
+    expect(result.content).toBe('')
+  })
+
+  test('repairs fully unquoted name', () => {
+    const content = `<tool_call>
+{"name": glob_files, "arguments": {"dir": "/tmp", "pattern": "**/*"}}
+</tool_call>`
+
+    const result = parseToolCalls(content)
+    expect(result.toolCalls).toHaveLength(1)
+    expect(result.toolCalls[0].name).toBe('glob_files')
+    expect(result.toolCalls[0].arguments).toEqual({ dir: '/tmp', pattern: '**/*' })
+  })
+
+  test('repairs name with dangling opening quote', () => {
+    const content = `<tool_call>
+{"name": "read_file, "arguments": {"path": "x"}}
+</tool_call>`
+
+    const result = parseToolCalls(content)
+    expect(result.toolCalls).toHaveLength(1)
+    expect(result.toolCalls[0].name).toBe('read_file')
+  })
+
   test('assigns sequential call IDs', () => {
     const content = `<tool_call>
 {"name": "a", "arguments": {}}
