@@ -33,7 +33,7 @@ No multi-model routing. No per-message cloud escalation. The local model solves 
 - **Conversation persistence** — picks up where you left off across restarts
 - **Background tasks** — cron-scheduled work with business-hours awareness and dependency ordering
 - **Tools that feel like hands** — file ops, shell, git, GitHub, browser (Playwright), web research, screenshots
-- **Three ways to talk to it** — interactive CLI, Discord DMs, or self-hosted XMPP (e.g. Prosody on your own box)
+- **Four ways to talk to it** — interactive CLI, Discord DMs, self-hosted XMPP, or a minimal HTTP API (for scripts, automations, LAN access)
 - **Skills** — reusable Markdown instruction sets
 - **Safety guardrails** — command filter, path sandbox, sensitive file guard, audit log (guardrails, not a sandbox)
 - **Customizable personality** — Kira's the default, replace her with whoever
@@ -90,8 +90,9 @@ code_agent = true     # the primary tool — delegate coding to Claude Code
 
 ```bash
 DISCORD_TOKEN=...     # for Discord bot
-XMPP_USERNAME=...     # for XMPP bot (optional, self-hosted alternative to Discord)
+XMPP_USERNAME=...     # for XMPP bot
 XMPP_PASSWORD=...
+EGIRL_API_TOKEN=...   # optional bearer token for the HTTP API (required if exposing on LAN)
 GITHUB_TOKEN=...      # for gh_* tools
 ```
 
@@ -104,6 +105,7 @@ bun run cli                               # Interactive CLI
 bun run src/index.ts cli -m "hello"       # Single message, then exit
 bun run src/index.ts discord              # Discord bot only
 bun run src/index.ts xmpp                 # XMPP bot only (self-hosted)
+bun run src/index.ts api                  # HTTP API on localhost:3000 (configurable)
 bun run src/index.ts serve                # Discord/XMPP + background task runner
 bun run src/index.ts claude-code          # Direct Claude Code bridge (alias: cc)
 bun run src/index.ts cc -m "fix the tests"
@@ -118,8 +120,9 @@ egirl/
 ├── egirl.toml                # Config
 ├── src/
 │   ├── agent/                # The local LLM's loop, memory-aware
+│   ├── api.ts                # Minimal HTTP API (Bun.serve, ~200 lines)
 │   ├── browser/              # Playwright browser automation
-│   ├── channels/             # CLI, Discord, Claude Code bridge
+│   ├── channels/             # CLI, Discord, XMPP, Claude Code bridge
 │   ├── commands/             # Command runners
 │   ├── config/               # TOML loading + TypeBox validation
 │   ├── conversation/         # Persisted conversation store (SQLite)
@@ -166,6 +169,32 @@ egirl ships with tools across six categories. Format: Qwen3 native tool calling 
 | **Other** | `screenshot`, `web_research`, `web_search` |
 
 See [docs/tools.md](docs/tools.md) for details.
+
+## HTTP API
+
+A small REST-ish API for scripts, automations, LAN clients, and mobile apps. Bun.serve, localhost-only by default, optional bearer auth via `EGIRL_API_TOKEN`.
+
+```
+GET    /                     → { service, version }
+POST   /chat                 { message, session_id? } → agent response
+GET    /sessions/:id         → messages
+DELETE /sessions/:id         → clear session
+GET    /memory?q=...&limit=  → search results
+POST   /memory               { key, value, category? }
+DELETE /memory/:key
+GET    /tasks?status=...     → list
+POST   /tasks                { name, prompt, kind, interval_ms?, cron? }
+POST   /tasks/:id/run        → trigger a task immediately
+```
+
+Example:
+```bash
+curl -s http://localhost:3000/chat \
+  -H 'content-type: application/json' \
+  -d '{"message":"what did we work on yesterday?"}' | jq -r .content
+```
+
+No OpenAPI spec, no versioned paths, no plugin framework. If you want to build something on top, talk to egirl over HTTP in whatever language you like.
 
 ## Documentation
 

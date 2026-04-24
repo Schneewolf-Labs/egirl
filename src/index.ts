@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 
+import { runAPI } from './commands/api'
 import { runClaudeCode } from './commands/claude-code'
 import { runCLI } from './commands/cli'
 import { runDiscord } from './commands/discord'
@@ -52,6 +53,10 @@ async function main() {
       await runXMPP(config, args.slice(1))
       break
 
+    case 'api':
+      await runAPI(config, args.slice(1))
+      break
+
     case 'serve':
       await runServe(config, args.slice(1))
       break
@@ -82,6 +87,7 @@ ${c.primary}Commands${RESET}
   ${c.accent}cli${RESET}            Start interactive CLI ${DIM}(default)${RESET}
   ${c.accent}discord${RESET}        Start Discord bot
   ${c.accent}xmpp${RESET}           Start XMPP bot (self-hosted chat)
+  ${c.accent}api${RESET}            Start HTTP API (localhost by default — scripts, automations, LAN access)
   ${c.accent}serve${RESET}          Discord + XMPP + background task runner in one process
   ${c.accent}claude-code${RESET}    Bridge to Claude Code with local model supervision ${DIM}(alias: cc)${RESET}
   ${c.accent}status${RESET}         Show current configuration and status

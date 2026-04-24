@@ -77,6 +77,12 @@ export const EgirlConfigSchema = Type.Object({
           allowed_jids: Type.Array(Type.String(), { default: [] }),
         }),
       ),
+      api: Type.Optional(
+        Type.Object({
+          host: Type.String({ default: '127.0.0.1' }),
+          port: Type.Number({ default: 3000 }),
+        }),
+      ),
     }),
   ),
 
@@ -267,6 +273,11 @@ export interface RuntimeConfig {
       password: string
       resource?: string
       allowedJids: string[]
+    }
+    api?: {
+      host: string
+      port: number
+      bearerToken?: string
     }
   }
   conversation: {

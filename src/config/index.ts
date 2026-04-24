@@ -237,6 +237,15 @@ export function loadConfig(): RuntimeConfig {
     }
   }
 
+  if (toml.channels?.api) {
+    const bearerToken = process.env.EGIRL_API_TOKEN
+    config.channels.api = {
+      host: toml.channels.api.host ?? '127.0.0.1',
+      port: toml.channels.api.port ?? 3000,
+      ...(bearerToken && { bearerToken }),
+    }
+  }
+
   if (toml.channels?.claude_code) {
     const cc = toml.channels.claude_code
     config.channels.claudeCode = {

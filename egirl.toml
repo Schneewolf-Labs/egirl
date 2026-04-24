@@ -42,6 +42,12 @@ permission_mode = "bypassPermissions"    # default, acceptEdits, bypassPermissio
 # resource = "egirl"
 # allowed_jids = ["you@localhost"]      # empty = allow all
 
+# HTTP API — localhost by default, for scripts / mobile / automations.
+# Set EGIRL_API_TOKEN in .env to require a bearer token (recommended if exposing on LAN).
+# [channels.api]
+# host = "127.0.0.1"
+# port = 3000
+
 [safety]
 enabled = true
 
