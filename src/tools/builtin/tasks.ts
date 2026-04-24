@@ -11,6 +11,126 @@ interface TaskToolContext {
   channelTarget: string
 }
 
+const SHARED_SCHEMA_PROPS = {
+  name: { type: 'string', description: 'Short identifier for the task (e.g., "watch-ci-main")' },
+  description: { type: 'string', description: 'What this task does' },
+  prompt: { type: 'string', description: 'The agent prompt to execute each run' },
+  kind: { type: 'string', description: 'Task type: scheduled or oneshot' },
+  interval: { type: 'string', description: 'Run interval: "30m", "2h", "1d" (scheduled only)' },
+  cron: {
+    type: 'string',
+    description:
+      'Cron expression or time: "0 9 * * MON-FRI", "09:00", "17:30 Mon-Fri" (scheduled only)',
+  },
+  business_hours: {
+    type: 'string',
+    description: 'Restrict runs: "9-17 Mon-Fri", "8-22", "business"',
+  },
+  depends_on: { type: 'string', description: 'Task ID this task depends on' },
+  notify: {
+    type: 'string',
+    description: 'Notification mode: always, on_change, on_failure, never (default: on_change)',
+  },
+  max_runs: { type: 'number', description: 'Maximum number of runs (null = unlimited)' },
+  memory_context: { type: 'array', description: 'Memory keys to pre-load before each run' },
+  memory_category: {
+    type: 'string',
+    description: 'Category filter for proactive memory retrieval',
+  },
+}
+
+type TaskInput = {
+  ok: true
+  input: NewTask
+  summary: {
+    intervalMs?: number
+    cronExpression?: string
+    businessHours?: string
+    dependsOn?: string
+  }
+}
+type TaskInputError = { ok: false; output: string }
+
+/** Shared parsing for task_add and task_propose — validates schedule, hours, dependency, then builds a NewTask. */
+function parseTaskInput(
+  params: Record<string, unknown>,
+  store: TaskStore,
+  ctx: TaskToolContext,
+  createdBy: NewTask['createdBy'],
+): TaskInput | TaskInputError {
+  const kind = params.kind as TaskKind
+  if (!['scheduled', 'oneshot'].includes(kind)) {
+    return { ok: false, output: `Invalid kind: ${kind}. Must be scheduled or oneshot.` }
+  }
+
+  let intervalMs: number | undefined
+  let cronExpression: string | undefined
+
+  if (kind === 'scheduled') {
+    const cron = params.cron as string | undefined
+    const interval = params.interval as string | undefined
+
+    if (cron) {
+      if (!parseScheduleExpression(cron)) {
+        return {
+          ok: false,
+          output: `Could not parse cron/time expression: "${cron}". Try "0 9 * * MON-FRI", "09:00", or "17:30 Mon-Fri".`,
+        }
+      }
+      cronExpression = cron
+    } else if (interval) {
+      intervalMs = parseInterval(interval)
+      if (!intervalMs) {
+        return {
+          ok: false,
+          output: `Could not parse interval: "${interval}". Try "30m", "2h", "1d".`,
+        }
+      }
+    } else {
+      return {
+        ok: false,
+        output:
+          'Scheduled tasks require either interval (e.g., "30m") or cron (e.g., "0 9 * * MON-FRI").',
+      }
+    }
+  }
+
+  const businessHours = params.business_hours as string | undefined
+  if (businessHours && !parseBusinessHours(businessHours)) {
+    return {
+      ok: false,
+      output: `Could not parse business_hours: "${businessHours}". Try "9-17 Mon-Fri", "8-22", or "business".`,
+    }
+  }
+
+  const dependsOn = params.depends_on as string | undefined
+  if (dependsOn && !store.get(dependsOn)) {
+    return { ok: false, output: `Dependency task ${dependsOn} not found.` }
+  }
+
+  return {
+    ok: true,
+    summary: { intervalMs, cronExpression, businessHours, dependsOn },
+    input: {
+      name: params.name as string,
+      description: params.description as string,
+      prompt: params.prompt as string,
+      kind,
+      intervalMs,
+      cronExpression,
+      businessHours,
+      dependsOn,
+      notify: (params.notify as TaskNotify) ?? 'on_change',
+      maxRuns: params.max_runs as number | undefined,
+      memoryContext: params.memory_context as string[] | undefined,
+      memoryCategory: params.memory_category as string | undefined,
+      channel: ctx.channel,
+      channelTarget: ctx.channelTarget,
+      createdBy,
+    },
+  }
+}
+
 export function createTaskTools(
   store: TaskStore,
   runner: TaskRunner,
@@ -42,58 +162,12 @@ Options:
 - depends_on: task ID — this task runs after the dependency completes`,
       parameters: {
         type: 'object',
-        properties: {
-          name: {
-            type: 'string',
-            description: 'Short identifier for the task (e.g., "watch-ci-main")',
-          },
-          description: { type: 'string', description: 'What this task does' },
-          prompt: { type: 'string', description: 'The agent prompt to execute each run' },
-          kind: { type: 'string', description: 'Task type: scheduled or oneshot' },
-          interval: {
-            type: 'string',
-            description: 'Run interval: "30m", "2h", "1d" (scheduled only)',
-          },
-          cron: {
-            type: 'string',
-            description:
-              'Cron expression or time: "0 9 * * MON-FRI", "09:00", "17:30 Mon-Fri" (scheduled only)',
-          },
-          business_hours: {
-            type: 'string',
-            description:
-              'Restrict runs to hours: "9-17 Mon-Fri", "8-22", "business" (default business hours)',
-          },
-          depends_on: {
-            type: 'string',
-            description: 'Task ID this task depends on — runs after that task completes',
-          },
-          notify: {
-            type: 'string',
-            description:
-              'Notification mode: always, on_change, on_failure, never (default: on_change)',
-          },
-          max_runs: { type: 'number', description: 'Maximum number of runs (null = unlimited)' },
-          memory_context: { type: 'array', description: 'Memory keys to pre-load before each run' },
-          memory_category: {
-            type: 'string',
-            description: 'Category filter for proactive memory retrieval',
-          },
-        },
+        properties: SHARED_SCHEMA_PROPS,
         required: ['name', 'description', 'prompt', 'kind'],
       },
     },
 
     async execute(params: Record<string, unknown>): Promise<ToolResult> {
-      const kind = params.kind as TaskKind
-      if (!['scheduled', 'oneshot'].includes(kind)) {
-        return {
-          success: false,
-          output: `Invalid kind: ${kind}. Must be scheduled or oneshot.`,
-        }
-      }
-
-      // Check active task limit
       if (store.activeCount() >= maxActiveTasks) {
         return {
           success: false,
@@ -101,96 +175,24 @@ Options:
         }
       }
 
-      // Parse schedule — cron or interval
-      let intervalMs: number | undefined
-      let cronExpression: string | undefined
-
-      if (kind === 'scheduled') {
-        const cron = params.cron as string | undefined
-        const interval = params.interval as string | undefined
-
-        if (cron) {
-          const parsed = parseScheduleExpression(cron)
-          if (!parsed) {
-            return {
-              success: false,
-              output: `Could not parse cron/time expression: "${cron}". Try "0 9 * * MON-FRI", "09:00", or "17:30 Mon-Fri".`,
-            }
-          }
-          cronExpression = cron
-        } else if (interval) {
-          intervalMs = parseInterval(interval)
-          if (!intervalMs) {
-            return {
-              success: false,
-              output: `Could not parse interval: "${interval}". Try "30m", "2h", "1d".`,
-            }
-          }
-        } else {
-          return {
-            success: false,
-            output:
-              'Scheduled tasks require either interval (e.g., "30m") or cron (e.g., "0 9 * * MON-FRI").',
-          }
-        }
-      }
-
-      // Validate business_hours
-      const businessHoursStr = params.business_hours as string | undefined
-      if (businessHoursStr) {
-        const parsed = parseBusinessHours(businessHoursStr)
-        if (!parsed) {
-          return {
-            success: false,
-            output: `Could not parse business_hours: "${businessHoursStr}". Try "9-17 Mon-Fri", "8-22", or "business".`,
-          }
-        }
-      }
-
-      // Validate depends_on
-      const dependsOn = params.depends_on as string | undefined
-      if (dependsOn) {
-        const depTask = store.get(dependsOn)
-        if (!depTask) {
-          return { success: false, output: `Dependency task ${dependsOn} not found.` }
-        }
-      }
-
-      const ctx = getContext()
-      const input: NewTask = {
-        name: params.name as string,
-        description: params.description as string,
-        prompt: params.prompt as string,
-        kind,
-        intervalMs,
-        cronExpression,
-        businessHours: businessHoursStr,
-        dependsOn,
-        notify: (params.notify as TaskNotify) ?? 'on_change',
-        maxRuns: params.max_runs as number | undefined,
-        memoryContext: params.memory_context as string[] | undefined,
-        memoryCategory: params.memory_category as string | undefined,
-        channel: ctx.channel,
-        channelTarget: ctx.channelTarget,
-        createdBy: 'user',
-      }
+      const parsed = parseTaskInput(params, store, getContext(), 'user')
+      if (!parsed.ok) return { success: false, output: parsed.output }
 
       try {
-        const task = store.create(input)
+        const task = store.create(parsed.input)
         runner.activateTask(task.id)
 
-        const parts = [`Created task **${task.name}** (${task.id})`]
-        parts.push(`Kind: ${task.kind}`)
+        const { intervalMs, cronExpression, businessHours, dependsOn } = parsed.summary
+        const parts = [`Created task **${task.name}** (${task.id})`, `Kind: ${task.kind}`]
         if (intervalMs) parts.push(`Interval: ${formatInterval(intervalMs)}`)
         if (cronExpression) {
           const schedule = parseScheduleExpression(cronExpression)
           parts.push(`Schedule: ${schedule ? formatSchedule(schedule) : cronExpression}`)
         }
-        if (businessHoursStr) parts.push(`Business hours: ${businessHoursStr}`)
+        if (businessHours) parts.push(`Business hours: ${businessHours}`)
         if (dependsOn) parts.push(`Depends on: ${dependsOn}`)
         if (task.maxRuns) parts.push(`Max runs: ${task.maxRuns}`)
-        parts.push(`Notify: ${task.notify}`)
-        parts.push('Status: active')
+        parts.push(`Notify: ${task.notify}`, 'Status: active')
 
         return { success: true, output: parts.join('\n') }
       } catch (err) {
@@ -208,16 +210,7 @@ Options:
       parameters: {
         type: 'object',
         properties: {
-          name: { type: 'string', description: 'Short identifier for the task' },
-          description: { type: 'string', description: 'What this task does' },
-          prompt: { type: 'string', description: 'The agent prompt to execute each run' },
-          kind: { type: 'string', description: 'Task type: scheduled or oneshot' },
-          interval: { type: 'string', description: 'Run interval (scheduled only)' },
-          cron: { type: 'string', description: 'Cron expression or time (scheduled only)' },
-          business_hours: { type: 'string', description: 'Business hours constraint' },
-          depends_on: { type: 'string', description: 'Task ID dependency' },
-          notify: { type: 'string', description: 'Notification mode (default: on_change)' },
-          max_runs: { type: 'number', description: 'Maximum number of runs' },
+          ...SHARED_SCHEMA_PROPS,
           reason: { type: 'string', description: 'Why you think this task would be useful' },
         },
         required: ['name', 'description', 'prompt', 'kind', 'reason'],
@@ -227,7 +220,6 @@ Options:
     async execute(params: Record<string, unknown>): Promise<ToolResult> {
       const name = params.name as string
 
-      // Check cooldown — don't re-propose recently rejected tasks
       if (store.wasRecentlyRejected(name, 24 * 60 * 60 * 1000)) {
         return {
           success: false,
@@ -242,36 +234,12 @@ Options:
         }
       }
 
-      let intervalMs: number | undefined
-      let cronExpression: string | undefined
-
-      if (params.cron) {
-        const parsed = parseScheduleExpression(params.cron as string)
-        if (parsed) cronExpression = params.cron as string
-      } else if (params.interval) {
-        intervalMs = parseInterval(params.interval as string)
-      }
-
       const ctx = getContext()
-      const input: NewTask = {
-        name,
-        description: params.description as string,
-        prompt: params.prompt as string,
-        kind: params.kind as TaskKind,
-        intervalMs,
-        cronExpression,
-        businessHours: params.business_hours as string | undefined,
-        dependsOn: params.depends_on as string | undefined,
-        notify: (params.notify as TaskNotify) ?? 'on_change',
-        maxRuns: params.max_runs as number | undefined,
-        channel: ctx.channel,
-        channelTarget: ctx.channelTarget,
-        createdBy: 'agent',
-      }
+      const parsed = parseTaskInput(params, store, ctx, 'agent')
+      if (!parsed.ok) return { success: false, output: parsed.output }
 
       try {
-        const task = store.create(input)
-        // Create proposal record
+        const task = store.create(parsed.input)
         store.createProposal(task.id, ctx.channel, ctx.channelTarget)
 
         const reason = params.reason as string
@@ -304,7 +272,6 @@ Options:
         : undefined
 
       const tasks = store.list(filter)
-
       if (tasks.length === 0) {
         return { success: true, output: filter ? `No ${filter.status} tasks.` : 'No tasks.' }
       }
@@ -318,9 +285,7 @@ Options:
           const schedule = parseScheduleExpression(t.cronExpression)
           parts.push(`  Schedule: ${schedule ? formatSchedule(schedule) : t.cronExpression}`)
         }
-        if (t.businessHours) {
-          parts.push(`  Business hours: ${t.businessHours}`)
-        }
+        if (t.businessHours) parts.push(`  Business hours: ${t.businessHours}`)
         if (t.dependsOn) {
           const dep = store.get(t.dependsOn)
           parts.push(`  Depends on: ${dep ? dep.name : t.dependsOn}`)
@@ -342,26 +307,25 @@ Options:
     },
   }
 
+  const idParam = {
+    type: 'object' as const,
+    properties: { id: { type: 'string', description: 'Task ID' } },
+    required: ['id'],
+  }
+
   const taskPauseTool: Tool = {
     definition: {
       name: 'task_pause',
       description: 'Pause an active background task. It stops running but is not deleted.',
-      parameters: {
-        type: 'object',
-        properties: {
-          id: { type: 'string', description: 'Task ID to pause' },
-        },
-        required: ['id'],
-      },
+      parameters: idParam,
     },
-
     async execute(params: Record<string, unknown>): Promise<ToolResult> {
       const id = params.id as string
       const task = store.get(id)
       if (!task) return { success: false, output: `Task ${id} not found.` }
-      if (task.status !== 'active')
+      if (task.status !== 'active') {
         return { success: false, output: `Task ${id} is not active (status: ${task.status}).` }
-
+      }
       store.update(id, { status: 'paused' })
       return { success: true, output: `Paused task "${task.name}" (${id}).` }
     },
@@ -371,22 +335,15 @@ Options:
     definition: {
       name: 'task_resume',
       description: 'Resume a paused background task. Clears failure tracking.',
-      parameters: {
-        type: 'object',
-        properties: {
-          id: { type: 'string', description: 'Task ID to resume' },
-        },
-        required: ['id'],
-      },
+      parameters: idParam,
     },
-
     async execute(params: Record<string, unknown>): Promise<ToolResult> {
       const id = params.id as string
       const task = store.get(id)
       if (!task) return { success: false, output: `Task ${id} not found.` }
-      if (task.status !== 'paused')
+      if (task.status !== 'paused') {
         return { success: false, output: `Task ${id} is not paused (status: ${task.status}).` }
-
+      }
       store.update(id, { status: 'active', consecutiveFailures: 0, lastErrorKind: undefined })
       runner.activateTask(id)
       return {
@@ -400,20 +357,12 @@ Options:
     definition: {
       name: 'task_cancel',
       description: 'Delete a background task permanently.',
-      parameters: {
-        type: 'object',
-        properties: {
-          id: { type: 'string', description: 'Task ID to cancel' },
-        },
-        required: ['id'],
-      },
+      parameters: idParam,
     },
-
     async execute(params: Record<string, unknown>): Promise<ToolResult> {
       const id = params.id as string
       const task = store.get(id)
       if (!task) return { success: false, output: `Task ${id} not found.` }
-
       store.delete(id)
       return { success: true, output: `Cancelled task "${task.name}" (${id}).` }
     },
@@ -423,15 +372,8 @@ Options:
     definition: {
       name: 'task_run_now',
       description: 'Trigger a background task to run immediately, regardless of its schedule.',
-      parameters: {
-        type: 'object',
-        properties: {
-          id: { type: 'string', description: 'Task ID to run' },
-        },
-        required: ['id'],
-      },
+      parameters: idParam,
     },
-
     async execute(params: Record<string, unknown>): Promise<ToolResult> {
       const id = params.id as string
       const task = store.get(id)
@@ -440,7 +382,6 @@ Options:
       try {
         const run = await runner.runNow(id)
         if (!run) return { success: false, output: `Failed to trigger task ${id}.` }
-
         return {
           success: run.status === 'success',
           output:
@@ -468,7 +409,6 @@ Options:
         required: ['id'],
       },
     },
-
     async execute(params: Record<string, unknown>): Promise<ToolResult> {
       const id = params.id as string
       const limit = (params.limit as number) ?? 5
