@@ -17,13 +17,6 @@ export async function showStatus(config: RuntimeConfig): Promise<void> {
   console.log(`  ${DIM}Local Model${RESET} ${config.local.model}`)
   console.log(`  ${DIM}Endpoint${RESET}    ${config.local.endpoint}`)
 
-  if (config.remote.anthropic) {
-    console.log(`  ${DIM}Anthropic${RESET}   ${config.remote.anthropic.model}`)
-  }
-  if (config.remote.openai) {
-    console.log(`  ${DIM}OpenAI${RESET}      ${config.remote.openai.model}`)
-  }
-
   if (config.local.embeddings) {
     console.log(
       `  ${DIM}Embeddings${RESET}  ${config.local.embeddings.model} ${DIM}@ ${config.local.embeddings.endpoint}${RESET}`,
@@ -49,12 +42,6 @@ export async function showStatus(config: RuntimeConfig): Promise<void> {
       `  ${emoji ? `${emoji} ` : ''}${skill.name} ${DIM}[${complexity}]${RESET} ${status}`,
     )
   }
-
-  console.log(`\n${c.primary}Routing${RESET}`)
-  console.log(`  ${DIM}Default${RESET}     ${config.routing.default}`)
-  console.log(`  ${DIM}Threshold${RESET}   ${config.routing.escalationThreshold}`)
-  console.log(`  ${DIM}Local${RESET}       ${config.routing.alwaysLocal.join(', ')}`)
-  console.log(`  ${DIM}Remote${RESET}      ${config.routing.alwaysRemote.join(', ')}`)
 
   // Test local provider connection
   console.log(`\n${c.primary}Provider Status${RESET}`)

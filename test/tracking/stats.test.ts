@@ -6,101 +6,69 @@ describe('StatsTracker', () => {
     const tracker = new StatsTracker()
     const stats = tracker.getStats()
     expect(stats.totalRequests).toBe(0)
-    expect(stats.localRequests).toBe(0)
-    expect(stats.remoteRequests).toBe(0)
-    expect(stats.totalCost).toBe(0)
+    expect(stats.totalInputTokens).toBe(0)
+    expect(stats.totalOutputTokens).toBe(0)
   })
 
-  test('records local request', () => {
+  test('records a request', () => {
     const tracker = new StatsTracker()
-    tracker.recordRequest('local', 'local', 100, 50, false)
+    tracker.recordRequest('llamacpp/qwen3', 100, 50)
 
     const stats = tracker.getStats()
     expect(stats.totalRequests).toBe(1)
-    expect(stats.localRequests).toBe(1)
-    expect(stats.remoteRequests).toBe(0)
-    expect(stats.localInputTokens).toBe(100)
-    expect(stats.localOutputTokens).toBe(50)
-    expect(stats.totalCost).toBe(0)
-    expect(stats.savedCost).toBeGreaterThan(0) // estimated savings
-  })
-
-  test('records remote request with cost', () => {
-    const tracker = new StatsTracker()
-    tracker.recordRequest('remote', 'gpt-4o', 1000, 500, false)
-
-    const stats = tracker.getStats()
-    expect(stats.totalRequests).toBe(1)
-    expect(stats.remoteRequests).toBe(1)
-    expect(stats.remoteInputTokens).toBe(1000)
-    expect(stats.remoteOutputTokens).toBe(500)
-    expect(stats.totalCost).toBeGreaterThan(0)
-  })
-
-  test('tracks escalations', () => {
-    const tracker = new StatsTracker()
-    tracker.recordRequest('remote', 'gpt-4o', 100, 50, true)
-    tracker.recordRequest('local', 'local', 100, 50, false)
-
-    const stats = tracker.getStats()
-    expect(stats.escalations).toBe(1)
+    expect(stats.totalInputTokens).toBe(100)
+    expect(stats.totalOutputTokens).toBe(50)
   })
 
   test('accumulates across multiple requests', () => {
     const tracker = new StatsTracker()
-    tracker.recordRequest('local', 'local', 100, 50, false)
-    tracker.recordRequest('local', 'local', 200, 100, false)
-    tracker.recordRequest('remote', 'gpt-4o', 300, 150, true)
+    tracker.recordRequest('llamacpp/qwen3', 100, 50)
+    tracker.recordRequest('llamacpp/qwen3', 200, 100)
+    tracker.recordRequest('llamacpp/qwen3', 300, 150)
 
     const stats = tracker.getStats()
     expect(stats.totalRequests).toBe(3)
-    expect(stats.localRequests).toBe(2)
-    expect(stats.remoteRequests).toBe(1)
     expect(stats.totalInputTokens).toBe(600)
     expect(stats.totalOutputTokens).toBe(300)
-    expect(stats.escalations).toBe(1)
   })
 
   test('getStats returns a copy', () => {
     const tracker = new StatsTracker()
-    tracker.recordRequest('local', 'local', 100, 50, false)
+    tracker.recordRequest('llamacpp/qwen3', 100, 50)
 
     const stats1 = tracker.getStats()
     const stats2 = tracker.getStats()
     expect(stats1).toEqual(stats2)
-    expect(stats1).not.toBe(stats2) // different object references
+    expect(stats1).not.toBe(stats2)
   })
 
   test('reset clears all stats', () => {
     const tracker = new StatsTracker()
-    tracker.recordRequest('local', 'local', 100, 50, false)
-    tracker.recordRequest('remote', 'gpt-4o', 200, 100, true)
+    tracker.recordRequest('llamacpp/qwen3', 100, 50)
+    tracker.recordRequest('llamacpp/qwen3', 200, 100)
 
     tracker.reset()
     const stats = tracker.getStats()
     expect(stats.totalRequests).toBe(0)
-    expect(stats.totalCost).toBe(0)
-    expect(stats.savedCost).toBe(0)
+    expect(stats.totalInputTokens).toBe(0)
+    expect(stats.totalOutputTokens).toBe(0)
   })
 
   test('formatSummary includes key info', () => {
     const tracker = new StatsTracker()
-    tracker.recordRequest('local', 'local', 1000, 500, false)
-    tracker.recordRequest('remote', 'gpt-4o', 2000, 1000, true)
+    tracker.recordRequest('llamacpp/qwen3', 1000, 500)
+    tracker.recordRequest('llamacpp/qwen3', 2000, 1000)
 
     const summary = tracker.formatSummary()
-    expect(summary).toContain('Total Requests: 2')
-    expect(summary).toContain('Local: 1')
-    expect(summary).toContain('Remote: 1')
-    expect(summary).toContain('Escalations: 1')
-    expect(summary).toContain('Saved:')
+    expect(summary).toContain('Requests: 2')
+    expect(summary).toContain('3000')
+    expect(summary).toContain('1500')
   })
 
   test('formatSummary handles zero requests', () => {
     const tracker = new StatsTracker()
     const summary = tracker.formatSummary()
-    expect(summary).toContain('Total Requests: 0')
-    expect(summary).toContain('(0%)')
+    expect(summary).toContain('Requests: 0')
   })
 })
 

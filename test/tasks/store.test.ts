@@ -144,20 +144,6 @@ describe('TaskStore', () => {
     expect(store.get(task.id)?.cronExpression).toBe('0 9 * * *')
   })
 
-  test('stores triggerMode', () => {
-    const task = store.create(makeTask({ kind: 'event', triggerMode: 'create_task' }))
-    const fetched = store.get(task.id)
-    expect(fetched).toBeDefined()
-    expect(fetched?.triggerMode).toBe('create_task')
-  })
-
-  test('triggerMode defaults to execute', () => {
-    const task = store.create(makeTask())
-    const fetched = store.get(task.id)
-    expect(fetched).toBeDefined()
-    expect(fetched?.triggerMode).toBe('execute')
-  })
-
   test('records initial transition on create', () => {
     const task = store.create(makeTask())
     const transitions = store.getTransitions(task.id)
@@ -202,10 +188,15 @@ describe('TaskStore', () => {
     expect(transitions[3]?.toStatus).toBe('active') // initial
   })
 
-  test('compact removes old transitions', () => {
+  test('compact removes old transitions', async () => {
     const task = store.create(makeTask())
     store.update(task.id, { status: 'paused' })
     store.update(task.id, { status: 'active' })
+
+    // Advance the clock past the transition timestamps before compacting —
+    // compact uses `timestamp < Date.now()` so without a delay the writes
+    // can land in the same millisecond as the cutoff and survive the sweep.
+    await new Promise((resolve) => setTimeout(resolve, 2))
 
     // Compact with 0 days = remove everything
     const result = store.compact(0)

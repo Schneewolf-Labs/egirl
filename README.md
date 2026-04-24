@@ -3,31 +3,40 @@
 </p>
 
 <p align="center">
-  <strong>Local-first AI agent that runs on your hardware</strong><br>
-  Escalates to cloud only when needed. Meet Kira.
+  <strong>Local AI that drives Claude Code.</strong><br>
+  The human-in-the-loop for your coding agent. Meet Kira.
 </p>
 
 ---
 
 ## What This Is
 
-egirl is a personal AI agent for users with local GPU inference. It runs most tasks locally via llama.cpp, remembers conversations, and intelligently escalates to Claude or GPT when complexity demands it.
+egirl is a long-running local AI agent. It runs on your hardware, remembers what you've been working on, and **delegates real engineering work to Claude Code**. The local LLM plans and supervises; Claude Code executes.
 
-**Default personality: Kira** - confident, sharp, gets stuff done. Will tease you when you push to main.
+Think of it as a competent colleague who lives in your cluster, knows your projects, and drives Claude Code so you don't have to write every prompt by hand.
+
+**Default personality: Kira** — confident, sharp, gets stuff done. Will tease you when you push to main.
+
+## The Mental Model
+
+Everything flows through one idea:
+
+> The local LLM is the operator. It escalates to **tools**, not to other models. The most important tool is `code_agent` — a wrapper around Claude Code.
+
+No multi-model routing. No per-message cloud escalation. The local model solves it itself or calls a tool.
 
 ## Features
 
-- **Local-first** - Runs on your hardware, zero API cost for most tasks
-- **[Smart routing](docs/routing.md)** - Escalates to Claude/GPT only when needed, with configurable thresholds and mid-conversation escalation
-- **[Memory system](docs/memory.md)** - Hybrid search (keyword + semantic) with multimodal embeddings, auto-extraction, and temporal queries
-- **Multiple channels** - [Discord](DISCORD.md) DMs, terminal CLI, [XMPP/Jabber](docs/communication-protocols.md), [HTTP API](docs/configuration.md#channelsapi), and [Claude Code bridge](docs/claude-code.md)
-- **[Tool use](docs/tools.md)** - File ops, git, GitHub API, command execution, memory, web research, browser automation, screenshots, background tasks, and code agent delegation
-- **[Background tasks](docs/background-tasks.md)** - Scheduled, event-driven, and one-shot tasks with workflow engine, discovery, and outbound notifications
-- **[Vision](docs/vision.md)** - Screenshot analysis and image understanding via Qwen3-VL
-- **[Browser automation](docs/tools.md#browser-tools)** - Full Playwright-based browser control with accessibility targeting
-- **[Skills](docs/skills.md)** - Extend capabilities with reusable Markdown instruction sets
-- **[Safety](docs/safety.md)** - Command blocklist, path sandboxing, sensitive file guard, audit logging
-- **[Customizable personality](docs/personality.md)** - Kira is the default, make her your own
+- **Local-first** — llama.cpp on your box, zero API cost for coordination
+- **Claude Code integration** — first-class `code_agent` tool that delegates engineering work to Claude Code via the Claude Agent SDK (uses your subscription, not API keys)
+- **Long-running memory** — hybrid keyword + semantic search, SQLite-backed, with auto-extraction and temporal recall
+- **Conversation persistence** — picks up where you left off across restarts
+- **Background tasks** — cron-scheduled work with business-hours awareness and dependency ordering
+- **Tools that feel like hands** — file ops, shell, git, GitHub, browser (Playwright), web research, screenshots
+- **Four ways to talk to it** — interactive CLI, Discord DMs, self-hosted XMPP, or a minimal HTTP API (for scripts, automations, LAN access)
+- **Skills** — reusable Markdown instruction sets
+- **Safety guardrails** — command filter, path sandbox, sensitive file guard, audit log (guardrails, not a sandbox)
+- **Customizable personality** — Kira's the default, replace her with whoever
 
 ## Quick Start
 
@@ -35,26 +44,19 @@ egirl is a personal AI agent for users with local GPU inference. It runs most ta
 # Install dependencies
 bun install
 
-# Configure
-cp .env.example .env
-# Edit .env with your API keys (optional - only needed for escalation)
-
-# Start llama.cpp server (your local model)
+# Start llama.cpp (your local model)
 llama-server -m your-model.gguf -c 32768 --port 8080
 
 # Start embedding service (for memory)
 cd services/embeddings && ./run.sh
 
-# Run CLI
+# Run the CLI
 bun run cli
-
-# Or Discord bot (see DISCORD.md for setup)
-bun run discord
 ```
 
 ## Configuration
 
-See [docs/configuration.md](docs/configuration.md) for the full reference including all channel options, routing rules, and skill directories.
+See [docs/configuration.md](docs/configuration.md) for the full reference.
 
 ### egirl.toml
 
@@ -63,138 +65,159 @@ See [docs/configuration.md](docs/configuration.md) for the full reference includ
 path = "~/.egirl/workspace"
 
 [local]
-endpoint = "http://localhost:8080"      # llama.cpp server
+endpoint = "http://localhost:8080"
 model = "qwen3-vl-32b"
 context_length = 32768
 
 [local.embeddings]
-endpoint = "http://localhost:8082"      # Qwen3-VL-Embedding service
+endpoint = "http://localhost:8082"
 model = "qwen3-vl-embedding-2b"
 dimensions = 2048
 multimodal = true
 
-[routing]
-default = "local"
-escalation_threshold = 0.4
-always_local = ["memory_search", "memory_get", "greeting"]
-always_remote = ["code_generation", "complex_reasoning"]
-
 [channels.discord]
 allowed_channels = ["dm"]
-allowed_users = []  # empty = allow all
+allowed_users = []   # empty = allow all
+
+[channels.claude_code]
+permission_mode = "bypassPermissions"
+
+[tools]
+code_agent = true     # the primary tool — delegate coding to Claude Code
 ```
 
 ### .env
 
 ```bash
-ANTHROPIC_API_KEY=sk-ant-...   # Optional - for escalation
-OPENAI_API_KEY=sk-...          # Optional - for escalation
-DISCORD_TOKEN=...              # Required for Discord bot
+DISCORD_TOKEN=...     # for Discord bot
+XMPP_USERNAME=...     # for XMPP bot
+XMPP_PASSWORD=...
+EGIRL_API_TOKEN=...   # optional bearer token for the HTTP API (required if exposing on LAN)
+GITHUB_TOKEN=...      # for gh_* tools
 ```
+
+No `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` — Claude Code uses subscription auth via the Claude Agent SDK.
 
 ## Commands
 
 ```bash
-bun run cli                         # Interactive CLI
-bun run src/index.ts cli -m "hello" # Single message
-bun run src/index.ts discord        # Discord bot
-bun run src/index.ts claude-code    # Claude Code bridge (or: cc)
-bun run src/index.ts xmpp          # XMPP/Jabber chat
-bun run api                         # HTTP REST API server
-bun run src/index.ts serve          # All configured channels in one process
-bun run src/index.ts status         # Check config and connections
-bun run src/index.ts help           # Show all commands
+bun run cli                               # Interactive CLI
+bun run src/index.ts cli -m "hello"       # Single message, then exit
+bun run src/index.ts discord              # Discord bot only
+bun run src/index.ts xmpp                 # XMPP bot only (self-hosted)
+bun run src/index.ts api                  # HTTP API on localhost:3000 (configurable)
+bun run src/index.ts serve                # Discord/XMPP + background task runner
+bun run src/index.ts claude-code          # Direct Claude Code bridge (alias: cc)
+bun run src/index.ts cc -m "fix the tests"
+bun run src/index.ts status               # Show config + connection status
+bun run src/index.ts help
 ```
 
 ## Architecture
 
-See [docs/architecture.md](docs/architecture.md) for the full system overview, request lifecycle, module dependencies, and design decisions.
-
 ```
 egirl/
-├── egirl.toml                 # Config
+├── egirl.toml                # Config
 ├── src/
-│   ├── agent/                 # Core loop, context building, summarization
-│   ├── api/                   # HTTP REST server (chat, tools, memory, stats)
-│   ├── browser/               # Playwright browser automation
-│   ├── channels/              # CLI, Discord, Claude Code, XMPP, API
-│   ├── commands/              # Command runners (cli, discord, xmpp, api, etc.)
-│   ├── config/                # TOML loading, validation, defaults
-│   ├── conversation/          # Conversation persistence (SQLite)
-│   ├── memory/                # SQLite + embeddings search
-│   ├── providers/             # llama.cpp, Anthropic, OpenAI
-│   ├── routing/               # Local vs remote decisions
-│   ├── safety/                # Command filter, path sandbox, audit log
-│   ├── skills/                # Skill loading and management
-│   ├── standup/               # Daily workspace context gathering
-│   ├── tasks/                 # Background task scheduler, events, workflows
-│   ├── tools/                 # 48 built-in tools (file, git, GitHub, browser, etc.)
-│   ├── tracking/              # Usage stats, cost tracking, transcripts
-│   ├── ui/                    # Theme system (256-color ANSI)
-│   ├── util/                  # Logger, token counting, async helpers
-│   └── workflows/             # Workflow engine for structured multi-step tasks
-├── services/
-│   └── embeddings/            # Qwen3-VL-Embedding service
-└── workspace/                 # Default personality templates (Kira)
+│   ├── agent/                # The local LLM's loop, memory-aware
+│   ├── api.ts                # Minimal HTTP API (Bun.serve, ~200 lines)
+│   ├── browser/              # Playwright browser automation
+│   ├── channels/             # CLI, Discord, XMPP, Claude Code bridge
+│   ├── commands/             # Command runners
+│   ├── config/               # TOML loading + TypeBox validation
+│   ├── conversation/         # Persisted conversation store (SQLite)
+│   ├── memory/               # Hybrid keyword + embeddings search
+│   ├── providers/            # llama.cpp (the only provider)
+│   ├── safety/               # Command filter, path guard, audit log
+│   ├── skills/               # Skill loading
+│   ├── standup/              # Morning workspace context
+│   ├── tasks/                # Cron scheduler, heartbeat, discovery
+│   ├── tools/                # Built-in tools (file, git, github, browser, code_agent)
+│   ├── tracking/             # Stats and JSONL transcripts
+│   ├── ui/                   # 256-color theme
+│   ├── util/                 # Logger, args, async helpers
+│   └── workspace/            # Workspace bootstrapping
+├── services/embeddings/      # Python Qwen3-VL-Embedding service
+└── workspace/                # Personality templates (copied on first run)
 ```
 
 ## Customizing Kira
 
-See [docs/personality.md](docs/personality.md) for the full guide on creating custom personalities with examples.
-
 Personality files live in `~/.egirl/workspace/`:
 
-- `IDENTITY.md` - Name, appearance, role
-- `SOUL.md` - Personality, voice, behavior
-- `USER.md` - Info about you
-- `AGENTS.md` - Operating instructions
+- `IDENTITY.md` — Name, appearance, role
+- `SOUL.md` — Personality, voice, behavior
+- `USER.md` — Info about you
+- `AGENTS.md` — Operating instructions
 
-Edit these to customize. Or replace Kira entirely.
+Edit to customize, or replace Kira entirely. See [docs/personality.md](docs/personality.md).
 
 ## Tools
 
-See [docs/tools.md](docs/tools.md) for the full reference with parameters and examples. egirl ships with 48 built-in tools across 8 categories. Tools use the [Qwen3 native tool calling format](docs/tool-format.md).
+egirl ships with tools across six categories. Format: Qwen3 native tool calling ([docs/tool-format.md](docs/tool-format.md)).
 
-| Category | Tools | Description |
-|----------|-------|-------------|
-| **File ops** | `read_file`, `write_file`, `edit_file`, `glob_files` | Read, write, edit, and find files |
-| **Commands** | `execute_command` | Run shell commands with timeout |
-| **Memory** | `memory_search`, `memory_get`, `memory_set`, `memory_delete`, `memory_list` | Hybrid search, store, and manage memories |
-| **Git** | `git_status`, `git_diff`, `git_log`, `git_commit`, `git_show` | Repository operations |
-| **GitHub** | `gh_pr_list`, `gh_pr_view`, `gh_pr_create`, `gh_pr_review`, `gh_pr_comment`, `gh_issue_list`, `gh_issue_view`, `gh_issue_comment`, `gh_issue_update`, `gh_ci_status`, `gh_branch_create` | Pull requests, issues, CI, and branches |
-| **Browser** | `browser_navigate`, `browser_click`, `browser_fill`, `browser_snapshot`, `browser_screenshot`, `browser_select`, `browser_check`, `browser_hover`, `browser_wait`, `browser_eval`, `browser_close` | Playwright-based browser automation |
-| **Tasks** | `task_add`, `task_propose`, `task_list`, `task_pause`, `task_resume`, `task_cancel`, `task_run_now`, `task_history` | Background task management |
-| **Other** | `screenshot`, `web_research`, `code_agent` | Screen capture, web fetching, Claude Code delegation |
+| Category | Tools |
+|----------|-------|
+| **Delegation (primary)** | `code_agent` — drive Claude Code |
+| **Files** | `read_file`, `write_file`, `edit_file`, `glob_files` |
+| **Shell** | `execute_command` |
+| **Memory** | `memory_search`, `memory_get`, `memory_set`, `memory_delete`, `memory_list`, `memory_recall` |
+| **Git** | `git_status`, `git_diff`, `git_log`, `git_commit`, `git_show` |
+| **GitHub** | `gh_pr_*`, `gh_issue_*`, `gh_ci_status`, `gh_branch_create` |
+| **Browser** | `browser_navigate`, `browser_click`, `browser_fill`, `browser_snapshot`, `browser_screenshot`, etc. |
+| **Tasks** | `task_add`, `task_propose`, `task_list`, `task_run_now`, `task_history`, etc. |
+| **Other** | `screenshot`, `web_research`, `web_search` |
+
+See [docs/tools.md](docs/tools.md) for details.
+
+## HTTP API
+
+A small REST-ish API for scripts, automations, LAN clients, and mobile apps. Bun.serve, localhost-only by default, optional bearer auth via `EGIRL_API_TOKEN`.
+
+```
+GET    /                     → { service, version }
+POST   /chat                 { message, session_id? } → agent response
+GET    /sessions/:id         → messages
+DELETE /sessions/:id         → clear session
+GET    /memory?q=...&limit=  → search results
+POST   /memory               { key, value, category? }
+DELETE /memory/:key
+GET    /tasks?status=...     → list
+POST   /tasks                { name, prompt, kind, interval_ms?, cron? }
+POST   /tasks/:id/run        → trigger a task immediately
+```
+
+Example:
+```bash
+curl -s http://localhost:3000/chat \
+  -H 'content-type: application/json' \
+  -d '{"message":"what did we work on yesterday?"}' | jq -r .content
+```
+
+No OpenAPI spec, no versioned paths, no plugin framework. If you want to build something on top, talk to egirl over HTTP in whatever language you like.
 
 ## Documentation
 
 | Document | Description |
 |----------|-------------|
-| [Architecture](docs/architecture.md) | System overview, request lifecycle, module dependencies, design decisions |
-| [Configuration](docs/configuration.md) | Complete reference for `egirl.toml` and `.env` |
-| [Routing & Escalation](docs/routing.md) | How requests are routed between local and remote models |
-| [Memory System](docs/memory.md) | Hybrid search, embeddings, storage, and search strategies |
-| [Tools Reference](docs/tools.md) | All 48 built-in tools with parameters and examples |
-| [Background Tasks](docs/background-tasks.md) | Scheduled, event-driven, and one-shot background task framework |
-| [Claude Code Integration](docs/claude-code.md) | Using egirl as a Claude Code supervisor |
-| [Skills](docs/skills.md) | Creating and managing skill files |
-| [Safety](docs/safety.md) | Command filtering, path sandboxing, sensitive file guard, audit logging, confirmation mode |
-| [Security Analysis](docs/security-analysis.md) | Threat model and security considerations |
-| [Development Guide](docs/development.md) | Setup, testing, code style, and contributing |
-| [Discord Setup](DISCORD.md) | Step-by-step Discord bot configuration |
-| [Tool Format](docs/tool-format.md) | Qwen3 native tool calling specification |
-| [Vision](docs/vision.md) | Multimodal capabilities with Qwen3-VL |
-| [Personality](docs/personality.md) | Customizing agent personality via workspace files |
-| [Communication Protocols](docs/communication-protocols.md) | Evaluation of self-hosted chat protocols (XMPP, Matrix, SimpleX, IRC) |
-| [Conversation Persistence](docs/exploration-conversation-persistence.md) | Design exploration for persisting conversations across restarts |
-| [Fine-Tuning](docs/fine-tuning.md) | Training data strategy for custom models |
+| [Architecture](docs/architecture.md) | System overview and module dependencies |
+| [Configuration](docs/configuration.md) | `egirl.toml` and `.env` reference |
+| [Memory](docs/memory.md) | Hybrid search, embeddings, storage |
+| [Tools](docs/tools.md) | All built-in tools with parameters |
+| [Background Tasks](docs/background-tasks.md) | Cron-scheduled task system |
+| [Claude Code Integration](docs/claude-code.md) | The core delegation flow |
+| [Skills](docs/skills.md) | Creating reusable skill files |
+| [Safety](docs/safety.md) | Guardrails and their limits |
+| [Tool Format](docs/tool-format.md) | Qwen3 native tool calling |
+| [Personality](docs/personality.md) | Customizing Kira |
+| [Development](docs/development.md) | Setup, testing, style |
 
 ## Requirements
 
-- [Bun](https://bun.sh) runtime
+- [Bun](https://bun.sh)
 - [llama.cpp](https://github.com/ggerganov/llama.cpp) server
-- Python 3.10+ (optional — for embedding service)
-- Playwright browsers (optional — for browser automation tools, install with `bunx playwright install`)
+- Python 3.10+ (optional — embeddings service)
+- Playwright browsers (optional — `bunx playwright install`)
 - GPU with enough VRAM for your model
 
 ## License

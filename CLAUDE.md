@@ -1,33 +1,38 @@
-# egirl — Local-First AI Agent
+# egirl — Local AI that Drives Claude Code
 
-## Project Overview
+## What This Is
 
-egirl is a personal AI agent designed for users with local GPU inference capability. It communicates via Discord and terminal, runs most tasks locally using llama.cpp, and escalates to Claude/GPT only when necessary.
+egirl is a long-running local AI agent that acts as the **human in the loop** for Claude Code. The local LLM plans, remembers, supervises, and delegates; Claude Code does the actual engineering work. Around that core sits memory, a toolbelt shaped like a human's hands (shell, files, git, browser, web), and a couple of ways to talk to it (CLI + Discord).
 
-This is a single-user tool, not a general-purpose framework. No auth, no multi-user, no deployment patterns.
+Single user. Single operator model. No cloud escalation, no routing decisions — the local LLM is the operator, and it escalates to *tools*, not to other models.
+
+## The Mental Model
+
+> **One local LLM is the operator. It escalates to tools, not to other models. The most important tool is Claude Code.**
+
+If you ever catch yourself adding "what if we route this to a bigger model" logic, stop. That's not what this is. If the local model can't do something itself, it calls `code_agent` (Claude Code) for code work, or `execute_command` / `browser_*` / `web_research` / `git_*` for everything else.
 
 ## Purpose
 
-**The core value proposition of egirl is giving a local LLM the ability to control a code agent (Claude Code).** The local model coordinates, plans, and delegates — the code agent does the actual code changes. egirl is the bridge between natural language intent and real engineering actions.
+egirl is built for one person at Schneewolf Labs. It behaves like a competent colleague who:
+- Remembers what you've been working on
+- Knows how to drive Claude Code for real project work
+- Can run shell commands, read/write files, interact with git and GitHub, browse the web
+- Wakes up on a cron to check in on things
+- Talks back through Discord DMs or the terminal
 
-egirl is built to be a productive employee for Schneewolf Labs — not a generic personal assistant. Feature development should prioritize workflows that help get real work done: code review, research, file management, task automation, and technical problem-solving.
-
-This is not OpenClaw. OpenClaw is a general-purpose agent framework. egirl is a purpose-built tool for a specific team's needs. When deciding what to build:
-
-- **Build**: Features that make the agent more useful for software development, research, and lab operations
-- **Skip**: Generic assistant features (weather, jokes, small talk, general knowledge Q&A)
-- **Prioritize**: Deep integration with the tools and workflows Schneewolf Labs actually uses
-- **Avoid**: Breadth for its own sake — depth in relevant areas beats shallow coverage
-
-The agent should behave like a competent colleague who knows the codebase, remembers context, and can be trusted with real tasks.
+Feature priorities:
+- **Build**: Anything that makes the local → Claude Code delegation better, or that makes the long-running memory richer.
+- **Skip**: Generic assistant features (weather, jokes, trivia). Multi-model routing. Multi-user anything. Hypothetical future integrations.
+- **Prioritize**: Depth over breadth. One Claude Code delegation flow that works well beats five half-wired remote providers.
 
 ## Design Philosophy
 
-1. **One user, one cluster** — No auth, no pairing, no multi-user anything
-2. **Local by default** — Routing, memory, simple conversations run on your hardware at zero API cost
-3. **Escalate, don't apologize** — Hand off to Claude seamlessly when local can't cut it
-4. **Flat and readable** — Minimal abstraction. If you can grep for it, don't wrap it
-5. **Steal good ideas** — OpenClaw's skill format: yes. Their 50-layer gateway abstraction: no
+1. **Local LLM is the operator.** No model routing, no escalation to remote LLMs. Delegate to *tools* (code_agent, execute_command, browser_*) when the local model isn't the right executor.
+2. **Long-running by design.** Memory survives restarts. Cron wakes it up. Conversations persist.
+3. **One user, one cluster.** No auth, no pairing, no multi-user anything.
+4. **Flat and readable.** Minimal abstraction. If you can grep for it, don't wrap it.
+5. **Steal good ideas.** OpenClaw's skill format: yes. Their 50-layer gateway abstraction: no.
 
 ## Tech Stack
 
@@ -36,10 +41,11 @@ The agent should behave like a competent colleague who knows the codebase, remem
 | Runtime | Bun |
 | Language | TypeScript (strict mode) |
 | Local LLM | llama.cpp HTTP server (OpenAI-compatible API) |
-| Remote LLMs | `@anthropic-ai/sdk`, `openai` npm packages |
-| Database | `bun:sqlite` for memory indexing |
-| Embeddings | llama.cpp serving embedding model (e.g., nomic-embed-text) |
+| Code agent | `@anthropic-ai/claude-agent-sdk` (subscription auth) |
+| Database | `bun:sqlite` for memory, conversations, tasks |
+| Embeddings | Qwen3-VL-Embedding served via Python (see `services/embeddings/`) |
 | Discord | `discord.js` |
+| Browser | `playwright` |
 | Config | TOML (`smol-toml`), validated with TypeBox |
 
 ## Tool Calling Format
@@ -48,53 +54,42 @@ egirl uses the native Qwen3 chat template for tool calling. See [docs/tool-forma
 
 ## Design Language
 
-egirl's visual identity is derived from the logo: deep purples, hot pinks, and dark neutrals. An anime cat-girl with a crescent moon — playful but sharp. The CLI should feel like it belongs to that world.
+egirl's visual identity: deep purples, hot pinks, dark neutrals. Anime cat-girl with a crescent moon. Playful but sharp. CLI should feel like it belongs to that world.
 
 ### Brand Palette
-
-Extracted from the logo. Use these as the source of truth for any UI surface — terminal, HTML docs, Discord embeds.
 
 | Role | Hex | 256-color | Usage |
 |------|-----|-----------|-------|
 | Purple (primary) | `#af5fd7` | 135 | Headings, user prompt, section labels |
 | Hot Pink (secondary) | `#ff5faf` | 198 | Agent name (`egirl>`), emphasis, brand text |
 | Orchid (accent) | `#d75fd7` | 171 | Decorators, separators, tool call arrows |
-| Gray (muted) | `#767676` | 243 | Timestamps, metadata, de-emphasized text |
-| Soft Green (success) | `#87d787` | 114 | `ok` status, connected, enabled |
-| Rose (error) | `#ff5f87` | 204 | `err` status, failures |
-| Gold (warning) | `#ffd75f` | 221 | Warnings, thresholds |
+| Gray (muted) | `#767676` | 243 | Timestamps, metadata |
+| Soft Green (success) | `#87d787` | 114 | `ok` status |
+| Rose (error) | `#ff5f87` | 204 | `err` status |
+| Gold (warning) | `#ffd75f` | 221 | Warnings |
 | Light Purple (info) | `#af87ff` | 141 | Info-level logs |
 
-### CLI Theme System
-
-Themes live in `src/ui/theme.ts`. Four built-in themes:
-
-- **egirl** (default) — Purple/pink. The brand palette above.
-- **midnight** — Steel blue/teal. Late-night hacking.
-- **neon** — Green/cyan. Cyberpunk terminal.
-- **mono** — Grayscale. When you want output, not vibes.
-
-Set via `theme = "egirl"` in `egirl.toml` (root level). All CLI output — logger, prompts, help text, status — uses the active theme through `colors()` from `src/ui/theme.ts`.
+Themes live in `src/ui/theme.ts`. Four built-in: `egirl` (default), `midnight`, `neon`, `mono`. Set via `theme = "..."` in `egirl.toml`.
 
 ### Principles
 
-- **256-color ANSI** — No external color libraries. Raw `\x1b[38;5;{n}m` sequences. Works in every modern terminal.
-- **Theme-aware, not theme-dependent** — Output is readable even without color support. Never encode meaning in color alone.
-- **Semantic color roles** — Don't hardcode ANSI codes in display files. Import `colors()` and use named roles (`primary`, `secondary`, `error`, etc.).
-- **Consistent hierarchy** — `BOLD` for brand name. `primary` for section headers. `accent` for commands/keywords. `DIM` for metadata. `muted` for noise.
-- **HTML docs** — When generating HTML documentation or manuals, use the same hex palette. Purple (`#af5fd7`) for headings, pink (`#ff5faf`) for accents, dark background (`#1a1a2e`) for code blocks.
+- **256-color ANSI.** No external color libraries. Raw `\x1b[38;5;{n}m` sequences.
+- **Theme-aware, not theme-dependent.** Output readable even without color support. Never encode meaning in color alone.
+- **Semantic color roles.** Import `colors()` from `src/ui/theme.ts`; use `primary`, `accent`, `error`. Don't hardcode ANSI codes in display files.
 
 ## What NOT to Build
 
-- No WebSocket gateway (Discord.js handles its connection, CLI is stdio)
-- No channel abstraction layer (hardcode Discord and CLI)
-- No plugin system for providers (three files, three classes)
-- No skill gating/permissions
-- No session persistence across restarts (v1)
-- No streaming (v1)
-- No multi-user anything
+This list is load-bearing. When you catch yourself about to add one of these, stop.
 
----
+- **No model routing.** The local LLM is the only chooser. "Escalate" means "call a tool." If you find yourself writing a `Router` class, you've lost the plot.
+- **No remote LLM providers** (Anthropic API, OpenAI, etc.) for per-message routing. Claude Code accesses Anthropic via the Claude Agent SDK with subscription auth — that's the only sanctioned remote path.
+- **No internal plugin system.** Channels, providers, tools are hardcoded. CLI, Discord, and XMPP are concrete `Channel` implementations, each optional via config. No dynamic registration, no discovery, no capability negotiation. If a fourth is genuinely wanted, hardcode it too; don't build a pluggable layer. Extensibility lives at the HTTP API boundary, not inside the process.
+- **External HTTP API is encouraged.** A small `Bun.serve` in `src/api.ts` lets scripts, mobile apps, automations, LAN clients, and external UIs talk to egirl without running in-process. Keep it tiny — no OpenAPI spec generation, no versioned routes, no tiered rate limits, no framework. Each endpoint should pay for itself; when in doubt delete rather than add.
+- **No workflow engine.** The LLM is the workflow engine. Don't build a second one.
+- **No event-driven task triggers** (file watchers, GitHub webhooks, inbound HTTP). Cron is enough. If you think you need webhooks, reconsider — almost always the right design is "check on a schedule."
+- **No plugin system for providers.** One local provider. That's the whole list.
+- **No skill gating/permissions.** You're the only user.
+- **No multi-user anything.**
 
 ## Rules for Working in This Codebase
 
@@ -107,113 +102,103 @@ Workspace files are user data, not code. **Never modify without explicit permiss
 - `IDENTITY.md` — Name, emoji, identity config
 - `AGENTS.md` — Operating instructions
 
-These files belong to the user. Treat them like you'd treat someone's personal notes.
+These belong to the user. Treat like personal notes.
 
 ### Don't Be Helpful
 
-No unsolicited changes. Specifically:
-- No "while I was in here I also..." modifications
-- No adding README sections that weren't requested
-- No creating index.ts barrel files to "clean up" imports
-- No refactoring adjacent code that "could be better"
-- No adding comments, docstrings, or type annotations to code you didn't change
-- No "improving" error handling in unrelated functions
-
-Do exactly what was asked. Stop.
+No unsolicited changes. No "while I was in here I also..." modifications. No README additions not requested. No barrel file creation to "clean up" imports. No refactoring adjacent code. No comments, docstrings, or type annotations on code you didn't change. No "improving" error handling in unrelated functions. Do exactly what was asked. Stop.
 
 ### When Uncertain
 
-- **Ask** for architectural decisions, new dependencies, or changes that affect multiple files
-- **Make a call** for implementation details, variable names, or local code structure
-- When in doubt, ask. A 30-second clarification beats a 30-minute redo.
+- **Ask** for architectural decisions, new dependencies, changes affecting multiple files.
+- **Make a call** for implementation details, variable names, local structure.
+- A 30-second clarification beats a 30-minute redo.
 
 ### Dependencies
 
-Don't install new packages without asking first. If you think a new dependency is needed:
-1. Explain what you need it for
-2. List alternatives you considered
-3. Wait for approval
+Don't install new packages without asking. The current stack is intentionally minimal:
 
-The current stack is intentionally minimal. Respect that.
+```
+@anthropic-ai/claude-agent-sdk   # the whole point
+@sinclair/typebox                # config validation
+discord.js                       # one remote interface
+playwright                       # browser tool
+smol-toml                        # config parsing
+yaml                             # skill frontmatter
+```
+
+If you think you need a new dep, explain what for, list alternatives, wait.
 
 ### Git Conventions
 
-Commit messages: imperative mood, concise, no period at the end
+Commit messages: imperative, concise, no trailing period.
 ```
 Add memory search tool
-Fix escalation threshold logic
-Remove unused provider config
+Fix heartbeat schedule parsing
+Remove unused tracking code
 ```
 
-Branch naming (if applicable): `feature/thing`, `fix/thing`, `refactor/thing`
-
-Batch related changes into single commits. Don't commit after every file change.
-
----
+Branches: `feature/thing`, `fix/thing`, `refactor/thing`. Batch related changes into single commits.
 
 ## Code Style
 
 ### TypeScript
 
-- Prefer `interface` for object shapes (it's what the codebase uses)
-- Use TypeBox for runtime validation, infer static types from schemas
-- No `any` — use `unknown` and narrow with type guards
-- Prefer explicit return types on exported functions
-- Barrel exports (`index.ts`) only at module boundaries, not within modules
+- Prefer `interface` for object shapes.
+- Use TypeBox for runtime validation, infer static types from schemas.
+- No `any` — use `unknown` and narrow.
+- Explicit return types on exported functions.
+- Barrel exports only at module boundaries, not within modules.
 
 ### Null vs Undefined
 
-- Prefer `undefined` for absence in application code
-- `null` is acceptable at external boundaries (SQLite, SDK responses)
-- discord.js and bun:sqlite return `null` in places — don't fight it
+- Prefer `undefined` in application code.
+- `null` is acceptable at external boundaries (SQLite, SDK responses).
 
 ### Error Handling
 
-- Throw errors early, catch them at boundaries (agent loop, channel handlers)
-- Use discriminated unions for expected failure states, not exceptions
-- Never swallow errors silently — log them at minimum
-- Tool execution errors should return `{ success: false, output: "..." }`, not throw
+- Throw early, catch at boundaries (agent loop, channel handlers).
+- Discriminated unions for expected failure states, not exceptions.
+- Never swallow errors silently — log at minimum.
+- Tool execution errors return `{ success: false, output: "..." }`, they don't throw.
 
 ### Patterns to Follow
 
-- One file = one concept. If a file exceeds ~200 lines, split it
-- Functions over classes unless you need stateful instances
-- Explicit dependencies via function parameters, not module-level singletons
-- Config is loaded once at startup and passed down
-- Use early returns to reduce nesting
+- One file = one concept. **Target 200 lines per file.** The current `agent/loop.ts` violates this and needs to be split — don't make it worse.
+- Functions over classes unless you need stateful instances.
+- Explicit dependencies via parameters, not module-level singletons.
+- Config loaded once at startup, passed down.
+- Early returns to reduce nesting.
 
 ### Patterns to Avoid
 
-- No dependency injection frameworks
-- No decorators
-- No class inheritance hierarchies — composition only
-- No `"use strict"` (TypeScript handles this)
-- No default exports (named exports are greppable)
-- No complex generics unless absolutely necessary
+- No DI frameworks, no decorators, no inheritance hierarchies.
+- No default exports (named exports are greppable).
+- No complex generics unless truly necessary.
 
 ### Naming
 
 - Files: `kebab-case.ts`
 - Types/Interfaces: `PascalCase`
 - Functions/variables: `camelCase`
-- Constants: `SCREAMING_SNAKE_CASE` only for true constants (not config values)
-- Boolean variables: prefix with `is`, `has`, `should`, `can`
+- Constants: `SCREAMING_SNAKE_CASE` only for true constants (not config values).
+- Booleans: prefix with `is`, `has`, `should`, `can`.
 
 ### Testing
 
-- Tests live in `test/` directory, mirroring `src/` structure
-- Use `bun:test` — no Jest, no Vitest
-- Test behavior, not implementation
-- Mock at module boundaries (providers, file system), not internal functions
+- Tests live in `test/`, mirroring `src/` structure.
+- Use `bun:test`. No Jest, no Vitest.
+- Test behavior, not implementation.
+- Mock at module boundaries (providers, filesystem), not internal functions.
 
 ### Verification
 
-After making changes, always run all three checks before considering work complete:
+After changes, run all three before considering work complete:
 
 ```
 bun test          # unit tests
-bun run lint      # biome check (formatting + lint rules)
+bun run lint      # biome
 bun run typecheck # tsc --noEmit
 ```
 
-All three must pass. Do not push code that fails any of these checks.
+All three must pass. Don't push code that fails any of these.

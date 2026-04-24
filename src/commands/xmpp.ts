@@ -17,21 +17,19 @@ export async function runXMPP(config: RuntimeConfig, args: string[]): Promise<vo
     process.exit(1)
   }
 
-  const { providers, router, toolExecutor, transcript, skills } = await createAppServices(config)
+  const { providers, memory, conversations, toolExecutor, transcript, skills } =
+    await createAppServices(config)
 
-  // Gather workspace standup for agent context
   const standup = await gatherStandup(config.workspace.path)
-
   const sessionMutex = new SessionMutex()
 
   const agent = createAgentLoop({
     config,
-    router,
     toolExecutor,
     localProvider: providers.local,
-    remoteProvider: providers.remote,
-    providers,
     sessionId: 'xmpp:default',
+    memory,
+    conversationStore: conversations,
     transcript,
     skills,
     additionalContext: standup.context || undefined,
@@ -43,6 +41,7 @@ export async function runXMPP(config: RuntimeConfig, args: string[]): Promise<vo
   const shutdown = async () => {
     log.info('main', 'Shutting down...')
     await xmpp.stop()
+    conversations?.close()
     process.exit(0)
   }
 

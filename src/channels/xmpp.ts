@@ -135,6 +135,20 @@ export class XMPPChannel implements Channel {
     await this.xmpp.stop()
   }
 
+  /** Outbound: send a message to a JID (used by the task runner for notifications). */
+  async sendTo(to: string, body: string): Promise<void> {
+    if (!to || to === 'self') {
+      // Fall back to the first allowed JID if configured
+      const fallback = this.config.allowedJids[0]
+      if (!fallback) {
+        log.warn('xmpp', 'sendTo called without a target and no allowed_jids configured')
+        return
+      }
+      to = fallback
+    }
+    await this.sendMessage(to, body)
+  }
+
   private async handleMessage(stanza: Element): Promise<void> {
     const from = stanza.attrs.from as string | undefined
     const body = stanza.getChildText('body')
@@ -157,10 +171,7 @@ export class XMPPChannel implements Channel {
 
       await this.sendMessage(from, fullResponse)
 
-      log.debug(
-        'xmpp',
-        `Responded via ${response.provider}${response.escalated ? ' (escalated)' : ''}`,
-      )
+      log.debug('xmpp', `Responded via ${response.provider}`)
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error)
       log.error('xmpp', 'Error processing message:', error)

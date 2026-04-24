@@ -42,7 +42,6 @@ export type { Tool, ToolDefinition, ToolResult } from './types'
 import type { BrowserManager } from '../browser'
 import type { RuntimeConfig } from '../config'
 import type { MemoryManager } from '../memory'
-import { builtinWorkflows, createWorkflowTool } from '../workflows'
 import {
   type CodeAgentConfig,
   createBrowserTools,
@@ -203,9 +202,6 @@ export function createDefaultToolExecutor(
       bt.browserCloseTool,
     ])
   }
-
-  // Workflow tool (registered last — it references the executor to call other tools)
-  executor.register(createWorkflowTool(executor, builtinWorkflows))
 
   return executor
 }

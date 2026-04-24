@@ -1,8 +1,7 @@
 # CLI color theme: egirl (purple/pink), midnight (blue/teal), neon (green/cyan), mono (grayscale)
 theme = "egirl"
 
-# Extended thinking / reasoning controls
-# Applies to Anthropic (extended thinking) and Qwen3 (/think mode)
+# Extended thinking / reasoning controls (Qwen3 /think mode)
 # Override per-session in CLI with: /think <level>
 [thinking]
 level = "off"                            # off, low, medium, high
@@ -16,61 +15,63 @@ path = "~/.egirl/workspace"
 endpoint = "http://0.0.0.0:8082"        # llama.cpp server
 model = "qwen3-vl-32b"                   # for display/logging only
 context_length = 32768
-max_concurrent = 2                       # you have the VRAM for parallel requests
+max_concurrent = 2
 
 [local.embeddings]
 provider = "qwen3-vl"                    # Python service using transformers
-endpoint = "http://localhost:8083"       # separate port from main model (8082)
+endpoint = "http://localhost:8083"
 model = "qwen3-vl-embedding-2b"
 dimensions = 2048
-multimodal = true                        # supports text + image embeddings
-
-[routing]
-disabled = true                          # always use local; no escalation or heuristics
-default = "local"
-escalation_threshold = 0.4
-always_local = ["memory_search", "memory_get", "greeting", "acknowledgment"]
-always_remote = []
+multimodal = true
 
 [channels.discord]
 allowed_channels = ["dm"]                # or specific channel IDs
 allowed_users = []                       # set your Discord user ID
 
-[channels.api]
-port = 3000
-host = "127.0.0.1"
-
 [channels.claude_code]
-permission_mode = "default"               # local model handles permissions
+permission_mode = "bypassPermissions"    # default, acceptEdits, bypassPermissions, plan
 # model = "sonnet"                       # claude model (sonnet, opus, haiku)
-# working_dir = "~/projects/myrepo"      # defaults to cwd
-# max_turns = 30                         # safety limit on turns per task
+# working_dir = "~/projects/myrepo"      # defaults to workspace
+# max_turns = 30
+
+# XMPP bot — self-hosted chat (e.g. Prosody on localhost or a VPS).
+# Requires XMPP_USERNAME and XMPP_PASSWORD in .env.
+# [channels.xmpp]
+# service = "xmpp://localhost:5222"     # or "xmpps://chat.example.com:5223" for TLS
+# domain = "localhost"                   # inferred from service if omitted
+# resource = "egirl"
+# allowed_jids = ["you@localhost"]      # empty = allow all
+
+# HTTP API — localhost by default, for scripts / mobile / automations.
+# Set EGIRL_API_TOKEN in .env to require a bearer token (recommended if exposing on LAN).
+# [channels.api]
+# host = "127.0.0.1"
+# port = 3000
 
 [safety]
-enabled = true                             # master switch for all safety features
+enabled = true
 
 [safety.command_filter]
-enabled = true                             # block dangerous shell commands
-# blocked_patterns = ["npm\\s+publish"]    # added on top of built-in blocklist
+enabled = true
+# blocked_patterns = ["npm\\s+publish"]
 
 [safety.path_sandbox]
-enabled = false                            # restrict file ops to allowed dirs
+enabled = false
 # allowed_paths = ["{workspace}", "~/projects"]
 
 [safety.sensitive_files]
-enabled = true                             # block access to secrets/keys
-# patterns = ["secret\\.yaml$"]            # added on top of built-in patterns
+enabled = true
 
 [safety.audit_log]
-enabled = true                             # log all tool calls to JSONL
+enabled = true
 path = "{workspace}/audit.log"
 
 [safety.confirmation]
-enabled = false                            # require confirmation for destructive ops
+enabled = false
 # tools = ["execute_command", "write_file", "edit_file"]
 
 [tools]
-code_agent = true                        # enable Claude Code delegation (uses subscription auth)
+code_agent = true                        # enable Claude Code delegation — the primary tool
 
 [skills]
 dirs = ["~/.egirl/skills", "{workspace}/skills"]

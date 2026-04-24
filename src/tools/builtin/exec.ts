@@ -8,10 +8,8 @@ const DEFAULT_TIMEOUT = 30000
 function sanitizedEnv(): Record<string, string | undefined> {
   const SECRET_PATTERNS = [
     /^ANTHROPIC_/i,
-    /^OPENAI_/i,
     /^DISCORD_TOKEN$/i,
     /^GITHUB_TOKEN$/i,
-    /^XMPP_PASSWORD$/i,
     /^AWS_SECRET/i,
     /^SSH_/i,
     /TOKEN/i,

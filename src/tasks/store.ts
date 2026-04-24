@@ -24,16 +24,12 @@ function rowToTask(row: Record<string, unknown>): Task {
     kind: row.kind as Task['kind'],
     status: row.status as Task['status'],
     prompt: row.prompt as string,
-    workflow: row.workflow ? JSON.parse(row.workflow as string) : undefined,
     memoryContext: row.memory_context ? JSON.parse(row.memory_context as string) : undefined,
     memoryCategory: (row.memory_category as string) ?? undefined,
     intervalMs: (row.interval_ms as number) ?? undefined,
     cronExpression: (row.cron_expression as string) ?? undefined,
     businessHours: (row.business_hours as string) ?? undefined,
     dependsOn: (row.depends_on as string) ?? undefined,
-    eventSource: (row.event_source as Task['eventSource']) ?? undefined,
-    eventConfig: row.event_config ? JSON.parse(row.event_config as string) : undefined,
-    triggerMode: ((row.trigger_mode as string) ?? 'execute') as Task['triggerMode'],
     persistConversation: (row.persist_conversation as number) === 1,
     nextRunAt: (row.next_run_at as number) ?? undefined,
     lastRunAt: (row.last_run_at as number) ?? undefined,
@@ -61,7 +57,6 @@ function rowToRun(row: Record<string, unknown>): TaskRun {
     result: (row.result as string) ?? undefined,
     error: (row.error as string) ?? undefined,
     errorKind: (row.error_kind as TaskErrorKind) ?? undefined,
-    triggerInfo: row.trigger_info ? JSON.parse(row.trigger_info as string) : undefined,
     tokensUsed: (row.tokens_used as number) ?? 0,
   }
 }
@@ -97,15 +92,12 @@ export class TaskStore {
         kind TEXT NOT NULL,
         status TEXT NOT NULL,
         prompt TEXT NOT NULL,
-        workflow TEXT,
         memory_context TEXT,
         memory_category TEXT,
         interval_ms INTEGER,
         cron_expression TEXT,
         business_hours TEXT,
         depends_on TEXT,
-        event_source TEXT,
-        event_config TEXT,
         persist_conversation INTEGER DEFAULT 0,
         next_run_at INTEGER,
         last_run_at INTEGER,
@@ -133,7 +125,6 @@ export class TaskStore {
         result TEXT,
         error TEXT,
         error_kind TEXT,
-        trigger_info TEXT,
         tokens_used INTEGER DEFAULT 0,
         FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
       )
@@ -192,7 +183,6 @@ export class TaskStore {
       ['business_hours', 'ALTER TABLE tasks ADD COLUMN business_hours TEXT'],
       ['depends_on', 'ALTER TABLE tasks ADD COLUMN depends_on TEXT'],
       ['last_error_kind', 'ALTER TABLE tasks ADD COLUMN last_error_kind TEXT'],
-      ['trigger_mode', "ALTER TABLE tasks ADD COLUMN trigger_mode TEXT DEFAULT 'execute'"],
       [
         'persist_conversation',
         'ALTER TABLE tasks ADD COLUMN persist_conversation INTEGER DEFAULT 0',
@@ -238,13 +228,13 @@ export class TaskStore {
     this.db.run(
       `
       INSERT INTO tasks (
-        id, name, description, kind, status, prompt, workflow,
+        id, name, description, kind, status, prompt,
         memory_context, memory_category, interval_ms,
         cron_expression, business_hours, depends_on,
-        event_source, event_config, trigger_mode, persist_conversation,
+        persist_conversation,
         next_run_at, max_runs, notify, channel, channel_target,
         created_by, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
       [
         id,
@@ -253,16 +243,12 @@ export class TaskStore {
         input.kind,
         status,
         input.prompt,
-        input.workflow ? JSON.stringify(input.workflow) : null,
         input.memoryContext ? JSON.stringify(input.memoryContext) : null,
         input.memoryCategory ?? null,
         input.intervalMs ?? null,
         input.cronExpression ?? null,
         input.businessHours ?? null,
         input.dependsOn ?? null,
-        input.eventSource ?? null,
-        input.eventConfig ? JSON.stringify(input.eventConfig) : null,
-        input.triggerMode ?? 'execute',
         input.persistConversation ? 1 : 0,
         nextRunAt ?? null,
         input.maxRuns ?? null,
@@ -313,7 +299,6 @@ export class TaskStore {
       cronExpression: 'cron_expression',
       businessHours: 'business_hours',
       dependsOn: 'depends_on',
-      triggerMode: 'trigger_mode',
       nextRunAt: 'next_run_at',
       lastRunAt: 'last_run_at',
       runCount: 'run_count',
@@ -333,17 +318,9 @@ export class TaskStore {
     }
 
     // JSON fields
-    if ('workflow' in changes) {
-      sets.push('workflow = ?')
-      values.push(changes.workflow ? JSON.stringify(changes.workflow) : null)
-    }
     if ('memoryContext' in changes) {
       sets.push('memory_context = ?')
       values.push(changes.memoryContext ? JSON.stringify(changes.memoryContext) : null)
-    }
-    if ('eventConfig' in changes) {
-      sets.push('event_config = ?')
-      values.push(changes.eventConfig ? JSON.stringify(changes.eventConfig) : null)
     }
     // Boolean field — handle separately to avoid false ?? null → null
     if ('persistConversation' in changes) {
@@ -418,16 +395,6 @@ export class TaskStore {
     return rows.map(rowToTask)
   }
 
-  getEventTasks(): Task[] {
-    const rows = this.db
-      .query(`
-      SELECT * FROM tasks
-      WHERE status = 'active' AND kind = 'event'
-    `)
-      .all() as Array<Record<string, unknown>>
-    return rows.map(rowToTask)
-  }
-
   /** Get tasks that depend on a given task ID */
   getDependents(taskId: string): Task[] {
     const rows = this.db
@@ -441,16 +408,16 @@ export class TaskStore {
 
   // --- Run tracking ---
 
-  createRun(taskId: string, triggerInfo?: unknown): TaskRun {
+  createRun(taskId: string): TaskRun {
     const id = generateId()
     const now = Date.now()
 
     this.db.run(
       `
-      INSERT INTO task_runs (id, task_id, started_at, status, trigger_info)
-      VALUES (?, ?, ?, 'running', ?)
+      INSERT INTO task_runs (id, task_id, started_at, status)
+      VALUES (?, ?, ?, 'running')
     `,
-      [id, taskId, now, triggerInfo ? JSON.stringify(triggerInfo) : null],
+      [id, taskId, now],
     )
 
     return {
@@ -462,7 +429,6 @@ export class TaskStore {
       result: undefined,
       error: undefined,
       errorKind: undefined,
-      triggerInfo,
       tokensUsed: 0,
     }
   }

@@ -12,7 +12,6 @@ import {
   type WorkingMemory,
 } from './memory'
 import { createProviderRegistry, type ProviderRegistry } from './providers'
-import { createRouter, type Router } from './routing'
 import { buildSafetyConfig } from './safety/config-bridge'
 import { loadSkillsFromDirectories } from './skills'
 import type { Skill } from './skills/types'
@@ -39,7 +38,6 @@ export interface AppServices {
   energy: EnergyBudget | undefined
   conversations: ConversationStore | undefined
   taskStore: TaskStore | undefined
-  router: Router
   toolExecutor: ToolExecutor
   stats: StatsTracker
   transcript: TranscriptLogger | undefined
@@ -189,9 +187,6 @@ export async function createAppServices(config: RuntimeConfig): Promise<AppServi
   const providers = createProviderRegistry(config)
 
   log.info('main', `Local provider: ${providers.local.name}`)
-  if (providers.remote) {
-    log.info('main', `Remote provider: ${providers.remote.name}`)
-  }
 
   const memory = createMemory(config)
 
@@ -234,7 +229,6 @@ export async function createAppServices(config: RuntimeConfig): Promise<AppServi
   const conversations = createConversations(config)
   const taskStore = createTasks(config)
   const skills = await loadSkills(config)
-  const router = createRouter(config, skills)
   const browser = new BrowserManager()
   const toolExecutor = createDefaultToolExecutor(
     config,
@@ -262,7 +256,6 @@ export async function createAppServices(config: RuntimeConfig): Promise<AppServi
     energy,
     conversations,
     taskStore,
-    router,
     toolExecutor,
     stats,
     transcript,

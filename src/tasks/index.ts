@@ -31,9 +31,6 @@ export {
 } from './schedule'
 export { createTaskStore, TaskStore } from './store'
 export type {
-  EventPayload,
-  EventSource,
-  EventSourceType,
   NewTask,
   Task,
   TaskFilter,

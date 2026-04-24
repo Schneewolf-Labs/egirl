@@ -1,77 +1,98 @@
-import { createAgentLoop } from '../agent'
+import { type AgentFactory, type AgentLoop, createAgentLoop } from '../agent'
 import { SessionMutex } from '../agent/session-mutex'
-import { createAPIServer } from '../api'
+import { startAPIServer } from '../api'
 import { createAppServices } from '../bootstrap'
 import type { RuntimeConfig } from '../config'
 import { gatherStandup } from '../standup'
+import { createTaskRunner } from '../tasks'
+import { createTaskTools } from '../tools/builtin/tasks'
 import { applyLogLevel } from '../util/args'
 import { log } from '../util/logger'
 
 export async function runAPI(config: RuntimeConfig, args: string[]): Promise<void> {
   applyLogLevel(args)
 
-  // Port/host from args override config
-  const portIndex = args.indexOf('--port')
-  const hostIndex = args.indexOf('--host')
-  const port =
-    portIndex !== -1 ? parseInt(args[portIndex + 1] ?? '', 10) : (config.channels.api?.port ?? 3000)
-  const host =
-    hostIndex !== -1
-      ? (args[hostIndex + 1] ?? '127.0.0.1')
-      : (config.channels.api?.host ?? '127.0.0.1')
+  if (!config.channels.api) {
+    console.error(
+      'Error: API not configured. Add [channels.api] to egirl.toml (and optionally EGIRL_API_TOKEN to .env).',
+    )
+    process.exit(1)
+  }
 
-  const { providers, memory, router, toolExecutor, stats, transcript, skills, browser } =
+  const { providers, memory, conversations, taskStore, toolExecutor, transcript, skills } =
     await createAppServices(config)
 
-  // Gather workspace standup for agent context
   const standup = await gatherStandup(config.workspace.path)
-
   const sessionMutex = new SessionMutex()
 
-  const agent = createAgentLoop({
-    config,
-    router,
-    toolExecutor,
-    localProvider: providers.local,
-    remoteProvider: providers.remote,
-    providers,
-    sessionId: 'api:default',
-    transcript,
-    skills,
-    additionalContext: standup.context || undefined,
-    sessionMutex,
-  })
-
-  const apiConf = config.channels.api
-  const api = createAPIServer(
-    {
-      port,
-      host,
-      bearerToken: apiConf?.apiKey,
-      rateLimitPerMinute: apiConf?.rateLimit ?? 30,
-      maxRequestBytes: apiConf?.maxRequestBytes ?? 65536,
-      corsOrigins: apiConf?.corsOrigins ?? [],
-    },
-    {
+  const agentFactory: AgentFactory = (sessionId: string) =>
+    createAgentLoop({
       config,
-      agent,
       toolExecutor,
+      localProvider: providers.local,
+      sessionId,
       memory,
-      providers,
-      stats,
-      browser,
-    },
-  )
+      conversationStore: conversations,
+      transcript,
+      skills,
+      additionalContext: standup.context || undefined,
+      sessionMutex,
+    })
+
+  const agents = new Map<string, AgentLoop>()
+
+  // Background tasks are optional but naturally pair with the API —
+  // POST /tasks doesn't do much without a runner.
+  let taskRunner: ReturnType<typeof createTaskRunner> | undefined
+  if (taskStore && config.tasks.enabled && config.tools.tasks) {
+    taskRunner = createTaskRunner({
+      config,
+      tasksConfig: config.tasks,
+      store: taskStore,
+      toolExecutor,
+      localProvider: providers.local,
+      memory,
+      transcript,
+      outbound: new Map(),
+      conversationStore: conversations,
+      sessionMutex,
+    })
+
+    const taskTools = createTaskTools(taskStore, taskRunner, config.tasks.maxActiveTasks, () => ({
+      channel: 'api',
+      channelTarget: 'api:default',
+    }))
+    toolExecutor.registerAll([
+      taskTools.taskAddTool,
+      taskTools.taskProposeTool,
+      taskTools.taskListTool,
+      taskTools.taskPauseTool,
+      taskTools.taskResumeTool,
+      taskTools.taskCancelTool,
+      taskTools.taskRunNowTool,
+      taskTools.taskHistoryTool,
+    ])
+
+    taskRunner.start()
+  }
+
+  const server = startAPIServer(config.channels.api, {
+    agentFactory,
+    agents,
+    memory,
+    taskStore,
+    taskRunner,
+  })
 
   const shutdown = async () => {
     log.info('main', 'Shutting down...')
-    api.stop()
-    await browser.close()
+    taskRunner?.stop()
+    server.stop()
+    taskStore?.close()
+    conversations?.close()
     process.exit(0)
   }
 
   process.on('SIGINT', shutdown)
   process.on('SIGTERM', shutdown)
-
-  api.start()
 }

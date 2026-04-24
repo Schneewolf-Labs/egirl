@@ -78,7 +78,6 @@ const TOOL_COSTS: Record<string, EnergyCost> = {
   code_agent: { cost: 5.0, isReadOnly: false },
   task_run: { cost: 3.0, isReadOnly: false },
   task_cancel: { cost: 2.0, isReadOnly: false },
-  run_workflow: { cost: 4.0, isReadOnly: false },
 
   // External / social — highest cost (visible to others)
   gh_pr_create: { cost: 6.0, isReadOnly: false },

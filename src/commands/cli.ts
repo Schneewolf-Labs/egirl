@@ -16,17 +16,8 @@ export async function runCLI(config: RuntimeConfig, args: string[]): Promise<voi
   const messageIndex = args.indexOf('-m')
   const singleMessage = messageIndex !== -1 ? args[messageIndex + 1] : null
 
-  const {
-    providers,
-    memory,
-    conversations,
-    taskStore,
-    router,
-    toolExecutor,
-    stats,
-    transcript,
-    skills,
-  } = await createAppServices(config)
+  const { providers, memory, conversations, taskStore, toolExecutor, stats, transcript, skills } =
+    await createAppServices(config)
 
   // Gather workspace standup for agent context
   const standup = await gatherStandup(config.workspace.path)
@@ -38,11 +29,8 @@ export async function runCLI(config: RuntimeConfig, args: string[]): Promise<voi
   const sessionId = singleMessage ? crypto.randomUUID() : 'cli:default'
   const agent = createAgentLoop({
     config,
-    router,
     toolExecutor,
     localProvider: providers.local,
-    remoteProvider: providers.remote,
-    providers,
     sessionId,
     memory,
     conversationStore: conversations,
@@ -58,11 +46,9 @@ export async function runCLI(config: RuntimeConfig, args: string[]): Promise<voi
       const response = await agent.run(singleMessage)
 
       stats.recordRequest(
-        response.target,
         response.provider,
         response.usage.input_tokens,
         response.usage.output_tokens,
-        response.escalated,
       )
 
       console.log(response.content)
@@ -90,9 +76,7 @@ export async function runCLI(config: RuntimeConfig, args: string[]): Promise<voi
       tasksConfig: config.tasks,
       store: taskStore,
       toolExecutor,
-      router,
       localProvider: providers.local,
-      remoteProvider: providers.remote,
       memory,
       transcript,
       outbound,
@@ -124,7 +108,6 @@ export async function runCLI(config: RuntimeConfig, args: string[]): Promise<voi
         store: taskStore,
         runner: taskRunner,
         toolExecutor,
-        router,
         localProvider: providers.local,
         memory,
         transcript,
