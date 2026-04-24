@@ -188,10 +188,15 @@ describe('TaskStore', () => {
     expect(transitions[3]?.toStatus).toBe('active') // initial
   })
 
-  test('compact removes old transitions', () => {
+  test('compact removes old transitions', async () => {
     const task = store.create(makeTask())
     store.update(task.id, { status: 'paused' })
     store.update(task.id, { status: 'active' })
+
+    // Advance the clock past the transition timestamps before compacting —
+    // compact uses `timestamp < Date.now()` so without a delay the writes
+    // can land in the same millisecond as the cutoff and survive the sweep.
+    await new Promise((resolve) => setTimeout(resolve, 2))
 
     // Compact with 0 days = remove everything
     const result = store.compact(0)
