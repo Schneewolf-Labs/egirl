@@ -1,6 +1,6 @@
 # Built-in Tools Reference
 
-egirl ships with 50 built-in tools across 8 categories that the agent can invoke during conversations. Tools are registered in the `ToolExecutor` at startup and described in the system prompt so the model knows how to use them.
+egirl ships with ~50 built-in tools across 8 categories that the agent can invoke during conversations. Tools are registered in the `ToolExecutor` at startup and described in the system prompt so the model knows how to use them. Rarely-used tool schemas are lazy-loaded via a `tool_search` meta-tool to keep the base system prompt small — see `src/tools/deferred-loader.ts`.
 
 | Category | Count | Tools |
 |----------|-------|-------|
@@ -11,7 +11,8 @@ egirl ships with 50 built-in tools across 8 categories that the agent can invoke
 | GitHub | 12 | `gh_pr_list`, `gh_pr_view`, `gh_pr_create`, `gh_pr_review`, `gh_pr_comment`, `gh_issue_list`, `gh_issue_view`, `gh_issue_comment`, `gh_issue_update`, `gh_ci_status`, `gh_branch_create`, `gh_release_list` |
 | Browser | 11 | `browser_navigate`, `browser_click`, `browser_fill`, `browser_snapshot`, `browser_screenshot`, `browser_select`, `browser_check`, `browser_hover`, `browser_wait`, `browser_eval`, `browser_close` |
 | Tasks | 8 | `task_add`, `task_propose`, `task_list`, `task_pause`, `task_resume`, `task_cancel`, `task_run_now`, `task_history` |
-| Other | 3 | `screenshot`, `web_research`, `code_agent` |
+| Delegation | 1 | `code_agent` — drive Claude Code (the primary tool) |
+| Other | 4 | `screenshot`, `web_research`, `web_search`, `tool_search` |
 
 ## Tool Architecture
 
@@ -37,8 +38,6 @@ interface ToolResult {
   success: boolean
   output: string
   isImage?: boolean              // true for screenshot results
-  suggest_escalation?: boolean   // hint to switch to remote provider
-  escalation_reason?: string     // why escalation is suggested
 }
 ```
 
@@ -108,11 +107,9 @@ Edit a file by replacing an exact text match with new text.
 
 **Behavior:**
 - The `old_text` must match exactly — no regex or fuzzy matching
-- If the text is not found, returns `success: false` and sets `suggest_escalation: true`
+- If the text is not found, returns `success: false` so the model can re-read the file and retry
 - If multiple occurrences are found, returns an error asking for more context to make the match unique
 - Only replaces the first occurrence
-
-**Escalation:** This tool suggests escalation when the target text isn't found, as this may indicate the model has incorrect context about the file's contents.
 
 **Example:**
 ```json
@@ -363,6 +360,32 @@ Fetch a URL and return its text content. Useful for reading web pages, documenta
 
 ---
 
+## web_search
+
+Search the web via a SearxNG instance. Pairs with `web_research` for a search-then-read flow.
+
+**Source:** `src/tools/builtin/web-search.ts`
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `query` | string | Yes | The search query |
+| `num_results` | number | No | Max results to return (default: 10, max: 25) |
+| `categories` | string | No | Comma-separated SearxNG categories (`general`, `news`, `it`, `science`). Default: `general` |
+| `timeout` | number | No | Request timeout in milliseconds (default: 15000) |
+
+**Behavior:**
+- Requires `[searxng] url` in `egirl.toml` to be configured; otherwise the tool is not registered
+- Sends a Bearer token from `SEARXNG_API_KEY` if set
+- Returns a numbered list of title/URL/snippet entries
+- Truncates combined output at ~20,000 characters
+
+**Example:**
+```json
+{"name": "web_search", "arguments": {"query": "SearxNG JSON API format", "num_results": 5}}
+```
+
+---
+
 ## git_status
 
 Show the current git repository state: branch name, staged changes, unstaged changes, and untracked files.
@@ -458,7 +481,7 @@ Stage files and create a git commit. Does NOT push.
 
 **Example:**
 ```json
-{"name": "git_commit", "arguments": {"message": "Fix routing logic", "files": ["src/router.ts"]}}
+{"name": "git_commit", "arguments": {"message": "Fix heartbeat schedule parsing", "files": ["src/tasks/schedule.ts"]}}
 ```
 
 ---
@@ -508,14 +531,14 @@ Delegate a coding task to an autonomous code agent (Claude Code) via the `@anthr
 
 **Example:**
 ```json
-{"name": "code_agent", "arguments": {"task": "Refactor the routing module to extract heuristics into a separate file"}}
+{"name": "code_agent", "arguments": {"task": "Split src/agent/loop.ts into loop + chat + background, keeping public exports unchanged"}}
 ```
 
 ---
 
 ## GitHub Tools
 
-GitHub tools are created via `createGitHubTools(config)` in `src/tools/builtin/github.ts`. They require a `GITHUB_TOKEN` environment variable. Repository owner and repo are auto-detected from the git remote when not specified.
+GitHub tools are created via `createGitHubTools(config)` in `src/tools/builtin/github/index.ts`. They require a `GITHUB_TOKEN` environment variable. Repository owner and repo are auto-detected from the git remote when not specified.
 
 ### gh_pr_list
 

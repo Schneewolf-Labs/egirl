@@ -12,7 +12,7 @@ egirl is configured through two files: `egirl.toml` for application settings and
 
 ### `[thinking]`
 
-Controls extended thinking / reasoning for Anthropic (extended thinking) and Qwen3 (`/think` mode).
+Controls Qwen3 `/think` mode (extended reasoning).
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
@@ -32,14 +32,15 @@ The workspace directory is created automatically on first run and populated with
 
 ### `[local]`
 
-Settings for the local llama.cpp server.
+Settings for the local llama.cpp server. This is the only LLM provider.
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `endpoint` | string | `http://localhost:8080` | URL of the llama.cpp HTTP server |
-| `model` | string | `qwen2.5-32b-instruct` | Model name (for display/logging only — the server decides which model to load) |
+| `model` | string | `qwen2.5-32b-instruct` | Model name (for display/logging — the server decides which model to load) |
 | `context_length` | number | `32768` | Maximum context window in tokens. Should match your llama.cpp server's `-c` flag |
 | `max_concurrent` | number | `2` | Maximum concurrent requests to the local server |
+| `stale_stream_timeout_ms` | number | `90000` | Kill a streaming request that has produced no new tokens for this long |
 
 ### `[local.embeddings]`
 
@@ -47,82 +48,93 @@ Optional. If omitted, the memory system is disabled entirely.
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `endpoint` | string | `http://localhost:8082` | URL of the embedding server (llama.cpp with `--embedding` flag, or the Python service in `services/embeddings/`) |
+| `provider` | `"qwen3-vl"` \| `"llamacpp"` \| `"openai"` | `"qwen3-vl"` | Which embedding backend to use |
+| `endpoint` | string | `http://localhost:8082` | URL of the embedding server |
 | `model` | string | `qwen3-vl-embedding-2b` | Embedding model name (for logging) |
 | `dimensions` | number | `2048` | Embedding vector dimensions. Must match the model's output |
-| `multimodal` | boolean | `true` | Whether the embedding model supports image inputs (e.g., Qwen3-VL-Embedding) |
-
-### `[routing]`
-
-Controls how requests are distributed between local and remote providers.
-
-| Key | Type | Default | Description |
-|-----|------|---------|-------------|
-| `default` | `"local"` \| `"remote"` | `"local"` | Default routing target when no rules match |
-| `escalation_threshold` | number | `0.4` | Confidence score below which local responses trigger escalation to remote (0.0–1.0) |
-| `always_local` | string[] | `["memory_search", "memory_get", "greeting", "acknowledgment"]` | Task types that always route to the local model |
-| `always_remote` | string[] | `["code_generation", "code_review", "complex_reasoning"]` | Task types that always route to the remote model |
-
-**Task types** recognized by the router:
-- `conversation` — general chat
-- `tool_use` — file operations, command execution
-- `code_generation` — writing or modifying code
-- `reasoning` — analysis, explanations
-- `memory_op` — memory search/recall
-- `greeting` — hi, hello, etc.
-- `acknowledgment` — thanks, ok, etc.
+| `multimodal` | boolean | `true` | Whether the embedding model accepts image inputs (Qwen3-VL-Embedding does) |
+| `api_key` | string | — | API key (only used by the `openai` provider) |
+| `base_url` | string | — | Custom base URL (only used by the `openai` provider) |
 
 ### `[channels.discord]`
 
-Optional. Required only when running `bun run start discord`.
+Required only when running `discord` (or `serve`). The Discord token itself goes in `.env`.
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `allowed_channels` | string[] | `["dm"]` | Channel IDs where the bot responds. Use `"dm"` for direct messages, or paste numeric channel IDs |
-| `allowed_users` | string[] | `[]` | User IDs allowed to interact. Empty array means all users are allowed |
-
-The Discord token itself goes in `.env` (see below).
+| `allowed_channels` | string[] | `["dm"]` | Channel IDs where the bot responds. `"dm"` for direct messages, or numeric channel IDs |
+| `allowed_users` | string[] | `[]` | User IDs allowed to interact. Empty = allow all |
+| `passive_channels` | string[] | `[]` | Channels where the bot lurks — reads but only responds when a batch evaluator decides it's relevant |
+| `batch_window_ms` | number | `3000` | Debounce window for grouping consecutive messages before responding |
 
 ### `[channels.claude_code]`
 
-Optional. Settings for the Claude Code bridge mode.
+Settings for the Claude Code bridge channel (`claude-code` / `cc` command). This is distinct from the `code_agent` tool.
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `permission_mode` | string | `"bypassPermissions"` | How Claude Code handles tool permissions. See values below |
-| `model` | string | (none) | Override the Claude model used (e.g., `"claude-sonnet-4-20250514"`) |
-| `working_dir` | string | current directory | Working directory for Claude Code operations |
+| `model` | string | (none) | Override the Claude model (e.g. `"sonnet"`, `"opus"`, `"haiku"`) |
+| `working_dir` | string | workspace path | Working directory for Claude Code operations |
 | `max_turns` | number | (none) | Maximum agentic turns before stopping |
 
 **Permission modes:**
-- `"default"` — Claude Code asks for permission on each tool use; local model answers
+- `"default"` — Claude Code asks permission on each tool use; local model answers
 - `"acceptEdits"` — Auto-approve file edits, ask about everything else
 - `"bypassPermissions"` — Skip all permission prompts (trust Claude Code)
 - `"plan"` — Claude Code creates a plan before executing
 
 ### `[channels.xmpp]`
 
-Optional. Required only when running `bun run start xmpp`. XMPP credentials (`XMPP_USERNAME`, `XMPP_PASSWORD`) must be set in `.env`.
+Required only when running `xmpp` (or `serve` with XMPP configured). XMPP credentials (`XMPP_USERNAME`, `XMPP_PASSWORD`) go in `.env`.
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `service` | string | `xmpp://localhost:5222` | XMPP server URI. Use `xmpps://` for direct TLS |
-| `domain` | string | (derived from service) | XMPP domain (e.g., `example.com`). Defaults to the hostname from `service` |
+| `domain` | string | (derived from service) | XMPP domain (e.g. `example.com`) |
 | `resource` | string | `egirl` | XMPP resource identifier |
-| `allowed_jids` | string[] | `[]` | Bare JIDs allowed to message (e.g., `["user@example.com"]`). Empty array means all JIDs are allowed |
+| `allowed_jids` | string[] | `[]` | Bare JIDs allowed to message. Empty = allow all |
 
 ### `[channels.api]`
 
-Optional. Required only when running `bun run start api`.
+Required only when running `api` (or `serve` with the API enabled).
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
+| `host` | string | `127.0.0.1` | Bind address. Use `0.0.0.0` to listen on all interfaces (requires `EGIRL_API_TOKEN`) |
 | `port` | number | `3000` | Port for the HTTP API server |
-| `host` | string | `127.0.0.1` | Bind address. Use `0.0.0.0` to listen on all interfaces |
+
+See the [README](../README.md#http-api) for the endpoint list.
+
+### `[conversation]`
+
+Optional. Controls conversation persistence and compaction.
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `enabled` | bool | `true` | Persist conversations to SQLite |
+| `max_age_days` | number | `30` | Drop messages older than this during startup compaction |
+| `max_messages` | number | `1000` | Cap messages per session |
+| `compact_on_startup` | bool | `true` | Run compaction when egirl starts |
+| `context_compaction` | bool | `true` | Summarize interior messages when context fills instead of dropping |
+
+### `[memory]`
+
+Optional. Tunes the memory system. The memory system itself is enabled by `[local.embeddings]`.
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `proactive_retrieval` | bool | `true` | Inject relevant memories into context before each turn |
+| `score_threshold` | number | `0.35` | Minimum relevance score to include a memory |
+| `max_results` | number | `5` | Maximum memories injected per turn |
+| `max_tokens_budget` | number | `2000` | Token budget for injected memories |
+| `auto_extract` | bool | `true` | After each turn, scan for notable facts and store them |
+| `extraction_min_messages` | number | `2` | Minimum messages before auto-extraction runs |
+| `extraction_max_per_turn` | number | `5` | Maximum memories extracted per turn |
 
 ### `[safety]`
 
-Master switch and per-feature toggles for the safety layer. See [docs/safety.md](safety.md) for the full guide.
+Master switch and per-feature toggles for the safety layer. See [safety.md](safety.md) for the full guide.
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
@@ -132,14 +144,16 @@ Master switch and per-feature toggles for the safety layer. See [docs/safety.md]
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `enabled` | bool | `true` | Block dangerous shell commands (`rm -rf /`, fork bombs, etc.) |
+| `enabled` | bool | `true` | Block dangerous shell commands |
+| `mode` | `"block"` \| `"allow"` | `"block"` | `block`: blocklist + built-in dangerous patterns. `allow`: allowlist — only permitted commands run |
 | `blocked_patterns` | string[] | `[]` | Additional regex patterns appended to the built-in blocklist |
+| `extra_allowed` | string[] | `[]` | In `allow` mode, commands permitted in addition to the built-in safe list |
 
 #### `[safety.path_sandbox]`
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `enabled` | bool | `false` | Restrict file operations to allowed directories |
+| `enabled` | bool | `true` | Restrict file operations to allowed directories |
 | `allowed_paths` | string[] | `[]` | Directories file ops are restricted to. Supports `{workspace}` and `~` |
 
 #### `[safety.sensitive_files]`
@@ -153,24 +167,53 @@ Master switch and per-feature toggles for the safety layer. See [docs/safety.md]
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `enabled` | bool | `true` | Log all tool calls (including blocked ones) to a JSONL file |
+| `enabled` | bool | `true` | Log every tool call (including blocked ones) to JSONL |
 | `path` | string | — | Path to the audit log file. Supports `{workspace}` |
 
 #### `[safety.confirmation]`
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `enabled` | bool | `false` | Require confirmation before executing destructive tools |
+| `enabled` | bool | `false` | Require CLI confirmation before running destructive tools |
 | `tools` | string[] | `["execute_command", "write_file", "edit_file"]` | Tools that require confirmation |
 
-### `[github]`
+#### `[safety.permission_rules]`
 
-Optional. Configures defaults for the GitHub tools. The `GITHUB_TOKEN` environment variable must be set for GitHub tools to work.
+Pattern-based allow/deny rules that match on `tool_name(argument_pattern)`.
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `default_owner` | string | (auto-detected from git remote) | Default repository owner for GitHub API calls |
-| `default_repo` | string | (auto-detected from git remote) | Default repository name for GitHub API calls |
+| `allow` | string[] | `[]` | Patterns to auto-allow (e.g. `"execute_command(bun test*)"`) |
+| `deny` | string[] | `[]` | Patterns to always deny |
+
+### `[github]`
+
+Optional. Configures defaults for the GitHub tools. `GITHUB_TOKEN` must be set in `.env`.
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `default_owner` | string | (auto-detected from git remote) | Default repository owner |
+| `default_repo` | string | (auto-detected from git remote) | Default repository name |
+
+### `[searxng]`
+
+Optional. Powers the `web_search` tool.
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `url` | string | — | URL of a SearxNG instance |
+
+`SEARXNG_API_KEY` may be set in `.env` if your instance requires it.
+
+### `[energy]`
+
+Optional. Per-user energy budget that throttles expensive tool calls.
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `enabled` | bool | `true` | Enable energy accounting |
+| `max_energy` | number | `20` | Max energy pool |
+| `regen_per_hour` | number | `10` | Regen rate per hour |
 
 ### `[tasks]`
 
@@ -180,7 +223,8 @@ Optional. Configures the [background task framework](background-tasks.md).
 |-----|------|---------|-------------|
 | `enabled` | bool | `true` | Enable background task system |
 | `tick_interval_ms` | number | `30000` | How often to check for due scheduled tasks (ms) |
-| `max_active_tasks` | number | `20` | Maximum number of active tasks at once |
+| `max_active_tasks` | number | `20` | Maximum active tasks at once |
+| `max_concurrent_tasks` | number | `1` | Tasks running simultaneously |
 | `task_timeout_ms` | number | `300000` | Maximum duration per task run (5 min default) |
 | `discovery_enabled` | bool | `true` | Agent looks for useful work during idle time |
 | `discovery_interval_ms` | number | `1800000` | Time between discovery runs (30 min default) |
@@ -196,18 +240,36 @@ Optional. Configures the [background task framework](background-tasks.md).
 
 ### `[transcript]`
 
-Optional. Configures conversation transcript logging.
+Optional. JSONL conversation transcripts.
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `enabled` | bool | `true` | Log conversations to JSONL files |
 | `path` | string | (workspace default) | Path to the transcript log file. Supports `{workspace}` |
 
+### `[tools]`
+
+Enable / disable tool groups.
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `files` | bool | `true` | `read_file`, `write_file`, `edit_file`, `glob_files` |
+| `exec` | bool | `true` | `execute_command` |
+| `git` | bool | `true` | `git_*` |
+| `memory` | bool | `true` | `memory_*` |
+| `browser` | bool | `false` | `browser_*` (requires `bunx playwright install`) |
+| `github` | bool | `false` | `gh_*` (requires `GITHUB_TOKEN`) |
+| `tasks` | bool | `false` | `task_*` |
+| `code_agent` | bool | `false` | `code_agent` — **the primary tool; enable this** |
+| `web_research` | bool | `true` | `web_research` |
+| `web_search` | bool | `true` | `web_search` (requires `[searxng]`) |
+| `screenshot` | bool | `true` | `screenshot` |
+
 ### `[skills]`
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `dirs` | string[] | `["~/.egirl/skills", "{workspace}/skills"]` | Directories to scan for skill files. `{workspace}` is replaced with the workspace path |
+| `dirs` | string[] | `["~/.egirl/skills", "{workspace}/skills"]` | Directories scanned for `SKILL.md` files. `{workspace}` is replaced with the workspace path |
 
 ## .env
 
@@ -215,22 +277,14 @@ Create from the template: `cp .env.example .env`
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `ANTHROPIC_API_KEY` | No | Anthropic API key for Claude (escalation provider) |
-| `OPENAI_API_KEY` | No | OpenAI API key (fallback escalation provider) |
 | `DISCORD_TOKEN` | For Discord mode | Discord bot token |
-| `GITHUB_TOKEN` | For GitHub tools | GitHub personal access token (for PR, issue, CI tools) |
 | `XMPP_USERNAME` | For XMPP mode | XMPP account username (local part, without domain) |
 | `XMPP_PASSWORD` | For XMPP mode | XMPP account password |
+| `EGIRL_API_TOKEN` | For API mode on LAN | Bearer token required on HTTP API requests. Recommended whenever `host` is not `127.0.0.1` |
+| `GITHUB_TOKEN` | For GitHub tools | GitHub personal access token (for PR, issue, CI tools) |
+| `SEARXNG_API_KEY` | Optional | API key if your SearxNG instance requires one |
 
-If neither `ANTHROPIC_API_KEY` nor `OPENAI_API_KEY` is set, all requests route to the local model regardless of routing rules. The agent will log a warning but function normally.
-
-## Remote Provider Priority
-
-When both API keys are set:
-1. **Anthropic** is used as the primary remote provider
-2. **OpenAI** is the fallback if Anthropic is not configured
-
-This priority is hardcoded in `src/providers/index.ts`.
+**No `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`.** Claude Code is driven through the Claude Agent SDK using subscription auth (`claude auth login`). There's no remote LLM provider in egirl itself.
 
 ## Full Example
 
@@ -252,16 +306,11 @@ context_length = 32768
 max_concurrent = 2
 
 [local.embeddings]
+provider = "qwen3-vl"
 endpoint = "http://localhost:8082"
 model = "qwen3-vl-embedding-2b"
 dimensions = 2048
 multimodal = true
-
-[routing]
-default = "local"
-escalation_threshold = 0.4
-always_local = ["memory_search", "memory_get", "greeting", "acknowledgment"]
-always_remote = ["code_generation", "code_review", "complex_reasoning"]
 
 [channels.discord]
 allowed_channels = ["dm"]
@@ -269,23 +318,27 @@ allowed_users = []
 
 [channels.claude_code]
 permission_mode = "bypassPermissions"
-working_dir = "/home/user/projects"
-max_turns = 50
+# model = "sonnet"
+# working_dir = "~/projects/myrepo"
+# max_turns = 30
 
-[channels.xmpp]
-service = "xmpp://chat.example.com:5222"
-domain = "example.com"
-allowed_jids = ["alice@example.com"]
+# [channels.xmpp]
+# service = "xmpp://localhost:5222"
+# allowed_jids = ["you@localhost"]
 
-[channels.api]
-port = 3000
-host = "127.0.0.1"
+# [channels.api]
+# host = "127.0.0.1"
+# port = 3000
 
 [safety]
 enabled = true
 
 [safety.command_filter]
 enabled = true
+
+[safety.path_sandbox]
+enabled = false
+# allowed_paths = ["{workspace}", "~/projects"]
 
 [safety.sensitive_files]
 enabled = true
@@ -294,28 +347,11 @@ enabled = true
 enabled = true
 path = "{workspace}/audit.log"
 
-[safety.path_sandbox]
-enabled = false
-
 [safety.confirmation]
 enabled = false
 
-[github]
-# default_owner and default_repo are auto-detected from git remote
-
-[tasks]
-enabled = true
-tick_interval_ms = 30000
-max_active_tasks = 20
-task_timeout_ms = 300000
-discovery_enabled = true
-
-[tasks.heartbeat]
-enabled = true
-schedule = "*/30 * * * *"
-
-[transcript]
-enabled = true
+[tools]
+code_agent = true   # the primary tool — delegate coding to Claude Code
 
 [skills]
 dirs = ["~/.egirl/skills", "{workspace}/skills"]
@@ -323,12 +359,11 @@ dirs = ["~/.egirl/skills", "{workspace}/skills"]
 
 ```bash
 # .env
-ANTHROPIC_API_KEY=sk-ant-...
-OPENAI_API_KEY=sk-...
 DISCORD_TOKEN=...
-GITHUB_TOKEN=ghp_...
 XMPP_USERNAME=egirl
 XMPP_PASSWORD=...
+EGIRL_API_TOKEN=...
+GITHUB_TOKEN=ghp_...
 ```
 
 ## RuntimeConfig
@@ -338,7 +373,7 @@ The TOML config is loaded and transformed into a `RuntimeConfig` object at start
 - Tilde (`~`) in paths is expanded to the home directory
 - `{workspace}` placeholders are resolved
 - TOML snake_case keys are converted to camelCase (`context_length` → `contextLength`)
-- API keys from `.env` are merged into the `remote` section
-- Default values from `src/config/defaults.ts` fill any gaps
+- Secrets from `.env` are merged into the relevant sections (e.g. `channels.discord.token`, `github.token`)
+- Default values fill any gaps
 
 The `RuntimeConfig` interface is defined in `src/config/schema.ts` and is the single source of truth for typed configuration throughout the application.

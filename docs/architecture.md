@@ -1,43 +1,46 @@
 # Architecture
 
-This document describes how egirl's components fit together, the data flow through the system, and the design decisions behind each layer.
+How egirl's components fit together, the data flow through the system, and the design decisions behind each layer.
+
+## Mental Model
+
+One local LLM is the operator. It escalates to **tools**, not to other models. The most important tool is `code_agent` — a wrapper around Claude Code.
+
+There is no model router, no remote LLM provider, no escalation target. When the local model can't do something itself, it calls a tool.
 
 ## System Overview
 
 ```
-┌──────────────────────────────────────────────────┐
+┌───────────────────────────────────────────────────┐
 │                    Channels                       │
-│  ┌─────┐ ┌────────┐ ┌────────────┐ ┌──────┐ ┌───┐│
-│  │ CLI │ │Discord │ │Claude Code │ │ XMPP │ │API││
-│  └──┬──┘ └───┬────┘ └─────┬──────┘ └──┬───┘ └─┬─┘│
-│     │        │            │           │       │   │
+│  ┌─────┐ ┌────────┐ ┌────────────┐ ┌──────┐ ┌───┐ │
+│  │ CLI │ │Discord │ │Claude Code │ │ XMPP │ │API│ │
+│  └──┬──┘ └───┬────┘ └─────┬──────┘ └──┬───┘ └─┬─┘ │
 │     └────────┼────────────┼───────────┼───────┘   │
 │                    │                              │
 │              ┌─────▼─────┐                        │
-│              │ Agent Loop │                        │
+│              │ Agent Loop│                        │
 │              └─────┬─────┘                        │
 │                    │                              │
 │         ┌──────────┼──────────┐                   │
 │         ▼          ▼          ▼                   │
-│    ┌────────┐ ┌────────┐ ┌────────┐              │
-│    │ Router │ │ Tools  │ │Context │              │
-│    └───┬────┘ └───┬────┘ └───┬────┘              │
-│        │          │          │                    │
-│   ┌────▼──────────▼──────────▼─────┐             │
-│   │           Providers            │             │
-│   │  ┌──────────┐  ┌────────────┐  │             │
-│   │  │ llama.cpp│  │Anthropic/  │  │             │
-│   │  │ (local)  │  │OpenAI      │  │             │
-│   │  └──────────┘  └────────────┘  │             │
-│   └────────────────────────────────┘             │
+│    ┌─────────┐ ┌───────┐ ┌────────┐               │
+│    │ Context │ │ Tools │ │ Safety │               │
+│    └────┬────┘ └───┬───┘ └───┬────┘               │
+│         │          │         │                    │
+│    ┌────▼──────────▼─────────▼─────┐              │
+│    │         llama.cpp provider    │              │
+│    └───────────────────────────────┘              │
 │                    │                              │
 │              ┌─────▼─────┐                        │
 │              │  Memory   │                        │
 │              │ (SQLite + │                        │
-│              │ Embeddings)│                        │
+│              │embeddings)│                        │
 │              └───────────┘                        │
-└──────────────────────────────────────────────────┘
+└───────────────────────────────────────────────────┘
 ```
+
+Channels are thin adapters. The agent loop drives a single local provider, executes tool calls, and reads/writes memory. Tools like `code_agent` spawn Claude Code out-of-band via the Claude Agent SDK.
 
 ## Request Lifecycle
 
@@ -45,40 +48,38 @@ A message from the user follows this path:
 
 ### 1. Channel receives input
 
-The channel (CLI, Discord, Claude Code, XMPP, or API) receives raw user input. Each channel is a thin adapter that converts its interface into a call to `AgentLoop.run()`.
+Each channel is a thin adapter that converts its interface into a call to `AgentLoop.run()`.
 
 - **CLI** (`src/channels/cli.ts`): readline-based interactive terminal. Supports single-message mode via `-m`.
-- **Discord** (`src/channels/discord.ts`): discord.js bot responding to DMs and @mentions. Filters by `allowed_channels` and `allowed_users`.
-- **Claude Code** (`src/channels/claude-code.ts`): bridges to Claude Code via `@anthropic-ai/claude-agent-sdk`. Uses the local model to handle tool permissions and answer clarifying questions.
+- **Discord** (`src/channels/discord.ts`): discord.js bot responding to DMs and mentions. Filters by `allowed_channels` and `allowed_users`.
 - **XMPP** (`src/channels/xmpp.ts`): XMPP/Jabber chat via `@xmpp/client`. Connects to a Prosody (or other XMPP) server. Filters by `allowed_jids`.
-- **API** (`src/api/server.ts`): HTTP REST server (Bun built-in) exposing chat, tools, memory, and stats endpoints.
+- **Claude Code bridge** (`src/channels/claude-code.ts`): runs Claude Code directly and uses the local model to answer permission/clarification prompts. This is a channel, not the `code_agent` tool.
+- **HTTP API** (`src/api.ts`): small Bun.serve handler exposing chat, memory, and task endpoints. Bound to localhost by default; optional bearer auth via `EGIRL_API_TOKEN`.
 
 ### 2. Agent loop processes the message
 
-`AgentLoop.run()` in `src/agent/loop.ts` is the core conversation engine:
+`AgentLoop.run()` is the conversation engine. The implementation is split across a few files:
 
-1. Adds the user message to the context
-2. Asks the Router where to send it (local or remote)
-3. Fits the conversation to the provider's context window
-4. Sends to the chosen provider
-5. Checks for escalation (if local provider responded with low confidence)
-6. If tool calls are returned, executes them and loops back to step 3
-7. When no more tool calls, returns the final response
+- `src/agent/loop.ts` — entry point and run orchestration
+- `src/agent/chat.ts` — single-turn chat, tool-call detection, continuation retries
+- `src/agent/context.ts` — system prompt assembly from workspace files
+- `src/agent/context-window.ts` — token-aware trimming
+- `src/agent/context-summarizer.ts` — interior compaction when conversations get long
+- `src/agent/session-mutex.ts` — serializes concurrent runs on the same session
 
-The loop runs for up to `maxTurns` iterations (default: 10) to prevent infinite tool-calling loops.
+Each turn:
 
-### 3. Router decides local vs remote
+1. Append the user message to the session context.
+2. Fit the conversation to the provider's context window (trim or summarize as needed).
+3. Send to the local llama.cpp provider.
+4. If the model returns tool calls, run them and loop back to step 2 with the results.
+5. When there are no more tool calls, return the final response.
 
-The `Router` class (`src/routing/model-router.ts`) combines two strategies:
+The loop runs for up to `maxTurns` iterations to prevent infinite tool-calling loops.
 
-- **Heuristics** (`src/routing/heuristics.ts`): keyword matching against the user's message. Code-related keywords push toward remote; greetings stay local.
-- **Rules** (`src/routing/rules.ts`): configurable priority-based rules from `egirl.toml`. Tasks like `memory_search` are always local; `code_generation` always goes remote.
+### 3. Provider generates a response
 
-The combined result is a `RoutingDecision` with a `target` (local/remote), `reason`, and `confidence` score.
-
-### 4. Provider generates a response
-
-Providers implement the `LLMProvider` interface (`src/providers/types.ts`):
+There is one provider: `LlamaCppProvider` (`src/providers/llamacpp.ts`). It speaks the llama.cpp OpenAI-compatible HTTP API, parses Qwen3 `<tool_call>` XML tags (`src/providers/qwen3-format.ts`), and uses llama.cpp's `/tokenize` endpoint for accurate token counting (`src/providers/llamacpp-tokenizer.ts`). Stale-stream detection kills hung requests.
 
 ```typescript
 interface LLMProvider {
@@ -87,65 +88,72 @@ interface LLMProvider {
 }
 ```
 
-Three implementations exist:
+### 4. Tool execution
 
-- **LlamaCppProvider** (`src/providers/llamacpp.ts`): HTTP client for the llama.cpp OpenAI-compatible API. Parses `<tool_call>` XML tags from Qwen3 responses. Creates a tokenizer endpoint for accurate token counting.
-- **AnthropicProvider** (`src/providers/anthropic.ts`): Wraps `@anthropic-ai/sdk`. Used as the primary escalation target.
-- **OpenAIProvider** (`src/providers/openai.ts`): Wraps the `openai` npm package. Used as fallback if Anthropic is not configured.
+When the provider returns tool calls, `ToolExecutor` (`src/tools/executor.ts`) looks each up in its registry and runs them concurrently via `Promise.all`. Each returns a `ToolResult`.
 
-### 5. Tool execution
+```typescript
+interface ToolResult {
+  success: boolean
+  output: string
+  isImage?: boolean
+}
+```
 
-When the provider returns tool calls, the `ToolExecutor` (`src/tools/executor.ts`) runs them:
+Tools never throw — errors come back as `{ success: false, output: "..." }` so the model can react.
 
-1. Parses tool calls from the response (format depends on provider)
-2. Looks up each tool by name in its registry
-3. Executes all calls concurrently via `Promise.all`
-4. Returns a `Map<string, ToolResult>` with results keyed by call ID
+A few tools are worth calling out:
 
-Tool results include a `suggest_escalation` flag — if a tool detects it needs more capability (e.g., `edit_file` can't find the target text), it can recommend escalating to a remote provider.
+- **`code_agent`** (`src/tools/builtin/code-agent.ts`) — delegates engineering work to Claude Code via `@anthropic-ai/claude-agent-sdk`. This is the primary tool, and the whole point of the system.
+- **`execute_command`** (`src/tools/builtin/exec.ts`) — shell access, gated by the safety layer.
+- **Deferred tool loading** (`src/tools/deferred-loader.ts`) — rarely-used tool schemas are lazy-loaded via a meta-tool to keep the base system prompt small.
 
-### 6. Escalation
+### 5. Safety layer
 
-Mid-conversation escalation can happen two ways:
+Tool calls pass through `src/safety/` before executing:
 
-- **Post-response analysis** (`src/routing/escalation.ts`): After the local model responds, `shouldRetryWithRemote()` checks for uncertainty patterns, low confidence, or insufficient responses. If triggered, the agent switches providers and retries.
-- **Tool-suggested escalation**: A tool can set `suggest_escalation: true` in its result, prompting the agent to switch to the remote provider for the next turn.
+- `command-filter.ts` — block dangerous shell commands (configurable via `blocked_patterns`, allow mode via `extra_allowed`)
+- `path-guard.ts` — optional filesystem sandbox
+- `sensitive-files.ts` — block `.env`, SSH keys, credential files
+- `permission-rules.ts` — pattern-based allow/deny rules for specific tool+argument shapes
+- `audit.ts` — JSONL audit log of every tool call
+- `prompt-injection.ts` — scans tool outputs for prompt-injection patterns
 
-### 7. Context window management
+These are guardrails, not a sandbox — assume the local model is trusted and the user is the only principal. See [safety.md](safety.md).
 
-`fitToContextWindow()` in `src/agent/context-window.ts` ensures the conversation fits within the provider's token limit:
+### 6. Context window management
 
-- Uses the llama.cpp tokenizer endpoint for accurate local token counts
-- Drops oldest messages first (keeps system prompt and recent context)
-- If the server reports a different `n_ctx` than configured, retrims and retries once
+`fitToContextWindow()` in `src/agent/context-window.ts` ensures the conversation fits within the provider's token limit. It uses the llama.cpp tokenizer endpoint for accurate counts and drops oldest messages first (keeping the system prompt).
+
+When interior compaction is enabled, long conversations are summarized mid-history via `context-summarizer.ts` instead of dropped, preserving continuity.
 
 ## Module Dependency Graph
 
 ```
 src/index.ts (entry point — parses command, dispatches to runner)
-├── commands/        → command runners (cli, discord, xmpp, api, claude-code, status)
+├── commands/        → command runners (cli, discord, xmpp, api, claude-code, serve, status)
 ├── bootstrap.ts     → shared AppServices factory
 │   ├── config/      → loads egirl.toml + .env → RuntimeConfig
 │   ├── workspace/   → bootstraps ~/.egirl/workspace with templates
-│   ├── providers/   → creates LLMProvider instances from config
-│   ├── routing/     → creates Router from config rules
-│   ├── tools/       → creates ToolExecutor with builtin tools (48 tools)
+│   ├── providers/   → creates the llama.cpp provider
+│   ├── tools/       → creates ToolExecutor with builtin tools
 │   ├── memory/      → creates MemoryManager (SQLite + embeddings)
-│   ├── tracking/    → creates StatsTracker for usage metrics
+│   ├── safety/      → creates safety checkers
+│   ├── tracking/    → creates StatsTracker / transcript logger
 │   ├── tasks/       → creates TaskStore + TaskRunner for background work
 │   └── conversation/→ creates ConversationStore for persistence
 ├── agent/           → creates AgentLoop (orchestrates everything above)
-├── channels/        → creates channel (CLI/Discord/Claude Code/XMPP/API)
-└── workflows/       → workflow engine for structured multi-step tasks
+├── api.ts           → HTTP API (chat, memory, tasks)
+└── channels/        → CLI / Discord / XMPP / Claude Code bridge
 ```
 
-Dependencies flow downward. The agent loop depends on the router, tools, and providers. Channels depend on the agent loop. Nothing depends on channels — they are leaf nodes.
+Dependencies flow downward. Channels depend on the agent loop; nothing depends on channels.
 
 ## Key Interfaces
 
 ### ChatMessage
 
-The universal message format shared across all providers:
+The universal message format:
 
 ```typescript
 interface ChatMessage {
@@ -162,186 +170,147 @@ Holds the full conversation state for a session:
 
 ```typescript
 interface AgentContext {
-  systemPrompt: string    // Built from workspace personality files
+  systemPrompt: string    // Built from workspace personality files + tool list
   messages: ChatMessage[] // Conversation history
   workspaceDir: string    // Path to ~/.egirl/workspace
   sessionId: string       // UUID for this session
 }
 ```
 
-The system prompt is assembled from workspace files: `IDENTITY.md`, `SOUL.md`, `AGENTS.md`, and `USER.md`. Tool descriptions are appended automatically.
-
-### ToolResult
-
-Every tool returns this:
-
-```typescript
-interface ToolResult {
-  success: boolean
-  output: string
-  isImage?: boolean               // For screenshot tool
-  suggest_escalation?: boolean    // Hint to switch to remote
-  escalation_reason?: string
-}
-```
+The system prompt is assembled from `IDENTITY.md`, `SOUL.md`, `AGENTS.md`, `USER.md`, plus the list of available tools.
 
 ## Directory Structure
 
 ```
 egirl/
 ├── src/
-│   ├── index.ts              # Entry point — parses command, dispatches to runner
+│   ├── index.ts              # Entry point
 │   ├── bootstrap.ts          # Shared AppServices factory
+│   ├── api.ts                # HTTP API (Bun.serve)
 │   ├── agent/
-│   │   ├── loop.ts           # Core agent loop
-│   │   ├── context.ts        # System prompt + conversation state
+│   │   ├── loop.ts           # Agent run orchestration
+│   │   ├── chat.ts           # Single-turn chat + continuations
+│   │   ├── background.ts     # Background-task agent variant
+│   │   ├── context.ts        # System prompt assembly
 │   │   ├── context-window.ts # Token-aware context trimming
-│   │   ├── context-summarizer.ts # Conversation summary for long contexts
-│   │   ├── session-mutex.ts  # Serializes concurrent agent runs
+│   │   ├── context-summarizer.ts # Interior compaction
+│   │   ├── token-budget.ts   # Budget tracking
+│   │   ├── session-mutex.ts  # Serializes concurrent runs
 │   │   └── events.ts         # Lifecycle event handlers
-│   ├── api/
-│   │   ├── server.ts         # Bun HTTP server
-│   │   ├── routes.ts         # Chat, tools, memory, stats endpoints
-│   │   └── openapi.ts        # OpenAPI specification
 │   ├── browser/
 │   │   ├── manager.ts        # Playwright session management
 │   │   └── targeting.ts      # Accessibility-based element targeting
 │   ├── channels/
 │   │   ├── cli.ts            # Terminal interface
+│   │   ├── cli-commands.ts   # Slash commands (/wipe, /think, etc.)
+│   │   ├── cli-events.ts     # Event rendering
 │   │   ├── discord.ts        # Discord bot
-│   │   ├── discord/          # Discord submodules
-│   │   │   ├── events.ts     # Event state management
-│   │   │   └── formatting.ts # Message formatting, tool call rendering
-│   │   ├── claude-code.ts    # Claude Code bridge
+│   │   ├── discord/          # Event/formatting helpers
+│   │   ├── claude-code.ts    # Claude Code bridge channel
 │   │   └── xmpp.ts           # XMPP/Jabber chat
-│   ├── commands/
-│   │   ├── cli.ts            # CLI channel runner
-│   │   ├── discord.ts        # Discord bot runner
-│   │   ├── xmpp.ts           # XMPP bot runner
-│   │   ├── api.ts            # HTTP API server runner
-│   │   ├── claude-code.ts    # Claude Code bridge runner
-│   │   └── status.ts         # Config status checker
+│   ├── commands/             # Command runners for each entry mode
 │   ├── config/
 │   │   ├── schema.ts         # TypeBox schema for egirl.toml
-│   │   ├── index.ts          # Config loading + validation
-│   │   └── writer.ts         # Config persistence
+│   │   └── index.ts          # Config loading + validation
 │   ├── conversation/
 │   │   └── store.ts          # SQLite conversation persistence
+│   ├── energy/               # Energy-budget system for tool calls
 │   ├── memory/
 │   │   ├── index.ts          # MemoryManager (public API)
 │   │   ├── files.ts          # MEMORY.md + daily logs + images
 │   │   ├── indexer.ts        # SQLite storage + FTS
 │   │   ├── search.ts         # Hybrid search (FTS + vector)
-│   │   ├── retrieval.ts      # Proactive memory retrieval for context
-│   │   ├── extractor.ts      # Auto-extraction of facts from conversations
+│   │   ├── retrieval.ts      # Proactive memory retrieval
+│   │   ├── extractor.ts      # Auto-extraction of facts
 │   │   ├── log-indexer.ts    # Indexes stdout logs as memories
 │   │   ├── compaction-flush.ts # Database maintenance
-│   │   └── embeddings/       # Embedding providers
-│   │       ├── qwen3-vl.ts   # Qwen3-VL multimodal embeddings
-│   │       ├── llamacpp.ts   # llama.cpp text embeddings
-│   │       └── openai.ts     # OpenAI text embeddings
+│   │   ├── working.ts        # Working-memory scratchpad
+│   │   ├── gc.ts             # Garbage collection
+│   │   └── embeddings/       # qwen3-vl / llamacpp / openai
 │   ├── providers/
 │   │   ├── types.ts          # LLMProvider, ChatMessage, etc.
-│   │   ├── index.ts          # Provider registry
 │   │   ├── llamacpp.ts       # Local model via llama.cpp
-│   │   ├── anthropic.ts      # Claude API
-│   │   ├── openai.ts         # OpenAI API
+│   │   ├── llamacpp-tokenizer.ts
 │   │   ├── qwen3-format.ts   # Qwen3 tool call parsing
-│   │   ├── error-classify.ts # API error categorization
-│   │   └── key-pool.ts       # API key rotation
-│   ├── routing/
-│   │   ├── model-router.ts   # Router class
-│   │   ├── heuristics.ts     # Keyword-based analysis
-│   │   ├── rules.ts          # Priority-based routing rules
-│   │   └── escalation.ts     # Post-response escalation checks
+│   │   └── error-classify.ts
 │   ├── safety/
-│   │   ├── index.ts          # Safety check orchestration
-│   │   ├── command-filter.ts # Dangerous command blocking
+│   │   ├── index.ts          # Orchestration
+│   │   ├── command-filter.ts # Shell command blocking / allow-list
 │   │   ├── path-guard.ts     # Path sandboxing
-│   │   ├── sensitive-files.ts # Sensitive file access guard
+│   │   ├── sensitive-files.ts
+│   │   ├── permission-rules.ts # Pattern-based tool rules
+│   │   ├── prompt-injection.ts
 │   │   └── audit.ts          # JSONL audit logging
 │   ├── skills/
-│   │   ├── types.ts          # Skill, SkillMetadata interfaces
-│   │   ├── parser.ts         # Markdown + YAML frontmatter parsing
-│   │   ├── loader.ts         # Filesystem skill discovery
-│   │   └── index.ts          # SkillManager registry
+│   │   ├── types.ts
+│   │   ├── parser.ts         # Markdown + YAML frontmatter
+│   │   ├── loader.ts         # Filesystem discovery
+│   │   ├── index.ts          # SkillManager registry
+│   │   └── bundled/          # Ships-with-egirl skills
 │   ├── standup/
 │   │   ├── gather.ts         # Workspace context gathering
-│   │   └── index.ts          # Exports
+│   │   └── index.ts
 │   ├── tasks/
 │   │   ├── store.ts          # SQLite-backed task CRUD
-│   │   ├── runner.ts         # Task execution engine
+│   │   ├── runner.ts         # Execution engine
 │   │   ├── discovery.ts      # Idle-time work finding
-│   │   ├── heartbeat.ts      # Periodic task pulse
+│   │   ├── heartbeat.ts      # Periodic pulse
 │   │   ├── schedule.ts       # Interval parsing, business hours
 │   │   ├── cron.ts           # Cron expression support
-│   │   └── events/           # Event sources
-│   │       ├── file-watcher.ts # File change monitoring
-│   │       ├── webhook.ts     # HTTP webhook receiver
-│   │       ├── github.ts      # GitHub polling
-│   │       └── command.ts     # Shell command output diffing
+│   │   └── events/           # File, webhook, GitHub, command event sources
 │   ├── tools/
 │   │   ├── types.ts          # Tool, ToolResult interfaces
-│   │   ├── executor.ts       # ToolExecutor registry + execution
+│   │   ├── executor.ts       # Registry + concurrent execution
 │   │   ├── format.ts         # Qwen3 <tool_call> parsing
-│   │   └── builtin/          # 48 built-in tools
-│   │       ├── read.ts       # File reading
-│   │       ├── write.ts      # File writing
-│   │       ├── edit.ts       # String replacement editing
-│   │       ├── exec.ts       # Shell command execution
-│   │       ├── glob.ts       # File pattern matching
-│   │       ├── memory.ts     # Memory CRUD (5 tools)
-│   │       ├── git.ts        # Git operations (5 tools)
-│   │       ├── github.ts     # GitHub API (11 tools)
-│   │       ├── browser.ts    # Browser automation (11 tools)
-│   │       ├── tasks.ts      # Background task management (8 tools)
-│   │       ├── screenshot.ts # Screen capture
-│   │       ├── web-research.ts # Web page fetching
+│   │   ├── deferred-loader.ts # Lazy tool schema loading
+│   │   └── builtin/
+│   │       ├── read.ts / write.ts / edit.ts / glob.ts
+│   │       ├── exec.ts       # execute_command
+│   │       ├── memory.ts     # memory_* tools
+│   │       ├── git.ts        # git_* tools
+│   │       ├── github/       # gh_* tools (pr, issue, ci, release, branch)
+│   │       ├── browser.ts    # browser_* tools
+│   │       ├── tasks.ts      # task_* tools
+│   │       ├── screenshot.ts
+│   │       ├── web-research.ts
+│   │       ├── web-search.ts # SearxNG-backed
 │   │       └── code-agent.ts # Claude Code delegation
-│   ├── tracking/
-│   │   ├── stats.ts          # Request/token/cost tracking
-│   │   ├── costs.ts          # Model pricing lookup
-│   │   └── transcript.ts     # Conversation logging to JSONL
+│   ├── tracking/             # Stats, transcript logging
 │   ├── ui/
-│   │   └── theme.ts          # 256-color ANSI theme system (4 themes)
+│   │   └── theme.ts          # 256-color ANSI theme system
 │   ├── util/
-│   │   ├── logger.ts         # Colored, leveled console logging
-│   │   ├── tokens.ts         # Token counting utilities
-│   │   ├── args.ts           # CLI argument parsing
-│   │   └── async.ts          # Async helpers
-│   └── workflows/
-│       ├── engine.ts         # Workflow execution engine
-│       ├── builtin.ts        # Pre-built workflows
-│       ├── tool.ts           # Workflow tool definitions
-│       └── types.ts          # Workflow types
-├── services/
-│   └── embeddings/           # Python embedding service (optional)
-├── test/                     # bun:test suite (mirroring src/)
+│   │   ├── logger.ts
+│   │   ├── tokens.ts
+│   │   ├── args.ts
+│   │   └── async.ts
+│   └── workspace/            # Workspace bootstrapping
+├── services/embeddings/      # Python Qwen3-VL-Embedding service (optional)
+├── test/                     # bun:test suite (mirrors src/)
 ├── workspace/                # Default personality templates
 ├── docs/                     # Documentation
-├── static/                   # Dashboard HTML/CSS/JS
 ├── scripts/                  # Utility scripts
 ├── egirl.toml                # Main configuration
-└── .env                      # API keys (not committed)
+└── .env                      # Secrets (not committed)
 ```
 
 ## Design Decisions
 
-### Why no channel abstraction?
+### Why no router?
 
-Channels share a minimal `Channel` interface (`start()` / `stop()`) but no deep abstraction. CLI uses readline, Discord uses discord.js events, Claude Code uses the agent SDK stream, XMPP uses stanza events, and the API server uses HTTP request handlers. Each transport is different enough that a shared abstraction would add indirection without reducing code.
+egirl used to route between a local and remote provider. That's gone. The model is the planner — if it needs more capability, it calls `code_agent` (Claude Code) as a tool. One chooser, one execution target, no escalation logic to debug.
 
-### Why Qwen3 native format for tool calls?
+### Why Qwen3 native tool-call format?
 
-Using `<tool_call>` XML tags matches the Qwen3 chat template exactly, which means:
-1. The model generates tool calls reliably without format confusion
-2. Fine-tuning data uses the same format the model was pre-trained on
-3. No post-processing layer needed between the model and the tool executor
+`<tool_call>` XML tags match the Qwen3 chat template exactly: the model generates tool calls reliably without format confusion, fine-tuning uses the same format as pre-training, and no post-processing layer sits between the model and the tool executor. See [tool-format.md](tool-format.md).
 
 ### Why SQLite for memory?
 
-bun:sqlite is zero-dependency, runs in-process, and handles FTS5 (full-text search) natively. No external database to manage. Vector search is done in application code using cosine similarity over Float32Arrays — no need for a vector database at this scale.
+`bun:sqlite` is zero-dependency, in-process, and supports FTS5 natively. Vector search is done in application code using cosine similarity over `Float32Array`s — no vector database at this scale. See [memory.md](memory.md).
+
+### Why no channel abstraction?
+
+Each transport is different enough that a shared abstraction would add indirection without removing code. Channels share a minimal `start()` / `stop()` interface and nothing more. CLI, Discord, XMPP, the Claude Code bridge, and the HTTP API are hardcoded; adding a fourth means writing a fourth — the extensibility point is the HTTP API, not an in-process plugin layer.
 
 ### Why no streaming?
 
-v1 intentionally skips streaming to keep the agent loop simple. The loop needs the complete response to check for tool calls and decide on escalation. Streaming would require buffering partial responses, detecting incomplete tool calls, and managing state across chunks — complexity that isn't worth it for a single-user tool.
+The agent loop needs the complete response to detect tool calls. Streaming would require buffering partial responses, detecting incomplete tool calls across chunks, and managing state — complexity that isn't worth it for a single-user tool. Continuation retries handle truncated responses (`src/agent/chat.ts`).

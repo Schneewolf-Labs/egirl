@@ -1,6 +1,6 @@
 # Skills System
 
-Skills are reusable instruction sets written in Markdown that extend egirl's capabilities. They follow a format compatible with OpenClaw, with egirl-specific extensions for routing.
+Skills are reusable instruction sets written in Markdown that extend egirl's capabilities. The format is compatible with OpenClaw.
 
 ## Skill Format
 
@@ -14,11 +14,6 @@ openclaw:
     env: ["GITHUB_TOKEN"]
   emoji: "🔀"
   homepage: "https://github.com/example/skill"
-egirl:
-  complexity: "auto"
-  canEscalate: true
-  escalationTriggers: ["merge conflict", "rebase"]
-  preferredProvider: "anthropic"
 ---
 
 # Git Operations
@@ -28,25 +23,16 @@ Instructions for handling git operations...
 
 ### Frontmatter Fields
 
-#### OpenClaw Compatible
-
 | Field | Type | Description |
 |-------|------|-------------|
 | `openclaw.requires.bins` | string[] | Required system binaries (e.g., `["git", "docker"]`) |
 | `openclaw.requires.env` | string[] | Required environment variables |
 | `openclaw.requires.config` | string[] | Required config files |
 | `openclaw.primaryEnv` | string | Primary environment variable for the skill |
-| `openclaw.emoji` | string | Display emoji |
+| `openclaw.emoji` | string | Display emoji (used in `status` output and headings) |
 | `openclaw.homepage` | string | URL for more information |
 
-#### egirl Extensions
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `egirl.complexity` | `"local"` \| `"remote"` \| `"auto"` | Routing hint for this skill |
-| `egirl.canEscalate` | boolean | Whether the skill supports mid-task escalation |
-| `egirl.escalationTriggers` | string[] | Keywords that trigger escalation when using this skill |
-| `egirl.preferredProvider` | string | Preferred provider for this skill |
+The frontmatter is optional; skills without it are content-only. An `egirl:` block is accepted by the parser for OpenClaw compatibility but not used — there's no routing layer for it to feed.
 
 ## Skill Discovery
 
@@ -109,11 +95,6 @@ interface Skill {
   enabled: boolean       // Whether the skill is active
 }
 
-interface SkillMatch {
-  skill: Skill
-  confidence: number     // 0.0–1.0 match confidence
-  reason: string         // Why this skill matched
-}
 ```
 
 ## Creating a Skill
@@ -127,9 +108,8 @@ interface SkillMatch {
 
 ```markdown
 ---
-egirl:
-  complexity: "remote"
-  canEscalate: true
+openclaw:
+  emoji: "🔍"
 ---
 
 # Code Review
@@ -154,4 +134,4 @@ When asked to review code:
 
 ## Bundled Skills
 
-The `src/skills/bundled/` directory is reserved for skills that ship with egirl. Currently empty (`.gitkeep`).
+`src/skills/bundled/` contains skills that ship with egirl: `code-review` and `research`. These are loaded alongside user-installed skills from the configured `[skills] dirs`.
