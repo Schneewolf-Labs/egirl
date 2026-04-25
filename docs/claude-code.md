@@ -37,7 +37,7 @@ Opens an interactive prompt where you type tasks for Claude Code to execute. The
 ### Single Task Mode
 
 ```bash
-bun run start cc -m "fix the failing tests in src/routing/"
+bun run start cc -m "fix the failing tests in src/agent/"
 ```
 
 Runs a single task and exits with the result, turn count, cost, and duration.
@@ -159,9 +159,9 @@ During execution, the channel emits prefixed log lines:
 [cc] Session a1b2c3d4... | Model: claude-sonnet-4-20250514
 [cc:permission] Bash: npm test
 [local] Approved: Safe testing command relevant to the task
-[cc:read] src/routing/model-router.ts
-[cc] I found the issue in the routing logic...
-[cc:edit] src/routing/model-router.ts
+[cc:read] src/agent/loop.ts
+[cc] I found the issue in the loop's turn handling...
+[cc:edit] src/agent/loop.ts
 [local] Approved: Edit is part of fixing the tests
 ```
 

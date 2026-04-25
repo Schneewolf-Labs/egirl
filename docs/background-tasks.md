@@ -1,5 +1,12 @@
 # Background Task Framework
 
+> **Note**: This is the original design doc. The workflow-engine sub-feature it
+> describes was descoped during the local-AI-drives-Claude-Code rescope —
+> there is no `src/workflows/` module, no `WorkflowEngine`, no `run_workflow`
+> tool, and no `workflow` field on tasks. All tasks are prompt-based and run
+> through the normal `AgentLoop`. Treat references to workflows below as
+> historical context only.
+
 ## Problem
 
 The agent is purely reactive — it only does work when a user sends a message. It has no way to:
@@ -77,10 +84,8 @@ CREATE TABLE tasks (
   kind TEXT NOT NULL,              -- 'scheduled' | 'event' | 'oneshot'
   status TEXT NOT NULL,            -- 'proposed' | 'active' | 'paused' | 'done' | 'failed'
 
-  -- What to do: either a prompt (agent decides how) or a workflow (structured steps)
+  -- What to do: a prompt the agent runs through its normal tool-calling loop
   prompt TEXT NOT NULL,
-  workflow TEXT,                  -- JSON: optional workflow definition (see Workflow Integration)
-                                 -- If set, runs via WorkflowEngine instead of prompt-based AgentLoop
 
   -- Memory context: keys the agent should load before running
   memory_context TEXT,            -- JSON array of memory keys, e.g. ["deploy-config", "ci-notes"]
@@ -366,14 +371,10 @@ interface TaskRunner {
 **Execution flow per task:**
 
 ```
-1. Check if task has a workflow definition:
-   - YES → run via WorkflowEngine (no LLM, see Workflow Integration below)
-   - NO  → continue with prompt-based execution
-
-2. Gather workspace context via gatherStandup() — gives the agent
+1. Gather workspace context via gatherStandup() — gives the agent
    branch state, uncommitted changes, recent commits for free
 
-3. Load memory context:
+2. Load memory context:
    - Pre-load task.memory_context keys (explicit context)
    - Run proactive retrieval against task.prompt with category filter
      (same as interactive — uses memory.retrieveForContext())
@@ -418,60 +419,7 @@ interface TaskRunner {
 
 This means the agent builds up institutional knowledge across runs. A CI watcher doesn't just report "build failed" — it can correlate with previous failures, track flaky tests, and reference decisions stored in memory.
 
-### 4. Workflow Integration
-
-Tasks with structured, repeatable steps can use the workflow engine (`src/workflows/engine.ts`) instead of prompt-based execution. When a task has a `workflow` field, the runner bypasses the `AgentLoop` entirely and runs the workflow via `executeWorkflow()`. This is faster, cheaper (no LLM tokens), and deterministic.
-
-**When to use workflows vs prompts:**
-
-| Use case | Approach | Why |
-|----------|----------|-----|
-| "Run tests and report" | Workflow | Deterministic steps, no LLM needed |
-| "Check CI and analyze failures" | Prompt | Needs LLM to interpret failure output |
-| "Pull, test, fix, push" | Workflow | Built-in `pull-test-fix` workflow |
-| "Watch PR and summarize reviews" | Prompt | Needs LLM to summarize prose |
-| "Git pull then run linter" | Workflow | Two sequential commands |
-
-**Workflow task definition:**
-
-```json
-{
-  "name": "auto-test-fix",
-  "description": "Pull latest, run tests, auto-fix if broken",
-  "kind": "scheduled",
-  "interval": "1h",
-  "workflow": {
-    "name": "pull-test-fix",
-    "params": {
-      "branch": "main",
-      "test_command": "bun test",
-      "remote": "origin"
-    }
-  },
-  "notify": "on_failure"
-}
-```
-
-**Hybrid approach**: A task can have both a `workflow` and a `prompt`. In this case, the workflow runs first. If any step fails, the prompt-based agent takes over with the workflow results as context — it can analyze what went wrong and decide what to do. This gives you deterministic happy-path execution with LLM-powered error handling.
-
-```json
-{
-  "name": "smart-test-fix",
-  "description": "Run tests, use AI to diagnose failures",
-  "workflow": {
-    "steps": [
-      { "name": "test", "tool": "execute_command", "params": { "command": "bun test" } }
-    ]
-  },
-  "prompt": "The test run failed. Analyze the output above, identify the root cause, and suggest a fix. Store your analysis in memory as 'test-failure-{date}'."
-}
-```
-
-**Ad-hoc workflow steps**: The `task_add` tool accepts inline `steps` for simple multi-command tasks. These are compiled into a workflow at creation time, avoiding the overhead of naming and registering a formal workflow.
-
-The runner integrates with `WorkflowEngine.executeWorkflow()` and uses `{{steps.x.output}}` interpolation for passing data between steps. Retry and `continue_on_error` settings from the workflow spec apply per-step.
-
-### 5. Outbound Messaging
+### 4. Outbound Messaging
 
 Channels gain a `send()` method for unprompted outbound messages.
 
@@ -500,7 +448,7 @@ async send(target: string, message: string): Promise<void> {
 
 **CLI implementation:** Print inline to stdout. The model can format however it wants — it's just text output. No special framing needed; the model will naturally indicate what it's reporting on.
 
-### 6. Task Tools (`src/tools/builtin/tasks.ts`)
+### 5. Task Tools (`src/tools/builtin/tasks.ts`)
 
 Tools the agent can use during normal conversations to manage background work.
 
@@ -522,7 +470,6 @@ Tools the agent can use during normal conversations to manage background work.
   "name": "string — short identifier",
   "description": "string — what this task does",
   "prompt": "string — the agent prompt to execute each run",
-  "workflow": "string | object — named workflow ('pull-test-fix') or inline steps",
   "kind": "scheduled | event | oneshot",
   "interval": "string — human-readable: '30m', '2h', '1d' (scheduled only)",
   "event_source": "file | webhook | github | command (event only)",
@@ -554,7 +501,7 @@ The channel and target are inferred from the current conversation context — if
 }
 ```
 
-### 7. Proposal & Approval Flow
+### 6. Proposal & Approval Flow
 
 When the agent notices an opportunity for background work, it uses `task_propose` instead of `task_add`. Proposed tasks don't run until approved.
 
@@ -592,7 +539,7 @@ discord.onReaction(async (event) => {
 
 Print the proposal. User types `approve <taskId>` or `reject <taskId>`.
 
-### 8. Discovery: Finding Work (`src/tasks/discovery.ts`)
+### 7. Discovery: Finding Work (`src/tasks/discovery.ts`)
 
 A special scheduled "meta-task" that looks for useful work. Runs at low frequency during idle time (default: every 30 minutes, only when no interactive messages for 10+ minutes).
 
@@ -654,17 +601,7 @@ Created in `createAppServices()` after conversation store, similar pattern. The 
 
 ### Agent Loop
 
-No changes to `AgentLoop` itself. Prompt-based background tasks use the same `AgentLoop` class with a different session ID (`task:{taskId}`), full tool set, and `additionalContext` set to standup output. Workflow-based tasks bypass `AgentLoop` entirely and use `executeWorkflow()` from `src/workflows/engine.ts`.
-
-### Workflow Engine
-
-Tasks with a `workflow` field run through the existing `WorkflowEngine` (`src/workflows/engine.ts`). This means:
-- No LLM tokens consumed for deterministic steps
-- Step interpolation (`{{steps.test.output}}`) passes data between steps
-- Conditional execution (`if: "test.failed"`) handles branching
-- Per-step retry logic handles transient failures
-- Built-in workflows (`pull-test-fix`, `test-fix`, `commit-push`) are available immediately
-- The `run_workflow` tool is also available to prompt-based tasks, so the agent can decide to use a workflow mid-execution
+No changes to `AgentLoop` itself. Background tasks use the same `AgentLoop` class with a different session ID (`task:{taskId}`), full tool set, and `additionalContext` set to standup output.
 
 ### Memory
 
@@ -690,9 +627,9 @@ The GitHub event source (`src/tasks/events/github.ts`) uses the native GitHub to
 
 Prompt-based task agents also have access to the full GitHub tool set, so they can create PRs, comment on issues, check CI, and create branches as part of task execution.
 
-### Routing
+### Delegation
 
-Background tasks always start with the local model. The normal escalation logic still applies — if the local model can't handle a task, it escalates to remote. But this should be rare; background tasks are typically simple (check a status, parse some output, diff two things).
+Background tasks run through the local model just like interactive sessions. If a task needs heavy engineering work, the agent calls the `code_agent` tool to delegate to Claude Code — same path as any other tool call. There's no separate routing or escalation layer.
 
 ### Notification Filtering
 
@@ -824,52 +761,25 @@ User has a CI pipeline that can POST to a webhook on completion:
 }
 ```
 
-### "Pull and test every hour" (workflow-based, no LLM)
-
-```json
-{
-  "name": "hourly-test",
-  "description": "Pull latest and run tests — no AI needed",
-  "kind": "scheduled",
-  "interval": "1h",
-  "workflow": {
-    "name": "pull-test-fix",
-    "params": {
-      "branch": "main",
-      "test_command": "bun test",
-      "remote": "origin"
-    }
-  },
-  "notify": "on_failure"
-}
-```
-
-Zero LLM tokens per run. The workflow engine pulls, tests, and only notifies if something breaks. If the built-in `pull-test-fix` workflow includes an auto-fix step that fails, the notification includes the workflow step output.
-
-### "Smart test watcher" (hybrid: workflow + prompt fallback)
+### "Test watcher with AI diagnosis"
 
 ```json
 {
   "name": "smart-test",
-  "description": "Run tests on file change, AI diagnoses failures",
+  "description": "Run tests on file change, diagnose failures",
   "kind": "event",
   "event_source": "file",
   "event_config": {
     "paths": ["src/"],
     "debounce_ms": 5000
   },
-  "workflow": {
-    "steps": [
-      { "name": "test", "tool": "execute_command", "params": { "command": "bun test" } }
-    ]
-  },
-  "prompt": "Tests failed. Analyze the output above. Identify the root cause, check if this is a known flaky test (use memory_search for 'flaky'), and suggest a fix. Store analysis as 'test-failure-latest' (category: project).",
+  "prompt": "Run `bun test` via execute_command. If it fails, analyze the output, check memory_search for 'flaky' to see if this is a known flake, and store your analysis as 'test-failure-latest' (category: project). Only notify on failure.",
   "notify": "on_failure",
   "memory_category": "project"
 }
 ```
 
-Workflow runs first (fast, free). If tests pass, done — no LLM. If tests fail, the prompt-based agent kicks in to analyze and diagnose.
+The agent runs the test command itself via `execute_command`, then reasons about the output. If something heavier is needed (e.g. authoring a fix), it calls `code_agent` to hand the work to Claude Code.
 
 ### Agent discovers work
 
@@ -929,13 +839,13 @@ src/channels/cli.ts            # Implement send()
 
 API server changes:
 ```
-src/api/server.ts              # Add addWebhookRoute/removeWebhookRoute
+src/api.ts                     # Add addWebhookRoute/removeWebhookRoute
 ```
 
 ## Future Work
 
 - **Cron expressions**: Interval-based scheduling covers most cases, but cron would be nice for "every weekday at 9am". Would need a cron parsing dependency
-- **Task chaining**: "When task A finishes, run task B." Workflow engine already supports step chaining within a task. Cross-task chaining (task A triggers task B) would need a `depends_on` field. Not needed yet
+- **Task chaining**: "When task A finishes, run task B." Would need a `depends_on` field. Not needed yet
 - **Resource budgeting**: Token/cost caps per task per day. Currently relies on timeout + max_runs limits. Could use the `StatsTracker` to track per-task token usage and enforce budgets
 - **Multi-channel delivery**: A task reports to one channel. Broadcasting isn't hard but isn't needed for single-user
 - **Dedicated GitHub webhook receiver**: Currently GitHub events use polling via the native GitHub tools. The generic webhook event source works for receiving GitHub webhooks too, but a dedicated receiver could parse `X-GitHub-Event` headers and verify signatures with the GitHub HMAC scheme specifically

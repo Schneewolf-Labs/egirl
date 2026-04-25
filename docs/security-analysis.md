@@ -28,7 +28,7 @@ The `command` parameter comes directly from LLM output (`params.command as strin
 - Heredoc/pipe tricks: `cat <<< "rm -rf /" | bash`
 - Encoded payloads: `echo cm0gLXJmIC8= | base64 -d | sh`
 
-Additionally, `env: { ...process.env }` leaks all environment variables (including `ANTHROPIC_API_KEY`, `DISCORD_TOKEN`) to the spawned process.
+Additionally, `env: { ...process.env }` leaks all environment variables (including `DISCORD_TOKEN`, `GITHUB_TOKEN`, `EGIRL_API_TOKEN`) to the spawned process.
 
 **Recommendation**: Switch from blocklist to allowlist. Use array-form `spawn(['git', 'status'])` instead of shell strings. Strip secrets from the child process environment.
 
@@ -140,18 +140,18 @@ Path validation uses `normalize()` and `resolve()` but does **not** resolve syml
 
 ### 3.1 No Rate Limiting on API Endpoints
 
-**File**: `src/api/server.ts:63-67`, `src/api/routes.ts`
+**File**: `src/api.ts`
 **CWE**: CWE-770 (Allocation of Resources Without Limits)
 
-The HTTP API has no rate limiting, no request size limits, and no authentication. Endpoints include:
+The HTTP API supports an optional bearer token (`EGIRL_API_TOKEN`) but has no rate limiting and no request size limits. Endpoints include:
 
-- `POST /v1/chat` — triggers full agent loop (LLM inference, tool execution)
-- `POST /v1/tools/:name/execute` — direct tool execution
-- `PUT /v1/memory/:key` — arbitrary memory writes
+- `POST /chat` — triggers a full agent loop (LLM inference, tool execution)
+- `POST /memory` / `DELETE /memory/:key` — memory writes
+- `POST /tasks` / `POST /tasks/:id/run` — create or trigger background tasks
 
-An attacker on the local network (or internet, if port-forwarded) can exhaust GPU/CPU with rapid `/v1/chat` requests, burn API credits via escalation, or poison memory via `/v1/memory`.
+An attacker on the network (if exposed beyond localhost without a bearer token) can exhaust GPU/CPU with rapid `/chat` requests, drive Claude Code usage via background tasks, or poison memory via `/memory`.
 
-**Recommendation**: Add per-IP rate limiting (e.g., 10 req/min for `/v1/chat`). Add request body size limits (e.g., 64KB). Bind to `127.0.0.1` by default, not `0.0.0.0`.
+**Recommendation**: Bind to `127.0.0.1` by default (current behavior); always require `EGIRL_API_TOKEN` when binding elsewhere. Add per-IP rate limiting (e.g., 10 req/min for `/chat`). Add request body size limits (e.g., 64KB).
 
 ---
 
@@ -164,9 +164,9 @@ An attacker on the local network (or internet, if port-forwarded) can exhaust GP
 env: { ...process.env },
 ```
 
-Every spawned command inherits the full process environment, including `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, and `DISCORD_TOKEN`. A command like `env` or `printenv` (which passes the blocklist) dumps all secrets.
+Every spawned command inherits the full process environment, including `DISCORD_TOKEN`, `XMPP_PASSWORD`, `EGIRL_API_TOKEN`, and `GITHUB_TOKEN`. A command like `env` or `printenv` (which passes the blocklist) dumps all secrets.
 
-**Recommendation**: Construct a minimal environment for child processes. Explicitly include only `PATH`, `HOME`, `USER`, `LANG`, `TERM`, and tool-specific variables. Never pass API keys.
+**Recommendation**: Construct a minimal environment for child processes. Explicitly include only `PATH`, `HOME`, `USER`, `LANG`, `TERM`, and tool-specific variables. Never pass tokens.
 
 ---
 
@@ -186,22 +186,14 @@ If the SQLite database contains malformed JSON (corruption, manual edits, migrat
 
 ---
 
-### 3.4 No HTTPS or Auth on API Server
+### 3.4 No HTTPS on API Server
 
-**File**: `src/api/server.ts:63-67`
+**File**: `src/api.ts`
 **CWE**: CWE-319 (Cleartext Transmission of Sensitive Information)
 
-```typescript
-this.server = Bun.serve({
-  port,
-  hostname: host,
-  fetch: (req) => this.handleRequest(req),
-})
-```
+The API server runs plain HTTP. The bearer token via `EGIRL_API_TOKEN` is optional and, when set, is transmitted in cleartext on every request. On shared networks, traffic (including chat messages, memory contents, tool results, and the bearer token itself) is accessible to any local process or network observer.
 
-The API server runs plain HTTP with no authentication. On shared networks, traffic (including chat messages, memory contents, tool results) is transmitted in cleartext and accessible to any local process.
-
-**Recommendation**: For non-localhost bindings, require HTTPS (Bun supports `tls` in `Bun.serve`). Add a bearer token check for all API routes. Default hostname to `127.0.0.1`.
+**Recommendation**: For non-localhost bindings, require HTTPS (Bun supports `tls` in `Bun.serve`) and make the bearer token mandatory in code (not just documentation). Default hostname is already `127.0.0.1` — keep it.
 
 ---
 
@@ -290,7 +282,7 @@ Based on OpenClaw's security model and public vulnerability disclosures:
 4. **Frame memories as untrusted** — Change `role: 'system'` to `role: 'user'` with prefix in `src/agent/loop.ts:119`
 5. **Replace command blocklist with allowlist** — Rewrite `src/safety/command-filter.ts`
 6. **Remove or restrict `browser_eval`** — Remove from `src/tools/builtin/browser.ts`
-7. **Add rate limiting to API** — Simple counter middleware in `src/api/server.ts`
+7. **Add rate limiting to API** — Simple counter in `src/api.ts`
 8. **Enable confirmation for `execute_command`** — Default change in `src/safety/index.ts`
 9. **Add try/catch to JSON parse** — `src/conversation/store.ts:83-86`
-10. **Bind API to localhost by default** — `src/api/server.ts`
+10. **Require bearer token when binding outside localhost** — `src/api.ts` (default host is already `127.0.0.1`)
