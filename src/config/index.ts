@@ -194,6 +194,7 @@ export function loadConfig(): RuntimeConfig {
     tools: {
       files: toml.tools?.files ?? true,
       exec: toml.tools?.exec ?? true,
+      process: toml.tools?.process ?? false,
       git: toml.tools?.git ?? true,
       memory: toml.tools?.memory ?? true,
       browser: toml.tools?.browser ?? false,

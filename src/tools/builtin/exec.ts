@@ -1,32 +1,9 @@
 import { spawn } from 'child_process'
 import { isAbsolute, resolve } from 'path'
+import { sanitizedEnv } from '../../util/env'
 import type { Tool, ToolResult } from '../types'
 
 const DEFAULT_TIMEOUT = 30000
-
-/** Build a minimal environment for child processes — strip secrets */
-function sanitizedEnv(): Record<string, string | undefined> {
-  const SECRET_PATTERNS = [
-    /^ANTHROPIC_/i,
-    /^DISCORD_TOKEN$/i,
-    /^GITHUB_TOKEN$/i,
-    /^AWS_SECRET/i,
-    /^SSH_/i,
-    /TOKEN/i,
-    /SECRET/i,
-    /PASSWORD/i,
-    /PRIVATE.?KEY/i,
-  ]
-
-  const env: Record<string, string | undefined> = {}
-  for (const [key, value] of Object.entries(process.env)) {
-    const isSecret = SECRET_PATTERNS.some((p) => p.test(key))
-    if (!isSecret) {
-      env[key] = value
-    }
-  }
-  return env
-}
 
 export const execTool: Tool = {
   definition: {

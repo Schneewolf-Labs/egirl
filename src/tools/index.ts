@@ -4,6 +4,7 @@ export {
   createCodeAgentTool,
   createGitHubTools,
   createMemoryTools,
+  createProcessTools,
   createTaskTools,
   createWebSearchTool,
   editTool,
@@ -37,6 +38,12 @@ export {
   hasToolCalls,
   parseToolCalls,
 } from './format'
+export {
+  createProcessRegistry,
+  type ProcessRegistry,
+  type ProcessSnapshot,
+  type ProcessStatus,
+} from './process-registry'
 export type { Tool, ToolDefinition, ToolResult } from './types'
 
 import type { BrowserManager } from '../browser'
@@ -48,6 +55,7 @@ import {
   createCodeAgentTool,
   createGitHubTools,
   createMemoryTools,
+  createProcessTools,
   createWebSearchTool,
   editTool,
   execTool,
@@ -64,6 +72,7 @@ import {
   writeTool,
 } from './builtin'
 import { createToolExecutor } from './executor'
+import type { ProcessRegistry } from './process-registry'
 import type { Tool, ToolResult } from './types'
 
 const MEMORY_NOT_INITIALIZED =
@@ -97,6 +106,7 @@ export function createDefaultToolExecutor(
   codeAgent?: CodeAgentConfig,
   github?: GitHubConfig,
   browser?: BrowserManager,
+  processRegistry?: ProcessRegistry,
 ) {
   const executor = createToolExecutor()
   const t = config.tools
@@ -109,6 +119,18 @@ export function createDefaultToolExecutor(
   // Shell execution
   if (t.exec) {
     executor.register(execTool)
+  }
+
+  // Background process registry (start/list/output/send_input/stop)
+  if (t.process && processRegistry) {
+    const pt = createProcessTools(processRegistry)
+    executor.registerAll([
+      pt.processStartTool,
+      pt.processListTool,
+      pt.processOutputTool,
+      pt.processSendInputTool,
+      pt.processStopTool,
+    ])
   }
 
   // Git tools

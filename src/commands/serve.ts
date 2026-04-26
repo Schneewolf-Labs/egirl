@@ -22,8 +22,16 @@ export async function runServe(config: RuntimeConfig, args: string[]): Promise<v
     process.exit(1)
   }
 
-  const { providers, memory, conversations, taskStore, toolExecutor, transcript, skills } =
-    await createAppServices(config)
+  const {
+    providers,
+    memory,
+    conversations,
+    taskStore,
+    toolExecutor,
+    transcript,
+    skills,
+    processRegistry,
+  } = await createAppServices(config)
 
   const standup = await gatherStandup(config.workspace.path)
   const sessionMutex = new SessionMutex()
@@ -160,6 +168,7 @@ export async function runServe(config: RuntimeConfig, args: string[]): Promise<v
     for (const fn of shutdownFns) {
       await fn().catch(() => {})
     }
+    await processRegistry.shutdownAll()
     taskStore?.close()
     conversations?.close()
     process.exit(0)

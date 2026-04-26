@@ -19,8 +19,16 @@ export async function runAPI(config: RuntimeConfig, args: string[]): Promise<voi
     process.exit(1)
   }
 
-  const { providers, memory, conversations, taskStore, toolExecutor, transcript, skills } =
-    await createAppServices(config)
+  const {
+    providers,
+    memory,
+    conversations,
+    taskStore,
+    toolExecutor,
+    transcript,
+    skills,
+    processRegistry,
+  } = await createAppServices(config)
 
   const standup = await gatherStandup(config.workspace.path)
   const sessionMutex = new SessionMutex()
@@ -88,6 +96,7 @@ export async function runAPI(config: RuntimeConfig, args: string[]): Promise<voi
     log.info('main', 'Shutting down...')
     taskRunner?.stop()
     server.stop()
+    await processRegistry.shutdownAll()
     taskStore?.close()
     conversations?.close()
     process.exit(0)
