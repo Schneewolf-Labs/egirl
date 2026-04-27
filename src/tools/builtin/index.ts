@@ -6,6 +6,7 @@ export { gitCommitTool, gitDiffTool, gitLogTool, gitShowTool, gitStatusTool } fr
 export { createGitHubTools, type GitHubConfig } from './github/index'
 export { globTool } from './glob'
 export { createMemoryTools } from './memory'
+export { createProcessTools } from './process'
 export { readTool } from './read'
 export { screenshotTool } from './screenshot'
 export { createTaskTools } from './tasks'

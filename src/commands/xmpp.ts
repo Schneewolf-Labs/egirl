@@ -17,7 +17,7 @@ export async function runXMPP(config: RuntimeConfig, args: string[]): Promise<vo
     process.exit(1)
   }
 
-  const { providers, memory, conversations, toolExecutor, transcript, skills } =
+  const { providers, memory, conversations, toolExecutor, transcript, skills, processRegistry } =
     await createAppServices(config)
 
   const standup = await gatherStandup(config.workspace.path)
@@ -41,6 +41,7 @@ export async function runXMPP(config: RuntimeConfig, args: string[]): Promise<vo
   const shutdown = async () => {
     log.info('main', 'Shutting down...')
     await xmpp.stop()
+    await processRegistry.shutdownAll()
     conversations?.close()
     process.exit(0)
   }

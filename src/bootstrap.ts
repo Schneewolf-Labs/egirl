@@ -19,7 +19,9 @@ import { createTaskStore, type TaskStore } from './tasks'
 import {
   type CodeAgentConfig,
   createDefaultToolExecutor,
+  createProcessRegistry,
   type GitHubConfig,
+  type ProcessRegistry,
   type ToolExecutor,
 } from './tools'
 import { createStatsTracker, type StatsTracker } from './tracking'
@@ -43,6 +45,7 @@ export interface AppServices {
   transcript: TranscriptLogger | undefined
   skills: Skill[]
   browser: BrowserManager
+  processRegistry: ProcessRegistry
 }
 
 /**
@@ -230,12 +233,14 @@ export async function createAppServices(config: RuntimeConfig): Promise<AppServi
   const taskStore = createTasks(config)
   const skills = await loadSkills(config)
   const browser = new BrowserManager()
+  const processRegistry = createProcessRegistry()
   const toolExecutor = createDefaultToolExecutor(
     config,
     memory,
     getCodeAgentConfig(config),
     getGitHubConfig(config),
     browser,
+    processRegistry,
   )
   toolExecutor.setSafety(buildSafetyConfig(config))
   if (energy) {
@@ -261,5 +266,6 @@ export async function createAppServices(config: RuntimeConfig): Promise<AppServi
     transcript,
     skills,
     browser,
+    processRegistry,
   }
 }

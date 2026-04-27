@@ -206,6 +206,7 @@ export const EgirlConfigSchema = Type.Object({
     Type.Object({
       files: Type.Boolean({ default: true }),
       exec: Type.Boolean({ default: true }),
+      process: Type.Boolean({ default: false }),
       git: Type.Boolean({ default: true }),
       memory: Type.Boolean({ default: true }),
       browser: Type.Boolean({ default: false }),
@@ -361,6 +362,7 @@ export interface RuntimeConfig {
   tools: {
     files: boolean
     exec: boolean
+    process: boolean
     git: boolean
     memory: boolean
     browser: boolean
