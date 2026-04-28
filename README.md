@@ -13,7 +13,7 @@
 
 egirl is a long-running local AI agent. It runs on your hardware, remembers what you've been working on, and **delegates real engineering work to a coding agent**. The local LLM plans and supervises; the coding agent executes.
 
-Think of it as a competent colleague who lives in your cluster, knows your projects, and drives Claude/Codex/OpenCode so you don't have to write every prompt by hand.
+Think of it as a competent colleague who lives in your cluster, knows your projects, and drives Claude/Codex/OpenCode/Hermes so you don't have to write every prompt by hand.
 
 **Default personality: Kira** — confident, sharp, gets stuff done. Will tease you when you push to main.
 
@@ -28,7 +28,7 @@ No multi-model routing. No per-message cloud escalation. The local model solves 
 ## Features
 
 - **Local-first** — llama.cpp on your box, zero API cost for coordination
-- **Code agent integration** — first-class `code_agent` tool that can delegate engineering work to Claude Code, Codex, or OpenCode
+- **Code agent integration** — first-class `code_agent` tool that can delegate engineering work to Claude Code, Codex, OpenCode, or Hermes Agent
 - **Long-running memory** — hybrid keyword + semantic search, SQLite-backed, with auto-extraction and temporal recall
 - **Conversation persistence** — picks up where you left off across restarts
 - **Background tasks** — cron-scheduled work with business-hours awareness and dependency ordering
@@ -84,7 +84,7 @@ backend = "opencode"
 permission_mode = "bypassPermissions"
 
 [tools]
-code_agent = true     # the primary tool — delegate coding to Claude/Codex/OpenCode
+code_agent = true     # the primary tool — delegate coding to Claude/Codex/OpenCode/Hermes
 ```
 
 ### .env
@@ -97,7 +97,7 @@ EGIRL_API_TOKEN=...   # optional bearer token for the HTTP API (required if expo
 GITHUB_TOKEN=...      # for gh_* tools
 ```
 
-For `backend = "claude"`, authenticate with `claude auth login`. Codex/OpenCode use their own CLI auth flows.
+For `backend = "claude"`, authenticate with `claude auth login`. Codex/OpenCode/Hermes use their own CLI auth flows.
 
 ## Commands
 

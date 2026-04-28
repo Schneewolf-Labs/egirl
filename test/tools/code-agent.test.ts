@@ -59,4 +59,23 @@ describe('code-agent backend config', () => {
     expect(invocation.args).toEqual(['write fibonacci'])
     expect(invocation.env.OPENCODE_PERMISSION).toContain('"*":"allow"')
   })
+
+  test('builds hermes invocation with one-shot query mode', () => {
+    const invocation = buildCliInvocation('hermes', 'write fibonacci', {
+      ...base,
+      permissionMode: 'bypassPermissions',
+      model: 'nous:hermes-4',
+    })
+
+    expect(invocation.args).toEqual([
+      'chat',
+      '-q',
+      'write fibonacci',
+      '-Q',
+      '--model',
+      'nous:hermes-4',
+      '--yolo',
+    ])
+    expect(invocation.env).toEqual({})
+  })
 })

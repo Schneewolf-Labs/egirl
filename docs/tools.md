@@ -512,7 +512,7 @@ Show the contents of a specific commit: message, author, date, and diff.
 
 ## code_agent
 
-Delegate a coding task to an autonomous code agent (Claude Code, Codex, or OpenCode).
+Delegate a coding task to an autonomous code agent (Claude Code, Codex, OpenCode, or Hermes Agent).
 
 **Source:** `src/tools/builtin/code-agent.ts`
 
@@ -522,8 +522,8 @@ Delegate a coding task to an autonomous code agent (Claude Code, Codex, or OpenC
 | `working_dir` | string | No | Working directory for the task (defaults to configured workspace) |
 
 **Behavior:**
-- Uses backend configured in `[channels.claude_code]` (`claude`, `codex`, or `opencode`)
-- Claude backend uses the Anthropic Agent SDK; Codex/OpenCode backends run their CLIs in non-interactive mode
+- Uses backend configured in `[channels.claude_code]` (`claude`, `codex`, `opencode`, or `hermes`)
+- Claude backend uses the Anthropic Agent SDK; Codex/OpenCode/Hermes backends run their CLIs in non-interactive mode
 - Permission mode is mapped to backend-specific approval/permission settings
 - The code agent has filesystem and command execution access
 - Default timeout is 5 minutes

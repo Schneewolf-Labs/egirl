@@ -7,7 +7,7 @@ import type { Tool, ToolResult } from '../types'
 /** Default timeout: 5 minutes */
 const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000
 
-export type CodeAgentBackend = 'claude' | 'codex' | 'opencode'
+export type CodeAgentBackend = 'claude' | 'codex' | 'opencode' | 'hermes'
 
 export interface CodeAgentConfig {
   backend?: CodeAgentBackend
@@ -45,7 +45,7 @@ export function resolveCodeAgentBackend(config: CodeAgentConfig): CodeAgentBacke
 }
 
 export function buildCliInvocation(
-  backend: Extract<CodeAgentBackend, 'codex' | 'opencode'>,
+  backend: Extract<CodeAgentBackend, 'codex' | 'opencode' | 'hermes'>,
   task: string,
   config: CodeAgentConfig,
 ): { args: string[]; env: Record<string, string | undefined> } {
@@ -63,6 +63,20 @@ export function buildCliInvocation(
     }
   }
 
+  if (backend === 'hermes') {
+    return {
+      args: [
+        'chat',
+        '-q',
+        task,
+        '-Q',
+        ...(config.model ? ['--model', config.model] : []),
+        ...(config.permissionMode === 'bypassPermissions' ? ['--yolo'] : []),
+      ],
+      env: {},
+    }
+  }
+
   return {
     args: [task],
     env: {
@@ -72,7 +86,7 @@ export function buildCliInvocation(
 }
 
 async function runCliCodeAgent(
-  backend: Extract<CodeAgentBackend, 'codex' | 'opencode'>,
+  backend: Extract<CodeAgentBackend, 'codex' | 'opencode' | 'hermes'>,
   task: string,
   config: CodeAgentConfig,
   workingDir: string,
@@ -145,7 +159,7 @@ export function createCodeAgentTool(config: CodeAgentConfig): Tool {
     definition: {
       name: 'code_agent',
       description: [
-        'Delegate a coding task to the code agent (Claude Code, Codex, or OpenCode).',
+        'Delegate a coding task to the code agent (Claude Code, Codex, OpenCode, or Hermes Agent).',
         'Use this for complex tasks that require multi-file edits, refactoring,',
         'debugging, running tests, or any task that benefits from deep codebase',
         'exploration. The agent has full access to the filesystem and can run commands.',

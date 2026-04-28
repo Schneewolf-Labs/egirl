@@ -73,7 +73,7 @@ Settings for the code-agent runtime. The `claude-code` / `cc` command still uses
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `backend` | string | `"opencode"` | Code-agent backend: `claude`, `codex`, `opencode` |
+| `backend` | string | `"opencode"` | Code-agent backend: `claude`, `codex`, `opencode`, `hermes` |
 | `permission_mode` | string | `"bypassPermissions"` | Permission/approval mode mapped per backend |
 | `model` | string | (none) | Optional backend model override |
 | `working_dir` | string | workspace path | Working directory for code-agent operations |
@@ -353,7 +353,7 @@ path = "{workspace}/audit.log"
 enabled = false
 
 [tools]
-code_agent = true   # the primary tool — delegate coding to Claude/Codex/OpenCode
+code_agent = true   # the primary tool — delegate coding to Claude/Codex/OpenCode/Hermes
 
 [skills]
 dirs = ["~/.egirl/skills", "{workspace}/skills"]

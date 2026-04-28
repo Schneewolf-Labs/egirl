@@ -29,7 +29,7 @@ allowed_channels = ["dm"]                # or specific channel IDs
 allowed_users = []                       # set your Discord user ID
 
 [channels.claude_code]
-backend = "opencode"                     # claude, codex, opencode
+backend = "opencode"                     # claude, codex, opencode, hermes
 permission_mode = "bypassPermissions"    # default, acceptEdits, bypassPermissions, plan
 # model = "sonnet"                       # model name for selected backend
 # working_dir = "~/projects/myrepo"      # defaults to workspace
@@ -72,7 +72,7 @@ enabled = false
 # tools = ["execute_command", "write_file", "edit_file"]
 
 [tools]
-code_agent = true                        # enable code agent delegation (Claude/Codex/OpenCode)
+code_agent = true                        # enable code agent delegation (Claude/Codex/OpenCode/Hermes)
 
 [skills]
 dirs = ["~/.egirl/skills", "{workspace}/skills"]
