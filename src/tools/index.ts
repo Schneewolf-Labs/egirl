@@ -183,7 +183,7 @@ export function createDefaultToolExecutor(
     }
   }
 
-  // Code agent tool (available if claude code config provided)
+  // Code agent tool (available if code-agent channel config provided)
   if (t.codeAgent && codeAgent) {
     executor.register(createCodeAgentTool(codeAgent))
   }

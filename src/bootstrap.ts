@@ -123,6 +123,7 @@ export function getCodeAgentConfig(config: RuntimeConfig): CodeAgentConfig | und
   const cc = config.channels.claudeCode
   if (!cc) return undefined
   return {
+    backend: cc.backend,
     permissionMode: cc.permissionMode,
     model: cc.model,
     workingDir: cc.workingDir,

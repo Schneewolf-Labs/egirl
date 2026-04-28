@@ -69,20 +69,21 @@ Required only when running `discord` (or `serve`). The Discord token itself goes
 
 ### `[channels.claude_code]`
 
-Settings for the Claude Code bridge channel (`claude-code` / `cc` command). This is distinct from the `code_agent` tool.
+Settings for the code-agent runtime. The `claude-code` / `cc` command still uses Claude directly; the `code_agent` tool can use Claude, Codex, or OpenCode.
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `permission_mode` | string | `"bypassPermissions"` | How Claude Code handles tool permissions. See values below |
-| `model` | string | (none) | Override the Claude model (e.g. `"sonnet"`, `"opus"`, `"haiku"`) |
-| `working_dir` | string | workspace path | Working directory for Claude Code operations |
+| `backend` | string | `"opencode"` | Code-agent backend: `claude`, `codex`, `opencode` |
+| `permission_mode` | string | `"bypassPermissions"` | Permission/approval mode mapped per backend |
+| `model` | string | (none) | Optional backend model override |
+| `working_dir` | string | workspace path | Working directory for code-agent operations |
 | `max_turns` | number | (none) | Maximum agentic turns before stopping |
 
 **Permission modes:**
-- `"default"` — Claude Code asks permission on each tool use; local model answers
-- `"acceptEdits"` — Auto-approve file edits, ask about everything else
-- `"bypassPermissions"` — Skip all permission prompts (trust Claude Code)
-- `"plan"` — Claude Code creates a plan before executing
+- `"default"` — conservative defaults (`suggest` approvals in Codex, `ask` permissions in OpenCode)
+- `"acceptEdits"` — allow edits while still gating shell/network actions where supported
+- `"bypassPermissions"` — highest autonomy mode for the selected backend
+- `"plan"` — planning-first mode where supported; otherwise falls back to conservative mode
 
 ### `[channels.xmpp]`
 
@@ -317,6 +318,7 @@ allowed_channels = ["dm"]
 allowed_users = []
 
 [channels.claude_code]
+backend = "opencode"
 permission_mode = "bypassPermissions"
 # model = "sonnet"
 # working_dir = "~/projects/myrepo"
@@ -351,7 +353,7 @@ path = "{workspace}/audit.log"
 enabled = false
 
 [tools]
-code_agent = true   # the primary tool — delegate coding to Claude Code
+code_agent = true   # the primary tool — delegate coding to Claude/Codex/OpenCode
 
 [skills]
 dirs = ["~/.egirl/skills", "{workspace}/skills"]

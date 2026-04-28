@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <strong>Local AI that drives Claude Code.</strong><br>
+  <strong>Local AI that drives a coding agent.</strong><br>
   The human-in-the-loop for your coding agent. Meet Kira.
 </p>
 
@@ -11,9 +11,9 @@
 
 ## What This Is
 
-egirl is a long-running local AI agent. It runs on your hardware, remembers what you've been working on, and **delegates real engineering work to Claude Code**. The local LLM plans and supervises; Claude Code executes.
+egirl is a long-running local AI agent. It runs on your hardware, remembers what you've been working on, and **delegates real engineering work to a coding agent**. The local LLM plans and supervises; the coding agent executes.
 
-Think of it as a competent colleague who lives in your cluster, knows your projects, and drives Claude Code so you don't have to write every prompt by hand.
+Think of it as a competent colleague who lives in your cluster, knows your projects, and drives Claude/Codex/OpenCode so you don't have to write every prompt by hand.
 
 **Default personality: Kira** — confident, sharp, gets stuff done. Will tease you when you push to main.
 
@@ -21,14 +21,14 @@ Think of it as a competent colleague who lives in your cluster, knows your proje
 
 Everything flows through one idea:
 
-> The local LLM is the operator. It escalates to **tools**, not to other models. The most important tool is `code_agent` — a wrapper around Claude Code.
+> The local LLM is the operator. It escalates to **tools**, not to other models. The most important tool is `code_agent` — a wrapper around your configured coding agent.
 
 No multi-model routing. No per-message cloud escalation. The local model solves it itself or calls a tool.
 
 ## Features
 
 - **Local-first** — llama.cpp on your box, zero API cost for coordination
-- **Claude Code integration** — first-class `code_agent` tool that delegates engineering work to Claude Code via the Claude Agent SDK (uses your subscription, not API keys)
+- **Code agent integration** — first-class `code_agent` tool that can delegate engineering work to Claude Code, Codex, or OpenCode
 - **Long-running memory** — hybrid keyword + semantic search, SQLite-backed, with auto-extraction and temporal recall
 - **Conversation persistence** — picks up where you left off across restarts
 - **Background tasks** — cron-scheduled work with business-hours awareness and dependency ordering
@@ -80,10 +80,11 @@ allowed_channels = ["dm"]
 allowed_users = []   # empty = allow all
 
 [channels.claude_code]
+backend = "opencode"
 permission_mode = "bypassPermissions"
 
 [tools]
-code_agent = true     # the primary tool — delegate coding to Claude Code
+code_agent = true     # the primary tool — delegate coding to Claude/Codex/OpenCode
 ```
 
 ### .env
@@ -96,7 +97,7 @@ EGIRL_API_TOKEN=...   # optional bearer token for the HTTP API (required if expo
 GITHUB_TOKEN=...      # for gh_* tools
 ```
 
-No `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` — Claude Code uses subscription auth via the Claude Agent SDK.
+For `backend = "claude"`, authenticate with `claude auth login`. Codex/OpenCode use their own CLI auth flows.
 
 ## Commands
 
@@ -158,7 +159,7 @@ egirl ships with tools across six categories. Format: Qwen3 native tool calling 
 
 | Category | Tools |
 |----------|-------|
-| **Delegation (primary)** | `code_agent` — drive Claude Code |
+| **Delegation (primary)** | `code_agent` — drive Claude Code / Codex / OpenCode |
 | **Files** | `read_file`, `write_file`, `edit_file`, `glob_files` |
 | **Shell** | `execute_command` |
 | **Memory** | `memory_search`, `memory_get`, `memory_set`, `memory_delete`, `memory_list`, `memory_recall` |
