@@ -271,7 +271,10 @@ function codexWorkingIndex(screen: string): number {
 
 function codexTranscriptLooksComplete(screen: string): boolean {
   const workingIndex = codexWorkingIndex(screen)
-  return workingIndex >= 0 && codexCompletionIndex(screen) > workingIndex
+  const completionIndex = codexCompletionIndex(screen)
+  if (completionIndex < 0) return false
+  if (screen.includes('• Completed') || screen.includes('• Created')) return true
+  return workingIndex >= 0 && completionIndex > workingIndex
 }
 
 async function chooseCodexOption(
@@ -471,6 +474,15 @@ async function runCodexCodeAgent(
 
       const output = stripAnsi(rawOutput).trim()
       if (exitCode !== 0) {
+        if (codexTranscriptLooksComplete(output)) {
+          log.info('code-agent', `Codex completed in ${duration()}s`)
+          finish({
+            success: true,
+            output: `${output}\n\n[code_agent: codex interactive | ${duration()}s]`,
+          })
+          return
+        }
+
         log.error('code-agent', `Codex interactive task failed with exit code ${exitCode}`)
         finish({
           success: false,
