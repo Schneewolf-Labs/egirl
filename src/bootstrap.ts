@@ -117,12 +117,13 @@ export function createMemory(config: RuntimeConfig): MemoryManager | undefined {
 }
 
 /**
- * Extract CodeAgentConfig from RuntimeConfig if Claude Code channel is configured.
+ * Extract CodeAgentConfig from RuntimeConfig if a code agent channel is configured.
  */
 export function getCodeAgentConfig(config: RuntimeConfig): CodeAgentConfig | undefined {
   const cc = config.channels.claudeCode
   if (!cc) return undefined
   return {
+    provider: cc.provider,
     permissionMode: cc.permissionMode,
     model: cc.model,
     workingDir: cc.workingDir,
@@ -234,10 +235,11 @@ export async function createAppServices(config: RuntimeConfig): Promise<AppServi
   const skills = await loadSkills(config)
   const browser = new BrowserManager()
   const processRegistry = createProcessRegistry()
+  const codeAgentConfig = getCodeAgentConfig(config)
   const toolExecutor = createDefaultToolExecutor(
     config,
     memory,
-    getCodeAgentConfig(config),
+    codeAgentConfig ? { ...codeAgentConfig, localProvider: providers.local } : undefined,
     getGitHubConfig(config),
     browser,
     processRegistry,
