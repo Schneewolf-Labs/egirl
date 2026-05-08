@@ -23,6 +23,8 @@ Thumbs.db
 # IDE
 .idea/
 .vscode/
+.codex
+.codex/
 *.swp
 *.swo
 .ipynb_checkpoints/
