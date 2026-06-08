@@ -14,12 +14,43 @@ import { BOLD, colors, DIM, RESET } from './ui/theme'
 import { log } from './util/logger'
 import { bootstrapWorkspace } from './workspace/bootstrap'
 
+interface ParsedArgs {
+  command: string
+  commandArgs: string[]
+  instance?: string
+}
+
+function parseGlobalArgs(args: string[]): ParsedArgs {
+  const remaining: string[] = []
+  let instance: string | undefined
+
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i]
+    if (!arg) continue
+
+    if (arg === '--instance') {
+      const value = args[++i]
+      if (!value) throw new Error('--instance requires a name')
+      instance = value
+      continue
+    }
+
+    remaining.push(arg)
+  }
+
+  return {
+    command: remaining[0] ?? 'cli',
+    commandArgs: remaining.slice(1),
+    ...(instance && { instance }),
+  }
+}
+
 async function main() {
-  const args = process.argv.slice(2)
-  const command = args[0] ?? 'cli'
+  const parsed = parseGlobalArgs(process.argv.slice(2))
+  const { command, commandArgs, instance } = parsed
 
   if (command === 'init') {
-    await runInit(args.slice(1))
+    await runInit(commandArgs)
     return
   }
 
@@ -30,8 +61,9 @@ async function main() {
 
   let config: RuntimeConfig
   try {
-    config = loadConfig()
-    log.info('main', `Loaded config: workspace=${config.workspace.path}`)
+    config = loadConfig({ instance })
+    const instanceLabel = config.source.instance ? ` instance=${config.source.instance}` : ''
+    log.info('main', `Loaded config: workspace=${config.workspace.path}${instanceLabel}`)
   } catch (error) {
     log.error('main', 'Failed to load config:', error)
     process.exit(1)
@@ -45,7 +77,7 @@ async function main() {
 
   switch (command) {
     case 'cli':
-      await runCLI(config, args.slice(1))
+      await runCLI(config, commandArgs)
       break
 
     case 'status':
@@ -58,23 +90,23 @@ async function main() {
 
     case 'claude-code':
     case 'cc':
-      await runClaudeCode(config, args.slice(1))
+      await runClaudeCode(config, commandArgs)
       break
 
     case 'discord':
-      await runDiscord(config, args.slice(1))
+      await runDiscord(config, commandArgs)
       break
 
     case 'xmpp':
-      await runXMPP(config, args.slice(1))
+      await runXMPP(config, commandArgs)
       break
 
     case 'api':
-      await runAPI(config, args.slice(1))
+      await runAPI(config, commandArgs)
       break
 
     case 'serve':
-      await runServe(config, args.slice(1))
+      await runServe(config, commandArgs)
       break
 
     default:
@@ -109,6 +141,7 @@ ${c.primary}Options${RESET} ${DIM}(all commands)${RESET}
   ${c.accent}-v, --verbose${RESET}  Enable verbose/debug logging
   ${c.accent}-d, --debug${RESET}    Alias for --verbose
   ${c.accent}-q, --quiet${RESET}    Only show errors
+  ${c.accent}--instance <name>${RESET} Select a named instance from egirl.toml
 
 ${c.primary}CLI / Code Agent Options${RESET}
   ${c.accent}-m <msg>${RESET}       Send a single message / run a single task and exit
@@ -117,6 +150,7 @@ ${c.primary}CLI / Code Agent Options${RESET}
 ${c.primary}Examples${RESET}
   ${DIM}$${RESET} bun run start init --provider codex       ${DIM}# Write starter config${RESET}
   ${DIM}$${RESET} bun run start doctor                      ${DIM}# Check setup${RESET}
+  ${DIM}$${RESET} bun run start --instance ops-big cli       ${DIM}# Run a named instance${RESET}
   ${DIM}$${RESET} bun run cli                              ${DIM}# Interactive chat${RESET}
   ${DIM}$${RESET} bun run start discord                    ${DIM}# Discord bot${RESET}
   ${DIM}$${RESET} bun run start serve                      ${DIM}# Discord + scheduler${RESET}

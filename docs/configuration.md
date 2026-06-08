@@ -98,6 +98,61 @@ Settings for the `code_agent` tool. If omitted, egirl falls back to `[channels.c
 
 **Migration note:** existing Claude-only configs can keep `[channels.claude_code]` unchanged. To configure the tool explicitly, add `[channels.code_agent] provider = "claude"` and copy any shared `permission_mode`, `model`, or `working_dir` values. To use Codex instead, set `provider = "codex"`; `[channels.claude_code]` still only controls the direct `claude-code` / `cc` bridge command.
 
+### Multi-Instance Config
+
+Optional `[profiles]`, `[personas]`, and `[instances]` sections let one TOML file define many egirl deployments.
+
+- **Profiles** hold runtime/backend settings such as local model endpoints and code-agent backend.
+- **Personas** hold identity/workspace settings such as theme and workspace path.
+- **Instances** marry one profile to one persona and can override any nested config.
+
+Run a named instance with `--instance`:
+
+```bash
+bun run start --instance kira-local cli
+bun run start --instance ops-big doctor
+```
+
+Example:
+
+```toml
+[defaults]
+workspace_root = "~/.egirl"
+profile = "local-codex"
+persona = "kira"
+
+[profiles.local-codex]
+local_endpoint = "http://localhost:8080"
+local_model = "qwen3-vl-32b"
+code_agent_provider = "codex"
+code_agent_permission_mode = "default"
+
+[profiles.big-box]
+local_endpoint = "http://192.168.8.218:8080"
+local_model = "qwen3-72b"
+code_agent_provider = "codex"
+code_agent_permission_mode = "default"
+
+[personas.kira]
+workspace = "~/.egirl/personas/kira"
+theme = "egirl"
+
+[personas.ops]
+workspace = "~/.egirl/personas/ops"
+theme = "midnight"
+
+[instances.kira-local]
+profile = "local-codex"
+persona = "kira"
+
+[instances.ops-big]
+profile = "big-box"
+persona = "ops"
+api_port = 3001
+```
+
+The existing top-level config remains valid and acts as the base. Resolution order is top-level config, selected profile, selected persona, then selected instance.
+
 ### `[channels.xmpp]`
 
 Required only when running `xmpp` (or `serve` with XMPP configured). XMPP credentials (`XMPP_USERNAME`, `XMPP_PASSWORD`) go in `.env`.

@@ -131,4 +131,117 @@ dirs = ["{workspace}/skills"]
     expect(config.channels.codeAgent?.workingDir.endsWith('/bridge')).toBe(true)
     expect(config.source.codeAgentUsesClaudeCodeFallback).toBe(true)
   })
+
+  test('composes profile, persona, and instance config', async () => {
+    process.chdir(tmpDir)
+    writeFileSync(
+      join(tmpDir, 'egirl.toml'),
+      `
+[defaults]
+workspace_root = "${tmpDir}"
+
+[workspace]
+path = "${tmpDir}/base"
+
+[local]
+endpoint = "http://localhost:8080"
+model = "base-model"
+context_length = 8192
+max_concurrent = 1
+
+[profiles.remote]
+local_endpoint = "http://192.168.8.218:8080"
+local_model = "remote-model"
+code_agent_provider = "codex"
+code_agent_permission_mode = "default"
+
+[personas.kira]
+theme = "midnight"
+
+[instances.kira-remote]
+profile = "remote"
+persona = "kira"
+api_port = 3007
+
+[instances.kira-remote.channels.api]
+host = "127.0.0.1"
+
+[skills]
+dirs = ["{workspace}/skills"]
+`,
+    )
+
+    const { loadConfig } = await import('../../src/config/index')
+    const config = loadConfig({ instance: 'kira-remote' })
+
+    expect(config.source.instance).toBe('kira-remote')
+    expect(config.source.profile).toBe('remote')
+    expect(config.source.persona).toBe('kira')
+    expect(config.workspace.path.endsWith('/personas/kira')).toBe(true)
+    expect(config.theme).toBe('midnight')
+    expect(config.local.endpoint).toBe('http://192.168.8.218:8080')
+    expect(config.local.model).toBe('remote-model')
+    expect(config.channels.codeAgent?.provider).toBe('codex')
+    expect(config.channels.codeAgent?.permissionMode).toBe('default')
+    expect(config.channels.api?.port).toBe(3007)
+  })
+
+  test('uses default instance when no instance option is passed', async () => {
+    process.chdir(tmpDir)
+    writeFileSync(
+      join(tmpDir, 'egirl.toml'),
+      `
+[defaults]
+instance = "ops"
+
+[workspace]
+path = "${tmpDir}/base"
+
+[local]
+endpoint = "http://localhost:8080"
+model = "base-model"
+context_length = 8192
+max_concurrent = 1
+
+[instances.ops]
+workspace = "${tmpDir}/ops"
+
+[instances.ops.local]
+model = "ops-model"
+
+[skills]
+dirs = ["{workspace}/skills"]
+`,
+    )
+
+    const { loadConfig } = await import('../../src/config/index')
+    const config = loadConfig()
+
+    expect(config.source.instance).toBe('ops')
+    expect(config.workspace.path.endsWith('/ops')).toBe(true)
+    expect(config.local.model).toBe('ops-model')
+  })
+
+  test('throws for unknown selected instance', async () => {
+    process.chdir(tmpDir)
+    writeFileSync(
+      join(tmpDir, 'egirl.toml'),
+      `
+[workspace]
+path = "${tmpDir}/base"
+
+[local]
+endpoint = "http://localhost:8080"
+model = "base-model"
+context_length = 8192
+max_concurrent = 1
+
+[skills]
+dirs = ["{workspace}/skills"]
+`,
+    )
+
+    const { loadConfig } = await import('../../src/config/index')
+    expect(() => loadConfig({ instance: 'missing' })).toThrow('instance "missing"')
+  })
 })

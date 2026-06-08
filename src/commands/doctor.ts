@@ -71,6 +71,14 @@ export async function runDoctor(config: RuntimeConfig): Promise<void> {
       'using built-in defaults; run `bun run start init` to create egirl.toml',
   })
 
+  if (config.source.instance || config.source.profile || config.source.persona) {
+    results.push({
+      label: 'instance',
+      ok: true,
+      message: `${config.source.instance ?? 'default'} (profile=${config.source.profile ?? 'top-level'}, persona=${config.source.persona ?? 'top-level'})`,
+    })
+  }
+
   if (endpointUsesBindAddress(config.local.endpoint)) {
     results.push({
       label: 'endpoint',
