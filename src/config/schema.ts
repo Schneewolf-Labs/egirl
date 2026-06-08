@@ -55,6 +55,28 @@ export const EgirlConfigSchema = Type.Object({
       ),
       claude_code: Type.Optional(
         Type.Object({
+          provider: Type.Optional(
+            Type.Union([Type.Literal('claude'), Type.Literal('codex')], { default: 'claude' }),
+          ),
+          permission_mode: Type.Union(
+            [
+              Type.Literal('default'),
+              Type.Literal('acceptEdits'),
+              Type.Literal('bypassPermissions'),
+              Type.Literal('plan'),
+            ],
+            { default: 'bypassPermissions' },
+          ),
+          model: Type.Optional(Type.String()),
+          working_dir: Type.Optional(Type.String()),
+          max_turns: Type.Optional(Type.Number()),
+        }),
+      ),
+      code_agent: Type.Optional(
+        Type.Object({
+          provider: Type.Union([Type.Literal('claude'), Type.Literal('codex')], {
+            default: 'claude',
+          }),
           permission_mode: Type.Union(
             [
               Type.Literal('default'),
@@ -262,6 +284,7 @@ export interface RuntimeConfig {
       batchWindowMs: number
     }
     claudeCode?: {
+      provider?: 'claude' | 'codex'
       permissionMode: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan'
       model?: string
       workingDir: string

@@ -82,8 +82,12 @@ allowed_users = []   # empty = allow all
 [channels.claude_code]
 permission_mode = "bypassPermissions"
 
+[channels.code_agent]
+provider = "codex"      # or "claude"; Codex runs through the interactive codex CLI
+permission_mode = "default"
+
 [tools]
-code_agent = true     # the primary tool — delegate coding to Claude Code
+code_agent = true     # the primary tool — delegate coding to Claude Code or Codex
 ```
 
 ### .env

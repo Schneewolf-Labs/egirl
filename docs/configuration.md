@@ -84,6 +84,18 @@ Settings for the Claude Code bridge channel (`claude-code` / `cc` command). This
 - `"bypassPermissions"` — Skip all permission prompts (trust Claude Code)
 - `"plan"` — Claude Code creates a plan before executing
 
+### `[channels.code_agent]`
+
+Settings for the `code_agent` tool. If omitted, egirl falls back to `[channels.claude_code]` for backward compatibility.
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `provider` | string | `"claude"` | Code agent backend: `"claude"` or `"codex"` |
+| `permission_mode` | string | `"bypassPermissions"` | Agent permission mode. For Codex, non-bypass modes use the interactive CLI with a workspace-write sandbox and local-model prompt decisions |
+| `model` | string | (none) | Override the selected backend model |
+| `working_dir` | string | workspace path | Working directory for code agent operations |
+| `max_turns` | number | (none) | Maximum Claude Code turns before stopping. Ignored by Codex |
+
 ### `[channels.xmpp]`
 
 Required only when running `xmpp` (or `serve` with XMPP configured). XMPP credentials (`XMPP_USERNAME`, `XMPP_PASSWORD`) go in `.env`.
@@ -260,7 +272,7 @@ Enable / disable tool groups.
 | `browser` | bool | `false` | `browser_*` (requires `bunx playwright install`) |
 | `github` | bool | `false` | `gh_*` (requires `GITHUB_TOKEN`) |
 | `tasks` | bool | `false` | `task_*` |
-| `code_agent` | bool | `false` | `code_agent` — **the primary tool; enable this** |
+| `code_agent` | bool | `false` | `code_agent` — **the primary tool; enable this**. Backend is configured in `[channels.code_agent]` |
 | `web_research` | bool | `true` | `web_research` |
 | `web_search` | bool | `true` | `web_search` (requires `[searxng]`) |
 | `screenshot` | bool | `true` | `screenshot` |
@@ -284,7 +296,7 @@ Create from the template: `cp .env.example .env`
 | `GITHUB_TOKEN` | For GitHub tools | GitHub personal access token (for PR, issue, CI tools) |
 | `SEARXNG_API_KEY` | Optional | API key if your SearxNG instance requires one |
 
-**No `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`.** Claude Code is driven through the Claude Agent SDK using subscription auth (`claude auth login`). There's no remote LLM provider in egirl itself.
+**No `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` is needed for egirl itself.** Claude Code uses subscription auth via `claude auth login`; Codex uses your local `codex` CLI login.
 
 ## Full Example
 
@@ -322,6 +334,12 @@ permission_mode = "bypassPermissions"
 # working_dir = "~/projects/myrepo"
 # max_turns = 30
 
+[channels.code_agent]
+provider = "codex"      # "claude" or "codex"
+permission_mode = "default"
+# model = "gpt-5.5"
+# working_dir = "~/projects/myrepo"
+
 # [channels.xmpp]
 # service = "xmpp://localhost:5222"
 # allowed_jids = ["you@localhost"]
@@ -351,7 +369,7 @@ path = "{workspace}/audit.log"
 enabled = false
 
 [tools]
-code_agent = true   # the primary tool — delegate coding to Claude Code
+code_agent = true   # the primary tool — delegate coding to Claude Code or Codex
 
 [skills]
 dirs = ["~/.egirl/skills", "{workspace}/skills"]

@@ -247,9 +247,11 @@ export function loadConfig(): RuntimeConfig {
     }
   }
 
-  if (toml.channels?.claude_code) {
-    const cc = toml.channels.claude_code
+  const codeAgentChannel = toml.channels?.code_agent ?? toml.channels?.claude_code
+  if (codeAgentChannel) {
+    const cc = codeAgentChannel
     config.channels.claudeCode = {
+      provider: cc.provider ?? 'claude',
       permissionMode: cc.permission_mode ?? 'bypassPermissions',
       model: cc.model,
       workingDir: cc.working_dir ? expandPath(cc.working_dir, workspacePath) : workspacePath,
