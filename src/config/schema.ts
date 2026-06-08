@@ -2,6 +2,24 @@ import { type Static, Type } from '@sinclair/typebox'
 
 export type ThinkingLevel = 'off' | 'low' | 'medium' | 'high'
 
+const CodeAgentChannelSchema = Type.Object({
+  provider: Type.Union([Type.Literal('claude'), Type.Literal('codex')], {
+    default: 'claude',
+  }),
+  permission_mode: Type.Union(
+    [
+      Type.Literal('default'),
+      Type.Literal('acceptEdits'),
+      Type.Literal('bypassPermissions'),
+      Type.Literal('plan'),
+    ],
+    { default: 'bypassPermissions' },
+  ),
+  model: Type.Optional(Type.String()),
+  working_dir: Type.Optional(Type.String()),
+  max_turns: Type.Optional(Type.Number()),
+})
+
 export const EgirlConfigSchema = Type.Object({
   theme: Type.Optional(Type.String({ default: 'egirl' })),
 
@@ -72,25 +90,7 @@ export const EgirlConfigSchema = Type.Object({
           max_turns: Type.Optional(Type.Number()),
         }),
       ),
-      code_agent: Type.Optional(
-        Type.Object({
-          provider: Type.Union([Type.Literal('claude'), Type.Literal('codex')], {
-            default: 'claude',
-          }),
-          permission_mode: Type.Union(
-            [
-              Type.Literal('default'),
-              Type.Literal('acceptEdits'),
-              Type.Literal('bypassPermissions'),
-              Type.Literal('plan'),
-            ],
-            { default: 'bypassPermissions' },
-          ),
-          model: Type.Optional(Type.String()),
-          working_dir: Type.Optional(Type.String()),
-          max_turns: Type.Optional(Type.Number()),
-        }),
-      ),
+      code_agent: Type.Optional(CodeAgentChannelSchema),
       xmpp: Type.Optional(
         Type.Object({
           service: Type.String({ default: 'xmpp://localhost:5222' }),
@@ -244,6 +244,19 @@ export const EgirlConfigSchema = Type.Object({
   skills: Type.Object({
     dirs: Type.Array(Type.String(), { default: ['~/.egirl/skills', '{workspace}/skills'] }),
   }),
+
+  defaults: Type.Optional(
+    Type.Object({
+      workspace_root: Type.Optional(Type.String()),
+      profile: Type.Optional(Type.String()),
+      persona: Type.Optional(Type.String()),
+      instance: Type.Optional(Type.String()),
+    }),
+  ),
+
+  profiles: Type.Optional(Type.Record(Type.String(), Type.Any())),
+  personas: Type.Optional(Type.Record(Type.String(), Type.Any())),
+  instances: Type.Optional(Type.Record(Type.String(), Type.Any())),
 })
 
 export type EgirlConfig = Static<typeof EgirlConfigSchema>
@@ -252,6 +265,9 @@ export type EgirlConfig = Static<typeof EgirlConfigSchema>
 export interface RuntimeConfig {
   source: {
     path?: string
+    instance?: string
+    profile?: string
+    persona?: string
     codeAgentUsesClaudeCodeFallback: boolean
   }
   theme: string

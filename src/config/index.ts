@@ -7,6 +7,12 @@ import type { EgirlConfig, RuntimeConfig, ThinkingLevel } from './schema'
 
 export type { EgirlConfig, RuntimeConfig, ThinkingLevel } from './schema'
 
+export interface LoadConfigOptions {
+  instance?: string
+}
+
+type ConfigFragment = Record<string, unknown>
+
 function getXmppDomain(service: string): string {
   try {
     return new URL(service).hostname
@@ -50,6 +56,169 @@ function loadTomlConfig(path: string): EgirlConfig {
   return parse(content) as unknown as EgirlConfig
 }
 
+function isRecord(value: unknown): value is ConfigFragment {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function deepMerge<T extends ConfigFragment>(base: T, ...overrides: unknown[]): T {
+  const result: ConfigFragment = { ...base }
+
+  for (const override of overrides) {
+    if (!isRecord(override)) continue
+
+    for (const [key, value] of Object.entries(override)) {
+      if (value === undefined) continue
+
+      const existing = result[key]
+      if (isRecord(existing) && isRecord(value)) {
+        result[key] = deepMerge(existing, value)
+      } else {
+        result[key] = value
+      }
+    }
+  }
+
+  return result as T
+}
+
+function normalizeFragment(fragment: unknown): ConfigFragment {
+  if (!isRecord(fragment)) return {}
+
+  const normalized: ConfigFragment = deepMerge({} as ConfigFragment, fragment)
+
+  if (typeof normalized.workspace === 'string') {
+    normalized.workspace = { path: normalized.workspace }
+  }
+
+  if (typeof normalized.local_endpoint === 'string') {
+    normalized.local = deepMerge(isRecord(normalized.local) ? normalized.local : {}, {
+      endpoint: normalized.local_endpoint,
+    })
+    delete normalized.local_endpoint
+  }
+
+  if (typeof normalized.local_model === 'string') {
+    normalized.local = deepMerge(isRecord(normalized.local) ? normalized.local : {}, {
+      model: normalized.local_model,
+    })
+    delete normalized.local_model
+  }
+
+  if (typeof normalized.code_agent_provider === 'string') {
+    const channels = isRecord(normalized.channels) ? normalized.channels : {}
+    const codeAgent = isRecord(channels.code_agent) ? channels.code_agent : {}
+    normalized.channels = deepMerge(channels, {
+      code_agent: { ...codeAgent, provider: normalized.code_agent_provider },
+    })
+    delete normalized.code_agent_provider
+  }
+
+  if (typeof normalized.code_agent_permission_mode === 'string') {
+    const channels = isRecord(normalized.channels) ? normalized.channels : {}
+    const codeAgent = isRecord(channels.code_agent) ? channels.code_agent : {}
+    normalized.channels = deepMerge(channels, {
+      code_agent: { ...codeAgent, permission_mode: normalized.code_agent_permission_mode },
+    })
+    delete normalized.code_agent_permission_mode
+  }
+
+  if (typeof normalized.api_port === 'number') {
+    const channels = isRecord(normalized.channels) ? normalized.channels : {}
+    const api = isRecord(channels.api) ? channels.api : {}
+    normalized.channels = deepMerge(channels, { api: { ...api, port: normalized.api_port } })
+    delete normalized.api_port
+  }
+
+  return normalized
+}
+
+function stripCompositionSections(toml: EgirlConfig): ConfigFragment {
+  const {
+    defaults: _defaults,
+    profiles: _profiles,
+    personas: _personas,
+    instances: _instances,
+    ...rest
+  } = toml as EgirlConfig & ConfigFragment
+  return rest as ConfigFragment
+}
+
+function getNamedFragment(collection: unknown, name: string, label: string): ConfigFragment {
+  if (!isRecord(collection)) {
+    throw new Error(`Config references ${label} "${name}", but no [${label}s] are defined`)
+  }
+
+  const value = collection[name]
+  if (!isRecord(value)) {
+    throw new Error(`Config references unknown ${label} "${name}"`)
+  }
+
+  return normalizeFragment(value)
+}
+
+function resolveTomlConfig(
+  toml: EgirlConfig,
+  options: LoadConfigOptions = {},
+): {
+  toml: EgirlConfig
+  instance?: string
+  profile?: string
+  persona?: string
+} {
+  const defaults = isRecord(toml.defaults) ? toml.defaults : {}
+  const selectedInstance =
+    options.instance ?? (typeof defaults.instance === 'string' ? defaults.instance : undefined)
+  const instance = selectedInstance
+    ? getNamedFragment(toml.instances, selectedInstance, 'instance')
+    : undefined
+
+  const selectedProfile =
+    (instance && typeof instance.profile === 'string' ? instance.profile : undefined) ??
+    (typeof defaults.profile === 'string' ? defaults.profile : undefined)
+  const selectedPersona =
+    (instance && typeof instance.persona === 'string' ? instance.persona : undefined) ??
+    (typeof defaults.persona === 'string' ? defaults.persona : undefined)
+
+  const profile = selectedProfile
+    ? getNamedFragment(toml.profiles, selectedProfile, 'profile')
+    : undefined
+  const persona = selectedPersona
+    ? getNamedFragment(toml.personas, selectedPersona, 'persona')
+    : undefined
+
+  const workspaceRoot =
+    typeof defaults.workspace_root === 'string' ? defaults.workspace_root : '~/.egirl'
+  const personaWithWorkspace = persona
+    ? deepMerge(
+        {},
+        typeof selectedPersona === 'string' && !persona.workspace
+          ? { workspace: { path: `${workspaceRoot}/personas/${selectedPersona}` } }
+          : {},
+        persona,
+      )
+    : undefined
+
+  const normalizedInstance = instance ? normalizeFragment(instance) : undefined
+  if (normalizedInstance) {
+    delete normalizedInstance.profile
+    delete normalizedInstance.persona
+  }
+
+  const merged = deepMerge(
+    stripCompositionSections(toml),
+    profile,
+    personaWithWorkspace,
+    normalizedInstance,
+  )
+
+  return {
+    toml: merged as unknown as EgirlConfig,
+    instance: selectedInstance,
+    profile: selectedProfile,
+    persona: selectedPersona,
+  }
+}
+
 const defaultToml: EgirlConfig = {
   workspace: { path: '~/.egirl/workspace' },
   local: {
@@ -70,9 +239,11 @@ const defaultToml: EgirlConfig = {
   },
 }
 
-export function loadConfig(): RuntimeConfig {
+export function loadConfig(options: LoadConfigOptions = {}): RuntimeConfig {
   const configPath = findConfigFile()
-  const toml: EgirlConfig = configPath ? loadTomlConfig(configPath) : defaultToml
+  const loadedToml: EgirlConfig = configPath ? loadTomlConfig(configPath) : defaultToml
+  const resolved = resolveTomlConfig(loadedToml, options)
+  const toml = resolved.toml
 
   const workspacePath = expandPath(toml.workspace?.path ?? defaultToml.workspace.path)
 
@@ -90,6 +261,9 @@ export function loadConfig(): RuntimeConfig {
   const config: RuntimeConfig = {
     source: {
       ...(configPath && { path: configPath }),
+      ...(resolved.instance && { instance: resolved.instance }),
+      ...(resolved.profile && { profile: resolved.profile }),
+      ...(resolved.persona && { persona: resolved.persona }),
       codeAgentUsesClaudeCodeFallback: !toml.channels?.code_agent && !!toml.channels?.claude_code,
     },
     theme: themeName,

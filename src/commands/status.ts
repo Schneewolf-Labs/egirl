@@ -11,6 +11,11 @@ export async function showStatus(config: RuntimeConfig): Promise<void> {
 
   console.log(`${c.primary}Configuration${RESET}`)
   console.log(`  ${DIM}Config${RESET}      ${config.source.path ?? 'built-in defaults'}`)
+  if (config.source.instance || config.source.profile || config.source.persona) {
+    console.log(
+      `  ${DIM}Instance${RESET}    ${config.source.instance ?? 'default'} ${DIM}(profile=${config.source.profile ?? 'top-level'}, persona=${config.source.persona ?? 'top-level'})${RESET}`,
+    )
+  }
   console.log(`  ${DIM}Workspace${RESET}   ${config.workspace.path}`)
   console.log(
     `  ${DIM}Theme${RESET}       ${c.accent}${theme.name}${RESET} ${DIM}(${theme.label})${RESET}`,

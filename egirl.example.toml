@@ -70,3 +70,40 @@ browser = false
 
 [skills]
 dirs = ["~/.egirl/skills", "{workspace}/skills"]
+
+# Optional multi-instance layout. Use with: bun run start --instance kira-local cli
+# Top-level config above stays valid and acts as the base.
+#
+# [defaults]
+# workspace_root = "~/.egirl"
+# profile = "local-codex"
+# persona = "kira"
+#
+# [profiles.local-codex]
+# local_endpoint = "http://localhost:8080"
+# local_model = "qwen3-vl-32b"
+# code_agent_provider = "codex"
+# code_agent_permission_mode = "default"
+#
+# [profiles.big-box]
+# local_endpoint = "http://192.168.8.218:8080"
+# local_model = "qwen3-72b"
+# code_agent_provider = "codex"
+# code_agent_permission_mode = "default"
+#
+# [personas.kira]
+# workspace = "~/.egirl/personas/kira"
+# theme = "egirl"
+#
+# [personas.ops]
+# workspace = "~/.egirl/personas/ops"
+# theme = "midnight"
+#
+# [instances.kira-local]
+# profile = "local-codex"
+# persona = "kira"
+#
+# [instances.ops-big]
+# profile = "big-box"
+# persona = "ops"
+# api_port = 3001

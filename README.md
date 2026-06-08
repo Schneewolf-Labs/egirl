@@ -107,6 +107,7 @@ No `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` needed for egirl itself. Claude Code 
 bun run cli                               # Interactive CLI
 bun run src/index.ts init --provider codex # Create starter config
 bun run src/index.ts doctor               # Check local setup
+bun run src/index.ts --instance ops-big cli # Run a named instance
 bun run src/index.ts cli -m "hello"       # Single message, then exit
 bun run src/index.ts discord              # Discord bot only
 bun run src/index.ts xmpp                 # XMPP bot only (self-hosted)
