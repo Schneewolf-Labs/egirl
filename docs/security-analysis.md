@@ -149,7 +149,7 @@ The HTTP API supports an optional bearer token (`EGIRL_API_TOKEN`) but has no ra
 - `POST /memory` / `DELETE /memory/:key` — memory writes
 - `POST /tasks` / `POST /tasks/:id/run` — create or trigger background tasks
 
-An attacker on the network (if exposed beyond localhost without a bearer token) can exhaust GPU/CPU with rapid `/chat` requests, drive Claude Code usage via background tasks, or poison memory via `/memory`.
+An attacker on the network (if exposed beyond localhost without a bearer token) can exhaust GPU/CPU with rapid `/chat` requests, drive code-agent usage via background tasks, or poison memory via `/memory`.
 
 **Recommendation**: Bind to `127.0.0.1` by default (current behavior); always require `EGIRL_API_TOKEN` when binding elsewhere. Add per-IP rate limiting (e.g., 10 req/min for `/chat`). Add request body size limits (e.g., 64KB).
 

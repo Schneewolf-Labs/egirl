@@ -11,7 +11,7 @@ egirl ships with ~50 built-in tools across 8 categories that the agent can invok
 | GitHub | 12 | `gh_pr_list`, `gh_pr_view`, `gh_pr_create`, `gh_pr_review`, `gh_pr_comment`, `gh_issue_list`, `gh_issue_view`, `gh_issue_comment`, `gh_issue_update`, `gh_ci_status`, `gh_branch_create`, `gh_release_list` |
 | Browser | 11 | `browser_navigate`, `browser_click`, `browser_fill`, `browser_snapshot`, `browser_screenshot`, `browser_select`, `browser_check`, `browser_hover`, `browser_wait`, `browser_eval`, `browser_close` |
 | Tasks | 8 | `task_add`, `task_propose`, `task_list`, `task_pause`, `task_resume`, `task_cancel`, `task_run_now`, `task_history` |
-| Delegation | 1 | `code_agent` — drive Claude Code (the primary tool) |
+| Delegation | 1 | `code_agent` — drive the configured code agent (the primary tool) |
 | Other | 4 | `screenshot`, `web_research`, `web_search`, `tool_search` |
 
 ## Tool Architecture

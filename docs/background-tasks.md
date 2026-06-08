@@ -629,7 +629,7 @@ Prompt-based task agents also have access to the full GitHub tool set, so they c
 
 ### Delegation
 
-Background tasks run through the local model just like interactive sessions. If a task needs heavy engineering work, the agent calls the `code_agent` tool to delegate to Claude Code — same path as any other tool call. There's no separate routing or escalation layer.
+Background tasks run through the local model just like interactive sessions. If a task needs heavy engineering work, the agent calls the `code_agent` tool to delegate to the configured code agent — same path as any other tool call. There's no separate routing or escalation layer.
 
 ### Notification Filtering
 
@@ -779,7 +779,7 @@ User has a CI pipeline that can POST to a webhook on completion:
 }
 ```
 
-The agent runs the test command itself via `execute_command`, then reasons about the output. If something heavier is needed (e.g. authoring a fix), it calls `code_agent` to hand the work to Claude Code.
+The agent runs the test command itself via `execute_command`, then reasons about the output. If something heavier is needed (e.g. authoring a fix), it calls `code_agent` to hand the work to the configured code agent.
 
 ### Agent discovers work
 

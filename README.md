@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <strong>Local AI that drives Claude Code.</strong><br>
+  <strong>Local AI that drives code agents.</strong><br>
   The human-in-the-loop for your coding agent. Meet Kira.
 </p>
 
@@ -11,9 +11,9 @@
 
 ## What This Is
 
-egirl is a long-running local AI agent. It runs on your hardware, remembers what you've been working on, and **delegates real engineering work to Claude Code**. The local LLM plans and supervises; Claude Code executes.
+egirl is a long-running local AI agent. It runs on your hardware, remembers what you've been working on, and **delegates real engineering work to a code agent**. The local LLM plans and supervises; Claude Code or Codex executes.
 
-Think of it as a competent colleague who lives in your cluster, knows your projects, and drives Claude Code so you don't have to write every prompt by hand.
+Think of it as a competent colleague who lives in your cluster, knows your projects, and drives your coding agent so you don't have to write every prompt by hand.
 
 **Default personality: Kira** — confident, sharp, gets stuff done. Will tease you when you push to main.
 
@@ -21,14 +21,14 @@ Think of it as a competent colleague who lives in your cluster, knows your proje
 
 Everything flows through one idea:
 
-> The local LLM is the operator. It escalates to **tools**, not to other models. The most important tool is `code_agent` — a wrapper around Claude Code.
+> The local LLM is the operator. It escalates to **tools**, not to other models. The most important tool is `code_agent` — a wrapper around Claude Code or Codex.
 
 No multi-model routing. No per-message cloud escalation. The local model solves it itself or calls a tool.
 
 ## Features
 
 - **Local-first** — llama.cpp on your box, zero API cost for coordination
-- **Claude Code integration** — first-class `code_agent` tool that delegates engineering work to Claude Code via the Claude Agent SDK (uses your subscription, not API keys)
+- **Code agent integration** — first-class `code_agent` tool that delegates engineering work to Claude Code or Codex using your local CLI/subscription auth
 - **Long-running memory** — hybrid keyword + semantic search, SQLite-backed, with auto-extraction and temporal recall
 - **Conversation persistence** — picks up where you left off across restarts
 - **Background tasks** — cron-scheduled work with business-hours awareness and dependency ordering
@@ -87,7 +87,7 @@ provider = "codex"      # or "claude"; Codex runs through the interactive codex 
 permission_mode = "default"
 
 [tools]
-code_agent = true     # the primary tool — delegate coding to Claude Code or Codex
+code_agent = true     # the primary tool — delegate coding to the configured code agent
 ```
 
 ### .env
@@ -100,7 +100,7 @@ EGIRL_API_TOKEN=...   # optional bearer token for the HTTP API (required if expo
 GITHUB_TOKEN=...      # for gh_* tools
 ```
 
-No `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` — Claude Code uses subscription auth via the Claude Agent SDK.
+No `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` needed for egirl itself. Claude Code and Codex use their own local CLI subscription auth.
 
 ## Commands
 
@@ -162,7 +162,7 @@ egirl ships with tools across six categories. Format: Qwen3 native tool calling 
 
 | Category | Tools |
 |----------|-------|
-| **Delegation (primary)** | `code_agent` — drive Claude Code |
+| **Delegation (primary)** | `code_agent` — drive the configured code agent |
 | **Files** | `read_file`, `write_file`, `edit_file`, `glob_files` |
 | **Shell** | `execute_command` |
 | **Memory** | `memory_search`, `memory_get`, `memory_set`, `memory_delete`, `memory_list`, `memory_recall` |
@@ -209,7 +209,8 @@ No OpenAPI spec, no versioned paths, no plugin framework. If you want to build s
 | [Memory](docs/memory.md) | Hybrid search, embeddings, storage |
 | [Tools](docs/tools.md) | All built-in tools with parameters |
 | [Background Tasks](docs/background-tasks.md) | Cron-scheduled task system |
-| [Claude Code Integration](docs/claude-code.md) | The core delegation flow |
+| [Code Agent Integration](docs/code-agent.md) | The core delegation flow |
+| [Claude Code Bridge](docs/claude-code.md) | Direct Claude Code bridge channel |
 | [Skills](docs/skills.md) | Creating reusable skill files |
 | [Safety](docs/safety.md) | Guardrails and their limits |
 | [Tool Format](docs/tool-format.md) | Qwen3 native tool calling |
