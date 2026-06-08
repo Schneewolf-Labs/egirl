@@ -250,6 +250,10 @@ export type EgirlConfig = Static<typeof EgirlConfigSchema>
 
 // Runtime config with resolved paths and secrets from .env
 export interface RuntimeConfig {
+  source: {
+    path?: string
+    codeAgentUsesClaudeCodeFallback: boolean
+  }
   theme: string
   thinking: {
     level: ThinkingLevel
@@ -284,6 +288,12 @@ export interface RuntimeConfig {
       batchWindowMs: number
     }
     claudeCode?: {
+      permissionMode: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan'
+      model?: string
+      workingDir: string
+      maxTurns?: number
+    }
+    codeAgent?: {
       provider?: 'claude' | 'codex'
       permissionMode: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan'
       model?: string

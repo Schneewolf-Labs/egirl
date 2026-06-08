@@ -12,14 +12,14 @@ show_thinking = true                     # display thinking output in CLI
 path = "~/.egirl/workspace"
 
 [local]
-endpoint = "http://0.0.0.0:8082"        # llama.cpp server
+endpoint = "http://localhost:8080"       # llama.cpp server
 model = "qwen3-vl-32b"                   # for display/logging only
 context_length = 32768
 max_concurrent = 2
 
 [local.embeddings]
 provider = "qwen3-vl"                    # Python service using transformers
-endpoint = "http://localhost:8083"
+endpoint = "http://localhost:8082"
 model = "qwen3-vl-embedding-2b"
 dimensions = 2048
 multimodal = true
@@ -28,11 +28,17 @@ multimodal = true
 allowed_channels = ["dm"]                # or specific channel IDs
 allowed_users = []                       # set your Discord user ID
 
-[channels.claude_code]
-permission_mode = "bypassPermissions"    # default, acceptEdits, bypassPermissions, plan
-# model = "sonnet"                       # claude model (sonnet, opus, haiku)
+[channels.code_agent]
+provider = "codex"                       # codex or claude
+permission_mode = "default"              # default, acceptEdits, bypassPermissions, plan
+# model = "gpt-5.5"                      # optional backend model
 # working_dir = "~/projects/myrepo"      # defaults to workspace
-# max_turns = 30
+# max_turns = 30                         # Claude backend only
+
+# Direct Claude Code bridge command only: bun run start cc
+# [channels.claude_code]
+# permission_mode = "bypassPermissions"
+# model = "sonnet"
 
 # XMPP bot — self-hosted chat (e.g. Prosody on localhost or a VPS).
 # Requires XMPP_USERNAME and XMPP_PASSWORD in .env.
@@ -71,7 +77,7 @@ enabled = false
 # tools = ["execute_command", "write_file", "edit_file"]
 
 [tools]
-code_agent = true                        # enable Claude Code delegation — the primary tool
+code_agent = true                        # enable configured code-agent delegation
 
 [skills]
 dirs = ["~/.egirl/skills", "{workspace}/skills"]

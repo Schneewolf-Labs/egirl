@@ -120,7 +120,7 @@ export function createMemory(config: RuntimeConfig): MemoryManager | undefined {
  * Extract CodeAgentConfig from RuntimeConfig if a code agent channel is configured.
  */
 export function getCodeAgentConfig(config: RuntimeConfig): CodeAgentConfig | undefined {
-  const cc = config.channels.claudeCode
+  const cc = config.channels.codeAgent
   if (!cc) return undefined
   return {
     provider: cc.provider,

@@ -1,7 +1,7 @@
 {
   "name": "egirl",
   "version": "0.1.0",
-  "description": "Local AI that drives Claude Code",
+  "description": "Local AI that drives code agents",
   "type": "module",
   "main": "src/index.ts",
   "bin": {
