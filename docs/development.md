@@ -19,7 +19,7 @@ cp .env.example .env
 # Edit .env with your tokens (optional — only Discord/XMPP/GitHub/API need secrets)
 ```
 
-Claude Code authentication is separate from `.env`: run `claude auth login` once — no `ANTHROPIC_API_KEY` needed.
+Code agent authentication is separate from `.env`. For Claude Code, run `claude auth login` once. For Codex, authenticate the local `codex` CLI according to your Codex install. egirl does not need `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` for either path.
 
 ## Running
 
@@ -251,16 +251,17 @@ Keep the dependency list minimal. Before adding a new package:
 Current production dependencies:
 
 ```
-@anthropic-ai/claude-agent-sdk   # Claude Code integration (the whole point)
+@anthropic-ai/claude-agent-sdk   # Claude Code backend for code_agent
 @sinclair/typebox                # runtime schema validation
 @xmpp/client                     # XMPP/Jabber protocol client
 discord.js                       # Discord bot framework
+node-pty                         # interactive Codex backend for code_agent
 playwright                       # browser automation
 smol-toml                        # TOML parser
 yaml                             # YAML parsing (skill frontmatter)
 ```
 
-No `@anthropic-ai/sdk`, no `openai`: there's no remote LLM provider in egirl. Claude access happens through the Claude Code subscription via the agent SDK.
+No `@anthropic-ai/sdk`, no `openai`: there's no remote LLM provider in egirl. Code agents are invoked through local CLI/SDK integrations and use their own subscription or CLI auth.
 
 ## Git Conventions
 

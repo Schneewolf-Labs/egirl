@@ -96,6 +96,8 @@ Settings for the `code_agent` tool. If omitted, egirl falls back to `[channels.c
 | `working_dir` | string | workspace path | Working directory for code agent operations |
 | `max_turns` | number | (none) | Maximum Claude Code turns before stopping. Ignored by Codex |
 
+**Migration note:** existing Claude-only configs can keep `[channels.claude_code]` unchanged. To configure the tool explicitly, add `[channels.code_agent] provider = "claude"` and copy any shared `permission_mode`, `model`, or `working_dir` values. To use Codex instead, set `provider = "codex"`; `[channels.claude_code]` still only controls the direct `claude-code` / `cc` bridge command.
+
 ### `[channels.xmpp]`
 
 Required only when running `xmpp` (or `serve` with XMPP configured). XMPP credentials (`XMPP_USERNAME`, `XMPP_PASSWORD`) go in `.env`.
@@ -369,7 +371,7 @@ path = "{workspace}/audit.log"
 enabled = false
 
 [tools]
-code_agent = true   # the primary tool — delegate coding to Claude Code or Codex
+code_agent = true   # the primary tool — delegate coding to the configured code agent
 
 [skills]
 dirs = ["~/.egirl/skills", "{workspace}/skills"]

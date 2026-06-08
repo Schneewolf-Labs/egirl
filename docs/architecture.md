@@ -4,7 +4,7 @@ How egirl's components fit together, the data flow through the system, and the d
 
 ## Mental Model
 
-One local LLM is the operator. It escalates to **tools**, not to other models. The most important tool is `code_agent` — a wrapper around Claude Code.
+One local LLM is the operator. It escalates to **tools**, not to other models. The most important tool is `code_agent` — a wrapper around a configured coding agent backend such as Claude Code or Codex.
 
 There is no model router, no remote LLM provider, no escalation target. When the local model can't do something itself, it calls a tool.
 
@@ -40,7 +40,7 @@ There is no model router, no remote LLM provider, no escalation target. When the
 └───────────────────────────────────────────────────┘
 ```
 
-Channels are thin adapters. The agent loop drives a single local provider, executes tool calls, and reads/writes memory. Tools like `code_agent` spawn Claude Code out-of-band via the Claude Agent SDK.
+Channels are thin adapters. The agent loop drives a single local provider, executes tool calls, and reads/writes memory. Tools like `code_agent` spawn a dedicated coding agent out-of-band, using the configured Claude Code or Codex backend.
 
 ## Request Lifecycle
 
@@ -104,7 +104,7 @@ Tools never throw — errors come back as `{ success: false, output: "..." }` so
 
 A few tools are worth calling out:
 
-- **`code_agent`** (`src/tools/builtin/code-agent.ts`) — delegates engineering work to Claude Code via `@anthropic-ai/claude-agent-sdk`. This is the primary tool, and the whole point of the system.
+- **`code_agent`** (`src/tools/builtin/code-agent.ts`) — delegates engineering work to the configured backend: Claude Code via `@anthropic-ai/claude-agent-sdk` or Codex via its interactive CLI. This is the primary delegation surface for project work.
 - **`execute_command`** (`src/tools/builtin/exec.ts`) — shell access, gated by the safety layer.
 - **Deferred tool loading** (`src/tools/deferred-loader.ts`) — rarely-used tool schemas are lazy-loaded via a meta-tool to keep the base system prompt small.
 
@@ -274,7 +274,7 @@ egirl/
 │   │       ├── screenshot.ts
 │   │       ├── web-research.ts
 │   │       ├── web-search.ts # SearxNG-backed
-│   │       └── code-agent.ts # Claude Code delegation
+│   │       └── code-agent.ts # Code agent delegation
 │   ├── tracking/             # Stats, transcript logging
 │   ├── ui/
 │   │   └── theme.ts          # 256-color ANSI theme system
@@ -297,7 +297,7 @@ egirl/
 
 ### Why no router?
 
-egirl used to route between a local and remote provider. That's gone. The model is the planner — if it needs more capability, it calls `code_agent` (Claude Code) as a tool. One chooser, one execution target, no escalation logic to debug.
+egirl used to route between a local and remote provider. That's gone. The model is the planner — if it needs more capability, it calls `code_agent` as a tool. One chooser, one delegation surface, no chat-provider escalation logic to debug.
 
 ### Why Qwen3 native tool-call format?
 

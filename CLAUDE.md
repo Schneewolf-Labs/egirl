@@ -1,30 +1,30 @@
-# egirl — Local AI that Drives Claude Code
+# egirl — Local AI that Drives Code Agents
 
 ## What This Is
 
-egirl is a long-running local AI agent that acts as the **human in the loop** for Claude Code. The local LLM plans, remembers, supervises, and delegates; Claude Code does the actual engineering work. Around that core sits memory, a toolbelt shaped like a human's hands (shell, files, git, browser, web), and a couple of ways to talk to it (CLI + Discord).
+egirl is a long-running local AI agent that acts as the **human in the loop** for code agents. The local LLM plans, remembers, supervises, and delegates; Claude Code or Codex does the heavy engineering work. Around that core sits memory, a toolbelt shaped like a human's hands (shell, files, git, browser, web), and a couple of ways to talk to it (CLI + Discord).
 
 Single user. Single operator model. No cloud escalation, no routing decisions — the local LLM is the operator, and it escalates to *tools*, not to other models.
 
 ## The Mental Model
 
-> **One local LLM is the operator. It escalates to tools, not to other models. The most important tool is Claude Code.**
+> **One local LLM is the operator. It escalates to tools, not to other models. The most important tool is `code_agent`.**
 
-If you ever catch yourself adding "what if we route this to a bigger model" logic, stop. That's not what this is. If the local model can't do something itself, it calls `code_agent` (Claude Code) for code work, or `execute_command` / `browser_*` / `web_research` / `git_*` for everything else.
+If you ever catch yourself adding "what if we route this to a bigger model" logic, stop. That's not what this is. If the local model can't do something itself, it calls `code_agent` for code work, or `execute_command` / `browser_*` / `web_research` / `git_*` for everything else.
 
 ## Purpose
 
 egirl is built for one person at Schneewolf Labs. It behaves like a competent colleague who:
 - Remembers what you've been working on
-- Knows how to drive Claude Code for real project work
+- Knows how to drive a configured code agent for real project work
 - Can run shell commands, read/write files, interact with git and GitHub, browse the web
 - Wakes up on a cron to check in on things
 - Talks back through Discord DMs or the terminal
 
 Feature priorities:
-- **Build**: Anything that makes the local → Claude Code delegation better, or that makes the long-running memory richer.
+- **Build**: Anything that makes local → code agent delegation better, or that makes the long-running memory richer.
 - **Skip**: Generic assistant features (weather, jokes, trivia). Multi-model routing. Multi-user anything. Hypothetical future integrations.
-- **Prioritize**: Depth over breadth. One Claude Code delegation flow that works well beats five half-wired remote providers.
+- **Prioritize**: Depth over breadth. One code-agent delegation flow that works well beats five half-wired remote providers.
 
 ## Design Philosophy
 
@@ -41,7 +41,7 @@ Feature priorities:
 | Runtime | Bun |
 | Language | TypeScript (strict mode) |
 | Local LLM | llama.cpp HTTP server (OpenAI-compatible API) |
-| Code agent | `@anthropic-ai/claude-agent-sdk` (subscription auth) |
+| Code agent | Claude Agent SDK or interactive Codex CLI (subscription auth) |
 | Database | `bun:sqlite` for memory, conversations, tasks |
 | Embeddings | Qwen3-VL-Embedding served via Python (see `services/embeddings/`) |
 | Discord | `discord.js` |
@@ -82,7 +82,7 @@ Themes live in `src/ui/theme.ts`. Four built-in: `egirl` (default), `midnight`, 
 This list is load-bearing. When you catch yourself about to add one of these, stop.
 
 - **No model routing.** The local LLM is the only chooser. "Escalate" means "call a tool." If you find yourself writing a `Router` class, you've lost the plot.
-- **No remote LLM providers** (Anthropic API, OpenAI, etc.) for per-message routing. Claude Code accesses Anthropic via the Claude Agent SDK with subscription auth — that's the only sanctioned remote path.
+- **No remote LLM providers** (Anthropic API, OpenAI, etc.) for per-message routing. Code agents are invoked through local CLI/SDK integrations with subscription auth; they are tools, not chat providers.
 - **No internal plugin system.** Channels, providers, tools are hardcoded. CLI, Discord, and XMPP are concrete `Channel` implementations, each optional via config. No dynamic registration, no discovery, no capability negotiation. If a fourth is genuinely wanted, hardcode it too; don't build a pluggable layer. Extensibility lives at the HTTP API boundary, not inside the process.
 - **External HTTP API is encouraged.** A small `Bun.serve` in `src/api.ts` lets scripts, mobile apps, automations, LAN clients, and external UIs talk to egirl without running in-process. Keep it tiny — no OpenAPI spec generation, no versioned routes, no tiered rate limits, no framework. Each endpoint should pay for itself; when in doubt delete rather than add.
 - **No workflow engine.** The LLM is the workflow engine. Don't build a second one.
@@ -119,7 +119,8 @@ No unsolicited changes. No "while I was in here I also..." modifications. No REA
 Don't install new packages without asking. The current stack is intentionally minimal:
 
 ```
-@anthropic-ai/claude-agent-sdk   # the whole point
+@anthropic-ai/claude-agent-sdk   # Claude Code backend
+node-pty                         # interactive Codex backend
 @sinclair/typebox                # config validation
 discord.js                       # one remote interface
 playwright                       # browser tool

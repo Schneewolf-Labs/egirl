@@ -4,7 +4,7 @@ Available tools and their usage. `code_agent` is the primary tool — default to
 
 ## Delegation (primary)
 
-- `code_agent` — Delegate to Claude Code. Use this by default for any non-trivial coding work: multi-file edits, refactors, debugging, test writing, reading unfamiliar code.
+- `code_agent` — Delegate to the configured code agent. Use this by default for any non-trivial coding work: multi-file edits, refactors, debugging, test writing, reading unfamiliar code.
 
 ## File Operations
 
