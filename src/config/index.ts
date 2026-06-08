@@ -1,9 +1,17 @@
+import type { TSchema } from '@sinclair/typebox'
+import { Value } from '@sinclair/typebox/value'
 import { existsSync, mkdirSync, readFileSync } from 'fs'
 import { homedir } from 'os'
 import { join, resolve } from 'path'
 import { parse } from 'smol-toml'
 import { setTheme } from '../ui/theme'
-import type { EgirlConfig, RuntimeConfig, ThinkingLevel } from './schema'
+import {
+  ConfigFragmentSchema,
+  type EgirlConfig,
+  InstanceFragmentSchema,
+  type RuntimeConfig,
+  type ThinkingLevel,
+} from './schema'
 
 export type { EgirlConfig, RuntimeConfig, ThinkingLevel } from './schema'
 
@@ -81,57 +89,6 @@ function deepMerge<T extends ConfigFragment>(base: T, ...overrides: unknown[]): 
   return result as T
 }
 
-function normalizeFragment(fragment: unknown): ConfigFragment {
-  if (!isRecord(fragment)) return {}
-
-  const normalized: ConfigFragment = deepMerge({} as ConfigFragment, fragment)
-
-  if (typeof normalized.workspace === 'string') {
-    normalized.workspace = { path: normalized.workspace }
-  }
-
-  if (typeof normalized.local_endpoint === 'string') {
-    normalized.local = deepMerge(isRecord(normalized.local) ? normalized.local : {}, {
-      endpoint: normalized.local_endpoint,
-    })
-    delete normalized.local_endpoint
-  }
-
-  if (typeof normalized.local_model === 'string') {
-    normalized.local = deepMerge(isRecord(normalized.local) ? normalized.local : {}, {
-      model: normalized.local_model,
-    })
-    delete normalized.local_model
-  }
-
-  if (typeof normalized.code_agent_provider === 'string') {
-    const channels = isRecord(normalized.channels) ? normalized.channels : {}
-    const codeAgent = isRecord(channels.code_agent) ? channels.code_agent : {}
-    normalized.channels = deepMerge(channels, {
-      code_agent: { ...codeAgent, provider: normalized.code_agent_provider },
-    })
-    delete normalized.code_agent_provider
-  }
-
-  if (typeof normalized.code_agent_permission_mode === 'string') {
-    const channels = isRecord(normalized.channels) ? normalized.channels : {}
-    const codeAgent = isRecord(channels.code_agent) ? channels.code_agent : {}
-    normalized.channels = deepMerge(channels, {
-      code_agent: { ...codeAgent, permission_mode: normalized.code_agent_permission_mode },
-    })
-    delete normalized.code_agent_permission_mode
-  }
-
-  if (typeof normalized.api_port === 'number') {
-    const channels = isRecord(normalized.channels) ? normalized.channels : {}
-    const api = isRecord(channels.api) ? channels.api : {}
-    normalized.channels = deepMerge(channels, { api: { ...api, port: normalized.api_port } })
-    delete normalized.api_port
-  }
-
-  return normalized
-}
-
 function stripCompositionSections(toml: EgirlConfig): ConfigFragment {
   const {
     defaults: _defaults,
@@ -143,7 +100,12 @@ function stripCompositionSections(toml: EgirlConfig): ConfigFragment {
   return rest as ConfigFragment
 }
 
-function getNamedFragment(collection: unknown, name: string, label: string): ConfigFragment {
+function getNamedFragment(
+  collection: unknown,
+  name: string,
+  label: string,
+  schema: TSchema,
+): ConfigFragment {
   if (!isRecord(collection)) {
     throw new Error(`Config references ${label} "${name}", but no [${label}s] are defined`)
   }
@@ -153,7 +115,13 @@ function getNamedFragment(collection: unknown, name: string, label: string): Con
     throw new Error(`Config references unknown ${label} "${name}"`)
   }
 
-  return normalizeFragment(value)
+  if (!Value.Check(schema, value)) {
+    const [first] = [...Value.Errors(schema, value)]
+    const detail = first ? `${first.path || '/'} ${first.message}` : 'invalid config'
+    throw new Error(`Invalid ${label} "${name}": ${detail}`)
+  }
+
+  return value
 }
 
 function resolveTomlConfig(
@@ -169,7 +137,7 @@ function resolveTomlConfig(
   const selectedInstance =
     options.instance ?? (typeof defaults.instance === 'string' ? defaults.instance : undefined)
   const instance = selectedInstance
-    ? getNamedFragment(toml.instances, selectedInstance, 'instance')
+    ? getNamedFragment(toml.instances, selectedInstance, 'instance', InstanceFragmentSchema)
     : undefined
 
   const selectedProfile =
@@ -180,10 +148,10 @@ function resolveTomlConfig(
     (typeof defaults.persona === 'string' ? defaults.persona : undefined)
 
   const profile = selectedProfile
-    ? getNamedFragment(toml.profiles, selectedProfile, 'profile')
+    ? getNamedFragment(toml.profiles, selectedProfile, 'profile', ConfigFragmentSchema)
     : undefined
   const persona = selectedPersona
-    ? getNamedFragment(toml.personas, selectedPersona, 'persona')
+    ? getNamedFragment(toml.personas, selectedPersona, 'persona', ConfigFragmentSchema)
     : undefined
 
   const workspaceRoot =
@@ -198,17 +166,17 @@ function resolveTomlConfig(
       )
     : undefined
 
-  const normalizedInstance = instance ? normalizeFragment(instance) : undefined
-  if (normalizedInstance) {
-    delete normalizedInstance.profile
-    delete normalizedInstance.persona
+  const instanceFragment = instance ? { ...instance } : undefined
+  if (instanceFragment) {
+    delete instanceFragment.profile
+    delete instanceFragment.persona
   }
 
   const merged = deepMerge(
     stripCompositionSections(toml),
     profile,
     personaWithWorkspace,
-    normalizedInstance,
+    instanceFragment,
   )
 
   return {

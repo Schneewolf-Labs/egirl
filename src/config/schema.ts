@@ -1,6 +1,19 @@
-import { type Static, Type } from '@sinclair/typebox'
+import { type Static, type TSchema, Type } from '@sinclair/typebox'
 
 export type ThinkingLevel = 'off' | 'low' | 'medium' | 'high'
+
+// Recursively makes every object field optional and forbids unknown keys, so a
+// config fragment can override any subset of the real schema while typos throw.
+function deepPartial(schema: TSchema): TSchema {
+  if (schema.type === 'object' && 'properties' in schema && schema.properties) {
+    const properties: Record<string, TSchema> = {}
+    for (const [key, value] of Object.entries(schema.properties as Record<string, TSchema>)) {
+      properties[key] = Type.Optional(deepPartial(value))
+    }
+    return Type.Object(properties, { additionalProperties: false })
+  }
+  return schema
+}
 
 const CodeAgentChannelSchema = Type.Object({
   provider: Type.Union([Type.Literal('claude'), Type.Literal('codex')], {
@@ -20,7 +33,7 @@ const CodeAgentChannelSchema = Type.Object({
   max_turns: Type.Optional(Type.Number()),
 })
 
-export const EgirlConfigSchema = Type.Object({
+const baseProperties = {
   theme: Type.Optional(Type.String({ default: 'egirl' })),
 
   thinking: Type.Optional(
@@ -277,6 +290,23 @@ export const EgirlConfigSchema = Type.Object({
   skills: Type.Object({
     dirs: Type.Array(Type.String(), { default: ['~/.egirl/skills', '{workspace}/skills'] }),
   }),
+}
+
+const BaseConfigSchema = Type.Object(baseProperties)
+
+// Profiles, personas, and instances reuse the top-level config shape — every
+// field optional, unknown keys rejected. There is no separate flat syntax.
+export const ConfigFragmentSchema = deepPartial(BaseConfigSchema)
+export const InstanceFragmentSchema = deepPartial(
+  Type.Object({
+    ...baseProperties,
+    profile: Type.Optional(Type.String()),
+    persona: Type.Optional(Type.String()),
+  }),
+)
+
+export const EgirlConfigSchema = Type.Object({
+  ...baseProperties,
 
   defaults: Type.Optional(
     Type.Object({
@@ -287,9 +317,9 @@ export const EgirlConfigSchema = Type.Object({
     }),
   ),
 
-  profiles: Type.Optional(Type.Record(Type.String(), Type.Any())),
-  personas: Type.Optional(Type.Record(Type.String(), Type.Any())),
-  instances: Type.Optional(Type.Record(Type.String(), Type.Any())),
+  profiles: Type.Optional(Type.Record(Type.String(), ConfigFragmentSchema)),
+  personas: Type.Optional(Type.Record(Type.String(), ConfigFragmentSchema)),
+  instances: Type.Optional(Type.Record(Type.String(), InstanceFragmentSchema)),
 })
 
 export type EgirlConfig = Static<typeof EgirlConfigSchema>

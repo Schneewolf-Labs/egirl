@@ -95,31 +95,36 @@ ask_user = [
 dirs = ["~/.egirl/skills", "{workspace}/skills"]
 
 # Optional multi-instance layout. Use with: bun run start --instance kira-local cli
-# Top-level config above stays valid and acts as the base.
+# Top-level config above stays valid and acts as the base. Profiles, personas,
+# and instances use the same nested keys as the config above (no flat syntax);
+# unknown keys are rejected at load time.
 #
 # [defaults]
 # workspace_root = "~/.egirl"
 # profile = "local-codex"
 # persona = "kira"
 #
-# [profiles.local-codex]
-# local_endpoint = "http://localhost:8080"
-# local_model = "qwen3-vl-32b"
-# code_agent_provider = "codex"
-# code_agent_permission_mode = "default"
+# [profiles.local-codex.local]
+# endpoint = "http://localhost:8080"
+# model = "qwen3-vl-32b"
 #
-# [profiles.big-box]
-# local_endpoint = "http://192.168.8.218:8080"
-# local_model = "qwen3-72b"
-# code_agent_provider = "codex"
-# code_agent_permission_mode = "default"
+# [profiles.local-codex.channels.code_agent]
+# provider = "codex"
+# permission_mode = "default"
+#
+# [profiles.big-box.local]
+# endpoint = "http://192.168.8.218:8080"
+# model = "qwen3-72b"
+#
+# [profiles.big-box.channels.code_agent]
+# provider = "codex"
+# permission_mode = "default"
 #
 # [personas.kira]
-# workspace = "~/.egirl/personas/kira"
 # theme = "egirl"
+# # workspace defaults to ~/.egirl/personas/kira
 #
 # [personas.ops]
-# workspace = "~/.egirl/personas/ops"
 # theme = "midnight"
 #
 # [instances.kira-local]
@@ -129,4 +134,6 @@ dirs = ["~/.egirl/skills", "{workspace}/skills"]
 # [instances.ops-big]
 # profile = "big-box"
 # persona = "ops"
-# api_port = 3001
+#
+# [instances.ops-big.channels.api]
+# port = 3001

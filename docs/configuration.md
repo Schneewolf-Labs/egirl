@@ -106,6 +106,8 @@ Optional `[profiles]`, `[personas]`, and `[instances]` sections let one TOML fil
 - **Personas** hold identity/workspace settings such as theme and workspace path.
 - **Instances** marry one profile to one persona and can override any nested config.
 
+Profiles, personas, and instances use the **same nested keys as the top-level config** — there is no separate flat syntax. Unknown keys are rejected at load time, so typos surface immediately. If a persona omits `workspace`, it defaults to `<workspace_root>/personas/<name>`.
+
 Run a named instance with `--instance`:
 
 ```bash
@@ -121,24 +123,27 @@ workspace_root = "~/.egirl"
 profile = "local-codex"
 persona = "kira"
 
-[profiles.local-codex]
-local_endpoint = "http://localhost:8080"
-local_model = "qwen3-vl-32b"
-code_agent_provider = "codex"
-code_agent_permission_mode = "default"
+[profiles.local-codex.local]
+endpoint = "http://localhost:8080"
+model = "qwen3-vl-32b"
 
-[profiles.big-box]
-local_endpoint = "http://192.168.8.218:8080"
-local_model = "qwen3-72b"
-code_agent_provider = "codex"
-code_agent_permission_mode = "default"
+[profiles.local-codex.channels.code_agent]
+provider = "codex"
+permission_mode = "default"
+
+[profiles.big-box.local]
+endpoint = "http://192.168.8.218:8080"
+model = "qwen3-72b"
+
+[profiles.big-box.channels.code_agent]
+provider = "codex"
+permission_mode = "default"
 
 [personas.kira]
-workspace = "~/.egirl/personas/kira"
 theme = "egirl"
+# workspace defaults to ~/.egirl/personas/kira
 
 [personas.ops]
-workspace = "~/.egirl/personas/ops"
 theme = "midnight"
 
 [instances.kira-local]
@@ -148,7 +153,9 @@ persona = "kira"
 [instances.ops-big]
 profile = "big-box"
 persona = "ops"
-api_port = 3001
+
+[instances.ops-big.channels.api]
+port = 3001
 ```
 
 The existing top-level config remains valid and acts as the base. Resolution order is top-level config, selected profile, selected persona, then selected instance.
