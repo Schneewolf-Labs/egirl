@@ -44,6 +44,9 @@ export async function showStatus(config: RuntimeConfig): Promise<void> {
   } else {
     console.log(`  ${DIM}Code Agent${RESET} ${c.muted}not configured${RESET}`)
   }
+  console.log(
+    `  ${DIM}Permissions${RESET} ${config.permissionSupervisor.mode} ${DIM}(default=${config.permissionSupervisor.defaultAction})${RESET}`,
+  )
 
   // Show loaded skills
   let skills: Awaited<ReturnType<typeof loadSkillsFromDirectories>> = []

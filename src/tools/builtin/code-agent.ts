@@ -1,6 +1,8 @@
 import { type Options as ClaudeAgentOptions, query } from '@anthropic-ai/claude-agent-sdk'
 import { spawn } from 'child_process'
 import { join } from 'path'
+import type { MemoryManager } from '../../memory'
+import type { PermissionSupervisor } from '../../permissions/supervisor'
 import type { LLMProvider } from '../../providers/types'
 import { sanitizedEnv } from '../../util/env'
 import { log } from '../../util/logger'
@@ -25,6 +27,8 @@ export interface CodeAgentConfig {
   maxTurns?: number
   timeoutMs?: number
   localProvider?: LLMProvider
+  memory?: MemoryManager
+  permissionSupervisor?: PermissionSupervisor
 }
 
 /**
@@ -244,9 +248,17 @@ function codexChoicePrompt(screen: string): string | undefined {
   return undefined
 }
 
-function extractChoice(answer: string, fallback: string): string {
-  const match = answer.match(/\b\d+\b/)
-  return match?.[0] ?? fallback
+function codexOptions(screen: string): { id: string; label: string }[] {
+  const options: { id: string; label: string }[] = []
+  const optionRe = /(?:^|\n|\s)(\d+)\.\s*([^\n\r]+)/g
+  for (const match of screen.matchAll(optionRe)) {
+    const id = match[1]
+    const label = match[2]?.trim()
+    if (id && label && !options.some((option) => option.id === id)) {
+      options.push({ id, label })
+    }
+  }
+  return options
 }
 
 function codexCompletionIndex(screen: string): number {
@@ -281,41 +293,37 @@ async function chooseCodexOption(
   config: CodeAgentConfig,
   screen: string,
   originalTask: string,
-): Promise<string> {
+  workingDir: string,
+): Promise<{ choice?: string; needsUser?: string }> {
   const prompt = codexChoicePrompt(screen)
-  if (!prompt) return '1'
+  if (!prompt) return { choice: '1' }
 
-  if (!config.localProvider) {
-    return '1'
+  if (!config.permissionSupervisor) {
+    return { choice: '1' }
   }
 
-  try {
-    const response = await config.localProvider.chat({
-      messages: [
-        {
-          role: 'system',
-          content: [
-            'You supervise the Codex interactive CLI for egirl.',
-            'Choose the safest practical numbered option for the original coding task.',
-            'Allow ordinary reads, writes, edits, and safe commands needed for the task.',
-            'Deny destructive actions, secret access, or unrelated network access unless explicitly required.',
-            'Respond with only the option number.',
-          ].join('\n'),
-        },
-        {
-          role: 'user',
-          content: [`Original task: ${originalTask}`, '', prompt, '', 'Option number:'].join('\n'),
-        },
-      ],
-      temperature: 0.1,
-      max_tokens: 20,
-    })
+  const decision = await config.permissionSupervisor.decide({
+    backend: 'codex',
+    kind: prompt.includes('trust the working directory') ? 'trust' : 'permission',
+    originalTask,
+    workingDir,
+    promptText: prompt,
+    options: codexOptions(screen),
+    recentContext: screen.slice(-3000),
+  })
 
-    return extractChoice(response.content, '1')
-  } catch (error) {
-    log.warn('code-agent', `Local model failed to decide Codex prompt, using option 1: ${error}`)
-    return '1'
+  if (decision.action === 'ask_user') {
+    return { needsUser: decision.reason }
   }
+
+  if (decision.action === 'deny') {
+    const denyOption = codexOptions(screen).find((option) =>
+      /deny|no|cancel|reject/i.test(option.label),
+    )
+    return { choice: denyOption?.id ?? decision.optionId ?? '1' }
+  }
+
+  return { choice: decision.optionId ?? '1' }
 }
 
 async function runCodexCodeAgent(
@@ -402,11 +410,26 @@ async function runCodexCodeAgent(
         now - promptHandledAt > 1000
       ) {
         handlingPrompt = true
-        chooseCodexOption(config, screen, task)
-          .then((choice) => {
+        chooseCodexOption(config, screen, task, workingDir)
+          .then((decision) => {
             promptHandledAt = Date.now()
             lastPromptSignature = promptSignature
-            proc.stdin.write(`${JSON.stringify({ type: 'input', data: `${choice}\r` })}\n`)
+            if (decision.needsUser) {
+              proc.stdin.write(`${JSON.stringify({ type: 'kill' })}\n`)
+              proc.kill('SIGTERM')
+              finish({
+                success: false,
+                output: [
+                  'Code agent needs user approval before continuing.',
+                  '',
+                  decision.needsUser,
+                  '',
+                  stripAnsi(rawOutput).trim(),
+                ].join('\n'),
+              })
+              return
+            }
+            proc.stdin.write(`${JSON.stringify({ type: 'input', data: `${decision.choice}\r` })}\n`)
           })
           .finally(() => {
             handlingPrompt = false

@@ -68,6 +68,29 @@ github = false
 tasks = false
 browser = false
 
+[permission_supervisor]
+mode = "supervised"                # bypass, supervised, rules_only, ask_user
+default_action = "allow"           # allow, deny, ask_user
+think_before_deciding = true
+min_confidence = 0.65
+ask_user_below_confidence = false
+memory_recall = true
+memory_write = false
+
+[permission_supervisor.policy]
+allow = [
+  "git status",
+  "bun test",
+]
+deny = [
+  "rm -rf",
+  ".env",
+]
+ask_user = [
+  "git push",
+  "curl",
+]
+
 [skills]
 dirs = ["~/.egirl/skills", "{workspace}/skills"]
 

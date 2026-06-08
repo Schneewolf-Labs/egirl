@@ -224,6 +224,39 @@ export const EgirlConfigSchema = Type.Object({
     }),
   ),
 
+  permission_supervisor: Type.Optional(
+    Type.Object({
+      mode: Type.Optional(
+        Type.Union(
+          [
+            Type.Literal('bypass'),
+            Type.Literal('supervised'),
+            Type.Literal('rules_only'),
+            Type.Literal('ask_user'),
+          ],
+          { default: 'supervised' },
+        ),
+      ),
+      default_action: Type.Optional(
+        Type.Union([Type.Literal('allow'), Type.Literal('deny'), Type.Literal('ask_user')], {
+          default: 'allow',
+        }),
+      ),
+      think_before_deciding: Type.Optional(Type.Boolean({ default: true })),
+      min_confidence: Type.Optional(Type.Number({ default: 0.65 })),
+      ask_user_below_confidence: Type.Optional(Type.Boolean({ default: false })),
+      memory_recall: Type.Optional(Type.Boolean({ default: true })),
+      memory_write: Type.Optional(Type.Boolean({ default: false })),
+      policy: Type.Optional(
+        Type.Object({
+          allow: Type.Optional(Type.Array(Type.String())),
+          deny: Type.Optional(Type.Array(Type.String())),
+          ask_user: Type.Optional(Type.Array(Type.String())),
+        }),
+      ),
+    }),
+  ),
+
   tools: Type.Optional(
     Type.Object({
       files: Type.Boolean({ default: true }),
@@ -407,6 +440,20 @@ export interface RuntimeConfig {
   transcript: {
     enabled: boolean
     path: string
+  }
+  permissionSupervisor: {
+    mode: 'bypass' | 'supervised' | 'rules_only' | 'ask_user'
+    defaultAction: 'allow' | 'deny' | 'ask_user'
+    thinkBeforeDeciding: boolean
+    minConfidence: number
+    askUserBelowConfidence: boolean
+    memoryRecall: boolean
+    memoryWrite: boolean
+    policy: {
+      allow: string[]
+      deny: string[]
+      askUser: string[]
+    }
   }
   tools: {
     files: boolean

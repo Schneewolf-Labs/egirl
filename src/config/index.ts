@@ -369,6 +369,20 @@ export function loadConfig(options: LoadConfigOptions = {}): RuntimeConfig {
         ? expandPath(toml.transcript.path, workspacePath)
         : join(workspacePath, 'transcripts'),
     },
+    permissionSupervisor: {
+      mode: toml.permission_supervisor?.mode ?? 'supervised',
+      defaultAction: toml.permission_supervisor?.default_action ?? 'allow',
+      thinkBeforeDeciding: toml.permission_supervisor?.think_before_deciding ?? true,
+      minConfidence: toml.permission_supervisor?.min_confidence ?? 0.65,
+      askUserBelowConfidence: toml.permission_supervisor?.ask_user_below_confidence ?? false,
+      memoryRecall: toml.permission_supervisor?.memory_recall ?? true,
+      memoryWrite: toml.permission_supervisor?.memory_write ?? false,
+      policy: {
+        allow: toml.permission_supervisor?.policy?.allow ?? [],
+        deny: toml.permission_supervisor?.policy?.deny ?? [],
+        askUser: toml.permission_supervisor?.policy?.ask_user ?? [],
+      },
+    },
     tools: {
       files: toml.tools?.files ?? true,
       exec: toml.tools?.exec ?? true,

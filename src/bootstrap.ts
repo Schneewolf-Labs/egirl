@@ -11,6 +11,7 @@ import {
   type MemoryManager,
   type WorkingMemory,
 } from './memory'
+import { createPermissionSupervisor } from './permissions/supervisor'
 import { createProviderRegistry, type ProviderRegistry } from './providers'
 import { buildSafetyConfig } from './safety/config-bridge'
 import { loadSkillsFromDirectories } from './skills'
@@ -236,10 +237,17 @@ export async function createAppServices(config: RuntimeConfig): Promise<AppServi
   const browser = new BrowserManager()
   const processRegistry = createProcessRegistry()
   const codeAgentConfig = getCodeAgentConfig(config)
+  const permissionSupervisor = createPermissionSupervisor({
+    config: config.permissionSupervisor,
+    localProvider: providers.local,
+    memory,
+  })
   const toolExecutor = createDefaultToolExecutor(
     config,
     memory,
-    codeAgentConfig ? { ...codeAgentConfig, localProvider: providers.local } : undefined,
+    codeAgentConfig
+      ? { ...codeAgentConfig, localProvider: providers.local, memory, permissionSupervisor }
+      : undefined,
     getGitHubConfig(config),
     browser,
     processRegistry,
