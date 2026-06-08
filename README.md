@@ -44,8 +44,14 @@ No multi-model routing. No per-message cloud escalation. The local model solves 
 # Install dependencies
 bun install
 
+# Create starter config, then check it
+bun run start init --provider codex
+
 # Start llama.cpp (your local model)
 llama-server -m your-model.gguf -c 32768 --port 8080
+
+# Check setup
+bun run start doctor
 
 # Start embedding service (for memory)
 cd services/embeddings && ./run.sh
@@ -56,7 +62,7 @@ bun run cli
 
 ## Configuration
 
-See [docs/configuration.md](docs/configuration.md) for the full reference.
+Run `bun run start init --provider codex` to create a starter `egirl.toml` and `.env`. Use `--provider claude` if you want Claude Code as the `code_agent` backend. See [docs/configuration.md](docs/configuration.md) for the full reference.
 
 ### egirl.toml
 
@@ -74,13 +80,6 @@ endpoint = "http://localhost:8082"
 model = "qwen3-vl-embedding-2b"
 dimensions = 2048
 multimodal = true
-
-[channels.discord]
-allowed_channels = ["dm"]
-allowed_users = []   # empty = allow all
-
-[channels.claude_code]
-permission_mode = "bypassPermissions"
 
 [channels.code_agent]
 provider = "codex"      # or "claude"; Codex runs through the interactive codex CLI
@@ -106,6 +105,8 @@ No `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` needed for egirl itself. Claude Code 
 
 ```bash
 bun run cli                               # Interactive CLI
+bun run src/index.ts init --provider codex # Create starter config
+bun run src/index.ts doctor               # Check local setup
 bun run src/index.ts cli -m "hello"       # Single message, then exit
 bun run src/index.ts discord              # Discord bot only
 bun run src/index.ts xmpp                 # XMPP bot only (self-hosted)

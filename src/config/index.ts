@@ -31,7 +31,7 @@ function expandPath(path: string, workspaceDir?: string): string {
   return resolve(result)
 }
 
-function findConfigFile(): string | null {
+export function findConfigFile(): string | null {
   const candidates = [
     resolve(process.cwd(), 'egirl.toml'),
     resolve(homedir(), '.egirl', 'egirl.toml'),
@@ -88,6 +88,10 @@ export function loadConfig(): RuntimeConfig {
   }
 
   const config: RuntimeConfig = {
+    source: {
+      ...(configPath && { path: configPath }),
+      codeAgentUsesClaudeCodeFallback: !toml.channels?.code_agent && !!toml.channels?.claude_code,
+    },
     theme: themeName,
     thinking: {
       level: (toml.thinking?.level ?? 'off') as ThinkingLevel,
@@ -247,10 +251,20 @@ export function loadConfig(): RuntimeConfig {
     }
   }
 
+  if (toml.channels?.claude_code) {
+    const cc = toml.channels.claude_code
+    config.channels.claudeCode = {
+      permissionMode: cc.permission_mode ?? 'bypassPermissions',
+      model: cc.model,
+      workingDir: cc.working_dir ? expandPath(cc.working_dir, workspacePath) : workspacePath,
+      maxTurns: cc.max_turns,
+    }
+  }
+
   const codeAgentChannel = toml.channels?.code_agent ?? toml.channels?.claude_code
   if (codeAgentChannel) {
     const cc = codeAgentChannel
-    config.channels.claudeCode = {
+    config.channels.codeAgent = {
       provider: cc.provider ?? 'claude',
       permissionMode: cc.permission_mode ?? 'bypassPermissions',
       model: cc.model,

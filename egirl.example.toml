@@ -1,0 +1,72 @@
+# CLI color theme: egirl (purple/pink), midnight (blue/teal), neon (green/cyan), mono (grayscale)
+theme = "egirl"
+
+[thinking]
+level = "off"
+show_thinking = true
+
+[workspace]
+path = "~/.egirl/workspace"
+
+[local]
+endpoint = "http://localhost:8080"
+model = "qwen3-vl-32b"
+context_length = 32768
+max_concurrent = 2
+
+# Optional. Uncomment when you have an embeddings service running to enable memory.
+# [local.embeddings]
+# provider = "qwen3-vl"
+# endpoint = "http://localhost:8082"
+# model = "qwen3-vl-embedding-2b"
+# dimensions = 2048
+# multimodal = true
+
+[channels.code_agent]
+provider = "codex"         # "codex" or "claude"
+permission_mode = "default"
+# model = "gpt-5.5"        # Codex example
+# model = "sonnet"         # Claude example
+# working_dir = "~/projects/myrepo"
+# max_turns = 30           # Claude backend only
+
+# Direct Claude Code bridge command only: bun run start cc
+# [channels.claude_code]
+# permission_mode = "bypassPermissions"
+# model = "sonnet"
+
+# Discord bot. Requires DISCORD_TOKEN in .env.
+# [channels.discord]
+# allowed_channels = ["dm"]
+# allowed_users = []
+
+# HTTP API. Set EGIRL_API_TOKEN in .env if exposing beyond localhost.
+# [channels.api]
+# host = "127.0.0.1"
+# port = 3000
+
+[safety]
+enabled = true
+
+[safety.command_filter]
+enabled = true
+
+[safety.path_sandbox]
+enabled = false
+# allowed_paths = ["{workspace}", "~/projects"]
+
+[safety.sensitive_files]
+enabled = true
+
+[safety.audit_log]
+enabled = true
+path = "{workspace}/audit.log"
+
+[tools]
+code_agent = true
+github = false
+tasks = false
+browser = false
+
+[skills]
+dirs = ["~/.egirl/skills", "{workspace}/skills"]

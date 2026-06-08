@@ -287,7 +287,7 @@ Enable / disable tool groups.
 
 ## .env
 
-Create from the template: `cp .env.example .env`
+Create starter files with `bun run start init --provider codex`, or copy the template manually with `cp .env.example .env`.
 
 | Variable | Required | Description |
 |----------|----------|-------------|
@@ -326,21 +326,20 @@ model = "qwen3-vl-embedding-2b"
 dimensions = 2048
 multimodal = true
 
-[channels.discord]
-allowed_channels = ["dm"]
-allowed_users = []
-
-[channels.claude_code]
-permission_mode = "bypassPermissions"
-# model = "sonnet"
-# working_dir = "~/projects/myrepo"
-# max_turns = 30
-
 [channels.code_agent]
 provider = "codex"      # "claude" or "codex"
 permission_mode = "default"
 # model = "gpt-5.5"
 # working_dir = "~/projects/myrepo"
+
+# Direct Claude Code bridge command only: bun run start cc
+# [channels.claude_code]
+# permission_mode = "bypassPermissions"
+# model = "sonnet"
+
+# [channels.discord]
+# allowed_channels = ["dm"]
+# allowed_users = []
 
 # [channels.xmpp]
 # service = "xmpp://localhost:5222"

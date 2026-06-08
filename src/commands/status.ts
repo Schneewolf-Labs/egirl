@@ -10,6 +10,7 @@ export async function showStatus(config: RuntimeConfig): Promise<void> {
   console.log(`\n${c.secondary}${BOLD}egirl${RESET} ${DIM}Status${RESET}\n`)
 
   console.log(`${c.primary}Configuration${RESET}`)
+  console.log(`  ${DIM}Config${RESET}      ${config.source.path ?? 'built-in defaults'}`)
   console.log(`  ${DIM}Workspace${RESET}   ${config.workspace.path}`)
   console.log(
     `  ${DIM}Theme${RESET}       ${c.accent}${theme.name}${RESET} ${DIM}(${theme.label})${RESET}`,
@@ -24,6 +25,19 @@ export async function showStatus(config: RuntimeConfig): Promise<void> {
     console.log(
       `              ${DIM}${config.local.embeddings.dimensions}d, multimodal=${config.local.embeddings.multimodal}${RESET}`,
     )
+  }
+
+  if (config.channels.codeAgent) {
+    console.log(
+      `  ${DIM}Code Agent${RESET} ${config.channels.codeAgent.provider ?? 'claude'} ${DIM}(${config.channels.codeAgent.permissionMode})${RESET}`,
+    )
+    if (config.source.codeAgentUsesClaudeCodeFallback) {
+      console.log(
+        `              ${c.warning}using [channels.claude_code] fallback; prefer [channels.code_agent]${RESET}`,
+      )
+    }
+  } else {
+    console.log(`  ${DIM}Code Agent${RESET} ${c.muted}not configured${RESET}`)
   }
 
   // Show loaded skills

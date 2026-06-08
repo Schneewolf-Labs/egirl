@@ -15,8 +15,8 @@ How to set up a development environment, run tests, and work with the codebase.
 git clone https://github.com/Schneewolf-Labs/egirl.git
 cd egirl
 bun install
-cp .env.example .env
-# Edit .env with your tokens (optional — only Discord/XMPP/GitHub/API need secrets)
+bun run start init --provider codex
+# Edit .env with your tokens if you use Discord/XMPP/GitHub/API.
 ```
 
 Code agent authentication is separate from `.env`. For Claude Code, run `claude auth login` once. For Codex, authenticate the local `codex` CLI according to your Codex install. egirl does not need `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` for either path.
