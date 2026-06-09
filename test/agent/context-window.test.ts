@@ -10,7 +10,7 @@ describe('estimateMessageTokens', () => {
   test('estimates tokens for simple text message', () => {
     const msg: ChatMessage = { role: 'user', content: 'Hello world' }
     const tokens = estimateMessageTokens(msg)
-    // 11 chars / 3.5 ≈ 4, + 4 overhead = 8
+    // 11 chars / 3.5 ≈ 4, + 7 overhead = 11
     expect(tokens).toBeGreaterThan(0)
     expect(tokens).toBeLessThan(20)
   })
@@ -24,7 +24,7 @@ describe('estimateMessageTokens', () => {
       ],
     }
     const tokens = estimateMessageTokens(msg)
-    // text tokens + 1000 for image + 4 overhead
+    // text tokens + 1000 for image + 7 overhead
     expect(tokens).toBeGreaterThanOrEqual(1004)
   })
 
@@ -35,7 +35,7 @@ describe('estimateMessageTokens', () => {
       tool_calls: [{ id: 'call_0', name: 'read_file', arguments: { path: '/test.txt' } }],
     }
     const tokens = estimateMessageTokens(msg)
-    // content tokens + tool call tokens + 15 overhead per call + 4 base
+    // content tokens + tool call tokens + 15 overhead per call + 7 base
     expect(tokens).toBeGreaterThan(10)
   })
 
@@ -48,7 +48,7 @@ describe('estimateMessageTokens', () => {
   test('handles empty content', () => {
     const msg: ChatMessage = { role: 'user', content: '' }
     const tokens = estimateMessageTokens(msg)
-    expect(tokens).toBe(4) // just overhead
+    expect(tokens).toBe(7) // just overhead
   })
 })
 

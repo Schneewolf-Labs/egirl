@@ -93,9 +93,10 @@ async function countToolDefinitionTokens(
 /**
  * Sync token estimation for a ChatMessage (no tokenizer).
  * Kept as a public API for routing heuristics and other sync callers.
+ * Overhead constants match countMessageTokens above.
  */
 export function estimateMessageTokens(message: ChatMessage): number {
-  let tokens = 4
+  let tokens = 7
 
   if (typeof message.content === 'string') {
     tokens += estimateStringTokens(message.content)
@@ -118,7 +119,7 @@ export function estimateMessageTokens(message: ChatMessage): number {
   }
 
   if (message.tool_call_id) {
-    tokens += 10
+    tokens += 5
   }
 
   return tokens
