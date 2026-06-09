@@ -26,11 +26,19 @@ Codex runs in an interactive PTY. When egirl sees a trust, permission, or clarif
 - `deny` chooses a deny/cancel option when one is visible.
 - `ask_user` stops the tool and returns an approval-needed message.
 
-### Claude Code
+### Claude `code_agent`
 
-The direct `claude-code` / `cc` bridge has its own local-model permission flow today. It asks for `ALLOW` or `DENY` and answers Claude questions from task context.
+Claude runs in-process via the Agent SDK. When the supervisor is active (mode is not `bypass`), egirl runs Claude in a gating permission mode and passes a `canUseTool` callback, so the SDK routes each tool call it would otherwise prompt on through the supervisor. This is complementary to Claude's own permissions: Claude decides which calls are worth gating, the supervisor decides each one.
 
-Claude through the `code_agent` tool still uses Claude Agent SDK permission behavior. Unifying that path under this supervisor is the next backend cleanup.
+- `allow` / `choose` lets the tool call proceed.
+- `deny` returns the supervisor's reason to Claude as the tool result, so it can re-steer and retry — write the reason as guidance, not just a refusal.
+- `ask_user` interrupts the run and returns an approval-needed message.
+
+When mode is `bypass`, Claude keeps its prior behavior: it honors the configured `permission_mode` (including `bypassPermissions`) and the supervisor is not consulted.
+
+### Claude Code bridge
+
+The direct `claude-code` / `cc` bridge has its own local-model permission flow. It asks for `ALLOW` or `DENY` and answers Claude questions from task context.
 
 ## Config
 

@@ -131,4 +131,40 @@ describe('PermissionSupervisor', () => {
     expect(calls.some((call) => call.startsWith('search:'))).toBe(true)
     expect(calls.some((call) => call.startsWith('set:permission:codex'))).toBe(true)
   })
+
+  test('isActive reflects whether the supervisor intercepts', () => {
+    expect(createPermissionSupervisor({ config: config({ mode: 'bypass' }) }).isActive()).toBe(
+      false,
+    )
+    expect(createPermissionSupervisor({ config: config({ mode: 'supervised' }) }).isActive()).toBe(
+      true,
+    )
+    expect(createPermissionSupervisor({ config: config({ mode: 'rules_only' }) }).isActive()).toBe(
+      true,
+    )
+  })
+
+  test('adjudicates claude tool requests without menu options', async () => {
+    const claudeRequest = {
+      backend: 'claude' as const,
+      kind: 'permission' as const,
+      originalTask: 'Refactor module',
+      workingDir: '/repo',
+      promptText: 'Claude Code requests permission to use Bash.',
+      toolName: 'Bash',
+      toolInput: { command: 'rm -rf /repo/dist' },
+    }
+
+    const denied = await createPermissionSupervisor({
+      config: config({ policy: { deny: ['rm -rf'], allow: [], askUser: [] } }),
+    }).decide(claudeRequest)
+    expect(denied.action).toBe('deny')
+
+    // With no options, an allow policy yields a plain allow (not a menu choice).
+    const allowed = await createPermissionSupervisor({
+      config: config({ policy: { allow: ['Bash'], deny: [], askUser: [] } }),
+    }).decide(claudeRequest)
+    expect(allowed.action).toBe('allow')
+    expect(allowed.optionId).toBeUndefined()
+  })
 })

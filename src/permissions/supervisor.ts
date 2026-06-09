@@ -202,6 +202,11 @@ async function writeMemory(
 export class PermissionSupervisor {
   constructor(private deps: PermissionSupervisorDeps) {}
 
+  /** Whether the supervisor should intercept permission requests at all. */
+  isActive(): boolean {
+    return this.deps.config.mode !== 'bypass'
+  }
+
   async decide(request: PermissionRequest): Promise<PermissionDecision> {
     const { config } = this.deps
 
@@ -243,6 +248,7 @@ export class PermissionSupervisor {
       'Allow ordinary reads, writes, edits, and safe commands needed for the original coding task.',
       'Deny destructive actions, secret access, or unrelated network access unless explicitly required.',
       'Use ask_user when the request is high risk, ambiguous, or outside the task.',
+      'When you deny, write the reason as concrete guidance the agent can act on, so it re-steers and retries correctly instead of just stopping.',
       'Return JSON: {"action":"allow|deny|choose|ask_user","optionId":"...","reason":"...","confidence":0.0}',
     ].join('\n')
 

@@ -2,6 +2,16 @@ import { type Static, type TSchema, Type } from '@sinclair/typebox'
 
 export type ThinkingLevel = 'off' | 'low' | 'medium' | 'high'
 
+// Single source of truth for code-agent backends. Adding a third (e.g.
+// 'opencode') here flows into the config schema and the dispatch map.
+export const CODE_AGENT_PROVIDERS = ['claude', 'codex'] as const
+export type CodeAgentProvider = (typeof CODE_AGENT_PROVIDERS)[number]
+
+const codeAgentProviderSchema = Type.Union(
+  CODE_AGENT_PROVIDERS.map((value) => Type.Literal(value)),
+  { default: 'claude' },
+)
+
 // Recursively makes every object field optional and forbids unknown keys, so a
 // config fragment can override any subset of the real schema while typos throw.
 function deepPartial(schema: TSchema): TSchema {
@@ -16,9 +26,7 @@ function deepPartial(schema: TSchema): TSchema {
 }
 
 const CodeAgentChannelSchema = Type.Object({
-  provider: Type.Union([Type.Literal('claude'), Type.Literal('codex')], {
-    default: 'claude',
-  }),
+  provider: codeAgentProviderSchema,
   permission_mode: Type.Union(
     [
       Type.Literal('default'),
@@ -86,9 +94,7 @@ const baseProperties = {
       ),
       claude_code: Type.Optional(
         Type.Object({
-          provider: Type.Optional(
-            Type.Union([Type.Literal('claude'), Type.Literal('codex')], { default: 'claude' }),
-          ),
+          provider: Type.Optional(codeAgentProviderSchema),
           permission_mode: Type.Union(
             [
               Type.Literal('default'),
@@ -373,7 +379,7 @@ export interface RuntimeConfig {
       maxTurns?: number
     }
     codeAgent?: {
-      provider?: 'claude' | 'codex'
+      provider?: CodeAgentProvider
       permissionMode: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan'
       model?: string
       workingDir: string
