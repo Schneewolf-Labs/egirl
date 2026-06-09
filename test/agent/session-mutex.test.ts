@@ -92,6 +92,64 @@ describe('SessionMutex', () => {
     expect(mutex.isLocked()).toBe(false)
   })
 
+  test('queued run rejects after acquire timeout', async () => {
+    const mutex = new SessionMutex(30)
+
+    const blocker = mutex.run(async () => {
+      await sleep(100)
+      return 'blocker'
+    })
+
+    const queued = mutex.run(async () => 'never')
+
+    await expect(queued).rejects.toThrow('Timed out')
+    expect(mutex.pending).toBe(0)
+
+    // Blocker still completes and the lock is released
+    expect(await blocker).toBe('blocker')
+    expect(mutex.isLocked()).toBe(false)
+  })
+
+  test('timed-out waiter is skipped on release', async () => {
+    const mutex = new SessionMutex(30)
+    const order: string[] = []
+
+    const blocker = mutex.run(async () => {
+      await sleep(100)
+      order.push('blocker')
+    })
+
+    const timedOut = mutex.run(async () => {
+      order.push('timed-out')
+    })
+
+    await expect(timedOut).rejects.toThrow('Timed out')
+
+    await blocker
+
+    // A new run after the blocker should acquire normally
+    await mutex.run(async () => {
+      order.push('after')
+    })
+
+    expect(order).toEqual(['blocker', 'after'])
+    expect(mutex.isLocked()).toBe(false)
+  })
+
+  test('timeout of 0 disables queue timeout', async () => {
+    const mutex = new SessionMutex(0)
+
+    const blocker = mutex.run(async () => {
+      await sleep(60)
+      return 'blocker'
+    })
+
+    const queued = mutex.run(async () => 'queued')
+
+    expect(await blocker).toBe('blocker')
+    expect(await queued).toBe('queued')
+  })
+
   test('queued runs proceed after error in earlier run', async () => {
     const mutex = new SessionMutex()
     const order: string[] = []

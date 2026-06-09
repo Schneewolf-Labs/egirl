@@ -101,6 +101,7 @@ export class LlamaCppProvider implements LLMProvider {
     const response = await fetch(`${this.endpoint}/v1/chat/completions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      signal: req.signal,
       body: JSON.stringify({
         messages,
         temperature: req.temperature,

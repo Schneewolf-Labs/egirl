@@ -60,6 +60,8 @@ export interface AgentResponse {
   thinking?: string
   /** Number of continuation retries performed for truncated responses */
   continuationRetries?: number
+  /** True if the run was cancelled via the abort signal */
+  aborted?: boolean
 }
 
 export interface AgentLoopDeps {
@@ -208,6 +210,7 @@ export class AgentLoop {
           tokenizer: this.tokenizer,
           onToken: events?.onToken,
           thinking,
+          signal,
         })
         response = result.response
 
@@ -215,6 +218,10 @@ export class AgentLoop {
           this.maybeTriggerCompaction(result.droppedMessages)
         }
       } catch (error) {
+        if (signal?.aborted) {
+          log.info('agent', 'Agent run aborted during inference')
+          break
+        }
         const err = error instanceof Error ? error : new Error(String(error))
         events?.onError?.(err)
         throw error
@@ -240,7 +247,7 @@ export class AgentLoop {
       }
 
       if (response.tool_calls && response.tool_calls.length > 0) {
-        await this.handleToolCalls(response, seenToolCalls, events)
+        await this.handleToolCalls(response, seenToolCalls, events, signal)
 
         if (signal?.aborted) {
           log.info('agent', 'Agent run aborted after tool execution')
@@ -349,6 +356,7 @@ export class AgentLoop {
       turns,
       thinking: lastThinking,
       continuationRetries: continuationRetries > 0 ? continuationRetries : undefined,
+      aborted: signal?.aborted ? true : undefined,
     }
   }
 
@@ -439,6 +447,7 @@ export class AgentLoop {
     response: ChatResponse,
     seenToolCalls: Set<string>,
     events?: AgentEventHandler,
+    signal?: AbortSignal,
   ): Promise<void> {
     const calls = response.tool_calls ?? []
 
@@ -458,7 +467,7 @@ export class AgentLoop {
     if (response.content && events?.onThinking) events.onThinking(response.content)
     events?.onToolCallStart?.(calls)
 
-    const toolResults = await this.executeToolsWithHooks(calls, events)
+    const toolResults = await this.executeToolsWithHooks(calls, events, signal)
 
     for (const [callId, result] of toolResults) {
       log.debug(
@@ -492,14 +501,30 @@ export class AgentLoop {
   private async executeToolsWithHooks(
     toolCalls: ToolCall[],
     events?: AgentEventHandler,
+    signal?: AbortSignal,
   ): Promise<Map<string, ToolResult>> {
+    // Don't start new tools after the run is aborted — emit skip results so
+    // tool messages stay paired with their tool_calls in history.
+    const skippedResult = (): ToolResult => ({
+      success: false,
+      output: 'Skipped: agent run was cancelled',
+    })
+
     if (!events?.onBeforeToolExec && !events?.onAfterToolExec && !this.transcript) {
+      if (signal?.aborted) {
+        return new Map(toolCalls.map((call) => [call.id, skippedResult()]))
+      }
       return this.toolExecutor.executeAll(toolCalls, this.context.workspaceDir)
     }
 
     const results = new Map<string, ToolResult>()
 
     for (const call of toolCalls) {
+      if (signal?.aborted) {
+        results.set(call.id, skippedResult())
+        continue
+      }
+
       if (events?.onBeforeToolExec) {
         const shouldRun = await events.onBeforeToolExec(call)
         if (shouldRun === false) {

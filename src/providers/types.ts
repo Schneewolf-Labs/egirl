@@ -37,6 +37,8 @@ export interface ChatRequest {
   onToken?: (token: string) => void
   /** Extended thinking / reasoning configuration */
   thinking?: ThinkingConfig
+  /** Abort signal — cancels the in-flight HTTP request / generation */
+  signal?: AbortSignal
   /** Stable/volatile split for system prompt caching (Anthropic prefix caching) */
   systemPromptParts?: {
     stable: string
