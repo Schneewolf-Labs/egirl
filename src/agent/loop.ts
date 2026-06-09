@@ -187,176 +187,179 @@ export class AgentLoop {
     let accumulatedContent = ''
     let validationRetried = false
 
-    while (turns < maxTurns) {
-      if (signal?.aborted) {
-        log.info('agent', 'Agent run aborted by signal')
+    // Persistence and transcript closure run in `finally` so a provider error
+    // mid-run doesn't lose the user message and tool activity already in context.
+    try {
+      while (turns < maxTurns) {
+        if (signal?.aborted) {
+          log.info('agent', 'Agent run aborted by signal')
+          break
+        }
+
+        turns++
+
+        const tools = isPlanning ? [] : this.toolExecutor.getDefinitions()
+
+        let response: ChatResponse
+        const inferenceStart = Date.now()
+        try {
+          const result = await chatWithContextWindow({
+            provider,
+            systemPrompt: this.context.systemPrompt,
+            messages: this.context.messages,
+            conversationSummary: this.context.conversationSummary,
+            tools,
+            contextLength: this.config.local.contextLength,
+            tokenizer: this.tokenizer,
+            onToken: events?.onToken,
+            thinking,
+            signal,
+          })
+          response = result.response
+
+          if (result.wasTrimmed && this.config.conversation.contextCompaction) {
+            this.maybeTriggerCompaction(result.droppedMessages)
+          }
+        } catch (error) {
+          if (signal?.aborted) {
+            log.info('agent', 'Agent run aborted during inference')
+            break
+          }
+          const err = error instanceof Error ? error : new Error(String(error))
+          events?.onError?.(err)
+          throw error
+        }
+        const inferenceDuration = Date.now() - inferenceStart
+
+        totalUsage.input_tokens += response.usage.input_tokens
+        totalUsage.output_tokens += response.usage.output_tokens
+
+        this.transcript?.inference(this.context.sessionId, {
+          provider: provider.name,
+          input_tokens: response.usage.input_tokens,
+          output_tokens: response.usage.output_tokens,
+          duration_ms: inferenceDuration,
+          has_tool_calls: (response.tool_calls?.length ?? 0) > 0,
+        })
+
+        this.handleTokenBudget(budgetTracker, response, events)
+
+        if (response.thinking) {
+          lastThinking = response.thinking
+          events?.onThinking?.(response.thinking)
+        }
+
+        if (response.tool_calls && response.tool_calls.length > 0) {
+          await this.handleToolCalls(response, seenToolCalls, events, signal)
+
+          if (signal?.aborted) {
+            log.info('agent', 'Agent run aborted after tool execution')
+            break
+          }
+          continue
+        }
+
+        // No tool calls — check if response was truncated and needs continuation
+        if (
+          response.finish_reason === 'length' &&
+          continuationRetries < MAX_CONTINUATION_RETRIES &&
+          response.content.length > 0
+        ) {
+          continuationRetries++
+          accumulatedContent += response.content
+          log.info(
+            'agent',
+            `Response truncated (finish_reason: length), continuation retry ${continuationRetries}/${MAX_CONTINUATION_RETRIES}`,
+          )
+
+          addMessage(this.context, { role: 'assistant', content: response.content })
+          addMessage(this.context, {
+            role: 'user',
+            content:
+              '[System: Your previous response was cut off. Continue exactly where you left off.]',
+          })
+          continue
+        }
+
+        finalContent = accumulatedContent + response.content
+        addMessage(this.context, { role: 'assistant', content: response.content })
+
+        if (events?.onPostResponseValidation && !validationRetried) {
+          const validation = await events.onPostResponseValidation(finalContent)
+          if (!validation.valid) {
+            validationRetried = true
+            const feedback =
+              validation.feedback ??
+              'Your previous response did not pass validation. Please try again.'
+            log.info('agent', `Post-response validation failed: ${feedback.slice(0, 100)}`)
+            addMessage(this.context, { role: 'user', content: `[Validation failed]: ${feedback}` })
+            accumulatedContent = ''
+            continuationRetries = 0
+            continue
+          }
+        }
+
+        events?.onResponseComplete?.()
+
+        if (isPlanning) {
+          isPlanning = false
+          return {
+            content: finalContent,
+            provider: provider.name,
+            usage: totalUsage,
+            turns,
+            isPlan: true,
+            thinking: lastThinking,
+          }
+        }
+
         break
       }
 
-      turns++
+      if (turns >= maxTurns && !finalContent) {
+        log.warn('agent', `Exhausted max turns (${maxTurns}) without a final response`)
 
-      const tools = isPlanning ? [] : this.toolExecutor.getDefinitions()
-
-      let response: ChatResponse
-      const inferenceStart = Date.now()
-      try {
-        const result = await chatWithContextWindow({
-          provider,
-          systemPrompt: this.context.systemPrompt,
-          messages: this.context.messages,
-          conversationSummary: this.context.conversationSummary,
-          tools,
-          contextLength: this.config.local.contextLength,
-          tokenizer: this.tokenizer,
-          onToken: events?.onToken,
-          thinking,
-          signal,
-        })
-        response = result.response
-
-        if (result.wasTrimmed && this.config.conversation.contextCompaction) {
-          this.maybeTriggerCompaction(result.droppedMessages)
+        for (let i = this.context.messages.length - 1; i >= 0; i--) {
+          const msg = this.context.messages[i]
+          if (
+            msg?.role === 'assistant' &&
+            msg.content &&
+            typeof msg.content === 'string' &&
+            msg.content.trim()
+          ) {
+            finalContent = msg.content
+            break
+          }
         }
-      } catch (error) {
-        if (signal?.aborted) {
-          log.info('agent', 'Agent run aborted during inference')
-          break
+
+        if (!finalContent) {
+          finalContent = '[Agent reached maximum turns without producing a final response]'
         }
-        const err = error instanceof Error ? error : new Error(String(error))
-        events?.onError?.(err)
-        throw error
+
+        events?.onResponseComplete?.()
       }
-      const inferenceDuration = Date.now() - inferenceStart
 
-      totalUsage.input_tokens += response.usage.input_tokens
-      totalUsage.output_tokens += response.usage.output_tokens
+      this.maybeRunAutoExtraction()
 
-      this.transcript?.inference(this.context.sessionId, {
+      return {
+        content: finalContent,
         provider: provider.name,
-        input_tokens: response.usage.input_tokens,
-        output_tokens: response.usage.output_tokens,
-        duration_ms: inferenceDuration,
-        has_tool_calls: (response.tool_calls?.length ?? 0) > 0,
+        usage: totalUsage,
+        turns,
+        thinking: lastThinking,
+        continuationRetries: continuationRetries > 0 ? continuationRetries : undefined,
+        aborted: signal?.aborted ? true : undefined,
+      }
+    } finally {
+      this.persistNewMessages()
+      this.transcript?.turnEnd(this.context.sessionId, {
+        content_length: finalContent.length,
+        provider: provider.name,
+        input_tokens: totalUsage.input_tokens,
+        output_tokens: totalUsage.output_tokens,
+        turns,
+        duration_ms: Date.now() - turnStartedAt,
       })
-
-      this.handleTokenBudget(budgetTracker, response, events)
-
-      if (response.thinking) {
-        lastThinking = response.thinking
-        events?.onThinking?.(response.thinking)
-      }
-
-      if (response.tool_calls && response.tool_calls.length > 0) {
-        await this.handleToolCalls(response, seenToolCalls, events, signal)
-
-        if (signal?.aborted) {
-          log.info('agent', 'Agent run aborted after tool execution')
-          break
-        }
-        continue
-      }
-
-      // No tool calls — check if response was truncated and needs continuation
-      if (
-        response.finish_reason === 'length' &&
-        continuationRetries < MAX_CONTINUATION_RETRIES &&
-        response.content.length > 0
-      ) {
-        continuationRetries++
-        accumulatedContent += response.content
-        log.info(
-          'agent',
-          `Response truncated (finish_reason: length), continuation retry ${continuationRetries}/${MAX_CONTINUATION_RETRIES}`,
-        )
-
-        addMessage(this.context, { role: 'assistant', content: response.content })
-        addMessage(this.context, {
-          role: 'user',
-          content:
-            '[System: Your previous response was cut off. Continue exactly where you left off.]',
-        })
-        continue
-      }
-
-      finalContent = accumulatedContent + response.content
-      addMessage(this.context, { role: 'assistant', content: response.content })
-
-      if (events?.onPostResponseValidation && !validationRetried) {
-        const validation = await events.onPostResponseValidation(finalContent)
-        if (!validation.valid) {
-          validationRetried = true
-          const feedback =
-            validation.feedback ??
-            'Your previous response did not pass validation. Please try again.'
-          log.info('agent', `Post-response validation failed: ${feedback.slice(0, 100)}`)
-          addMessage(this.context, { role: 'user', content: `[Validation failed]: ${feedback}` })
-          accumulatedContent = ''
-          continuationRetries = 0
-          continue
-        }
-      }
-
-      events?.onResponseComplete?.()
-
-      if (isPlanning) {
-        isPlanning = false
-        this.persistNewMessages()
-        return {
-          content: finalContent,
-          provider: provider.name,
-          usage: totalUsage,
-          turns,
-          isPlan: true,
-          thinking: lastThinking,
-        }
-      }
-
-      break
-    }
-
-    if (turns >= maxTurns && !finalContent) {
-      log.warn('agent', `Exhausted max turns (${maxTurns}) without a final response`)
-
-      for (let i = this.context.messages.length - 1; i >= 0; i--) {
-        const msg = this.context.messages[i]
-        if (
-          msg?.role === 'assistant' &&
-          msg.content &&
-          typeof msg.content === 'string' &&
-          msg.content.trim()
-        ) {
-          finalContent = msg.content
-          break
-        }
-      }
-
-      if (!finalContent) {
-        finalContent = '[Agent reached maximum turns without producing a final response]'
-      }
-
-      events?.onResponseComplete?.()
-    }
-
-    this.persistNewMessages()
-    this.maybeRunAutoExtraction()
-
-    this.transcript?.turnEnd(this.context.sessionId, {
-      content_length: finalContent.length,
-      provider: provider.name,
-      input_tokens: totalUsage.input_tokens,
-      output_tokens: totalUsage.output_tokens,
-      turns,
-      duration_ms: Date.now() - turnStartedAt,
-    })
-
-    return {
-      content: finalContent,
-      provider: provider.name,
-      usage: totalUsage,
-      turns,
-      thinking: lastThinking,
-      continuationRetries: continuationRetries > 0 ? continuationRetries : undefined,
-      aborted: signal?.aborted ? true : undefined,
     }
   }
 
