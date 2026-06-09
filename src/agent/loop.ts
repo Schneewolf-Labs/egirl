@@ -259,6 +259,14 @@ export class AgentLoop {
         }
 
         if (response.tool_calls && response.tool_calls.length > 0) {
+          // A tool call interrupts any continuation in progress. The truncated
+          // text is already in context as assistant messages — prepending it to
+          // the post-tool final response would interleave unrelated fragments.
+          if (accumulatedContent) {
+            accumulatedContent = ''
+            continuationRetries = 0
+          }
+
           await this.handleToolCalls(response, seenToolCalls, events, signal)
 
           if (signal?.aborted) {
