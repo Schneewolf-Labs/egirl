@@ -587,17 +587,62 @@ export class AgentLoop {
     )
     if (droppedConversation.length === 0) return
 
-    this.pendingCompaction = triggerCompaction({
-      droppedMessages: droppedConversation,
-      provider: this.localProvider,
-      existingSummary: this.context.conversationSummary,
-      memory: this.memory,
-      conversationStore: this.conversationStore,
-      sessionId: this.context.sessionId,
-      onSummary: (summary) => {
-        this.context.conversationSummary = summary
-      },
-    })
+    this.pruneDroppedMessages(droppedConversation)
+
+    // Chain onto any in-flight compaction instead of overwriting it —
+    // overlapping summarizations raced on conversationSummary and lost
+    // updates. existingSummary is read when the chained step runs.
+    const previous = this.pendingCompaction ?? Promise.resolve()
+    this.pendingCompaction = previous.then(() =>
+      triggerCompaction({
+        droppedMessages: droppedConversation,
+        provider: this.localProvider,
+        existingSummary: this.context.conversationSummary,
+        memory: this.memory,
+        conversationStore: this.conversationStore,
+        sessionId: this.context.sessionId,
+        onSummary: (summary) => {
+          this.context.conversationSummary = summary
+        },
+      }),
+    )
+  }
+
+  /**
+   * Remove messages dropped by context fitting from the live message array.
+   * Without this, every inference past capacity re-fits and re-summarizes
+   * the same middle messages. The conversation store keeps the full history —
+   * dropped messages are persisted first, then only the in-memory working
+   * set shrinks. Watermarks shift to stay aligned with the new indices.
+   */
+  private pruneDroppedMessages(dropped: ChatMessage[]): void {
+    this.persistNewMessages()
+
+    const droppedSet = new Set(dropped)
+    const kept: ChatMessage[] = []
+    let removedBeforePersisted = 0
+    let removedBeforeExtraction = 0
+
+    for (let idx = 0; idx < this.context.messages.length; idx++) {
+      const msg = this.context.messages[idx]
+      if (!msg) continue
+      if (droppedSet.has(msg)) {
+        if (idx < this.persistedIndex) removedBeforePersisted++
+        if (idx < this.extractionWatermark) removedBeforeExtraction++
+        continue
+      }
+      kept.push(msg)
+    }
+
+    if (kept.length === this.context.messages.length) return
+
+    log.debug(
+      'agent',
+      `Pruned ${this.context.messages.length - kept.length} compacted messages from live context`,
+    )
+    this.context.messages = kept
+    this.persistedIndex -= removedBeforePersisted
+    this.extractionWatermark -= removedBeforeExtraction
   }
 
   private persistNewMessages(): void {
