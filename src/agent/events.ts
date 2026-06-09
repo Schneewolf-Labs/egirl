@@ -43,6 +43,10 @@ export interface AgentEventHandler {
    * response (no tool calls). Return { valid: false, feedback } to reject the
    * response and retry with the feedback injected as a user message.
    * Only retried once to prevent infinite loops.
+   *
+   * Registering this disables token streaming (onToken) for the run — a
+   * rejected response can't be retracted from a stream the user already saw,
+   * so responses are delivered whole once they pass validation.
    */
   onPostResponseValidation?(response: string): ValidationResult | Promise<ValidationResult>
 }

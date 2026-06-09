@@ -219,6 +219,11 @@ export class AgentLoop {
     let accumulatedContent = ''
     let validationRetried = false
 
+    // Streaming and post-response validation are mutually exclusive: a rejected
+    // response can't be retracted from a stream the user already saw. When
+    // validation is registered, responses are delivered whole on acceptance.
+    const onToken = events?.onPostResponseValidation ? undefined : events?.onToken
+
     // Persistence and transcript closure run in `finally` so a provider error
     // mid-run doesn't lose the user message and tool activity already in context.
     try {
@@ -243,7 +248,7 @@ export class AgentLoop {
             tools,
             contextLength: this.config.local.contextLength,
             tokenizer: this.tokenizer,
-            onToken: events?.onToken,
+            onToken,
             thinking,
             signal,
           })
@@ -412,7 +417,7 @@ export class AgentLoop {
         tools: [],
         contextLength: this.config.local.contextLength,
         tokenizer: this.tokenizer,
-        onToken: events?.onToken,
+        onToken: events?.onPostResponseValidation ? undefined : events?.onToken,
         thinking,
         signal,
       })
