@@ -104,7 +104,7 @@ Tools never throw — errors come back as `{ success: false, output: "..." }` so
 
 A few tools are worth calling out:
 
-- **`code_agent`** (`src/tools/builtin/code-agent.ts`) — delegates engineering work to the configured backend: Claude Code via `@anthropic-ai/claude-agent-sdk` or Codex via its interactive CLI. This is the primary delegation surface for project work.
+- **`code_agent`** (`src/tools/builtin/code-agent/`) — delegates engineering work to the configured backend: Claude Code via `@anthropic-ai/claude-agent-sdk` or Codex via its interactive CLI. Each backend is one file implementing a shared `CodeAgentBackend` contract, dispatched by provider. This is the primary delegation surface for project work.
 - **`execute_command`** (`src/tools/builtin/exec.ts`) — shell access, gated by the safety layer.
 - **Deferred tool loading** (`src/tools/deferred-loader.ts`) — rarely-used tool schemas are lazy-loaded via a meta-tool to keep the base system prompt small.
 
@@ -274,7 +274,7 @@ egirl/
 │   │       ├── screenshot.ts
 │   │       ├── web-research.ts
 │   │       ├── web-search.ts # SearxNG-backed
-│   │       └── code-agent.ts # Code agent delegation
+│   │       └── code-agent/   # Code agent delegation (claude, codex backends)
 │   ├── tracking/             # Stats, transcript logging
 │   ├── ui/
 │   │   └── theme.ts          # 256-color ANSI theme system

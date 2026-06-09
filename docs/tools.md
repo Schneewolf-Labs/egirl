@@ -514,7 +514,7 @@ Show the contents of a specific commit: message, author, date, and diff.
 
 Delegate a coding task to an autonomous code agent. Backends are Claude Code via the `@anthropic-ai/claude-agent-sdk` or Codex via the local interactive `codex` CLI.
 
-**Source:** `src/tools/builtin/code-agent.ts`
+**Source:** `src/tools/builtin/code-agent/`
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
