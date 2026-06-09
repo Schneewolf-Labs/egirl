@@ -325,26 +325,9 @@ export class AgentLoop {
         break
       }
 
-      if (turns >= maxTurns && !finalContent) {
+      if (turns >= maxTurns && !finalContent && !signal?.aborted) {
         log.warn('agent', `Exhausted max turns (${maxTurns}) without a final response`)
-
-        for (let i = this.context.messages.length - 1; i >= 0; i--) {
-          const msg = this.context.messages[i]
-          if (
-            msg?.role === 'assistant' &&
-            msg.content &&
-            typeof msg.content === 'string' &&
-            msg.content.trim()
-          ) {
-            finalContent = msg.content
-            break
-          }
-        }
-
-        if (!finalContent) {
-          finalContent = '[Agent reached maximum turns without producing a final response]'
-        }
-
+        finalContent = await this.forceFinalResponse(totalUsage, thinking, events, signal)
         events?.onResponseComplete?.()
       }
 
@@ -370,6 +353,52 @@ export class AgentLoop {
         duration_ms: Date.now() - turnStartedAt,
       })
     }
+  }
+
+  /**
+   * Force a final text response after max turns are exhausted mid-tool-flow.
+   * Runs one extra inference with no tools so the model summarizes where it
+   * got to, instead of returning a stale assistant message from history.
+   */
+  private async forceFinalResponse(
+    totalUsage: { input_tokens: number; output_tokens: number },
+    thinking?: ThinkingConfig,
+    events?: AgentEventHandler,
+    signal?: AbortSignal,
+  ): Promise<string> {
+    addMessage(this.context, {
+      role: 'user',
+      content:
+        '[System: Maximum turns reached. Do not call any tools. Summarize what you accomplished, what remains unfinished, and your best answer so far.]',
+    })
+
+    try {
+      const result = await chatWithContextWindow({
+        provider: this.localProvider,
+        systemPrompt: this.context.systemPrompt,
+        messages: this.context.messages,
+        conversationSummary: this.context.conversationSummary,
+        tools: [],
+        contextLength: this.config.local.contextLength,
+        tokenizer: this.tokenizer,
+        onToken: events?.onToken,
+        thinking,
+        signal,
+      })
+
+      totalUsage.input_tokens += result.response.usage.input_tokens
+      totalUsage.output_tokens += result.response.usage.output_tokens
+
+      const content = result.response.content.trim()
+      if (content) {
+        addMessage(this.context, { role: 'assistant', content: result.response.content })
+        return result.response.content
+      }
+    } catch (error) {
+      log.warn('agent', 'Forced final response failed:', error)
+    }
+
+    return '[Agent reached maximum turns without producing a final response]'
   }
 
   /**
