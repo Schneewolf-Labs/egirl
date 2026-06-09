@@ -149,11 +149,13 @@ model = "base-model"
 context_length = 8192
 max_concurrent = 1
 
-[profiles.remote]
-local_endpoint = "http://192.168.8.218:8080"
-local_model = "remote-model"
-code_agent_provider = "codex"
-code_agent_permission_mode = "default"
+[profiles.remote.local]
+endpoint = "http://192.168.8.218:8080"
+model = "remote-model"
+
+[profiles.remote.channels.code_agent]
+provider = "codex"
+permission_mode = "default"
 
 [personas.kira]
 theme = "midnight"
@@ -161,10 +163,10 @@ theme = "midnight"
 [instances.kira-remote]
 profile = "remote"
 persona = "kira"
-api_port = 3007
 
 [instances.kira-remote.channels.api]
 host = "127.0.0.1"
+port = 3007
 
 [skills]
 dirs = ["{workspace}/skills"]
@@ -203,8 +205,8 @@ model = "base-model"
 context_length = 8192
 max_concurrent = 1
 
-[instances.ops]
-workspace = "${tmpDir}/ops"
+[instances.ops.workspace]
+path = "${tmpDir}/ops"
 
 [instances.ops.local]
 model = "ops-model"
@@ -243,5 +245,34 @@ dirs = ["{workspace}/skills"]
 
     const { loadConfig } = await import('../../src/config/index')
     expect(() => loadConfig({ instance: 'missing' })).toThrow('instance "missing"')
+  })
+
+  test('rejects unknown keys in a composition fragment', async () => {
+    process.chdir(tmpDir)
+    writeFileSync(
+      join(tmpDir, 'egirl.toml'),
+      `
+[defaults]
+profile = "bad"
+
+[workspace]
+path = "${tmpDir}/base"
+
+[local]
+endpoint = "http://localhost:8080"
+model = "base-model"
+context_length = 8192
+max_concurrent = 1
+
+[profiles.bad]
+local_endpoint = "http://192.168.8.218:8080"
+
+[skills]
+dirs = ["{workspace}/skills"]
+`,
+    )
+
+    const { loadConfig } = await import('../../src/config/index')
+    expect(() => loadConfig()).toThrow('Invalid profile "bad"')
   })
 })

@@ -106,6 +106,8 @@ Optional `[profiles]`, `[personas]`, and `[instances]` sections let one TOML fil
 - **Personas** hold identity/workspace settings such as theme and workspace path.
 - **Instances** marry one profile to one persona and can override any nested config.
 
+Profiles, personas, and instances use the **same nested keys as the top-level config** — there is no separate flat syntax. Unknown keys are rejected at load time, so typos surface immediately. If a persona omits `workspace`, it defaults to `<workspace_root>/personas/<name>`.
+
 Run a named instance with `--instance`:
 
 ```bash
@@ -121,24 +123,27 @@ workspace_root = "~/.egirl"
 profile = "local-codex"
 persona = "kira"
 
-[profiles.local-codex]
-local_endpoint = "http://localhost:8080"
-local_model = "qwen3-vl-32b"
-code_agent_provider = "codex"
-code_agent_permission_mode = "default"
+[profiles.local-codex.local]
+endpoint = "http://localhost:8080"
+model = "qwen3-vl-32b"
 
-[profiles.big-box]
-local_endpoint = "http://192.168.8.218:8080"
-local_model = "qwen3-72b"
-code_agent_provider = "codex"
-code_agent_permission_mode = "default"
+[profiles.local-codex.channels.code_agent]
+provider = "codex"
+permission_mode = "default"
+
+[profiles.big-box.local]
+endpoint = "http://192.168.8.218:8080"
+model = "qwen3-72b"
+
+[profiles.big-box.channels.code_agent]
+provider = "codex"
+permission_mode = "default"
 
 [personas.kira]
-workspace = "~/.egirl/personas/kira"
 theme = "egirl"
+# workspace defaults to ~/.egirl/personas/kira
 
 [personas.ops]
-workspace = "~/.egirl/personas/ops"
 theme = "midnight"
 
 [instances.kira-local]
@@ -148,7 +153,9 @@ persona = "kira"
 [instances.ops-big]
 profile = "big-box"
 persona = "ops"
-api_port = 3001
+
+[instances.ops-big.channels.api]
+port = 3001
 ```
 
 The existing top-level config remains valid and acts as the base. Resolution order is top-level config, selected profile, selected persona, then selected instance.
@@ -315,6 +322,50 @@ Optional. JSONL conversation transcripts.
 |-----|------|---------|-------------|
 | `enabled` | bool | `true` | Log conversations to JSONL files |
 | `path` | string | (workspace default) | Path to the transcript log file. Supports `{workspace}` |
+
+### `[permission_supervisor]`
+
+Controls how egirl answers code-agent permission, trust, and clarification prompts. The shared supervisor is currently used by the Codex `code_agent` backend. The direct Claude Code bridge has its own local-model supervisor; Claude through `code_agent` still follows Claude Agent SDK permission behavior.
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `mode` | `"bypass"` \| `"supervised"` \| `"rules_only"` \| `"ask_user"` | `"supervised"` | Decision mode. `supervised` applies rules then asks the local model; `rules_only` skips model decisions; `ask_user` always requires user approval |
+| `default_action` | `"allow"` \| `"deny"` \| `"ask_user"` | `"allow"` | Fallback when no rule/model decision applies |
+| `think_before_deciding` | bool | `true` | Tells the local model to reason about risk before returning strict JSON |
+| `min_confidence` | number | `0.65` | Confidence threshold used when `ask_user_below_confidence` is enabled |
+| `ask_user_below_confidence` | bool | `false` | Escalate low-confidence model decisions to user approval |
+| `memory_recall` | bool | `true` | Recall relevant project/preference memories before model decisions |
+| `memory_write` | bool | `false` | Store compact decision traces in memory |
+
+#### `[permission_supervisor.policy]`
+
+Policy lists are simple substring/wildcard patterns matched against backend, prompt text, tool name, working directory, recent context, and tool input.
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `allow` | string[] | `[]` | Auto-allow matching requests |
+| `deny` | string[] | `[]` | Auto-deny matching requests |
+| `ask_user` | string[] | `[]` | Require user approval for matching requests |
+
+Example:
+
+```toml
+[permission_supervisor]
+mode = "supervised"
+default_action = "allow"
+think_before_deciding = true
+ask_user_below_confidence = true
+min_confidence = 0.75
+memory_recall = true
+memory_write = false
+
+[permission_supervisor.policy]
+allow = ["git status", "bun test"]
+deny = ["rm -rf", ".env"]
+ask_user = ["git push", "curl"]
+```
+
+When the supervisor returns `ask_user` inside a non-resumable `code_agent` run, the tool stops and reports that user approval is needed. A resumable pending-approval store is future work.
 
 ### `[tools]`
 

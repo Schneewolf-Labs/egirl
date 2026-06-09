@@ -1,11 +1,32 @@
-import { type Static, Type } from '@sinclair/typebox'
+import { type Static, type TSchema, Type } from '@sinclair/typebox'
 
 export type ThinkingLevel = 'off' | 'low' | 'medium' | 'high'
 
+// Single source of truth for code-agent backends. Adding a third (e.g.
+// 'opencode') here flows into the config schema and the dispatch map.
+export const CODE_AGENT_PROVIDERS = ['claude', 'codex'] as const
+export type CodeAgentProvider = (typeof CODE_AGENT_PROVIDERS)[number]
+
+const codeAgentProviderSchema = Type.Union(
+  CODE_AGENT_PROVIDERS.map((value) => Type.Literal(value)),
+  { default: 'claude' },
+)
+
+// Recursively makes every object field optional and forbids unknown keys, so a
+// config fragment can override any subset of the real schema while typos throw.
+function deepPartial(schema: TSchema): TSchema {
+  if (schema.type === 'object' && 'properties' in schema && schema.properties) {
+    const properties: Record<string, TSchema> = {}
+    for (const [key, value] of Object.entries(schema.properties as Record<string, TSchema>)) {
+      properties[key] = Type.Optional(deepPartial(value))
+    }
+    return Type.Object(properties, { additionalProperties: false })
+  }
+  return schema
+}
+
 const CodeAgentChannelSchema = Type.Object({
-  provider: Type.Union([Type.Literal('claude'), Type.Literal('codex')], {
-    default: 'claude',
-  }),
+  provider: codeAgentProviderSchema,
   permission_mode: Type.Union(
     [
       Type.Literal('default'),
@@ -20,7 +41,7 @@ const CodeAgentChannelSchema = Type.Object({
   max_turns: Type.Optional(Type.Number()),
 })
 
-export const EgirlConfigSchema = Type.Object({
+const baseProperties = {
   theme: Type.Optional(Type.String({ default: 'egirl' })),
 
   thinking: Type.Optional(
@@ -73,9 +94,7 @@ export const EgirlConfigSchema = Type.Object({
       ),
       claude_code: Type.Optional(
         Type.Object({
-          provider: Type.Optional(
-            Type.Union([Type.Literal('claude'), Type.Literal('codex')], { default: 'claude' }),
-          ),
+          provider: Type.Optional(codeAgentProviderSchema),
           permission_mode: Type.Union(
             [
               Type.Literal('default'),
@@ -224,6 +243,39 @@ export const EgirlConfigSchema = Type.Object({
     }),
   ),
 
+  permission_supervisor: Type.Optional(
+    Type.Object({
+      mode: Type.Optional(
+        Type.Union(
+          [
+            Type.Literal('bypass'),
+            Type.Literal('supervised'),
+            Type.Literal('rules_only'),
+            Type.Literal('ask_user'),
+          ],
+          { default: 'supervised' },
+        ),
+      ),
+      default_action: Type.Optional(
+        Type.Union([Type.Literal('allow'), Type.Literal('deny'), Type.Literal('ask_user')], {
+          default: 'allow',
+        }),
+      ),
+      think_before_deciding: Type.Optional(Type.Boolean({ default: true })),
+      min_confidence: Type.Optional(Type.Number({ default: 0.65 })),
+      ask_user_below_confidence: Type.Optional(Type.Boolean({ default: false })),
+      memory_recall: Type.Optional(Type.Boolean({ default: true })),
+      memory_write: Type.Optional(Type.Boolean({ default: false })),
+      policy: Type.Optional(
+        Type.Object({
+          allow: Type.Optional(Type.Array(Type.String())),
+          deny: Type.Optional(Type.Array(Type.String())),
+          ask_user: Type.Optional(Type.Array(Type.String())),
+        }),
+      ),
+    }),
+  ),
+
   tools: Type.Optional(
     Type.Object({
       files: Type.Boolean({ default: true }),
@@ -244,6 +296,23 @@ export const EgirlConfigSchema = Type.Object({
   skills: Type.Object({
     dirs: Type.Array(Type.String(), { default: ['~/.egirl/skills', '{workspace}/skills'] }),
   }),
+}
+
+const BaseConfigSchema = Type.Object(baseProperties)
+
+// Profiles, personas, and instances reuse the top-level config shape — every
+// field optional, unknown keys rejected. There is no separate flat syntax.
+export const ConfigFragmentSchema = deepPartial(BaseConfigSchema)
+export const InstanceFragmentSchema = deepPartial(
+  Type.Object({
+    ...baseProperties,
+    profile: Type.Optional(Type.String()),
+    persona: Type.Optional(Type.String()),
+  }),
+)
+
+export const EgirlConfigSchema = Type.Object({
+  ...baseProperties,
 
   defaults: Type.Optional(
     Type.Object({
@@ -254,9 +323,9 @@ export const EgirlConfigSchema = Type.Object({
     }),
   ),
 
-  profiles: Type.Optional(Type.Record(Type.String(), Type.Any())),
-  personas: Type.Optional(Type.Record(Type.String(), Type.Any())),
-  instances: Type.Optional(Type.Record(Type.String(), Type.Any())),
+  profiles: Type.Optional(Type.Record(Type.String(), ConfigFragmentSchema)),
+  personas: Type.Optional(Type.Record(Type.String(), ConfigFragmentSchema)),
+  instances: Type.Optional(Type.Record(Type.String(), InstanceFragmentSchema)),
 })
 
 export type EgirlConfig = Static<typeof EgirlConfigSchema>
@@ -310,7 +379,7 @@ export interface RuntimeConfig {
       maxTurns?: number
     }
     codeAgent?: {
-      provider?: 'claude' | 'codex'
+      provider?: CodeAgentProvider
       permissionMode: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan'
       model?: string
       workingDir: string
@@ -407,6 +476,20 @@ export interface RuntimeConfig {
   transcript: {
     enabled: boolean
     path: string
+  }
+  permissionSupervisor: {
+    mode: 'bypass' | 'supervised' | 'rules_only' | 'ask_user'
+    defaultAction: 'allow' | 'deny' | 'ask_user'
+    thinkBeforeDeciding: boolean
+    minConfidence: number
+    askUserBelowConfidence: boolean
+    memoryRecall: boolean
+    memoryWrite: boolean
+    policy: {
+      allow: string[]
+      deny: string[]
+      askUser: string[]
+    }
   }
   tools: {
     files: boolean

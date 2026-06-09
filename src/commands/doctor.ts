@@ -127,6 +127,12 @@ export async function runDoctor(config: RuntimeConfig): Promise<void> {
     })
   }
 
+  results.push({
+    label: 'permissions',
+    ok: true,
+    message: `${config.permissionSupervisor.mode}, default=${config.permissionSupervisor.defaultAction}`,
+  })
+
   if (config.source.codeAgentUsesClaudeCodeFallback) {
     results.push({
       label: 'migration',

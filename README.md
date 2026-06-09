@@ -213,6 +213,7 @@ No OpenAPI spec, no versioned paths, no plugin framework. If you want to build s
 | [Background Tasks](docs/background-tasks.md) | Cron-scheduled task system |
 | [Code Agent Integration](docs/code-agent.md) | The core delegation flow |
 | [Claude Code Bridge](docs/claude-code.md) | Direct Claude Code bridge channel |
+| [Permission Supervisor](docs/permissions.md) | Code-agent permission policy and local-model decisions |
 | [Skills](docs/skills.md) | Creating reusable skill files |
 | [Safety](docs/safety.md) | Guardrails and their limits |
 | [Tool Format](docs/tool-format.md) | Qwen3 native tool calling |
