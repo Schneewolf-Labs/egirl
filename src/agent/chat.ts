@@ -24,17 +24,19 @@ export async function chatWithRetry(args: {
   tools: ToolDefinition[]
   onToken?: (token: string) => void
   thinking?: ThinkingConfig
+  signal?: AbortSignal
   maxRetries?: number
 }): Promise<ChatResponse> {
-  const { provider, messages, tools, onToken, thinking, maxRetries = 2 } = args
+  const { provider, messages, tools, onToken, thinking, signal, maxRetries = 2 } = args
   let lastError: unknown
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
-      return await provider.chat({ messages, tools, onToken, thinking })
+      return await provider.chat({ messages, tools, onToken, thinking, signal })
     } catch (error) {
       lastError = error
       if (error instanceof ContextSizeError) throw error
+      if (signal?.aborted) throw error
 
       const errorMsg = error instanceof Error ? error.message : String(error)
       const errorKind = classifyProviderError(errorMsg)
@@ -73,6 +75,7 @@ export async function chatWithContextWindow(args: {
   tokenizer: Tokenizer
   onToken?: (token: string) => void
   thinking?: ThinkingConfig
+  signal?: AbortSignal
 }): Promise<{ response: ChatResponse; droppedMessages: ChatMessage[]; wasTrimmed: boolean }> {
   const { provider, systemPrompt, messages, conversationSummary, tools, contextLength, tokenizer } =
     args
@@ -106,6 +109,7 @@ export async function chatWithContextWindow(args: {
       tools,
       onToken: args.onToken,
       thinking: args.thinking,
+      signal: args.signal,
     })
     return {
       response,
@@ -139,6 +143,7 @@ export async function chatWithContextWindow(args: {
       tools,
       onToken: args.onToken,
       thinking: args.thinking,
+      signal: args.signal,
     })
     return {
       response,
