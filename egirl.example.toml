@@ -23,10 +23,11 @@ max_concurrent = 2
 # multimodal = true
 
 [channels.code_agent]
-provider = "codex"         # "codex" or "claude"
+provider = "codex"         # "codex", "claude", or "opencode"
 permission_mode = "default"
-# model = "gpt-5.5"        # Codex example
-# model = "sonnet"         # Claude example
+# model = "gpt-5.5"                     # Codex example
+# model = "sonnet"                      # Claude example
+# model = "anthropic/claude-sonnet-4-5" # opencode example (provider/model)
 # working_dir = "~/projects/myrepo"
 # max_turns = 30           # Claude backend only
 

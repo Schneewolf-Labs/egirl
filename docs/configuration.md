@@ -90,13 +90,13 @@ Settings for the `code_agent` tool. If omitted, egirl falls back to `[channels.c
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `provider` | string | `"claude"` | Code agent backend: `"claude"` or `"codex"` |
-| `permission_mode` | string | `"bypassPermissions"` | Agent permission mode. For Codex, non-bypass modes use the interactive CLI with a workspace-write sandbox and local-model prompt decisions |
-| `model` | string | (none) | Override the selected backend model |
+| `provider` | string | `"claude"` | Code agent backend: `"claude"`, `"codex"`, or `"opencode"` |
+| `permission_mode` | string | `"bypassPermissions"` | Agent permission mode. For Codex, non-bypass modes use the interactive CLI with a workspace-write sandbox and local-model prompt decisions. For opencode, `bypassPermissions`/`acceptEdits` pass `--dangerously-skip-permissions`, `plan` runs the opencode `plan` agent, and `default` keeps opencode's own permission config |
+| `model` | string | (none) | Override the selected backend model. opencode expects `provider/model`, e.g. `anthropic/claude-sonnet-4-5` |
 | `working_dir` | string | workspace path | Working directory for code agent operations |
-| `max_turns` | number | (none) | Maximum Claude Code turns before stopping. Ignored by Codex |
+| `max_turns` | number | (none) | Maximum Claude Code turns before stopping. Ignored by Codex and opencode |
 
-**Migration note:** existing Claude-only configs can keep `[channels.claude_code]` unchanged. To configure the tool explicitly, add `[channels.code_agent] provider = "claude"` and copy any shared `permission_mode`, `model`, or `working_dir` values. To use Codex instead, set `provider = "codex"`; `[channels.claude_code]` still only controls the direct `claude-code` / `cc` bridge command.
+**Migration note:** existing Claude-only configs can keep `[channels.claude_code]` unchanged. To configure the tool explicitly, add `[channels.code_agent] provider = "claude"` and copy any shared `permission_mode`, `model`, or `working_dir` values. To use Codex instead, set `provider = "codex"`; `[channels.claude_code]` still only controls the direct `claude-code` / `cc` bridge command. To use opencode, install the [`opencode`](https://opencode.ai) CLI, authenticate it (`opencode auth login`), and set `provider = "opencode"`; egirl runs it headless via `opencode run`. Set `OPENCODE_BIN` to point at a non-PATH binary.
 
 ### Multi-Instance Config
 
@@ -404,7 +404,7 @@ Create starter files with `bun run start init --provider codex`, or copy the tem
 | `GITHUB_TOKEN` | For GitHub tools | GitHub personal access token (for PR, issue, CI tools) |
 | `SEARXNG_API_KEY` | Optional | API key if your SearxNG instance requires one |
 
-**No `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` is needed for egirl itself.** Claude Code uses subscription auth via `claude auth login`; Codex uses your local `codex` CLI login.
+**No `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` is needed for egirl itself.** Claude Code uses subscription auth via `claude auth login`; Codex uses your local `codex` CLI login; opencode uses its own `opencode auth login`.
 
 ## Full Example
 
