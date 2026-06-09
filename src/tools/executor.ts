@@ -181,44 +181,55 @@ export class ToolExecutor {
     }
   }
 
-  async executeAll(calls: ToolCall[], cwd: string): Promise<Map<string, ToolResult>> {
-    const results = new Map<string, ToolResult>()
-
-    // Pre-check energy budget for the entire batch to avoid partial completion.
-    // Without this, parallel tools race to spend energy and some succeed while
-    // others fail — leaving the batch in an inconsistent half-done state.
-    if (this.energy && this.executionContext === 'autonomous' && calls.length > 1) {
-      const toolNames = calls.map((c) => c.name)
-      const batch = this.energy.checkBatch(toolNames)
-      if (!batch.allowed) {
-        log.info(
-          'energy',
-          `Blocked batch of ${calls.length} tools: total cost ${batch.totalCost}, balance ${batch.current.toFixed(1)}`,
-        )
-        for (const call of calls) {
-          this.audit(call.name, call.arguments, {
-            success: false,
-            blocked: true,
-            reason: 'Batch energy budget exceeded',
-          })
-          results.set(call.id, {
-            success: false,
-            output: `Energy budget exceeded for batch: ${calls.length} tools cost ${batch.totalCost} total energy, current balance is ${batch.current.toFixed(1)}. Wait for energy to regenerate.`,
-          })
-        }
-        return results
-      }
+  /**
+   * Pre-check energy budget for a batch of calls to avoid partial completion.
+   * Without this, tools in a batch race to spend energy and some succeed while
+   * others fail — leaving the batch in an inconsistent half-done state.
+   * Returns blocked results for every call if the batch exceeds budget, or
+   * null if the batch is allowed.
+   */
+  checkBatchEnergy(calls: ToolCall[]): Map<string, ToolResult> | null {
+    if (!this.energy || this.executionContext !== 'autonomous' || calls.length <= 1) {
+      return null
     }
 
-    const executions = calls.map(async (call) => {
-      const result = await this.execute(call, cwd)
-      return { id: call.id, result }
-    })
+    const toolNames = calls.map((c) => c.name)
+    const batch = this.energy.checkBatch(toolNames)
+    if (batch.allowed) return null
 
-    const resolved = await Promise.all(executions)
+    log.info(
+      'energy',
+      `Blocked batch of ${calls.length} tools: total cost ${batch.totalCost}, balance ${batch.current.toFixed(1)}`,
+    )
 
-    for (const { id, result } of resolved) {
-      results.set(id, result)
+    const results = new Map<string, ToolResult>()
+    for (const call of calls) {
+      this.audit(call.name, call.arguments, {
+        success: false,
+        blocked: true,
+        reason: 'Batch energy budget exceeded',
+      })
+      results.set(call.id, {
+        success: false,
+        output: `Energy budget exceeded for batch: ${calls.length} tools cost ${batch.totalCost} total energy, current balance is ${batch.current.toFixed(1)}. Wait for energy to regenerate.`,
+      })
+    }
+    return results
+  }
+
+  /**
+   * Execute a batch of tool calls sequentially.
+   * Serial on purpose — concurrent write tools (file edits, shell commands)
+   * race on shared workspace state.
+   */
+  async executeAll(calls: ToolCall[], cwd: string): Promise<Map<string, ToolResult>> {
+    const blocked = this.checkBatchEnergy(calls)
+    if (blocked) return blocked
+
+    const results = new Map<string, ToolResult>()
+
+    for (const call of calls) {
+      results.set(call.id, await this.execute(call, cwd))
     }
 
     return results

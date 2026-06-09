@@ -551,25 +551,18 @@ export class AgentLoop {
     events?: AgentEventHandler,
     signal?: AbortSignal,
   ): Promise<Map<string, ToolResult>> {
-    // Don't start new tools after the run is aborted — emit skip results so
-    // tool messages stay paired with their tool_calls in history.
-    const skippedResult = (): ToolResult => ({
-      success: false,
-      output: 'Skipped: agent run was cancelled',
-    })
-
-    if (!events?.onBeforeToolExec && !events?.onAfterToolExec && !this.transcript) {
-      if (signal?.aborted) {
-        return new Map(toolCalls.map((call) => [call.id, skippedResult()]))
-      }
-      return this.toolExecutor.executeAll(toolCalls, this.context.workspaceDir)
-    }
+    // Same batch energy semantics as ToolExecutor.executeAll — all-or-nothing
+    // so the batch never half-completes on an exhausted budget.
+    const blocked = this.toolExecutor.checkBatchEnergy(toolCalls)
+    if (blocked) return blocked
 
     const results = new Map<string, ToolResult>()
 
     for (const call of toolCalls) {
+      // Don't start new tools after the run is aborted — emit skip results so
+      // tool messages stay paired with their tool_calls in history.
       if (signal?.aborted) {
-        results.set(call.id, skippedResult())
+        results.set(call.id, { success: false, output: 'Skipped: agent run was cancelled' })
         continue
       }
 
