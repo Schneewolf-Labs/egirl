@@ -1,0 +1,52 @@
+import type { RuntimeConfig } from '../config'
+import type { ConversationStore } from '../conversation'
+import type { MemoryManager } from '../memory'
+import type { LLMProvider, ThinkingConfig } from '../providers/types'
+import type { Skill } from '../skills/types'
+import type { ToolExecutor } from '../tools'
+import type { TranscriptLogger } from '../tracking/transcript'
+import type { AgentEventHandler } from './events'
+import type { SessionMutex } from './session-mutex'
+
+export interface AgentLoopOptions {
+  maxTurns?: number
+  events?: AgentEventHandler
+  /** Override thinking level for this run */
+  thinking?: ThinkingConfig
+  /** Planning mode: first response is a plan (no tools), user approves before execution */
+  planningMode?: boolean
+  /** Abort signal — checked between turns and after tool execution */
+  signal?: AbortSignal
+}
+
+export interface AgentResponse {
+  content: string
+  provider: string
+  usage: {
+    input_tokens: number
+    output_tokens: number
+  }
+  turns: number
+  /** True if the response is a plan awaiting approval (planning mode) */
+  isPlan?: boolean
+  /** Extended thinking content from the model */
+  thinking?: string
+  /** Number of continuation retries performed for truncated responses */
+  continuationRetries?: number
+  /** True if the run was cancelled via the abort signal */
+  aborted?: boolean
+}
+
+export interface AgentLoopDeps {
+  config: RuntimeConfig
+  toolExecutor: ToolExecutor
+  localProvider: LLMProvider
+  sessionId: string
+  memory?: MemoryManager
+  conversationStore?: ConversationStore
+  transcript?: TranscriptLogger
+  skills?: Skill[]
+  additionalContext?: string
+  /** Shared mutex to serialize agent runs across entry points */
+  sessionMutex?: SessionMutex
+}
