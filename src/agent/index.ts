@@ -14,12 +14,6 @@ export {
   fitToContextWindow,
 } from './context-window'
 export type { AgentEventHandler } from './events'
-export {
-  type AgentFactory,
-  AgentLoop,
-  type AgentLoopDeps,
-  type AgentLoopOptions,
-  type AgentResponse,
-  createAgentLoop,
-} from './loop'
+export { type AgentFactory, AgentLoop, createAgentLoop } from './loop'
 export { SessionMutex } from './session-mutex'
+export type { AgentLoopDeps, AgentLoopOptions, AgentResponse } from './types'

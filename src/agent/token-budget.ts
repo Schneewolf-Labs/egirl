@@ -6,6 +6,11 @@
  * compared against the context window length to compute utilization.
  */
 
+import type { TranscriptLogger } from '../tracking/transcript'
+import { log } from '../util/logger'
+import { type AgentContext, addMessage } from './context'
+import type { AgentEventHandler } from './events'
+
 export type BudgetLevel = 'ok' | 'high' | 'critical'
 
 /** Utilization thresholds (fraction of context window) */
@@ -106,4 +111,52 @@ function classifyUtilization(utilization: number): BudgetLevel {
   if (utilization >= CRITICAL_THRESHOLD) return 'critical'
   if (utilization >= HIGH_THRESHOLD) return 'high'
   return 'ok'
+}
+
+/**
+ * Record a turn's token usage and surface threshold crossings:
+ * logs, fires the budget event, records the transcript entry, and at
+ * the critical level injects a wrap-up notice into the conversation.
+ */
+export function reportTokenBudget(args: {
+  tracker: TokenBudgetTracker
+  inputTokens: number
+  outputTokens: number
+  context: AgentContext
+  transcript: TranscriptLogger | null
+  events?: AgentEventHandler
+}): void {
+  const { tracker, inputTokens, outputTokens, context, transcript, events } = args
+  const status = tracker.record(inputTokens, outputTokens)
+
+  if (tracker.shouldWarnCritical()) {
+    log.warn(
+      'agent',
+      `Token budget critical: ${Math.round(status.utilization * 100)}% of ${status.contextLength}t context used`,
+    )
+    events?.onTokenBudgetWarning?.('critical', status)
+    transcript?.tokenBudget(context.sessionId, {
+      level: 'critical',
+      utilization: status.utilization,
+      input_tokens: status.lastInputTokens,
+      context_length: status.contextLength,
+    })
+    addMessage(context, {
+      role: 'user',
+      content:
+        '[System: Context window is nearly full. Wrap up your current task and provide a final response. Avoid further tool calls unless absolutely necessary.]',
+    })
+  } else if (tracker.shouldWarnHigh()) {
+    log.info(
+      'agent',
+      `Token budget high: ${Math.round(status.utilization * 100)}% of ${status.contextLength}t context used`,
+    )
+    events?.onTokenBudgetWarning?.('high', status)
+    transcript?.tokenBudget(context.sessionId, {
+      level: 'high',
+      utilization: status.utilization,
+      input_tokens: status.lastInputTokens,
+      context_length: status.contextLength,
+    })
+  }
 }

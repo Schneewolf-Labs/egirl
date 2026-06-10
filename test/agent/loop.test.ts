@@ -1,114 +1,9 @@
 import { describe, expect, test } from 'bun:test'
-import { mkdtempSync } from 'fs'
-import { tmpdir } from 'os'
-import { join } from 'path'
 import { AgentLoop } from '../../src/agent/loop'
-import type { RuntimeConfig } from '../../src/config'
 import { ConversationStore } from '../../src/conversation/store'
 import type { ChatRequest, ChatResponse, LLMProvider } from '../../src/providers/types'
 import { createToolExecutor } from '../../src/tools/executor'
-
-function makeConfig(workspacePath: string): RuntimeConfig {
-  return {
-    theme: 'egirl',
-    thinking: { level: 'off', showThinking: true },
-    workspace: { path: workspacePath },
-    local: {
-      endpoint: 'http://localhost:1',
-      model: 'test',
-      contextLength: 32768,
-      maxConcurrent: 2,
-      staleStreamTimeoutMs: 90000,
-    },
-    remote: {},
-    routing: {
-      disabled: false,
-      default: 'local',
-      escalationThreshold: 0.4,
-      alwaysLocal: [],
-      alwaysRemote: [],
-    },
-    channels: {},
-    conversation: {
-      enabled: false,
-      maxAgeDays: 30,
-      maxMessages: 1000,
-      compactOnStartup: false,
-      contextCompaction: false,
-    },
-    memory: {
-      proactiveRetrieval: false,
-      scoreThreshold: 0.35,
-      maxResults: 5,
-      maxTokensBudget: 2000,
-      autoExtract: false,
-      extractionMinMessages: 2,
-      extractionMaxPerTurn: 5,
-    },
-    safety: {
-      enabled: false,
-      commandFilter: { enabled: false, mode: 'block', blockedPatterns: [], extraAllowed: [] },
-      pathSandbox: { enabled: false, allowedPaths: [] },
-      sensitiveFiles: { enabled: false, patterns: [] },
-      auditLog: { enabled: false },
-      confirmation: { enabled: false, tools: [] },
-      permissionRules: { allow: [], deny: [] },
-    },
-    energy: { enabled: false, maxEnergy: 20, regenPerHour: 10 },
-    tasks: {
-      enabled: false,
-      tickIntervalMs: 30000,
-      maxActiveTasks: 20,
-      maxConcurrentTasks: 1,
-      taskTimeoutMs: 300000,
-      discoveryEnabled: false,
-      discoveryIntervalMs: 60000,
-      idleThresholdMs: 300000,
-      heartbeat: { enabled: false, schedule: '0 9 * * 1-5' },
-    },
-    transcript: { enabled: false, path: '' },
-    tools: {
-      files: false,
-      exec: false,
-      git: false,
-      memory: false,
-      browser: false,
-      github: false,
-      tasks: false,
-      codeAgent: false,
-      webResearch: false,
-      screenshot: false,
-    },
-    skills: { dirs: [] },
-  } as RuntimeConfig
-}
-
-function makeWorkspace(): string {
-  return mkdtempSync(join(tmpdir(), 'egirl-loop-test-'))
-}
-
-function makeExecutorWithNoop() {
-  const executor = createToolExecutor()
-  executor.register({
-    definition: {
-      name: 'noop',
-      description: 'does nothing',
-      parameters: { type: 'object', properties: {} },
-    },
-    execute: async () => ({ success: true, output: 'ok' }),
-  })
-  return executor
-}
-
-function stubResponse(overrides: Partial<ChatResponse> = {}): ChatResponse {
-  return {
-    content: '',
-    usage: { input_tokens: 10, output_tokens: 5 },
-    model: 'stub',
-    finish_reason: 'stop',
-    ...overrides,
-  }
-}
+import { makeConfig, makeExecutorWithNoop, makeWorkspace, stubResponse } from './helpers'
 
 describe('AgentLoop max turns exhaustion', () => {
   test('forces a final no-tools response instead of reusing stale history', async () => {
@@ -260,5 +155,194 @@ describe('AgentLoop abort', () => {
 
     // No further inference happened after abort
     expect(chatCalls).toBe(1)
+  })
+})
+
+describe('AgentLoop continuation', () => {
+  test('continues a truncated response and concatenates the parts', async () => {
+    let chatCalls = 0
+    const provider: LLMProvider = {
+      name: 'stub',
+      async chat(): Promise<ChatResponse> {
+        chatCalls++
+        if (chatCalls === 1) {
+          return stubResponse({ content: 'Part one, ', finish_reason: 'length' })
+        }
+        return stubResponse({ content: 'part two.' })
+      },
+    }
+
+    const agent = new AgentLoop({
+      config: makeConfig(makeWorkspace()),
+      toolExecutor: makeExecutorWithNoop(),
+      localProvider: provider,
+      sessionId: 'test:continuation',
+    })
+
+    const response = await agent.run('long question')
+
+    expect(response.content).toBe('Part one, part two.')
+    expect(response.continuationRetries).toBe(1)
+    expect(response.turns).toBe(2)
+
+    // The continue prompt was injected between the two parts
+    const messages = agent.getContext().messages
+    const continuePrompt = messages.find(
+      (m) =>
+        m.role === 'user' &&
+        typeof m.content === 'string' &&
+        m.content.includes('Continue exactly where you left off'),
+    )
+    expect(continuePrompt).toBeDefined()
+  })
+
+  test('gives up continuing after the retry limit', async () => {
+    const provider: LLMProvider = {
+      name: 'stub',
+      async chat(): Promise<ChatResponse> {
+        return stubResponse({ content: 'X', finish_reason: 'length' })
+      },
+    }
+
+    const agent = new AgentLoop({
+      config: makeConfig(makeWorkspace()),
+      toolExecutor: makeExecutorWithNoop(),
+      localProvider: provider,
+      sessionId: 'test:continuation-limit',
+    })
+
+    const response = await agent.run('question')
+
+    // 3 retries accumulate three X's, the 4th truncated response is accepted
+    expect(response.content).toBe('XXXX')
+    expect(response.continuationRetries).toBe(3)
+  })
+})
+
+describe('AgentLoop post-response validation', () => {
+  test('retries once with feedback when validation fails', async () => {
+    let chatCalls = 0
+    const provider: LLMProvider = {
+      name: 'stub',
+      async chat(): Promise<ChatResponse> {
+        chatCalls++
+        return stubResponse({ content: chatCalls === 1 ? 'BAD' : 'GOOD' })
+      },
+    }
+
+    const agent = new AgentLoop({
+      config: makeConfig(makeWorkspace()),
+      toolExecutor: makeExecutorWithNoop(),
+      localProvider: provider,
+      sessionId: 'test:validation',
+    })
+
+    const validated: string[] = []
+    const response = await agent.run('question', {
+      events: {
+        onPostResponseValidation: (content) => {
+          validated.push(content)
+          return content === 'BAD'
+            ? { valid: false, feedback: 'No placeholders allowed' }
+            : { valid: true }
+        },
+      },
+    })
+
+    expect(response.content).toBe('GOOD')
+    expect(response.turns).toBe(2)
+    // Validation only runs once — the retry response is accepted as-is
+    expect(validated).toEqual(['BAD'])
+
+    const feedbackMessage = agent
+      .getContext()
+      .messages.find(
+        (m) =>
+          m.role === 'user' &&
+          typeof m.content === 'string' &&
+          m.content.includes('[Validation failed]: No placeholders allowed'),
+      )
+    expect(feedbackMessage).toBeDefined()
+  })
+})
+
+describe('AgentLoop planning mode', () => {
+  test('returns a plan without offering tools', async () => {
+    const toolsOffered: number[] = []
+    const provider: LLMProvider = {
+      name: 'stub',
+      async chat(req: ChatRequest): Promise<ChatResponse> {
+        toolsOffered.push(req.tools?.length ?? 0)
+        return stubResponse({ content: '1. step one\n2. step two' })
+      },
+    }
+
+    const agent = new AgentLoop({
+      config: makeConfig(makeWorkspace()),
+      toolExecutor: makeExecutorWithNoop(),
+      localProvider: provider,
+      sessionId: 'test:planning',
+    })
+
+    const response = await agent.run('build the thing', { planningMode: true })
+
+    expect(response.isPlan).toBe(true)
+    expect(response.content).toBe('1. step one\n2. step two')
+    expect(response.turns).toBe(1)
+    expect(toolsOffered).toEqual([0])
+
+    const userMessage = agent.getContext().messages.find((m) => m.role === 'user')
+    expect(userMessage?.content).toContain('[PLANNING MODE]')
+    expect(userMessage?.content).toContain('build the thing')
+  })
+})
+
+describe('AgentLoop token budget', () => {
+  test('warns and injects a wrap-up notice when budget goes critical', async () => {
+    const contextLength = makeConfig(makeWorkspace()).local.contextLength
+    let chatCalls = 0
+    const provider: LLMProvider = {
+      name: 'stub',
+      async chat(): Promise<ChatResponse> {
+        chatCalls++
+        if (chatCalls === 1) {
+          return stubResponse({
+            tool_calls: [{ id: 'call_1', name: 'noop', arguments: {} }],
+            finish_reason: 'tool_calls',
+            usage: { input_tokens: Math.ceil(contextLength * 0.95), output_tokens: 5 },
+          })
+        }
+        return stubResponse({ content: 'wrapped up' })
+      },
+    }
+
+    const agent = new AgentLoop({
+      config: makeConfig(makeWorkspace()),
+      toolExecutor: makeExecutorWithNoop(),
+      localProvider: provider,
+      sessionId: 'test:budget',
+    })
+
+    const warnings: string[] = []
+    const response = await agent.run('go', {
+      events: {
+        onTokenBudgetWarning: (level) => {
+          warnings.push(level)
+        },
+      },
+    })
+
+    expect(response.content).toBe('wrapped up')
+    expect(warnings).toContain('critical')
+
+    const wrapUp = agent
+      .getContext()
+      .messages.find(
+        (m) =>
+          m.role === 'user' &&
+          typeof m.content === 'string' &&
+          m.content.includes('Context window is nearly full'),
+      )
+    expect(wrapUp).toBeDefined()
   })
 })

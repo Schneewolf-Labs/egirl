@@ -1,6 +1,6 @@
-import type { AgentLoopDeps } from '../agent/loop'
 import { AgentLoop } from '../agent/loop'
 import type { SessionMutex } from '../agent/session-mutex'
+import type { AgentLoopDeps } from '../agent/types'
 import type { RuntimeConfig } from '../config'
 import type { ConversationStore } from '../conversation'
 import type { MemoryManager } from '../memory'

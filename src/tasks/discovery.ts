@@ -1,5 +1,5 @@
-import type { AgentLoopDeps } from '../agent/loop'
 import { AgentLoop } from '../agent/loop'
+import type { AgentLoopDeps } from '../agent/types'
 import type { RuntimeConfig } from '../config'
 import type { MemoryManager } from '../memory'
 import { retrieveForContext } from '../memory/retrieval'
