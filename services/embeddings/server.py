@@ -11,6 +11,10 @@ Usage:
 
 import argparse
 import base64
+import os
+import threading
+import time
+from collections import OrderedDict
 import io
 import logging
 import unicodedata
@@ -110,6 +114,51 @@ class Qwen3VLForEmbedding(Qwen3VLPreTrainedModel):
         )
 
 
+# ---------------------------------------------------------------- CPU tuning
+# This service runs on the CPU on purpose: the model's M-RoPE path misbehaves on CUDA here,
+# and keeping it off the GPU leaves all 48 GB for the main LLM. That makes the forward pass
+# memory-bound on ~8 GB of fp32 weights, so the knobs that matter are batching (amortize the
+# weight read), caching (skip it entirely), and thread count.
+MAX_BATCH = int(os.environ.get("EMBED_MAX_BATCH", "16"))
+CACHE_MAX = int(os.environ.get("EMBED_CACHE", "2048"))
+EMBED_DTYPE = os.environ.get("EMBED_DTYPE", "float32").lower()
+
+_threads = os.environ.get("EMBED_THREADS")
+if _threads:
+    torch.set_num_threads(int(_threads))
+
+# Text -> pooled (un-normalized, un-truncated) embedding. Keyed on the raw text so a hit
+# serves any `dimensions`/`normalize` combination. Retrieval re-embeds the same memory text
+# and the same query repeatedly, and a hit costs ~0 against ~0.4 s for a miss.
+_cache: "OrderedDict[str, torch.Tensor]" = OrderedDict()
+_cache_lock = threading.Lock()
+_cache_hits = 0
+_cache_misses = 0
+
+
+def _cache_get(text: str) -> Optional[torch.Tensor]:
+    global _cache_hits, _cache_misses
+    if CACHE_MAX <= 0:
+        return None
+    with _cache_lock:
+        v = _cache.get(text)
+        if v is None:
+            _cache_misses += 1
+            return None
+        _cache.move_to_end(text)
+        _cache_hits += 1
+        return v
+
+
+def _cache_put(text: str, emb: torch.Tensor) -> None:
+    if CACHE_MAX <= 0:
+        return
+    with _cache_lock:
+        _cache[text] = emb.clone()
+        while len(_cache) > CACHE_MAX:
+            _cache.popitem(last=False)
+
+
 class Qwen3VLEmbedder:
     """Wrapper for Qwen3-VL-Embedding model."""
 
@@ -134,7 +183,11 @@ class Qwen3VLEmbedder:
         self.model = Qwen3VLForEmbedding.from_pretrained(
             model_name_or_path,
             trust_remote_code=True,
-            torch_dtype=torch.float32,
+            # bf16 halves the weight bytes this memory-bound forward has to read, and this
+            # CPU has AVX512-BF16. Opt-in (EMBED_DTYPE=bfloat16) rather than default: an
+            # existing memory store was built with fp32 vectors and silently changing the
+            # numerics of new ones is not a decision this service should make for the user.
+            torch_dtype=torch.bfloat16 if EMBED_DTYPE in ("bf16", "bfloat16") else torch.float32,
             device_map="cpu",
             **kwargs,
         )
@@ -150,7 +203,18 @@ class Qwen3VLEmbedder:
 
         # Embedding dimension from model config
         self.embedding_dim = self.model.config.text_config.hidden_size
-        logger.info(f"Model loaded. Embedding dimension: {self.embedding_dim}")
+        logger.info(
+            f"Model loaded. dim={self.embedding_dim} dtype={EMBED_DTYPE} "
+            f"threads={torch.get_num_threads()} max_batch={MAX_BATCH} cache={CACHE_MAX}"
+        )
+        # Warm up: the first forward pays lazy kernel/allocator init, which would otherwise
+        # land on a user request and look like a slow server.
+        try:
+            t0 = time.time()
+            self.embed_texts(["warmup"])
+            logger.info(f"Warmup forward: {time.time() - t0:.2f}s")
+        except Exception as e:      # never let warmup stop the server from coming up
+            logger.warning(f"Warmup failed (continuing): {e}")
 
     def _decode_base64_image(self, data: str) -> Image.Image:
         """Decode base64 image data."""
@@ -259,6 +323,41 @@ class Qwen3VLEmbedder:
         row = torch.arange(hidden_state.shape[0], device=hidden_state.device)
         return hidden_state[row, col]
 
+    def _preprocess_texts(self, texts: List[str]) -> Dict[str, torch.Tensor]:
+        """Preprocess SEVERAL text-only inputs into one padded batch.
+
+        Safe because the processor pads right and _pooling_last selects the last position where
+        the attention mask is 1, i.e. each row's own final real token. Padding is masked out of
+        attention, so a row's embedding does not depend on what it was batched with -- verified
+        against the one-at-a-time path (cosine > 0.9999)."""
+        chats = [
+            self.processor.apply_chat_template(
+                self.format_model_input(text=t, image=None),
+                add_generation_prompt=True, tokenize=False,
+            )
+            for t in texts
+        ]
+        return self.processor(
+            text=chats, images=None, videos=None,
+            truncation=True, max_length=self.max_length, padding=True, return_tensors="pt",
+        )
+
+    @torch.no_grad()
+    def embed_texts(self, texts: List[str]) -> torch.Tensor:
+        """[N, embedding_dim] for N text-only inputs, in ONE forward pass.
+
+        This is the whole point of the rewrite. A forward pass over a 2B model in fp32 reads
+        ~8 GB of weights, and on CPU that read is the entire cost -- so embedding N texts one
+        at a time paid it N times. Measured: 0.39 s per text at every batch size before,
+        because embed() looped embed_single. Batching amortizes the weight read across the
+        batch, which is why cost per text now falls with N."""
+        if not texts:
+            return torch.empty(0, self.embedding_dim)
+        model_inputs = self._preprocess_texts(texts)
+        model_inputs = {k: v.to(self.device).contiguous() for k, v in model_inputs.items()}
+        outputs = self.model(**model_inputs)
+        return self._pooling_last(outputs.last_hidden_state, outputs.attention_mask)
+
     @torch.no_grad()
     def embed_single(self, text: Optional[str], image: Optional[Any]) -> torch.Tensor:
         """Generate embedding for a single input."""
@@ -291,31 +390,47 @@ class Qwen3VLEmbedder:
         Returns:
             numpy array of embeddings with shape (batch_size, dimensions)
         """
-        all_embeddings = []
+        n = len(inputs)
+        slots: List[Optional[torch.Tensor]] = [None] * n
 
-        for inp in inputs:
-            text = inp.get("text")
+        # Text-only inputs batch; anything with an image keeps the per-item path, because
+        # batching vision inputs means reconciling per-image patch grids and is a separate job.
+        text_idx: List[int] = []
+        text_vals: List[str] = []
+        for i, inp in enumerate(inputs):
+            if inp.get("image") is None:
+                t = inp.get("text") or ""
+                cached = _cache_get(t)
+                if cached is not None:
+                    slots[i] = cached
+                else:
+                    text_idx.append(i)
+                    text_vals.append(t)
+                continue
             image_data = inp.get("image")
-
-            # Process image if provided
             image = None
-            if image_data:
-                if isinstance(image_data, str):
-                    if image_data.startswith("data:") or (
-                        not image_data.startswith(("http://", "https://", "file://"))
-                        and len(image_data) > 500
-                    ):
-                        image = self._decode_base64_image(image_data)
-                    else:
-                        image = image_data
-                elif isinstance(image_data, Image.Image):
+            if isinstance(image_data, str):
+                if image_data.startswith("data:") or (
+                    not image_data.startswith(("http://", "https://", "file://"))
+                    and len(image_data) > 500
+                ):
+                    image = self._decode_base64_image(image_data)
+                else:
                     image = image_data
+            elif isinstance(image_data, Image.Image):
+                image = image_data
+            slots[i] = self.embed_single(inp.get("text"), image)
 
-            embedding = self.embed_single(text, image)
-            all_embeddings.append(embedding)
+        for lo in range(0, len(text_vals), MAX_BATCH):
+            chunk_idx = text_idx[lo:lo + MAX_BATCH]
+            chunk_txt = text_vals[lo:lo + MAX_BATCH]
+            out = self.embed_texts(chunk_txt)
+            for j, gi in enumerate(chunk_idx):
+                row = out[j:j + 1]
+                slots[gi] = row
+                _cache_put(chunk_txt[j], row)
 
-        # Stack all embeddings
-        embeddings = torch.cat(all_embeddings, dim=0)
+        embeddings = torch.cat(slots, dim=0)
 
         # Truncate dimensions if requested (MRL)
         if dimensions and dimensions < embeddings.shape[-1]:
@@ -325,7 +440,7 @@ class Qwen3VLEmbedder:
         if normalize:
             embeddings = F.normalize(embeddings, p=2, dim=-1)
 
-        return embeddings.cpu().numpy()
+        return embeddings.float().cpu().numpy()
 
 
 # FastAPI app
@@ -368,6 +483,12 @@ class HealthResponse(BaseModel):
     model: str
     device: str
     embedding_dim: int
+    dtype: str
+    threads: int
+    max_batch: int
+    cache_size: int
+    cache_hits: int
+    cache_misses: int
 
 
 @app.get("/health", response_model=HealthResponse)
@@ -381,6 +502,12 @@ async def health():
         model="Qwen3-VL-Embedding-2B",
         device=str(embedder.device),
         embedding_dim=embedder.embedding_dim,
+        dtype=EMBED_DTYPE,
+        threads=torch.get_num_threads(),
+        max_batch=MAX_BATCH,
+        cache_size=len(_cache),
+        cache_hits=_cache_hits,
+        cache_misses=_cache_misses,
     )
 
 

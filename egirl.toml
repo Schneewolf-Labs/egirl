@@ -12,18 +12,16 @@ show_thinking = true                     # display thinking output in CLI
 path = "~/.egirl/workspace"
 
 [local]
-endpoint = "http://localhost:8099"       # sabrewing qwen35 via openai_server.py
-model = "qwen3.5-35b-a3b-sabrewing"      # for display/logging only
-context_length = 16384                   # must match the engine's CTX_MAX
-max_concurrent = 1                       # qwen35's serve loop is SERIAL: a second request
-                                         # would queue server-side and burn the stale-stream
-                                         # timeout waiting for a slot. Now enforced.
-cache_slots = 0                          # qwen35 has no slot pool / prefix reuse yet, so
-                                         # pinning would do nothing
-tool_format = "qwen35"                   # auto | qwen3 | qwen35 | laguna — speak Qwen3.5's
-                                         # own <function=>/<parameter=> syntax both ways
-stale_stream_timeout_ms = 900000         # CPU-only: ~30 tok/s prefill means a 5k-token
-                                         # agent context is ~3 min before the first token
+endpoint = "http://localhost:8080"       # llama.cpp (Qwen3.6-27B-TIES Q6_K, GPU)
+model = "qwen3.6-27b-ties-q6k"           # for display/logging only
+context_length = 16384                   # llama-server: --parallel 4 -c 65536
+max_concurrent = 4                       # match llama-server --parallel 4; enforced by a
+                                         # semaphore in the provider
+cache_slots = 0                          # llama.cpp does its own prefix caching; slot
+                                         # pinning is a sabrewing-only feature
+tool_format = "auto"                     # auto | qwen3 | qwen35 | laguna — asks in Qwen3 form
+                                         # (this is a Qwen3-family model) and accepts any back
+stale_stream_timeout_ms = 120000         # ~1100 tok/s prefill on GPU; fail fast
 
 [local.embeddings]
 provider = "qwen3-vl"                    # Python service using transformers
