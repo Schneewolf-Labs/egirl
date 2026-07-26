@@ -17,7 +17,6 @@ import { buildSafetyConfig } from './safety/config-bridge'
 import { loadSkillsFromDirectories } from './skills'
 import type { Skill } from './skills/types'
 import { createTaskStore, type TaskStore } from './tasks'
-import { setToolDialect } from './tools/dialects'
 import {
   type CodeAgentConfig,
   createDefaultToolExecutor,
@@ -26,6 +25,7 @@ import {
   type ProcessRegistry,
   type ToolExecutor,
 } from './tools'
+import { setToolDialect } from './tools/dialects'
 import { createStatsTracker, type StatsTracker } from './tracking'
 import { createTranscriptLogger, type TranscriptLogger } from './tracking/transcript'
 import { log } from './util/logger'
