@@ -135,3 +135,80 @@ export function matchToolName(name: string, available: string[]): ToolNameMatch 
       .map((s) => s.name),
   }
 }
+
+/* ------------------------------------------------------------------ parameters
+ * Salvaged from #58, which was otherwise superseded by this file's name matching.
+ *
+ * The same model that misspells a tool name also invents parameter keys: `filePath` for
+ * `file_path`, `dir` for `directory`, `cmd` for `command`. The call then fails on a missing
+ * required parameter and burns a roundtrip on an error.
+ *
+ * This is deliberately stricter than name matching, because the failure modes are not
+ * symmetric. A wrong tool name fails loudly — the tool does not exist. A wrong *argument*
+ * silently feeds the wrong data to a tool that will happily run with it, so a bad remap is
+ * worse than no remap. Hence: only unambiguous rewrites, never onto a key the model already
+ * supplied, and anything unresolved is passed through untouched rather than dropped or
+ * guessed at (a tool that ignores extra keys keeps working; one that validates still gets to
+ * report the real problem).
+ */
+
+export interface ParamRemap {
+  from: string
+  to: string
+}
+
+/** Edit-distance remapping needs at least this many characters to be meaningful */
+const MIN_PARAM_MATCH_LENGTH = 4
+
+function schemaPropertyNames(schema: unknown): string[] {
+  if (!schema || typeof schema !== 'object') return []
+  const props = (schema as { properties?: unknown }).properties
+  if (!props || typeof props !== 'object') return []
+  return Object.keys(props as Record<string, unknown>)
+}
+
+/**
+ * Rewrite hallucinated argument keys onto the tool's actual parameter names.
+ * Returns the (possibly rewritten) args plus every remap performed, so the caller can log.
+ */
+export function remapParamKeys(
+  args: Record<string, unknown>,
+  schema: unknown,
+): { args: Record<string, unknown>; remapped: ParamRemap[] } {
+  const valid = schemaPropertyNames(schema)
+  if (valid.length === 0) return { args, remapped: [] }
+
+  const validSet = new Set(valid)
+  const unknown = Object.keys(args).filter((k) => !validSet.has(k))
+  if (unknown.length === 0) return { args, remapped: [] }
+
+  const out: Record<string, unknown> = {}
+  for (const [k, v] of Object.entries(args)) {
+    if (validSet.has(k)) out[k] = v
+  }
+  const remapped: ParamRemap[] = []
+
+  // sorted for determinism: two unknown keys competing for one target must resolve the same
+  // way on every run, or an identical call could behave differently between attempts
+  for (const key of [...unknown].sort()) {
+    const nk = normalizeToolName(key)
+    const free = valid.filter((p) => !(p in out))
+
+    let target: string | undefined
+    const normHits = free.filter((p) => normalizeToolName(p) === nk)
+    if (normHits.length === 1) {
+      target = normHits[0]
+    } else if (normHits.length === 0 && nk.length >= MIN_PARAM_MATCH_LENGTH) {
+      const near = free.filter((p) => osaDistance(nk, normalizeToolName(p)) <= 1)
+      if (near.length === 1) target = near[0]
+    }
+
+    if (target) {
+      out[target] = args[key]
+      remapped.push({ from: key, to: target })
+    } else {
+      out[key] = args[key] // unresolved: pass through, never drop
+    }
+  }
+  return { args: out, remapped }
+}

@@ -3,7 +3,7 @@ import type { ToolCall } from '../providers/types'
 import type { SafetyConfig } from '../safety'
 import { checkToolCall, getAuditLogPath, logToolExecution, scanForInjection } from '../safety'
 import { log } from '../util/logger'
-import { matchToolName } from './fuzzy-match'
+import { matchToolName, remapParamKeys } from './fuzzy-match'
 import type { Tool, ToolDefinition, ToolResult } from './types'
 
 export type ConfirmCallback = (toolName: string, args: Record<string, unknown>) => Promise<boolean>
@@ -110,6 +110,20 @@ export class ToolExecutor {
       return {
         success: false,
         output: `Unknown tool: ${call.name}`,
+      }
+    }
+
+    // Same reason as the name resolution above: remap before the safety and energy checks,
+    // so they inspect the arguments the tool will actually receive. Remapping afterwards
+    // would let a renamed argument slip past safety entirely.
+    {
+      const { args, remapped } = remapParamKeys(call.arguments, tool.definition.parameters)
+      if (remapped.length > 0) {
+        log.info(
+          'tools',
+          `Remapped params for ${call.name}: ${remapped.map((r) => `${r.from} -> ${r.to}`).join(', ')}`,
+        )
+        call = { ...call, arguments: args }
       }
     }
 
