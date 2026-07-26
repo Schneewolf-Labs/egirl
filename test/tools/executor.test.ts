@@ -72,6 +72,55 @@ describe('ToolExecutor', () => {
     expect(result.output).toContain('Unknown tool')
   })
 
+  test('fuzzy-matches casing and separator variants', async () => {
+    await mkdir(testDir, { recursive: true })
+    await writeFile(join(testDir, 'fuzzy-test.txt'), 'fuzzy content')
+
+    const result = await executor.execute(
+      { id: 'call_1', name: 'Read_File', arguments: { path: 'fuzzy-test.txt' } },
+      testDir,
+    )
+
+    expect(result.success).toBe(true)
+    expect(result.output).toBe('fuzzy content')
+
+    await rm(testDir, { recursive: true, force: true })
+  })
+
+  test('fuzzy-matches namespaced and typo tool names', async () => {
+    await mkdir(testDir, { recursive: true })
+
+    const namespaced = await executor.execute(
+      { id: 'call_1', name: 'functions.execute_command', arguments: { command: 'echo "ns"' } },
+      testDir,
+    )
+    expect(namespaced.success).toBe(true)
+    expect(namespaced.output).toContain('ns')
+
+    const typo = await executor.execute(
+      { id: 'call_2', name: 'execute_comand', arguments: { command: 'echo "typo"' } },
+      testDir,
+    )
+    expect(typo.success).toBe(true)
+    expect(typo.output).toContain('typo')
+
+    await rm(testDir, { recursive: true, force: true })
+  })
+
+  test('suggests close names instead of guessing between ambiguous matches', async () => {
+    // wit_file is two edits from both write_file and edit_file
+    const result = await executor.execute(
+      { id: 'call_1', name: 'wit_file', arguments: { path: 'x.txt' } },
+      testDir,
+    )
+
+    expect(result.success).toBe(false)
+    expect(result.output).toContain('Unknown tool: wit_file')
+    expect(result.output).toContain('Did you mean')
+    expect(result.output).toContain('write_file')
+    expect(result.output).toContain('edit_file')
+  })
+
   test('executes command tool', async () => {
     await mkdir(testDir, { recursive: true })
 

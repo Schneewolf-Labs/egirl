@@ -3,6 +3,7 @@ import type { ToolCall } from '../providers/types'
 import type { SafetyConfig } from '../safety'
 import { checkToolCall, getAuditLogPath, logToolExecution, scanForInjection } from '../safety'
 import { log } from '../util/logger'
+import { matchToolName } from './fuzzy-match'
 import type { Tool, ToolDefinition, ToolResult } from './types'
 
 export type ConfirmCallback = (toolName: string, args: Record<string, unknown>) => Promise<boolean>
@@ -81,7 +82,28 @@ export class ToolExecutor {
     }
   }
 
+  /** Resolve a called name to a registered tool name (exact, then fuzzy) */
+  private resolveName(name: string): string | undefined {
+    if (this.tools.has(name)) return name
+    return matchToolName(name, this.listTools()).match
+  }
+
   async execute(call: ToolCall, cwd: string): Promise<ToolResult> {
+    // Resolve near-miss names before safety/energy checks so they all see
+    // the tool that actually runs, not the name the model emitted.
+    if (!this.tools.has(call.name)) {
+      const { match, suggestions } = matchToolName(call.name, this.listTools())
+      if (!match) {
+        const hint = suggestions.length > 0 ? `. Did you mean: ${suggestions.join(', ')}?` : ''
+        return {
+          success: false,
+          output: `Unknown tool: ${call.name}${hint}`,
+        }
+      }
+      log.info('tools', `Fuzzy-matched tool call "${call.name}" -> "${match}"`)
+      call = { ...call, name: match }
+    }
+
     const tool = this.tools.get(call.name)
 
     if (!tool) {
@@ -188,7 +210,7 @@ export class ToolExecutor {
     // Without this, parallel tools race to spend energy and some succeed while
     // others fail — leaving the batch in an inconsistent half-done state.
     if (this.energy && this.executionContext === 'autonomous' && calls.length > 1) {
-      const toolNames = calls.map((c) => c.name)
+      const toolNames = calls.map((c) => this.resolveName(c.name) ?? c.name)
       const batch = this.energy.checkBatch(toolNames)
       if (!batch.allowed) {
         log.info(
