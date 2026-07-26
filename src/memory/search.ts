@@ -1,3 +1,4 @@
+import { log } from '../util/logger'
 import type { EmbeddingInput, EmbeddingProvider } from './embeddings/index'
 import type { ContentType, IndexedMemory, MemoryCategory, MemoryIndexer } from './indexer'
 
@@ -122,10 +123,17 @@ function compositeScore(
 export class MemorySearch {
   private indexer: MemoryIndexer
   private embeddings: EmbeddingProvider | null
+  /** Consecutive embedding failures, so the first one is loud and the rest are not */
+  private embedFailures = 0
 
   constructor(indexer: MemoryIndexer, embeddings?: EmbeddingProvider) {
     this.indexer = indexer
     this.embeddings = embeddings ?? null
+  }
+
+  /** How many consecutive semantic-search failures have occurred (0 = healthy) */
+  get semanticFailureCount(): number {
+    return this.embedFailures
   }
 
   /**
@@ -229,16 +237,47 @@ export class MemorySearch {
     const ftsResults = await this.searchText(query, { limit: limit * 2 })
     const ftsScoreMap = new Map(ftsResults.map((r) => [r.memory.key, r.score]))
 
-    // Get vector results if embeddings available
+    // Get vector results if embeddings available.
+    //
+    // A configured-but-unreachable embedding service used to be strictly WORSE than no
+    // embedding service at all: with none configured this method returns FTS results, but
+    // when searchSemantic threw, the exception propagated out of searchHybrid and the caller
+    // (memory retrieval) swallowed it into a warning and returned nothing -- discarding the
+    // FTS results that had already succeeded on the line above. An agent whose embedding
+    // server was down therefore lost its memory entirely and said so only in a debug-level
+    // warning. Degrade to keyword search instead, and make the first failure loud.
     let vectorScoreMap = new Map<string, number>()
     if (this.embeddings) {
-      const vectorResults = await this.searchSemantic(query, {
-        limit: limit * 2,
-        categories,
-        since,
-        until,
-      })
-      vectorScoreMap = new Map(vectorResults.map((r) => [r.memory.key, r.score]))
+      try {
+        const vectorResults = await this.searchSemantic(query, {
+          limit: limit * 2,
+          categories,
+          since,
+          until,
+        })
+        vectorScoreMap = new Map(vectorResults.map((r) => [r.memory.key, r.score]))
+        if (this.embedFailures > 0) {
+          log.info('memory', `Semantic search recovered after ${this.embedFailures} failure(s)`)
+          this.embedFailures = 0
+        }
+      } catch (error) {
+        this.embedFailures++
+        const msg = error instanceof Error ? error.message : String(error)
+        // First failure at error level: losing semantic recall changes what the agent can
+        // remember, which is not a debug detail. Then stay quiet, and mark every 50th so a
+        // long-running process still shows the problem in its logs.
+        if (this.embedFailures === 1) {
+          log.error(
+            'memory',
+            `Semantic search failed; falling back to keyword search only. Memory recall is degraded. ${msg}`,
+          )
+        } else if (this.embedFailures % 50 === 0) {
+          log.warn(
+            'memory',
+            `Semantic search still failing (${this.embedFailures} in a row): ${msg}`,
+          )
+        }
+      }
     }
 
     // Combine scores with composite recall
