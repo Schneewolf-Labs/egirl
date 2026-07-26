@@ -12,15 +12,18 @@ show_thinking = true                     # display thinking output in CLI
 path = "~/.egirl/workspace"
 
 [local]
-endpoint = "http://localhost:8080"       # llama.cpp server
-model = "qwen3-vl-32b"                   # for display/logging only
-context_length = 32768
-max_concurrent = 2                       # NOTE: currently unenforced in egirl (see findings)
-cache_slots = 6                          # must match sabrewing's --kv-slots: pins a session
-                                         # to a slot so its prefilled prefix is reused
-tool_format = "laguna"                   # auto | qwen3 | laguna — speak the model's own
-                                         # tool-call syntax in BOTH directions
-stale_stream_timeout_ms = 300000         # local prefill on a cold context is slow
+endpoint = "http://localhost:8099"       # sabrewing qwen35 via openai_server.py
+model = "qwen3.5-35b-a3b-sabrewing"      # for display/logging only
+context_length = 16384                   # must match the engine's CTX_MAX
+max_concurrent = 1                       # qwen35's serve loop is SERIAL: a second request
+                                         # would queue server-side and burn the stale-stream
+                                         # timeout waiting for a slot. Now enforced.
+cache_slots = 0                          # qwen35 has no slot pool / prefix reuse yet, so
+                                         # pinning would do nothing
+tool_format = "qwen35"                   # auto | qwen3 | qwen35 | laguna — speak Qwen3.5's
+                                         # own <function=>/<parameter=> syntax both ways
+stale_stream_timeout_ms = 900000         # CPU-only: ~30 tok/s prefill means a 5k-token
+                                         # agent context is ~3 min before the first token
 
 [local.embeddings]
 provider = "qwen3-vl"                    # Python service using transformers

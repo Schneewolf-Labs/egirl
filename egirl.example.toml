@@ -12,7 +12,14 @@ path = "~/.egirl/workspace"
 endpoint = "http://localhost:8080"
 model = "qwen3-vl-32b"
 context_length = 32768
-max_concurrent = 2
+max_concurrent = 2                 # in-flight requests against the endpoint; set to 1 for a
+                                   # serial engine, 0 to disable the limit
+# tool_format = "auto"             # auto | qwen3 | qwen35 | laguna — which tool-call syntax to
+                                   # ask for and parse. "auto" asks in Qwen3 form and accepts
+                                   # any of them back; name the model's own dialect when you
+                                   # know it (Qwen3.5 uses <function=>/<parameter=>).
+# cache_slots = 0                  # >0 pins a session to a server KV slot (sabrewing only)
+# stale_stream_timeout_ms = 90000   # raise well above your worst-case prefill time
 
 # Optional. Uncomment when you have an embeddings service running to enable memory.
 # [local.embeddings]

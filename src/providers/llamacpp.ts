@@ -40,16 +40,59 @@ export interface LlamaCppCapabilities {
 /** Default stale-stream timeout in milliseconds (90 seconds) */
 const DEFAULT_STALE_STREAM_TIMEOUT_MS = 90_000
 
+/**
+ * Bounds how many requests we have in flight against the local endpoint at once.
+ *
+ * `[local] max_concurrent` was config that nothing read: the agent loop stopped serializing
+ * inference (SessionMutex now guards only the tool phase), so N sessions plus M background
+ * tasks could all hit one endpoint together. That is fine against a server with N parallel
+ * slots and actively harmful against one without: a serial engine (sabrewing's qwen35, or
+ * llama.cpp with --parallel 1) queues the extras server-side, where they burn the
+ * stale-stream timeout waiting for a slot rather than waiting politely here.
+ *
+ * Queuing client-side instead keeps the wait observable and makes the timeout mean what it
+ * says — time without tokens from a request that is actually running.
+ */
+class Semaphore {
+  private active = 0
+  private waiters: (() => void)[] = []
+
+  constructor(private readonly limit: number) {}
+
+  async acquire(): Promise<() => void> {
+    if (this.limit <= 0) return () => {}
+    if (this.active >= this.limit) {
+      await new Promise<void>((resolve) => this.waiters.push(resolve))
+    }
+    this.active++
+    let released = false
+    return () => {
+      if (released) return // a double release would let the limit drift upward forever
+      released = true
+      this.active--
+      this.waiters.shift()?.()
+    }
+  }
+}
+
 export class LlamaCppProvider implements LLMProvider {
   readonly name: string
   private endpoint: string
   private capabilities: LlamaCppCapabilities | null = null
   private staleStreamTimeoutMs: number
+  private gate: Semaphore
 
-  constructor(endpoint: string, model: string, staleStreamTimeoutMs?: number) {
+  constructor(
+    endpoint: string,
+    model: string,
+    staleStreamTimeoutMs?: number,
+    maxConcurrent?: number,
+  ) {
     this.endpoint = endpoint.replace(/\/$/, '')
     this.name = `llamacpp/${model}`
     this.staleStreamTimeoutMs = staleStreamTimeoutMs ?? DEFAULT_STALE_STREAM_TIMEOUT_MS
+    // 0 or negative disables the limit, for a server with plenty of slots
+    this.gate = new Semaphore(maxConcurrent ?? 0)
   }
 
   /**
@@ -89,6 +132,15 @@ export class LlamaCppProvider implements LLMProvider {
   }
 
   async chat(req: ChatRequest): Promise<ChatResponse> {
+    const release = await this.gate.acquire()
+    try {
+      return await this.chatInner(req)
+    } finally {
+      release()
+    }
+  }
+
+  private async chatInner(req: ChatRequest): Promise<ChatResponse> {
     // Embed tool definitions in the system prompt in Qwen3 native format.
     // We do NOT send tools via the API tools param — llama.cpp would parse
     // <tool_call> XML server-side and return structured tool_calls instead of
@@ -421,6 +473,7 @@ export function createLlamaCppProvider(
   endpoint: string,
   model: string,
   staleStreamTimeoutMs?: number,
+  maxConcurrent?: number,
 ): LLMProvider {
-  return new LlamaCppProvider(endpoint, model, staleStreamTimeoutMs)
+  return new LlamaCppProvider(endpoint, model, staleStreamTimeoutMs, maxConcurrent)
 }

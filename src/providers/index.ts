@@ -31,6 +31,7 @@ export function createProviderRegistry(config: RuntimeConfig): ProviderRegistry 
     config.local.endpoint,
     config.local.model,
     config.local.staleStreamTimeoutMs,
+    config.local.maxConcurrent,
   )
 
   return { local }

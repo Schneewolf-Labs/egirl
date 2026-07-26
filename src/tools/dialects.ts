@@ -124,6 +124,38 @@ function jsonObjects(text: string): string[] {
  *   {"name": n, "path": "..."}        arguments flattened to top level
  * and several objects inside one <tool_call> block.
  */
+/**
+ * JSON.parse, then two repairs for quantization-mangled output, restoring behaviour that the
+ * dialect refactor dropped (see test/tools/format.test.ts "repairs ..." cases):
+ *  1. single quotes used as JSON delimiters, without touching apostrophes inside strings;
+ *  2. a tool name missing either or both of its quotes -- `"name":foo`, `"name":foo"`,
+ *     `"name":"foo` -- which is by far the most common way a small quantized model breaks
+ *     a call, and the one place a repair is safe because the key is known and the value is
+ *     a bare identifier.
+ */
+const NAME_QUOTE_RE = /"name"\s*:\s*"?([a-zA-Z_][a-zA-Z0-9_]*)"?\s*([,}])/
+
+function parseCallObject(jsonStr: string): Record<string, unknown> | undefined {
+  const attempt = (text: string): Record<string, unknown> | undefined => {
+    try {
+      const parsed = JSON.parse(text) as Record<string, unknown>
+      return parsed && typeof parsed.name === 'string' ? parsed : undefined
+    } catch {
+      return undefined
+    }
+  }
+  const direct = attempt(jsonStr)
+  if (direct) return direct
+
+  const singleQuoted = attempt(
+    jsonStr.replace(/(\{|,)\s*'(\w+)'\s*:/g, '$1 "$2":').replace(/:\s*'([^']*)'/g, ': "$1"'),
+  )
+  if (singleQuoted) return singleQuoted
+
+  const nameFixed = jsonStr.replace(NAME_QUOTE_RE, '"name":"$1"$2')
+  return nameFixed === jsonStr ? undefined : attempt(nameFixed)
+}
+
 export function parseJsonToolCalls(content: string): {
   content: string
   toolCalls: Omit<ToolCall, 'id'>[]
@@ -133,13 +165,19 @@ export function parseJsonToolCalls(content: string): {
 
   for (const { chunk, raw } of toolCallChunks(content)) {
     let matched = false
-    for (const objText of jsonObjects(chunk)) {
-      let parsed: Record<string, unknown>
-      try {
-        parsed = JSON.parse(objText) as Record<string, unknown>
-      } catch {
-        continue
-      }
+    // A tool name with an unbalanced quote (`"name": "read_file,`) desynchronizes the
+    // string tracking in jsonObjects, so the object is never extracted whole and the
+    // per-object repair never gets a chance. Repairing the chunk first and re-extracting
+    // is the only order that recovers those. NAME_QUOTE_RE is anchored on the known
+    // "name" key and a bare identifier, so it cannot invent a call out of prose.
+    let candidates = jsonObjects(chunk)
+    if (candidates.length === 0 || !candidates.some((o) => parseCallObject(o))) {
+      const repaired = chunk.replace(NAME_QUOTE_RE, '"name":"$1"$2')
+      if (repaired !== chunk) candidates = jsonObjects(repaired)
+    }
+    for (const objText of candidates) {
+      const parsed = parseCallObject(objText)
+      if (!parsed) continue
       const name = parsed.name
       if (typeof name !== 'string') continue
       let args: Record<string, unknown>
@@ -259,6 +297,96 @@ export const lagunaDialect: ToolDialect = {
   },
 }
 
+/**
+ * Qwen3.5's native call syntax, taken from its chat_template.jinja:
+ *   <tool_call>
+ *   <function=NAME>
+ *   <parameter=KEY>
+ *   value
+ *   </parameter>
+ *   </function>
+ *   </tool_call>
+ * Distinct from BOTH existing dialects: qwen3 puts JSON inside <tool_call>, laguna uses
+ * arg_key/arg_value. Values are newline-delimited and may span lines, so the closing tag —
+ * not a line break — terminates them.
+ */
+function parseFunctionParamToolCalls(content: string): {
+  content: string
+  toolCalls: Omit<ToolCall, 'id'>[]
+} {
+  const calls: Omit<ToolCall, 'id'>[] = []
+  const boxes = /<tool_call>([\s\S]*?)(?:<\/tool_call>|$)/g
+  let cleaned = content
+  let match: RegExpExecArray | null
+  while ((match = boxes.exec(content)) !== null) {
+    const inner = match[1]
+    if (inner === undefined) continue
+    const fn = /<function=([^>\s]+)\s*>([\s\S]*)/.exec(inner.trim())
+    const name = fn?.[1]
+    if (!fn || name === undefined) continue
+    const args: Record<string, unknown> = {}
+    const params = /<parameter=([^>\s]+)\s*>\n?([\s\S]*?)\n?<\/parameter>/g
+    let p: RegExpExecArray | null
+    while ((p = params.exec(fn[2] ?? '')) !== null) {
+      const key = p[1]
+      if (key !== undefined) args[key] = coerceArgValue(p[2] ?? '')
+    }
+    calls.push({ name, arguments: args })
+    cleaned = cleaned.replace(match[0], '')
+  }
+  return { content: cleaned.trim(), toolCalls: calls }
+}
+
+const QWEN35_INSTRUCTION = `# Tools
+
+You have access to the following functions:
+
+<tools>
+{definitions}
+</tools>
+
+If you choose to call a function ONLY reply in the following format with NO suffix:
+
+<tool_call>
+<function=example_function_name>
+<parameter=example_parameter_1>
+value_1
+</parameter>
+</function>
+</tool_call>
+
+<IMPORTANT>
+Reminder:
+- Function calls MUST follow the specified format: an inner <function=...></function> block must be nested within <tool_call></tool_call> XML tags
+- Required parameters MUST be specified
+- You may provide optional reasoning for your function call in natural language BEFORE the function call, but NOT after
+</IMPORTANT>`
+
+/**
+ * Qwen3.5-MoE (e.g. via sabrewing's qwen35 engine). The instruction block is the model's own,
+ * copied from its chat template — asking in a foreign dialect makes it fall back to the syntax
+ * it was trained on, which the other parsers do not recognize.
+ */
+export const qwen35Dialect: ToolDialect = {
+  name: 'qwen35',
+  buildToolsSection(tools) {
+    if (!tools || tools.length === 0) return ''
+    const definitions = tools.map((t) => JSON.stringify(toolSignature(t))).join('\n')
+    return `\n\n${QWEN35_INSTRUCTION.replace('{definitions}', definitions)}`
+  },
+  parseToolCalls(content) {
+    const native = parseFunctionParamToolCalls(content)
+    if (native.toolCalls.length > 0) return withIds(native)
+    // a model told to use one syntax still sometimes reaches for another
+    const json = parseJsonToolCalls(content)
+    if (json.toolCalls.length > 0) return withIds(json)
+    return withIds(parseKeyValueToolCalls(content))
+  },
+  formatToolResponse(output) {
+    return `<tool_response>\n${output}\n</tool_response>`
+  },
+}
+
 /** Ask in Qwen3 form (widely understood), accept either on the way back. */
 export const autoDialect: ToolDialect = {
   name: 'auto',
@@ -266,7 +394,9 @@ export const autoDialect: ToolDialect = {
   parseToolCalls(content) {
     const json = parseJsonToolCalls(content)
     if (json.toolCalls.length > 0) return withIds(json)
-    return withIds(parseKeyValueToolCalls(content))
+    const kv = parseKeyValueToolCalls(content)
+    if (kv.toolCalls.length > 0) return withIds(kv)
+    return withIds(parseFunctionParamToolCalls(content))
   },
   formatToolResponse: qwen3Dialect.formatToolResponse,
 }
@@ -274,6 +404,7 @@ export const autoDialect: ToolDialect = {
 const DIALECTS: Record<string, ToolDialect> = {
   auto: autoDialect,
   qwen3: qwen3Dialect,
+  qwen35: qwen35Dialect,
   laguna: lagunaDialect,
 }
 
