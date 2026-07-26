@@ -44,6 +44,14 @@ export interface ChatRequest {
     stable: string
     volatile: string
   }
+  /**
+   * KV cache slot for local servers that keep per-slot prefix caches (sabrewing).
+   * An agent re-sends its whole transcript every turn, so pinning a conversation to a
+   * slot lets the server reuse the prefix it already prefilled instead of recomputing
+   * it — measured 92x faster time-to-first-token on continuation turns. Sessions must
+   * map to slots stably, or two conversations will evict each other.
+   */
+  cacheSlot?: number
 }
 
 export interface ChatResponse {

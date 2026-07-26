@@ -63,8 +63,27 @@ const baseProperties = {
     endpoint: Type.String({ default: 'http://localhost:8080' }),
     model: Type.String({ default: 'qwen2.5-32b-instruct' }),
     context_length: Type.Number({ default: 32768 }),
+    /**
+     * KV cache slots the local server exposes (sabrewing --kv-slots). Sessions are
+     * pinned to a slot so the server can reuse each conversation's already-prefilled
+     * prefix. 1 = every session shares slot 0, which makes concurrent conversations
+     * evict each other; 0 disables slot pinning entirely.
+     */
+    cache_slots: Type.Number({ default: 1 }),
+    /**
+     * Tool-calling dialect the local model speaks: "auto" asks in Qwen3 form and accepts
+     * either on the way back, "qwen3"/"laguna" pin the model's native syntax for both
+     * directions. Pinning matters when a model has a strong trained prior — Laguna emits
+     * <arg_key>/<arg_value> regardless of what the prompt asks for.
+     */
+    tool_format: Type.String({ default: 'auto' }),
     max_concurrent: Type.Number({ default: 2 }),
-    stale_stream_timeout_ms: Type.Optional(Type.Number({ default: 90000 })),
+    /**
+     * Abort a stream after this long with no new token. 90s aborted legitimate work on a
+     * local model: a cold 32k prefill is minutes at ~29 tok/s, and time-to-first-token is
+     * all prefill. Finite so a genuinely hung stream still fails.
+     */
+    stale_stream_timeout_ms: Type.Optional(Type.Number({ default: 300_000 })),
     embeddings: Type.Optional(
       Type.Object({
         provider: Type.Optional(
@@ -353,6 +372,8 @@ export interface RuntimeConfig {
     model: string
     contextLength: number
     maxConcurrent: number
+    cacheSlots: number
+    toolFormat: string
     staleStreamTimeoutMs: number
     embeddings?: {
       provider: 'qwen3-vl' | 'llamacpp' | 'openai'

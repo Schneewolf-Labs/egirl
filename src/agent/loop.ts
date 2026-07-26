@@ -64,11 +64,35 @@ export class AgentLoop {
     this.history.hydrate(this.context)
   }
 
-  async run(userMessage: string, options: AgentLoopOptions = {}): Promise<AgentResponse> {
-    if (this.mutex) {
-      return this.mutex.run(() => this.doRun(userMessage, options))
+  /**
+   * Stable KV cache slot for this session. Local servers with per-slot prefix caching
+   * (sabrewing) reuse the context this conversation already prefilled, which is the
+   * difference between ~60 s and <1 s to first token on a continuation turn. The mapping
+   * must be stable for the life of the session; collisions only cost a re-prefill, never
+   * correctness, because the server matches on token content.
+   */
+  private cacheSlot(): number | undefined {
+    const slots = this.config.local.cacheSlots
+    if (!slots || slots < 1) return undefined
+    const id = this.context.sessionId
+    let h = 2166136261
+    for (let i = 0; i < id.length; i++) {
+      h ^= id.charCodeAt(i)
+      h = Math.imul(h, 16777619)
     }
+    return Math.abs(h) % slots
+  }
+
+  async run(userMessage: string, options: AgentLoopOptions = {}): Promise<AgentResponse> {
+    // The mutex guards tool execution only (see SessionMutex): inference runs outside it
+    // so concurrent sessions can be batched by the local server. Wrapping the whole run
+    // here would serialize every entry point again.
     return this.doRun(userMessage, options)
+  }
+
+  /** Run a tool phase under the shared-state lock. */
+  private async exclusive<T>(fn: () => Promise<T>): Promise<T> {
+    return this.mutex ? this.mutex.run(fn) : fn()
   }
 
   private async doRun(userMessage: string, options: AgentLoopOptions): Promise<AgentResponse> {
@@ -140,6 +164,7 @@ export class AgentLoop {
             onToken: events?.onToken,
             thinking,
             signal,
+            cacheSlot: this.cacheSlot(),
           })
           response = result.response
 
@@ -183,15 +208,17 @@ export class AgentLoop {
         }
 
         if (response.tool_calls && response.tool_calls.length > 0) {
-          await runToolCalls({
-            response,
-            context: this.context,
-            executor: this.toolExecutor,
-            seenToolCalls,
-            transcript: this.transcript,
-            events,
-            signal,
-          })
+          await this.exclusive(() =>
+            runToolCalls({
+              response,
+              context: this.context,
+              executor: this.toolExecutor,
+              seenToolCalls,
+              transcript: this.transcript,
+              events,
+              signal,
+            }),
+          )
 
           if (signal?.aborted) {
             log.info('agent', 'Agent run aborted after tool execution')
@@ -313,6 +340,7 @@ export class AgentLoop {
         tools: [],
         contextLength: this.config.local.contextLength,
         tokenizer: this.tokenizer,
+        cacheSlot: this.cacheSlot(),
         onToken: events?.onToken,
         thinking,
         signal,

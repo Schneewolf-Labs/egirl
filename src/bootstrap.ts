@@ -17,6 +17,7 @@ import { buildSafetyConfig } from './safety/config-bridge'
 import { loadSkillsFromDirectories } from './skills'
 import type { Skill } from './skills/types'
 import { createTaskStore, type TaskStore } from './tasks'
+import { setToolDialect } from './tools/dialects'
 import {
   type CodeAgentConfig,
   createDefaultToolExecutor,
@@ -189,9 +190,12 @@ function createTasks(config: RuntimeConfig): TaskStore | undefined {
  * Bootstrap all shared services from config.
  */
 export async function createAppServices(config: RuntimeConfig): Promise<AppServices> {
+  // Pick the tool-calling dialect before anything renders a system prompt: the syntax we
+  // ask for has to be the syntax we parse (see src/tools/dialects.ts).
+  const dialect = setToolDialect(config.local.toolFormat)
   const providers = createProviderRegistry(config)
 
-  log.info('main', `Local provider: ${providers.local.name}`)
+  log.info('main', `Local provider: ${providers.local.name} (tool format: ${dialect.name})`)
 
   const memory = createMemory(config)
 

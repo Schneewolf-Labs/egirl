@@ -109,6 +109,9 @@ export class LlamaCppProvider implements LLMProvider {
         stream: shouldStream,
         // Qwen3 supports enable_thinking parameter via llama.cpp
         ...(isThinkingEnabled !== undefined && { enable_thinking: isThinkingEnabled }),
+        // Servers with per-slot prefix caching (sabrewing) reuse this conversation's
+        // already-prefilled context. Ignored by servers that don't implement it.
+        ...(req.cacheSlot !== undefined && { cache_slot: req.cacheSlot }),
       }),
     })
 

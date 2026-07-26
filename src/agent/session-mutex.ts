@@ -10,15 +10,21 @@ interface Waiter {
 }
 
 /**
- * Async mutex that serializes agent runs across all entry points.
+ * Async mutex serializing the parts of an agent run that touch shared state.
  *
- * Without this, Discord messages, CLI input, and background tasks can
- * trigger concurrent agent.run() calls that race on shared workspace
- * state and the tool executor. This mutex ensures only one agent run
- * is active at a time — queuing others until the current one completes.
+ * The hazard this guards is concurrent TOOL EXECUTION: Discord messages, CLI input and
+ * background tasks can all trigger agent runs that race on the workspace and the tool
+ * executor. Inference is not a hazard — it is a pure request to the model — and it is also
+ * the slow part, so holding the lock across it serialized everything for no safety gain.
+ * With a local server that batches concurrent requests (sabrewing), that serialization
+ * left the throughput on the table: one in-flight request instead of six.
  *
- * Queued waiters time out after `acquireTimeoutMs` so a single hung run
- * can't deadlock every entry point forever. Pass 0 to disable the timeout.
+ * So callers wrap only their tool phase in `run()`/`runExclusive()`, and inference happens
+ * outside the lock. Two runs therefore interleave turn by turn — nothing may assume a run
+ * holds the lock for its whole duration.
+ *
+ * Queued waiters time out after `acquireTimeoutMs` so a single hung tool call can't
+ * deadlock every entry point forever. Pass 0 to disable the timeout.
  *
  * Inspired by OpenClaw's Lane Queue concept, simplified for single-user.
  */

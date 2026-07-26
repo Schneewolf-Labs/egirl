@@ -26,13 +26,14 @@ export async function chatWithRetry(args: {
   thinking?: ThinkingConfig
   signal?: AbortSignal
   maxRetries?: number
+  cacheSlot?: number
 }): Promise<ChatResponse> {
-  const { provider, messages, tools, onToken, thinking, signal, maxRetries = 2 } = args
+  const { provider, messages, tools, onToken, thinking, signal, cacheSlot, maxRetries = 2 } = args
   let lastError: unknown
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
-      return await provider.chat({ messages, tools, onToken, thinking, signal })
+      return await provider.chat({ messages, tools, onToken, thinking, signal, cacheSlot })
     } catch (error) {
       lastError = error
       if (error instanceof ContextSizeError) throw error
@@ -76,6 +77,7 @@ export async function chatWithContextWindow(args: {
   onToken?: (token: string) => void
   thinking?: ThinkingConfig
   signal?: AbortSignal
+  cacheSlot?: number
 }): Promise<{ response: ChatResponse; droppedMessages: ChatMessage[]; wasTrimmed: boolean }> {
   const { provider, systemPrompt, messages, conversationSummary, tools, contextLength, tokenizer } =
     args
@@ -110,6 +112,7 @@ export async function chatWithContextWindow(args: {
       onToken: args.onToken,
       thinking: args.thinking,
       signal: args.signal,
+      cacheSlot: args.cacheSlot,
     })
     return {
       response,
@@ -144,6 +147,7 @@ export async function chatWithContextWindow(args: {
       onToken: args.onToken,
       thinking: args.thinking,
       signal: args.signal,
+      cacheSlot: args.cacheSlot,
     })
     return {
       response,

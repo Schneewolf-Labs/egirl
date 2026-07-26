@@ -15,7 +15,12 @@ path = "~/.egirl/workspace"
 endpoint = "http://localhost:8080"       # llama.cpp server
 model = "qwen3-vl-32b"                   # for display/logging only
 context_length = 32768
-max_concurrent = 2
+max_concurrent = 2                       # NOTE: currently unenforced in egirl (see findings)
+cache_slots = 6                          # must match sabrewing's --kv-slots: pins a session
+                                         # to a slot so its prefilled prefix is reused
+tool_format = "laguna"                   # auto | qwen3 | laguna — speak the model's own
+                                         # tool-call syntax in BOTH directions
+stale_stream_timeout_ms = 300000         # local prefill on a cold context is slow
 
 [local.embeddings]
 provider = "qwen3-vl"                    # Python service using transformers
@@ -50,9 +55,9 @@ permission_mode = "default"              # default, acceptEdits, bypassPermissio
 
 # HTTP API — localhost by default, for scripts / mobile / automations.
 # Set EGIRL_API_TOKEN in .env to require a bearer token (recommended if exposing on LAN).
-# [channels.api]
-# host = "127.0.0.1"
-# port = 3000
+[channels.api]
+host = "127.0.0.1"
+port = 3000
 
 [safety]
 enabled = true
@@ -75,6 +80,11 @@ path = "{workspace}/audit.log"
 [safety.confirmation]
 enabled = false
 # tools = ["execute_command", "write_file", "edit_file"]
+
+[tasks]
+max_concurrent_tasks = 4                 # the real concurrency knob: concurrent background
+                                         # tasks each drive a local-model call, which is what
+                                         # sabrewing's batched decode is for
 
 [tools]
 code_agent = true                        # enable configured code-agent delegation

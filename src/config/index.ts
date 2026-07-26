@@ -194,6 +194,8 @@ const defaultToml: EgirlConfig = {
     model: 'qwen2.5-32b-instruct',
     context_length: 32768,
     max_concurrent: 2,
+    cache_slots: 1,
+    tool_format: 'auto',
   },
   conversation: {
     enabled: true,
@@ -248,7 +250,9 @@ export function loadConfig(options: LoadConfigOptions = {}): RuntimeConfig {
       model: toml.local?.model ?? defaultToml.local.model,
       contextLength: toml.local?.context_length ?? defaultToml.local.context_length,
       maxConcurrent: toml.local?.max_concurrent ?? defaultToml.local.max_concurrent,
-      staleStreamTimeoutMs: toml.local?.stale_stream_timeout_ms ?? 90000,
+      cacheSlots: toml.local?.cache_slots ?? defaultToml.local.cache_slots ?? 1,
+      toolFormat: toml.local?.tool_format ?? defaultToml.local.tool_format ?? 'auto',
+      staleStreamTimeoutMs: toml.local?.stale_stream_timeout_ms ?? 300_000,
       ...(toml.local?.embeddings && {
         embeddings: {
           provider: toml.local.embeddings.provider ?? 'qwen3-vl',
