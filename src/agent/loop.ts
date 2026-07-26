@@ -13,6 +13,7 @@ import type { ToolExecutor } from '../tools'
 import type { TranscriptLogger } from '../tracking/transcript'
 import { log } from '../util/logger'
 import { runAutoExtraction } from './background'
+import { slotFor } from './cache-slots'
 import { chatWithContextWindow } from './chat'
 import { CompactionScheduler } from './compaction'
 import {
@@ -65,22 +66,12 @@ export class AgentLoop {
   }
 
   /**
-   * Stable KV cache slot for this session. Local servers with per-slot prefix caching
-   * (sabrewing) reuse the context this conversation already prefilled, which is the
-   * difference between ~60 s and <1 s to first token on a continuation turn. The mapping
-   * must be stable for the life of the session; collisions only cost a re-prefill, never
-   * correctness, because the server matches on token content.
+   * KV cache slot for this session, from the shared registry (see ./cache-slots.ts).
+   * Local servers with per-slot prefix caching reuse the context this conversation already
+   * prefilled — the difference between ~60 s and <1 s to first token on a continuation turn.
    */
   private cacheSlot(): number | undefined {
-    const slots = this.config.local.cacheSlots
-    if (!slots || slots < 1) return undefined
-    const id = this.context.sessionId
-    let h = 2166136261
-    for (let i = 0; i < id.length; i++) {
-      h ^= id.charCodeAt(i)
-      h = Math.imul(h, 16777619)
-    }
-    return Math.abs(h) % slots
+    return slotFor(this.context.sessionId, this.config.local.cacheSlots)
   }
 
   async run(userMessage: string, options: AgentLoopOptions = {}): Promise<AgentResponse> {
