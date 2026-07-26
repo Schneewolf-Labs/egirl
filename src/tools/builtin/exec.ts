@@ -6,13 +6,13 @@ import type { Tool, ToolResult } from '../types'
 
 const DEFAULT_TIMEOUT = 30000
 /** How long a command gets to die politely after SIGTERM before it is SIGKILLed */
-const KILL_GRACE_MS = 5000
+export const KILL_GRACE_MS = 5000
 /**
  * Extra slack after the SIGKILL before we stop waiting for the process to report anything
  * and resolve regardless. A wedged grandchild can hold the stdio pipes open so `close`
  * never fires at all.
  */
-const HARD_DEADLINE_SLACK_MS = 2000
+export const HARD_DEADLINE_SLACK_MS = 2000
 
 export const execTool: Tool = {
   definition: {

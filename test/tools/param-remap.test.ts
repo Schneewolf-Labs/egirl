@@ -68,6 +68,36 @@ describe('remapParamKeys', () => {
     expect(r.remapped).toEqual([])
   })
 
+  test('maps a dropped qualifier onto a unique compound name', () => {
+    // the shape models actually produce: `dir` for `working_dir`, 8 edits away and
+    // invisible to distance matching
+    expect(remapParamKeys({ dir: '/tmp' }, SCHEMA).args).toEqual({ working_dir: '/tmp' })
+    expect(remapParamKeys({ path: '/a' }, SCHEMA).args).toEqual({ file_path: '/a' })
+    expect(remapParamKeys({ dir: '/tmp' }, SCHEMA).remapped).toEqual([
+      { from: 'dir', to: 'working_dir' },
+    ])
+  })
+
+  test('does NOT segment-match when two compound names both qualify', () => {
+    const two = {
+      type: 'object',
+      properties: { file_path: { type: 'string' }, output_path: { type: 'string' } },
+    }
+    const r = remapParamKeys({ path: '/a' }, two)
+    expect(r.args).toEqual({ path: '/a' })
+    expect(r.remapped).toEqual([])
+  })
+
+  test('segment matching ignores keys too short to be distinctive', () => {
+    const xy = {
+      type: 'object',
+      properties: { max_x: { type: 'number' }, max_y: { type: 'number' } },
+    }
+    const r = remapParamKeys({ x: 1 }, xy)
+    expect(r.args).toEqual({ x: 1 })
+    expect(r.remapped).toEqual([])
+  })
+
   test('is a no-op without a usable schema', () => {
     const args = { anything: 1 }
     expect(remapParamKeys(args, undefined).args).toBe(args)

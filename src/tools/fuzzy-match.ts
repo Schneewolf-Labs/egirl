@@ -159,6 +159,8 @@ export interface ParamRemap {
 
 /** Edit-distance remapping needs at least this many characters to be meaningful */
 const MIN_PARAM_MATCH_LENGTH = 4
+/** Segment matching needs at least this many, so `x`/`y` cannot latch onto anything */
+const MIN_SEGMENT_MATCH_LENGTH = 3
 
 function schemaPropertyNames(schema: unknown): string[] {
   if (!schema || typeof schema !== 'object') return []
@@ -201,6 +203,22 @@ export function remapParamKeys(
     } else if (normHits.length === 0 && nk.length >= MIN_PARAM_MATCH_LENGTH) {
       const near = free.filter((p) => osaDistance(nk, normalizeToolName(p)) <= 1)
       if (near.length === 1) target = near[0]
+    }
+    // Tier 3: the key is a whole segment of exactly one compound parameter name.
+    //
+    // Edit distance only reaches typos and casing. The other thing models actually do is
+    // drop the qualifier from a compound name -- `dir` for `working_dir`, `path` for
+    // `file_path` -- which is 5 to 8 edits away and invisible to tier 2. Matching whole
+    // underscore segments catches that shape without loosening the distance threshold,
+    // and uniqueness still decides: `path` against a schema holding BOTH `file_path` and
+    // `output_path` is ambiguous, so it is left alone rather than guessed.
+    //
+    // Deliberately NOT done: an alias table (`cmd`->command, `msg`->message, `q`->query).
+    // Those need semantics, not string similarity, and a wrong guess here silently feeds a
+    // tool the wrong argument -- the exact failure this whole function is cautious about.
+    if (!target && nk.length >= MIN_SEGMENT_MATCH_LENGTH) {
+      const segHits = free.filter((p) => normalizeToolName(p).split('_').includes(nk))
+      if (segHits.length === 1) target = segHits[0]
     }
 
     if (target) {
