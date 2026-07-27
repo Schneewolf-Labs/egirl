@@ -49,6 +49,7 @@ export type { Tool, ToolDefinition, ToolResult } from './types'
 import type { BrowserManager } from '../browser'
 import type { RuntimeConfig } from '../config'
 import type { MemoryManager } from '../memory'
+import { log } from '../util/logger'
 import {
   type CodeAgentConfig,
   createBrowserTools,
@@ -111,6 +112,24 @@ export function createDefaultToolExecutor(
   const executor = createToolExecutor()
   const t = config.tools
 
+  /**
+   * Five tool groups need a [tools] flag AND a dependency, and when the dependency is absent
+   * they used to just... not exist. No message, no stub, nothing to notice. `web_search`
+   * defaults to TRUE while needing a [searxng] url, so the DEFAULT install silently has no
+   * web search at all -- which is how this audit started.
+   *
+   * The memory branch below already gets this right by registering explanatory stubs. This is
+   * the cheap version of the same idea for the rest: say it once, at startup, naming both the
+   * flag and what is missing, and how to silence it.
+   */
+  const missingDep = (flag: string, needs: string) => {
+    log.warn(
+      'tools',
+      `[tools] ${flag} = true but ${needs} — those tools are NOT registered. ` +
+        `Configure it, or set ${flag} = false to silence this.`,
+    )
+  }
+
   // File tools (read, write, edit, glob)
   if (t.files) {
     executor.registerAll([readTool, writeTool, editTool, globTool])
@@ -131,7 +150,7 @@ export function createDefaultToolExecutor(
       pt.processSendInputTool,
       pt.processStopTool,
     ])
-  }
+  } else if (t.process) missingDep('process', 'no process registry was created')
 
   // Git tools
   if (t.git) {
@@ -156,7 +175,7 @@ export function createDefaultToolExecutor(
         apiKey: config.searxng.apiKey,
       }),
     )
-  }
+  } else if (t.webSearch) missingDep('web_search', 'no [searxng] url is configured')
 
   // Memory tools (functional if MemoryManager provided)
   if (t.memory) {
@@ -186,7 +205,8 @@ export function createDefaultToolExecutor(
   // Code agent tool (available if claude code config provided)
   if (t.codeAgent && codeAgent) {
     executor.register(createCodeAgentTool(codeAgent))
-  }
+  } else if (t.codeAgent)
+    missingDep('code_agent', 'no [channels.code_agent] or [channels.claude_code] config was found')
 
   // GitHub tools (available if GITHUB_TOKEN is set)
   if (t.github && github) {
@@ -205,7 +225,8 @@ export function createDefaultToolExecutor(
       gh.ghBranchCreateTool,
       gh.ghReleaseListTool,
     ])
-  }
+  } else if (t.github)
+    missingDep('github', 'no [github] config was found (needs GITHUB_TOKEN and a [github] section)')
 
   // Browser tools (available if BrowserManager provided)
   if (t.browser && browser) {
@@ -223,7 +244,7 @@ export function createDefaultToolExecutor(
       bt.browserEvalTool,
       bt.browserCloseTool,
     ])
-  }
+  } else if (t.browser) missingDep('browser', 'no browser manager was created')
 
   return executor
 }
