@@ -18,6 +18,8 @@ export interface APIDeps {
   memory?: MemoryManager
   taskStore?: TaskStore
   taskRunner?: TaskRunner
+  /** why the runner is absent, so a 503 can name the flag instead of just saying "disabled" */
+  taskOffReason?: string
 }
 
 type JSONValue = string | number | boolean | null | JSONValue[] | { [k: string]: JSONValue }
@@ -184,7 +186,9 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
         }
 
         if (method === 'POST' && path === '/tasks') {
-          if (!deps.taskStore || !deps.taskRunner) return err('tasks disabled', 503)
+          if (!deps.taskStore || !deps.taskRunner) {
+            return err(`tasks disabled: ${deps.taskOffReason ?? 'no task runner'}`, 503)
+          }
           const body = await readJson(req)
           if (typeof body.name !== 'string' || typeof body.prompt !== 'string') {
             return err('name and prompt required')
@@ -206,7 +210,9 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
         }
 
         if (method === 'POST' && path.match(/^\/tasks\/[^/]+\/run$/)) {
-          if (!deps.taskRunner) return err('tasks disabled', 503)
+          if (!deps.taskRunner) {
+            return err(`tasks disabled: ${deps.taskOffReason ?? 'no task runner'}`, 503)
+          }
           const id = path.split('/')[2] as string
           const run = await deps.taskRunner.runNow(id)
           if (!run) return err('task not found', 404)

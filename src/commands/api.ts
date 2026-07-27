@@ -4,7 +4,7 @@ import { startAPIServer } from '../api'
 import { createAppServices } from '../bootstrap'
 import type { RuntimeConfig } from '../config'
 import { gatherStandup } from '../standup'
-import { createTaskRunner } from '../tasks'
+import { createTaskRunner, taskRunnerEnabled, taskRunnerOffReason } from '../tasks'
 import { createTaskTools } from '../tools/builtin/tasks'
 import { applyLogLevel } from '../util/args'
 import { log } from '../util/logger'
@@ -52,7 +52,7 @@ export async function runAPI(config: RuntimeConfig, args: string[]): Promise<voi
   // Background tasks are optional but naturally pair with the API —
   // POST /tasks doesn't do much without a runner.
   let taskRunner: ReturnType<typeof createTaskRunner> | undefined
-  if (taskStore && config.tasks.enabled && config.tools.tasks) {
+  if (taskRunnerEnabled(config, !!taskStore) && taskStore) {
     taskRunner = createTaskRunner({
       config,
       tasksConfig: config.tasks,
@@ -82,6 +82,15 @@ export async function runAPI(config: RuntimeConfig, args: string[]): Promise<voi
     ])
 
     taskRunner.start()
+  } else {
+    // Say WHY, naming the flag. A bare silence here means a populated [tasks] section that
+    // simply never runs, which is exactly what happened in practice.
+    const why = taskRunnerOffReason(config, !!taskStore)
+    if (config.source.tasksConfiguredButGated) {
+      log.warn('tasks', `[tasks] is configured but INERT: ${why}`)
+    } else if (why) {
+      log.info('tasks', `Background tasks off: ${why}`)
+    }
   }
 
   const server = startAPIServer(config.channels.api, {
@@ -90,6 +99,7 @@ export async function runAPI(config: RuntimeConfig, args: string[]): Promise<voi
     memory,
     taskStore,
     taskRunner,
+    ...(taskRunner ? {} : { taskOffReason: taskRunnerOffReason(config, !!taskStore) }),
   })
 
   const shutdown = async () => {

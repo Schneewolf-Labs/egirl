@@ -235,6 +235,7 @@ export function loadConfig(options: LoadConfigOptions = {}): RuntimeConfig {
       ...(resolved.profile && { profile: resolved.profile }),
       ...(resolved.persona && { persona: resolved.persona }),
       codeAgentUsesClaudeCodeFallback: !toml.channels?.code_agent && !!toml.channels?.claude_code,
+      tasksConfiguredButGated: !!toml.tasks && !toml.tools?.tasks,
     },
     theme: themeName,
     thinking: {

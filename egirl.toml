@@ -89,6 +89,9 @@ max_concurrent_tasks = 4                 # the real concurrency knob: concurrent
 
 [tools]
 code_agent = true                        # enable configured code-agent delegation
+tasks = true                             # NOTE: gates the whole [tasks] section below.
+                                         # Without this, [tasks] is inert and POST /tasks
+                                         # returns 503 -- see the startup warning.
 
 [skills]
 dirs = ["~/.egirl/skills", "{workspace}/skills"]

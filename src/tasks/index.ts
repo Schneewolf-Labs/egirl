@@ -10,6 +10,7 @@ export type { DiscoveryDeps } from './discovery'
 export { createDiscovery, Discovery } from './discovery'
 export type { RetryPolicy, TaskErrorKind } from './error-classify'
 export { classifyError, getRetryPolicy } from './error-classify'
+export { taskRunnerEnabled, taskRunnerOffReason } from './gating'
 export type { HeartbeatConfig } from './heartbeat'
 export {
   checkOffItem,

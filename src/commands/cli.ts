@@ -4,7 +4,13 @@ import { createAppServices } from '../bootstrap'
 import { createCLIChannel } from '../channels'
 import type { RuntimeConfig } from '../config'
 import { gatherStandup } from '../standup'
-import { createDiscovery, createTaskRunner, seedHeartbeatTask } from '../tasks'
+import {
+  createDiscovery,
+  createTaskRunner,
+  seedHeartbeatTask,
+  taskRunnerEnabled,
+  taskRunnerOffReason,
+} from '../tasks'
 import { createTaskTools } from '../tools/builtin/tasks'
 import { applyLogLevel } from '../util/args'
 import { log } from '../util/logger'
@@ -76,7 +82,7 @@ export async function runCLI(config: RuntimeConfig, args: string[]): Promise<voi
   let taskRunner: ReturnType<typeof createTaskRunner> | undefined
   let discovery: ReturnType<typeof createDiscovery> | undefined
 
-  if (taskStore && config.tasks.enabled && config.tools.tasks) {
+  if (taskRunnerEnabled(config, !!taskStore) && taskStore) {
     const outbound = new Map<string, { send(target: string, message: string): Promise<void> }>()
     outbound.set('cli', cli)
 
@@ -135,6 +141,15 @@ export async function runCLI(config: RuntimeConfig, args: string[]): Promise<voi
     })
 
     log.info('main', 'Background task system initialized')
+  } else {
+    // Say WHY, naming the flag. A bare silence here means a populated [tasks] section that
+    // simply never runs, which is exactly what happened in practice.
+    const why = taskRunnerOffReason(config, !!taskStore)
+    if (config.source.tasksConfiguredButGated) {
+      log.warn('tasks', `[tasks] is configured but INERT: ${why}`)
+    } else if (why) {
+      log.info('tasks', `Background tasks off: ${why}`)
+    }
   }
 
   // Handle graceful shutdown

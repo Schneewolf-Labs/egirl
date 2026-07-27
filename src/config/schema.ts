@@ -357,6 +357,8 @@ export interface RuntimeConfig {
     profile?: string
     persona?: string
     codeAgentUsesClaudeCodeFallback: boolean
+    /** the user wrote a [tasks] section but [tools] tasks is false, so all of it is inert */
+    tasksConfiguredButGated: boolean
   }
   theme: string
   thinking: {
