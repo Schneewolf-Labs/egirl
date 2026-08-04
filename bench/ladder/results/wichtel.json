@@ -1,0 +1,111 @@
+{
+ "label": "wichtel",
+ "passed": 3,
+ "total": 5,
+ "quad": {
+  "self_passed": 2,
+  "escalated_passed": 1,
+  "self_failed": 1,
+  "escalated_failed": 1
+ },
+ "results": [
+  {
+   "id": "L1_add_function",
+   "level": 1,
+   "passed": true,
+   "strategy": "self",
+   "delegated": false,
+   "tool_calls": 13,
+   "tools": [
+    "glob_files",
+    "read_file",
+    "read_file",
+    "read_file",
+    "edit_file",
+    "edit_file",
+    "execute_command",
+    "execute_command",
+    "execute_command",
+    "edit_file",
+    "edit_file",
+    "execute_command",
+    "execute_command"
+   ],
+   "turns": 10,
+   "elapsed_ms": 252169,
+   "agent_ok": true,
+   "verify_detail": ""
+  },
+  {
+   "id": "L2_fix_bug",
+   "level": 2,
+   "passed": true,
+   "strategy": "escalated",
+   "delegated": true,
+   "tool_calls": 8,
+   "tools": [
+    "code_agent",
+    "execute_command",
+    "git_diff",
+    "git_diff",
+    "read_file",
+    "read_file",
+    "edit_file",
+    "execute_command"
+   ],
+   "turns": 8,
+   "elapsed_ms": 190875,
+   "agent_ok": true,
+   "verify_detail": ""
+  },
+  {
+   "id": "L3_refactor",
+   "level": 3,
+   "passed": true,
+   "strategy": "self",
+   "delegated": false,
+   "tool_calls": 7,
+   "tools": [
+    "read_file",
+    "read_file",
+    "read_file",
+    "edit_file",
+    "edit_file",
+    "edit_file",
+    "execute_command"
+   ],
+   "turns": 3,
+   "elapsed_ms": 118783,
+   "agent_ok": true,
+   "verify_detail": ""
+  },
+  {
+   "id": "L4_feature_with_tests",
+   "level": 4,
+   "passed": false,
+   "strategy": "escalated",
+   "delegated": true,
+   "tool_calls": 1,
+   "tools": [
+    "code_agent"
+   ],
+   "turns": 2,
+   "elapsed_ms": 128830,
+   "agent_ok": true,
+   "verify_detail": "    from inventory.report import low_stock ImportError: cannot import name 'low_stock' from 'inventory.report' (/home/nbeerbower/Projects/egirl/bench/ladder/fixture/./inventory/report.py)"
+  },
+  {
+   "id": "L5_algorithmic",
+   "level": 5,
+   "passed": false,
+   "strategy": "self",
+   "delegated": false,
+   "tool_calls": 0,
+   "tools": [],
+   "turns": 0,
+   "elapsed_ms": 900042,
+   "agent_ok": false,
+   "verify_detail": "    from inventory.pricing import best_bundle ModuleNotFoundError: No module named 'inventory.pricing'"
+  }
+ ]
+}

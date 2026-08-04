@@ -123,6 +123,19 @@ async function main() {
     const prompt = t.prompt.replace('{dir}', FIXTURE)
     const run = await runAgent(prompt, timeoutMs)
     const v = verify(t.verify)
+    // Capture what the agent actually left behind before the next task wipes it. Failures are
+    // the interesting cases — for diagnosis now, and as training material later — and a reset
+    // that happens before anyone looks at the diff destroys the only record of what went wrong.
+    let diff = ''
+    try {
+      diff = execSync(`git diff -- '${FIXTURE}'; git ls-files --others --exclude-standard '${FIXTURE}'`, {
+        cwd: ROOT,
+        encoding: 'utf8',
+        maxBuffer: 8 << 20,
+      })
+    } catch {
+      diff = '<could not capture diff>'
+    }
     // "Escalated" means the code agent was used at all — whether immediately or after the model
     // tried and got stuck. The transcript distinguishes those; the headline number does not.
     const delegated = run.toolCalls.some((c) => c.name === 'code_agent')
@@ -139,6 +152,8 @@ async function main() {
       elapsed_ms: run.elapsed,
       agent_ok: run.ok,
       verify_detail: v.detail,
+      response: run.response.slice(0, 4000),
+      diff: diff.slice(0, 40000),
     }
     results.push(row)
     console.error(
