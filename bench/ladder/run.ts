@@ -47,9 +47,15 @@ function arg(name: string, fallback?: string): string | undefined {
   return i !== -1 ? process.argv[i + 1] : fallback
 }
 
-/** Baseline state for every task: uncommitted work discarded, untracked files removed. */
+/**
+ * Baseline state for every task: agent edits discarded, new files removed.
+ *
+ * Reset goes through the *outer* repo rather than a git repo inside the fixture — nesting one
+ * would either be a broken gitlink or a submodule, and neither survives a clone cleanly. The
+ * fixture is just tracked files, so checkout plus clean restores it exactly.
+ */
 function resetFixture() {
-  execSync('git reset --hard -q HEAD && git clean -fdq', { cwd: FIXTURE })
+  execSync(`git checkout -q -- '${FIXTURE}' && git clean -fdq '${FIXTURE}'`, { cwd: ROOT })
 }
 
 function runAgent(prompt: string, timeoutMs: number): Promise<{
