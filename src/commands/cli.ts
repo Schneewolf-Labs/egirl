@@ -21,6 +21,12 @@ export async function runCLI(config: RuntimeConfig, args: string[]): Promise<voi
   // Check for single message mode
   const messageIndex = args.indexOf('-m')
   const singleMessage = messageIndex !== -1 ? args[messageIndex + 1] : null
+  // --json makes single-message mode machine-readable: one JSON object on stdout and nothing
+  // else. Without it the only way to check what egirl did is to scrape ANSI-coloured log lines,
+  // which is too lossy to build an eval harness on — you can see the final text but not which
+  // tools were called, with what arguments, or whether they succeeded. Those are the things
+  // worth measuring about an operator model.
+  const asJson = args.includes('--json')
 
   const {
     providers,
@@ -57,8 +63,43 @@ export async function runCLI(config: RuntimeConfig, args: string[]): Promise<voi
 
   // Single message mode — no task runner
   if (singleMessage) {
+    // Record every tool call and its outcome. An operator model is judged on what it *did*, not
+    // just what it said, and a run that answers correctly by calling the wrong tool is a failure
+    // that plain text output cannot show.
+    const toolCalls: Array<{
+      name: string
+      arguments: unknown
+      ok?: boolean
+      error?: string
+      ms?: number
+    }> = []
+    const startedAt = new Map<string, number>()
+
+    const events = asJson
+      ? {
+          onToolCallStart(calls: { id?: string; name: string; arguments?: unknown }[]) {
+            for (const call of calls) {
+              startedAt.set(call.id ?? call.name, Date.now())
+              toolCalls.push({ name: call.name, arguments: call.arguments })
+            }
+          },
+          onToolCallComplete(callId: string, name: string, result: { error?: unknown }) {
+            const started = startedAt.get(callId) ?? startedAt.get(name)
+            // Match the most recent unresolved entry for this tool: ids are not guaranteed
+            // to be present on every provider dialect.
+            const entry = [...toolCalls].reverse().find((t) => t.name === name && t.ok === undefined)
+            if (entry) {
+              entry.ok = !result?.error
+              if (result?.error) entry.error = String(result.error)
+              if (started) entry.ms = Date.now() - started
+            }
+          },
+        }
+      : undefined
+
+    const t0 = Date.now()
     try {
-      const response = await agent.run(singleMessage)
+      const response = await agent.run(singleMessage, events ? { events } : undefined)
 
       stats.recordRequest(
         response.provider,
@@ -66,10 +107,40 @@ export async function runCLI(config: RuntimeConfig, args: string[]): Promise<voi
         response.usage.output_tokens,
       )
 
-      console.log(response.content)
+      if (asJson) {
+        // Exactly one JSON object on stdout, nothing else — logs go to stderr, so a caller can
+        // safely do `egirl cli -m "..." --json 2>/dev/null | jq`.
+        process.stdout.write(
+          `${JSON.stringify({
+            ok: true,
+            message: singleMessage,
+            response: response.content,
+            thinking: response.thinking ?? null,
+            tool_calls: toolCalls,
+            turns: response.turns,
+            provider: response.provider,
+            usage: response.usage,
+            elapsed_ms: Date.now() - t0,
+          })}\n`,
+        )
+      } else {
+        console.log(response.content)
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
-      console.error(`Error: ${message}`)
+      if (asJson) {
+        process.stdout.write(
+          `${JSON.stringify({
+            ok: false,
+            message: singleMessage,
+            error: message,
+            tool_calls: toolCalls,
+            elapsed_ms: Date.now() - t0,
+          })}\n`,
+        )
+      } else {
+        console.error(`Error: ${message}`)
+      }
       process.exit(1)
     }
     return
