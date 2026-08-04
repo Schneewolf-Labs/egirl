@@ -1,11 +1,11 @@
 {
- "_comment": "egirl operator bench. Driven through the real agent via `egirl cli -m ... --json`, so tool registration, config and prompt changes are all in scope. A case passes only if the expected tool was called (or none, for abstention), every arg_check regex matches, no forbid pattern appears, and the run completed. Answering correctly via the wrong tool is a failure.",
+ "_comment": "egirl operator bench. Driven through the real agent via `egirl cli -m ... --json`, so tool registration, config and prompt changes are all in scope. A case passes only if the expected tool was called (or none, for abstention), every arg_check regex matches, no forbid pattern appears, and the run completed. Answering correctly via the wrong tool is a failure. Cases point at ~/Projects/dummy/egirl, a throwaway clone reset before every run \u2014 pointing them at the live repo let an agent rewrite config files and delete 117 lines of egirl.example.toml.",
  "cases": [
   {
    "id": "delegate_refactor",
    "axis": "delegate",
    "expect_tool": "code_agent",
-   "user": "The auth module in ~/Projects/egirl is a mess - split it into separate files and make sure the tests still pass.",
+   "user": "The auth module in ~/Projects/dummy/egirl is a mess - split it into separate files and make sure the tests still pass.",
    "arg_checks": {
     "task": "."
    }
@@ -95,7 +95,7 @@
    "id": "trivial_bump_const",
    "axis": "trivial",
    "expect_tool": "edit_file",
-   "user": "In ~/Projects/egirl/config.py change MAX_RETRIES from 3 to 5. That's the only change.",
+   "user": "In ~/Projects/dummy/egirl/config.py change MAX_RETRIES from 3 to 5. That's the only change.",
    "arg_checks": {
     "path": "config\\.py"
    }
@@ -149,7 +149,7 @@
    "id": "read_config",
    "axis": "inspect",
    "expect_tool": "read_file",
-   "user": "Show me what's in ~/Projects/egirl/pyproject.toml.",
+   "user": "Show me what's in ~/Projects/dummy/egirl/pyproject.toml.",
    "arg_checks": {
     "path": "pyproject"
    }
@@ -176,7 +176,7 @@
    "id": "read_log_tail",
    "axis": "inspect",
    "expect_tool": "read_file",
-   "user": "Open ~/Projects/egirl/logs/worker.log so I can see what it says.",
+   "user": "Open ~/Projects/dummy/egirl/logs/worker.log so I can see what it says.",
    "arg_checks": {
     "path": "worker\\.log"
    }
@@ -467,7 +467,7 @@
    "id": "delegate_dryrun",
    "axis": "delegate",
    "expect_tool": "code_agent",
-   "user": "Add a --dry-run flag to the deploy script in ~/Projects/egirl and wire it through.",
+   "user": "Add a --dry-run flag to the deploy script in ~/Projects/dummy/egirl and wire it through.",
    "arg_checks": {
     "task": "dry.?run|flag"
    }
@@ -476,7 +476,7 @@
    "id": "delegate_race",
    "axis": "delegate",
    "expect_tool": "code_agent",
-   "user": "There's a race condition in the task runner in ~/Projects/egirl. Track it down and fix it.",
+   "user": "There's a race condition in the task runner in ~/Projects/dummy/egirl. Track it down and fix it.",
    "arg_checks": {
     "task": "race|task runner"
    }
@@ -485,7 +485,7 @@
    "id": "delegate_unittest",
    "axis": "delegate",
    "expect_tool": "code_agent",
-   "user": "Write unit tests for the memory module in ~/Projects/egirl.",
+   "user": "Write unit tests for the memory module in ~/Projects/dummy/egirl.",
    "arg_checks": {
     "task": "test|memory"
    }
@@ -494,7 +494,7 @@
    "id": "delegate_configmigrate",
    "axis": "delegate",
    "expect_tool": "code_agent",
-   "user": "Migrate ~/Projects/egirl from the old config format to the new one across all files.",
+   "user": "Migrate ~/Projects/dummy/egirl from the old config format to the new one across all files.",
    "arg_checks": {
     "task": "config|migrat"
    }
@@ -503,7 +503,7 @@
    "id": "delegate_profile",
    "axis": "delegate",
    "expect_tool": "code_agent",
-   "user": "The embedding lookup in ~/Projects/egirl is slow. Profile it and make it faster.",
+   "user": "The embedding lookup in ~/Projects/dummy/egirl is slow. Profile it and make it faster.",
    "arg_checks": {
     "task": "embed|slow|profil"
    }
@@ -512,7 +512,7 @@
    "id": "trivial_count_ts",
    "axis": "trivial",
    "expect_tool": "execute_command",
-   "user": "How many .ts files are in ~/Projects/egirl/src?",
+   "user": "How many .ts files are in ~/Projects/dummy/egirl/src?",
    "arg_checks": {
     "command": "find|ls|wc|rg|grep"
    }

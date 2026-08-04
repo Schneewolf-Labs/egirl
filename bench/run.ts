@@ -29,7 +29,7 @@
  *   bun bench/run.ts --label wichtel --axis delegate,no_tool --concurrency 2
  */
 
-import { spawn } from 'node:child_process'
+import { execFileSync, spawn } from 'node:child_process'
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 
@@ -79,7 +79,14 @@ function runCase(c: Case, timeoutMs: number): Promise<Outcome> {
     const child = spawn(
       'bun',
       ['run', 'src/index.ts', 'cli', '-m', c.user, '--json', '--quiet'],
-      { cwd: ROOT, stdio: ['ignore', 'pipe', 'pipe'] },
+      {
+        cwd: ROOT,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        // Pin sampling unless the caller overrides it. Two runs of identical weights disagreed
+        // on 13 of 67 cases at llama.cpp's default 0.8 — a 19% flip rate, far larger than any
+        // model difference worth detecting, which made every A/B comparison meaningless.
+        env: { ...process.env, EGIRL_LOCAL_TEMPERATURE: process.env.EGIRL_LOCAL_TEMPERATURE ?? '0' },
+      },
     )
     let out = ''
     let err = ''
@@ -223,6 +230,15 @@ async function main() {
 
   const all: Case[] = JSON.parse(readFileSync(casesPath, 'utf8')).cases
   const cases = axisFilter ? all.filter((c) => axisFilter.includes(c.axis)) : all
+
+  // Restore the throwaway repos before every run. Cases that edit code would otherwise carry
+  // state between runs, and a case that passes only because a previous run left the right file
+  // lying around is worse than a case that fails.
+  try {
+    execFileSync(join(ROOT, 'bench', 'sandbox.sh'), ['reset'], { stdio: 'pipe' })
+  } catch (e) {
+    console.error('warning: sandbox reset failed —', (e as Error).message)
+  }
 
   console.error(`running ${cases.length} cases, concurrency ${concurrency}`)
   const results: Outcome[] = []
