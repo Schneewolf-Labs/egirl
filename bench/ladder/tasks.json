@@ -1,0 +1,35 @@
+{
+ "_comment": "Escalating difficulty ladder. Success is verified by running a command, not by inspecting which tool was called \u2014 if the operator does the job itself and the check passes, that is the best outcome available, because it skips a code-agent round trip entirely. Delegation is a strategy, not the goal. Each task resets the fixture to its baseline commit first, so tasks cannot contaminate each other. `verify` runs in the fixture root and must exit 0.",
+ "tasks": [
+  {
+   "id": "L1_add_function",
+   "level": 1,
+   "prompt": "In the Python project at {dir}, add a function `count_skus(store)` to inventory/report.py that returns how many distinct SKUs the store holds, and export it from inventory/__init__.py. Keep the existing tests passing.",
+   "verify": "python3 ../checks/l1.py && python3 -m unittest discover -s tests -q"
+  },
+  {
+   "id": "L2_fix_bug",
+   "level": 2,
+   "prompt": "In the Python project at {dir}, Store.remove() lets quantities go negative and doesn't drop items that reach zero. Fix it so removing more than is in stock raises ValueError, and an item whose quantity reaches exactly zero is removed from the store entirely. Keep the existing tests passing.",
+   "verify": "python3 ../checks/l2.py && python3 -m unittest discover -s tests -q"
+  },
+  {
+   "id": "L3_refactor",
+   "level": 3,
+   "prompt": "In the Python project at {dir}, move the total_value calculation out of Store and into inventory/report.py as a function `total_value(store)`, keeping `Store.total_value()` working as a thin wrapper that calls it. Update the tests if needed and make sure they all pass.",
+   "verify": "python3 ../checks/l3.py && python3 -m unittest discover -s tests -q"
+  },
+  {
+   "id": "L4_feature_with_tests",
+   "level": 4,
+   "prompt": "In the Python project at {dir}, add low-stock tracking: each Item gets an optional `reorder_level` (default 0), and inventory/report.py gets `low_stock(store)` returning the items whose qty is at or below their reorder_level, sorted by SKU. Write unit tests for it in tests/ and make sure the whole suite passes.",
+   "verify": "python3 ../checks/l4.py && python3 -m unittest discover -s tests -q && test $(ls tests/*.py | wc -l) -ge 2"
+  },
+  {
+   "id": "L5_algorithmic",
+   "level": 5,
+   "prompt": "In the Python project at {dir}, add `inventory/pricing.py` with a function `best_bundle(store, budget)` that picks the combination of items (at most one of each SKU, using unit_price and treating each SKU as one purchasable unit) maximising total price without exceeding budget, returning the chosen SKUs sorted alphabetically. It must be exact, not greedy \u2014 a greedy solution will fail the tests. Add tests for it and keep the whole suite green.",
+   "verify": "python3 ../checks/l5.py && python3 -m unittest discover -s tests -q"
+  }
+ ]
+}
