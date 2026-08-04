@@ -39,6 +39,15 @@ export class CLIChannel implements Channel {
     this.rl = readline.createInterface({ input: process.stdin, output: process.stdout })
     this.running = true
 
+    // stdin can end without anyone calling stop() — a piped command, a redirected file, or
+    // Ctrl-D. Without this the reply loop calls question() again on a closed interface and
+    // throws ERR_USE_AFTER_CLOSE, after the answer has already been printed. It makes the CLI
+    // unusable for scripting, which is exactly how you would drive it from an eval harness.
+    this.rl.on('close', () => {
+      this.running = false
+      this.rl = null
+    })
+
     const c = colors()
     console.log(
       `\n${c.primary}egirl CLI${RESET} ${DIM}— Type your message and press Enter. Type "/exit" to quit.${RESET}`,
