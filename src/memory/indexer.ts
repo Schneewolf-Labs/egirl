@@ -1,4 +1,5 @@
-import { Database } from 'bun:sqlite'
+import type { Database } from 'bun:sqlite'
+import { openDatabase } from '../util/db'
 import { log } from '../util/logger'
 
 export type ContentType = 'text' | 'image' | 'multimodal'
@@ -45,7 +46,7 @@ export class MemoryIndexer {
   private embeddingCache: Map<string, IndexedMemory> | null = null
 
   constructor(dbPath: string, _dimensions = 2048) {
-    this.db = new Database(dbPath)
+    this.db = openDatabase(dbPath)
     this.initialize()
   }
 

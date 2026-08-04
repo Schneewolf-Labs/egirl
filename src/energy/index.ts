@@ -13,7 +13,8 @@
  * - Autonomous (heartbeat/task) actions are energy-gated
  */
 
-import { Database } from 'bun:sqlite'
+import type { Database } from 'bun:sqlite'
+import { openDatabase } from '../util/db'
 import { log } from '../util/logger'
 import { getToolCost } from './costs'
 
@@ -54,7 +55,7 @@ export class EnergyBudget {
 
   constructor(dbPath: string, config: Partial<EnergyConfig> = {}) {
     this.config = { ...ENERGY_DEFAULTS, ...config }
-    this.db = new Database(dbPath)
+    this.db = openDatabase(dbPath)
     this.initialize()
   }
 

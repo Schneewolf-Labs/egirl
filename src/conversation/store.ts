@@ -1,4 +1,5 @@
-import { Database } from 'bun:sqlite'
+import type { Database } from 'bun:sqlite'
+import { openDatabase } from '../util/db'
 import type { ChatMessage, ToolCall } from '../providers/types'
 import { log } from '../util/logger'
 
@@ -19,8 +20,7 @@ export class ConversationStore {
   private db: Database
 
   constructor(dbPath: string) {
-    this.db = new Database(dbPath)
-    this.db.run('PRAGMA journal_mode=WAL')
+    this.db = openDatabase(dbPath)
     this.initialize()
   }
 

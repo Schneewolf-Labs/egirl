@@ -11,6 +11,7 @@ import {
   taskRunnerEnabled,
   taskRunnerOffReason,
 } from '../tasks'
+import type { ToolResult } from '../tools/types'
 import { createTaskTools } from '../tools/builtin/tasks'
 import { applyLogLevel } from '../util/args'
 import { log } from '../util/logger'
@@ -83,14 +84,16 @@ export async function runCLI(config: RuntimeConfig, args: string[]): Promise<voi
               toolCalls.push({ name: call.name, arguments: call.arguments })
             }
           },
-          onToolCallComplete(callId: string, name: string, result: { error?: unknown }) {
+          onToolCallComplete(callId: string, name: string, result: ToolResult) {
             const started = startedAt.get(callId) ?? startedAt.get(name)
             // Match the most recent unresolved entry for this tool: ids are not guaranteed
             // to be present on every provider dialect.
             const entry = [...toolCalls].reverse().find((t) => t.name === name && t.ok === undefined)
             if (entry) {
-              entry.ok = !result?.error
-              if (result?.error) entry.error = String(result.error)
+              entry.ok = result.success
+              // A failed tool's output is the error message; keep a short prefix so a bench can
+              // tell "wrong arguments" apart from "tool blew up".
+              if (!result.success) entry.error = result.output?.slice(0, 500)
               if (started) entry.ms = Date.now() - started
             }
           },

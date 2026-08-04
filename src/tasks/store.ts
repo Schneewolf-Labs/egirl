@@ -1,4 +1,5 @@
-import { Database } from 'bun:sqlite'
+import type { Database } from 'bun:sqlite'
+import { openDatabase } from '../util/db'
 import { log } from '../util/logger'
 import type { TaskErrorKind } from './error-classify'
 import type {
@@ -78,8 +79,7 @@ export class TaskStore {
   private db: Database
 
   constructor(dbPath: string) {
-    this.db = new Database(dbPath)
-    this.db.run('PRAGMA journal_mode=WAL')
+    this.db = openDatabase(dbPath)
     this.initialize()
   }
 
