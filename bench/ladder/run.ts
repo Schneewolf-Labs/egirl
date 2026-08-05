@@ -155,11 +155,21 @@ async function main() {
     // that happens before anyone looks at the diff destroys the only record of what went wrong.
     let diff = ''
     try {
-      diff = execSync(`git diff -- '${FIXTURE}'; git ls-files --others --exclude-standard '${FIXTURE}'`, {
-        cwd: ROOT,
-        encoding: 'utf8',
-        maxBuffer: 8 << 20,
-      })
+      // Run inside whichever repo owns the working tree. Pointing git at a path outside its
+      // own checkout fails with "is outside repository", which silently discarded the diff for
+      // every task in the first generated-task run — losing exactly the material the ladder
+      // exists to collect.
+      diff = FIXTURE_IN_TREE
+        ? execSync(`git diff -- '${FIXTURE}'; git ls-files --others --exclude-standard '${FIXTURE}'`, {
+            cwd: ROOT,
+            encoding: 'utf8',
+            maxBuffer: 8 << 20,
+          })
+        : execSync('git diff; git ls-files --others --exclude-standard', {
+            cwd: FIXTURE,
+            encoding: 'utf8',
+            maxBuffer: 8 << 20,
+          })
     } catch {
       diff = '<could not capture diff>'
     }
