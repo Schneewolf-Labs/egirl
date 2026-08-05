@@ -149,6 +149,10 @@ def main():
             "source_file": fn["file"],
             "function": fn["name"],
             "blank_lines": fn["lines"],
+            # Applied by the runner after resetting the repo. Without it the prompt describes a
+            # removal that never happened, the agent finds working code, and the task passes
+            # without the model doing anything.
+            "setup": f"python3 {Path(__file__).resolve().parent}/blank.py --repo . --file {fn['file']} --function {fn['name']}",
             "prompt": (
                 f"In the Python project at {{dir}}, the function `{fn['name']}` in `{fn['file']}` "
                 f"has been removed — its body now raises NotImplementedError. Implement it so the "

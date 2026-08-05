@@ -33,13 +33,25 @@ import { dirname, join } from 'node:path'
 
 const HERE = dirname(new URL(import.meta.url).pathname)
 const ROOT = join(HERE, '..', '..')
-const FIXTURE = join(HERE, 'fixture')
+// --repo points the ladder at any resettable git repo; the built-in fixture is the default.
+// Generated tasks run against a throwaway clone, never a working tree.
+function repoArg(): string {
+  const i = process.argv.indexOf('--repo')
+  return i !== -1 ? (process.argv[i + 1] as string) : join(HERE, 'fixture')
+}
+const FIXTURE = repoArg()
+// The fixture lives inside this repo, so resetting it goes through the outer checkout. A repo
+// passed with --repo owns its own git dir and resets itself.
+const FIXTURE_IN_TREE = FIXTURE.startsWith(join(HERE, 'fixture'))
 
 interface Task {
   id: string
   level: number
   prompt: string
   verify: string
+  /** Optional command run in the repo after reset, before the agent sees the prompt. Generated
+   *  tasks use it to blank the function the prompt says was removed. */
+  setup?: string
 }
 
 function arg(name: string, fallback?: string): string | undefined {
@@ -55,7 +67,11 @@ function arg(name: string, fallback?: string): string | undefined {
  * fixture is just tracked files, so checkout plus clean restores it exactly.
  */
 function resetFixture() {
-  execSync(`git checkout -q -- '${FIXTURE}' && git clean -fdq '${FIXTURE}'`, { cwd: ROOT })
+  if (FIXTURE_IN_TREE) {
+    execSync(`git checkout -q -- '${FIXTURE}' && git clean -fdq '${FIXTURE}'`, { cwd: ROOT })
+  } else {
+    execSync('git checkout -q -- . && git clean -fdq', { cwd: FIXTURE })
+  }
 }
 
 function runAgent(prompt: string, timeoutMs: number): Promise<{
@@ -114,12 +130,23 @@ async function main() {
   }
   const timeoutMs = Number(arg('timeout', '900000'))
   const levels = arg('levels')?.split(',').map(Number)
-  const all: Task[] = JSON.parse(readFileSync(join(HERE, 'tasks.json'), 'utf8')).tasks
+  const tasksPath = arg('tasks', join(HERE, 'tasks.json'))!
+  const all: Task[] = JSON.parse(readFileSync(tasksPath, 'utf8')).tasks
   const tasks = levels ? all.filter((t) => levels.includes(t.level)) : all
 
   const results = []
   for (const t of tasks) {
     resetFixture()
+    // Put the repo into the state the prompt describes. A task whose setup fails would otherwise
+    // be handed to the agent as already-working code, and pass without the model doing anything.
+    if (t.setup) {
+      try {
+        execSync(t.setup, { cwd: FIXTURE, stdio: 'pipe', shell: '/bin/bash' })
+      } catch (e) {
+        console.error(`L${t.level} ${t.id.padEnd(24)} SKIP  setup failed: ${(e as Error).message.split('\n')[0]}`)
+        continue
+      }
+    }
     const prompt = t.prompt.replace('{dir}', FIXTURE)
     const run = await runAgent(prompt, timeoutMs)
     const v = verify(t.verify)
