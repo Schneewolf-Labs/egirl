@@ -114,21 +114,43 @@ describe('browser tools', () => {
       expect(result.output).toBeTruthy()
     })
 
-    test('snapshot handles no page gracefully', async () => {
+    // These two asserted failure on a fresh manager, and passed only where no browser binary was
+    // installed. snapshot() and click() both go through ensurePage(), which launches on demand by
+    // design — so on any machine with Playwright's chromium present the tools correctly succeed
+    // and the tests failed. They were testing "browser unavailable" while claiming to test
+    // "no page open". Assert the real contract instead, and close the browser afterwards: without
+    // it the suite leaked processes ("killed 3 dangling processes").
+    test('snapshot launches a page on demand', async () => {
       const freshManager = new BrowserManager()
       const freshTools = createBrowserTools(freshManager)
-      const result = await freshTools.browserSnapshotTool.execute({}, '/tmp')
-      expect(result.success).toBe(false)
-      expect(result.output).toBeTruthy()
+      try {
+        const result = await freshTools.browserSnapshotTool.execute({}, '/tmp')
+        expect(result.success).toBe(true)
+        expect(result.output).toBeTruthy()
+      } finally {
+        await freshManager.close()
+      }
     })
 
-    test('click handles no page gracefully', async () => {
+    // 40s because manager.click() calls locator.click() with no timeout, so Playwright waits its
+    // 30s default for a selector that will never appear. Worth noting separately: that same
+    // default means a mistyped selector hangs the agent for half a minute mid-task.
+    test('click on a page with no such element fails cleanly', async () => {
       const freshManager = new BrowserManager()
       const freshTools = createBrowserTools(freshManager)
-      const result = await freshTools.browserClickTool.execute({ target: 'button/Submit' }, '/tmp')
-      expect(result.success).toBe(false)
-      expect(result.output).toBeTruthy()
-    })
+      try {
+        const result = await freshTools.browserClickTool.execute(
+          { target: 'button/Submit' },
+          '/tmp',
+        )
+        // A blank page has no Submit button, so this fails on the selector rather than on
+        // there being no page at all — which is the behaviour worth pinning.
+        expect(result.success).toBe(false)
+        expect(result.output).toBeTruthy()
+      } finally {
+        await freshManager.close()
+      }
+    }, 40000)
 
     test('close always succeeds even without open browser', async () => {
       const freshManager = new BrowserManager()
