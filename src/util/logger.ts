@@ -73,7 +73,10 @@ class Logger {
     }
 
     if (this.shouldLog(level)) {
-      console.log(this.formatMessage(entry))
+      // Logs go to stderr so stdout carries only the program's actual output. That is what makes
+      // `egirl cli -m "..." --json 2>/dev/null | jq` work; with logs on stdout the two are
+      // interleaved and nothing downstream can parse the result.
+      console.error(this.formatMessage(entry))
     }
   }
 

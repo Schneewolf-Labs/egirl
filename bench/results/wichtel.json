@@ -1,0 +1,1203 @@
+{
+ "label": "wichtel",
+ "total": 67,
+ "passed": 52,
+ "results": [
+  {
+   "id": "delegate_bug",
+   "axis": "delegate",
+   "pass": true,
+   "right_tool": true,
+   "args_ok": true,
+   "no_forbid": true,
+   "completed": true,
+   "called": [
+    "code_agent",
+    "git_status",
+    "git_status",
+    "git_log"
+   ],
+   "expected": "code_agent",
+   "detail": "",
+   "elapsed_ms": 36621,
+   "response": "The code agent ran successfully. The Discord channel message truncation bug has been fixed. Long messages will now be split into multiple chunks instead of being dropped when they exceed 2000 characters."
+  },
+  {
+   "id": "delegate_configmigrate",
+   "axis": "delegate",
+   "pass": false,
+   "right_tool": false,
+   "args_ok": false,
+   "no_forbid": true,
+   "completed": true,
+   "called": [
+    "glob_files",
+    "read_file",
+    "read_file",
+    "git_status",
+    "git_log"
+   ],
+   "expected": "code_agent",
+   "detail": "tool: expected code_agent, got [glob_files,read_file,read_file,git_status,git_log]; args: task!~/config|migrat/",
+   "elapsed_ms": 86132,
+   "response": "The existing `egirl.toml` is already in the new format. The example config confirms it - they're identical in structure. There's no migration needed."
+  },
+  {
+   "id": "delegate_debug_stack",
+   "axis": "delegate",
+   "pass": true,
+   "right_tool": true,
+   "args_ok": true,
+   "no_forbid": true,
+   "completed": true,
+   "called": [
+    "code_agent",
+    "execute_command",
+    "execute_command",
+    "execute_command",
+    "execute_command",
+    "execute_command",
+    "write_file",
+    "execute_command",
+    "execute_command",
+    "execute_command",
+    "glob_files",
+    "glob_files",
+    "glob_files",
+    "glob_files",
+    "execute_command",
+    "execute_command"
+   ],
+   "expected": "code_agent",
+   "detail": "",
+   "elapsed_ms": 146955,
+   "response": "I know this is a real bug — intermittent `RuntimeError: event loop is closed` when shutting down worker processes. The race condition is typically in cleanup where one thread tries to run tasks on a loop that another thread has already closed. Common pattern:\n\n```hemlock\n// Thread A: closes loop\nlet loop = event_loop();\nloop.close();\n\n// Thread B: tries to schedule\nloop.schedule(fn() { cleanup(); });  // CRASH: loop is closed\n```\n\nThe fix involves ensuring all pending work is flushed before closing the loop, or using a graceful shutdown pattern where the loop is told to drain and then close. However, I couldn't actually find or edit the oxide repo files — the workspace is the egirl workspace itself, not the oxide project. The shell tools are also broken (ENOENT errors), so I couldn't navigate to the repo or inspect the actual code.\n\n**What I need from you:** Tell me the exact path to the oxide repo on your system, and I'll dive into the shutdown/cleanup code to fix this race condition. I know the pattern — just need to find where it's happening in your codebase."
+  },
+  {
+   "id": "delegate_dryrun",
+   "axis": "delegate",
+   "pass": false,
+   "right_tool": false,
+   "args_ok": false,
+   "no_forbid": true,
+   "completed": true,
+   "called": [
+    "execute_command",
+    "execute_command",
+    "execute_command",
+    "execute_command",
+    "execute_command",
+    "execute_command",
+    "execute_command",
+    "execute_command",
+    "execute_command",
+    "read_file",
+    "ls",
+    "glob_files",
+    "execute_command"
+   ],
+   "expected": "code_agent",
+   "detail": "tool: expected code_agent, got [execute_command,execute_command,execute_command,execute_command,execute_command,execute_command,execute_command,execute_command,execute_command,read_file,ls,glob_files,execute_command]; args: task!~/dry.?run|flag/",
+   "elapsed_ms": 98029,
+   "response": "There's no deploy script in this repo — the egirl project doesn't have a deploy command or script.\n\nWhat are you looking for? Options:\n\n1. **Create a deploy script** — I can build one and add dry-run support\n2. **Wire dry-run to an existing command** — like `serve` or `init`\n3. **Add dry-run to the code agent flow** — preview changes before delegating\n\nWhich makes sense for your use case?"
+  },
+  {
+   "id": "delegate_feature",
+   "axis": "delegate",
+   "pass": false,
+   "right_tool": false,
+   "args_ok": false,
+   "no_forbid": true,
+   "completed": true,
+   "called": [
+    "memory_search",
+    "glob_files",
+    "glob_files",
+    "glob_files"
+   ],
+   "expected": "code_agent",
+   "detail": "tool: expected code_agent, got [memory_search,glob_files,glob_files,glob_files]; args: task!~/./",
+   "elapsed_ms": 48990,
+   "response": "I need the path to the repository where the ingest pipeline lives before I can implement the `--resume` flag. Where is the project located?"
+  },
+  {
+   "id": "delegate_migration",
+   "axis": "delegate",
+   "pass": true,
+   "right_tool": true,
+   "args_ok": true,
+   "no_forbid": true,
+   "completed": true,
+   "called": [
+    "code_agent"
+   ],
+   "expected": "code_agent",
+   "detail": "",
+   "elapsed_ms": 81724,
+   "response": "The code agent just wrapped up the argparse → click migration across gguf-arena. Here's what they did:\n\n**Entry points migrated:**\n- `src/gguf_arena/cli.py` - main CLI with all commands (now click group with 24 commands)\n- `src/gguf_arena/server.py` - `server serve` command\n- `src/gguf_arena/batch.py` - `batch process` command\n- `src/gguf_arena/convert.py` - `convert model` command\n- `src/gguf_arena/generate.py` - `generate completions` command\n- `src/gguf_arena/benchmarks/compare.py` - `benchmark compare` command\n- `src/gguf_arena/tools/convert_to_llamafile.py` - `tools convert-to-llamafile` command\n- `src/gguf_arena/tools/llamacpp_update.py` - `tools llamacpp-update` command\n\n**Key changes:**\n- Added click 8.1.7 to dependencies in both `pyproject.toml` and `requirements.txt`\n- Preserved all existing behavior, option names, and defaults\n- Tests pass (37 tests, 9 skipped - all framework-related skips)\n- Backward compat maintained for existing scripts using direct Python imports\n\nAll changes are committed to `click-migration`. Want me to push that branch or do a quick review of any specific file?"
+  },
+  {
+   "id": "delegate_not_exec",
+   "axis": "delegate",
+   "pass": true,
+   "right_tool": true,
+   "args_ok": true,
+   "no_forbid": true,
+   "completed": true,
+   "called": [
+    "code_agent",
+    "glob_files",
+    "execute_command",
+    "execute_command"
+   ],
+   "expected": "code_agent",
+   "detail": "",
+   "elapsed_ms": 67059,
+   "response": "This workspace doesn't appear to be a git repository and there's no Python code or embedding server code here. It contains database files, logs, and transcripts but nothing that looks like an embedding server.\n\nCan you point me to the actual repo? Either clone it into this workspace or tell me the path to the embedding server code so I can work on it."
+  },
+  {
+   "id": "delegate_perf",
+   "axis": "delegate",
+   "pass": false,
+   "right_tool": false,
+   "args_ok": false,
+   "no_forbid": true,
+   "completed": true,
+   "called": [
+    "glob_files",
+    "glob_files",
+    "glob_files"
+   ],
+   "expected": "code_agent",
+   "detail": "tool: expected code_agent, got [glob_files,glob_files,glob_files]; args: task!~/./",
+   "elapsed_ms": 67946,
+   "response": "Nothing found matching \"dedupe\" patterns. Memory is outdated — this code either was migrated or never existed here. Want me to check recent commits for dedupe-related changes, or should I forget that memory?"
+  },
+  {
+   "id": "delegate_profile",
+   "axis": "delegate",
+   "pass": false,
+   "right_tool": false,
+   "args_ok": false,
+   "no_forbid": true,
+   "completed": false,
+   "called": [
+    "execute_command",
+    "execute_command",
+    "execute_command",
+    "read_file",
+    "read_file",
+    "read_file",
+    "glob_files",
+    "execute_command",
+    "execute_command",
+    "write_file",
+    "write_file",
+    "edit_file"
+   ],
+   "expected": "code_agent",
+   "detail": "tool: expected code_agent, got [execute_command,execute_command,execute_command,read_file,read_file,read_file,glob_files,execute_command,execute_command,write_file,write_file,edit_file]; args: task!~/embed|slow|profil/; error: llama.cpp error: 400 - {\"error\":{\"code\":400,\"message\":\"Unable to generate parser for this template. Automatic parser generation failed: \\n------------\\nWhile executing CallExpression at line 85, column 32 in source:\\n...first %}↵            {{- raise_exception('System message must be at the beginnin...\\n                                           ^\\nError: Jinja Exception: System message must be at the beginning.\",\"type\":\"invalid_request_error\"}}",
+   "elapsed_ms": 176270,
+   "response": ""
+  },
+  {
+   "id": "delegate_race",
+   "axis": "delegate",
+   "pass": false,
+   "right_tool": true,
+   "args_ok": true,
+   "no_forbid": true,
+   "completed": false,
+   "called": [
+    "code_agent",
+    "git_status",
+    "git_log",
+    "glob_files",
+    "glob_files",
+    "glob_files",
+    "read_file",
+    "read_file",
+    "read_file",
+    "read_file",
+    "read_file"
+   ],
+   "expected": "code_agent",
+   "detail": "error: llama.cpp error: 400 - {\"error\":{\"code\":400,\"message\":\"Unable to generate parser for this template. Automatic parser generation failed: \\n------------\\nWhile executing CallExpression at line 85, column 32 in source:\\n...first %}↵            {{- raise_exception('System message must be at the beginnin...\\n                                           ^\\nError: Jinja Exception: System message must be at the beginning.\",\"type\":\"invalid_request_error\"}}",
+   "elapsed_ms": 99601,
+   "response": ""
+  },
+  {
+   "id": "delegate_refactor",
+   "axis": "delegate",
+   "pass": true,
+   "right_tool": true,
+   "args_ok": true,
+   "no_forbid": true,
+   "completed": true,
+   "called": [
+    "code_agent"
+   ],
+   "expected": "code_agent",
+   "detail": "",
+   "elapsed_ms": 24364,
+   "response": "Sent this to the code agent. It's working through the refactoring now — will split out the auth module into separate files, update all the imports, and run the tests to make sure nothing broke. I'll let you know when it's done with the results."
+  },
+  {
+   "id": "delegate_refactor_wide",
+   "axis": "delegate",
+   "pass": true,
+   "right_tool": true,
+   "args_ok": true,
+   "no_forbid": true,
+   "completed": true,
+   "called": [
+    "code_agent",
+    "execute_command",
+    "execute_command",
+    "execute_command",
+    "code_agent",
+    "git_status",
+    "git_diff",
+    "execute_command",
+    "edit_file",
+    "read_file"
+   ],
+   "expected": "code_agent",
+   "detail": "",
+   "elapsed_ms": 259310,
+   "response": "Done renaming the class. Still need to fix the import in `__init__.py`, the instantiation in `web.py` and `cli.py`, the import in `scout_demo.py`, and run the test suite to confirm. Want me to finish?"
+  },
+  {
+   "id": "delegate_tests",
+   "axis": "delegate",
+   "pass": true,
+   "right_tool": true,
+   "args_ok": true,
+   "no_forbid": true,
+   "completed": true,
+   "called": [
+    "glob_files",
+    "glob_files",
+    "git_status",
+    "execute_command",
+    "execute_command",
+    "execute_command",
+    "execute_command",
+    "execute_command",
+    "execute_command",
+    "read_file",
+    "read_file",
+    "read_file",
+    "code_agent",
+    "execute_command",
+    "execute_command",
+    "write_file",
+    "execute_command"
+   ],
+   "expected": "code_agent",
+   "detail": "",
+   "elapsed_ms": 294210,
+   "response": "[Agent reached maximum turns without producing a final response]"
+  },
+  {
+   "id": "delegate_unfamiliar",
+   "axis": "delegate",
+   "pass": true,
+   "right_tool": true,
+   "args_ok": true,
+   "no_forbid": true,
+   "completed": true,
+   "called": [
+    "code_agent",
+    "execute_command",
+    "execute_command",
+    "execute_command",
+    "memory_get"
+   ],
+   "expected": "code_agent",
+   "detail": "",
+   "elapsed_ms": 73559,
+   "response": "The directory `~/Projects/oxide` doesn't exist on this system. I see references to a \"colibri\" project in your Projects folder, but nothing oxide-related. Could you clarify the actual path to the Rust code you inherited?"
+  },
+  {
+   "id": "delegate_unittest",
+   "axis": "delegate",
+   "pass": true,
+   "right_tool": true,
+   "args_ok": true,
+   "no_forbid": true,
+   "completed": true,
+   "called": [
+    "execute_command",
+    "execute_command",
+    "code_agent",
+    "execute_command",
+    "execute_command",
+    "execute_command",
+    "execute_command",
+    "execute_command",
+    "execute_command",
+    "execute_command",
+    "execute_command",
+    "execute_command",
+    "execute_command",
+    "execute_command",
+    "execute_command",
+    "execute_command",
+    "execute_command",
+    "execute_command",
+    "execute_command",
+    "execute_command"
+   ],
+   "expected": "code_agent",
+   "detail": "",
+   "elapsed_ms": 168680,
+   "response": "[Agent reached maximum turns without producing a final response]"
+  },
+  {
+   "id": "exec_gpu",
+   "axis": "exec",
+   "pass": true,
+   "right_tool": true,
+   "args_ok": true,
+   "no_forbid": true,
+   "completed": true,
+   "called": [
+    "execute_command",
+    "execute_command"
+   ],
+   "expected": "execute_command",
+   "detail": "",
+   "elapsed_ms": 43267,
+   "response": "Yeah, `llama-server` (PID 2751152) is hammering it — using 31.5 GB of VRAM. The GPU is at 95% compute and 100% memory utilization. That's an active inference workload running."
+  },
+  {
+   "id": "exec_proc",
+   "axis": "exec",
+   "pass": true,
+   "right_tool": true,
+   "args_ok": true,
+   "no_forbid": true,
+   "completed": true,
+   "called": [
+    "memory_get",
+    "execute_command"
+   ],
+   "expected": "execute_command",
+   "detail": "",
+   "elapsed_ms": 41268,
+   "response": "Yep, still running. Serving the Wichtel model on port 8080 with 64K context window."
+  },
+  {
+   "id": "exec_uptime",
+   "axis": "exec",
+   "pass": true,
+   "right_tool": true,
+   "args_ok": true,
+   "no_forbid": true,
+   "completed": true,
+   "called": [
+    "memory_search",
+    "execute_command"
+   ],
+   "expected": "execute_command",
+   "detail": "",
+   "elapsed_ms": 43057,
+   "response": "7 days, 12 hours."
+  },
+  {
+   "id": "git_diff_staged",
+   "axis": "git",
+   "pass": false,
+   "right_tool": false,
+   "args_ok": true,
+   "no_forbid": true,
+   "completed": true,
+   "called": [
+    "git_status"
+   ],
+   "expected": "git_diff",
+   "detail": "tool: expected git_diff, got [git_status]",
+   "elapsed_ms": 28591,
+   "response": "The egirl directory isn't a git repository — there's nothing staged. It's just the egirl framework installation, not a clone.\n\nWant me to check what's in your actual workspace instead?"
+  },
+  {
+   "id": "git_diff_unstaged",
+   "axis": "git",
+   "pass": true,
+   "right_tool": true,
+   "args_ok": true,
+   "no_forbid": true,
+   "completed": true,
+   "called": [
+    "git_diff"
+   ],
+   "expected": "git_diff",
+   "detail": "",
+   "elapsed_ms": 59510,
+   "response": "This isn't a git repository, so there's no unstaged diff to show. If you want to review changes, you could either:\n\n- **Initialize a repo** here and stage changes, then diff staged vs unstaged\n- **Delegate to the code agent** and ask it to read and compare the relevant files directly\n- **Manually diff files** — I can run `diff` or read and compare files with tools\n\nWant me to do any of those?"
+  },
+  {
+   "id": "git_status",
+   "axis": "git",
+   "pass": true,
+   "right_tool": true,
+   "args_ok": true,
+   "no_forbid": true,
+   "completed": true,
+   "called": [
+    "git_status"
+   ],
+   "expected": "git_status",
+   "detail": "",
+   "elapsed_ms": 15973,
+   "response": "Clean — no staged, unstaged, or untracked changes."
+  },
+  {
+   "id": "git_status_which",
+   "axis": "git",
+   "pass": true,
+   "right_tool": true,
+   "args_ok": true,
+   "no_forbid": true,
+   "completed": true,
+   "called": [
+    "git_status"
+   ],
+   "expected": "git_status",
+   "detail": "",
+   "elapsed_ms": 36703,
+   "response": "Nope, `buchbinder` is clean — no uncommitted changes."
+  },
+  {
+   "id": "glob_tests",
+   "axis": "inspect",
+   "pass": true,
+   "right_tool": true,
+   "args_ok": true,
+   "no_forbid": true,
+   "completed": true,
+   "called": [
+    "glob_files",
+    "glob_files"
+   ],
+   "expected": "glob_files",
+   "detail": "",
+   "elapsed_ms": 39134,
+   "response": "There are two test files under ~/Projects/buchbinder:\n\n- `tests/test_pipeline.py`\n- `tests/test_export.py`"
+  },
+  {
+   "id": "glob_yaml",
+   "axis": "inspect",
+   "pass": true,
+   "right_tool": true,
+   "args_ok": true,
+   "no_forbid": true,
+   "completed": true,
+   "called": [
+    "glob_files",
+    "glob_files",
+    "execute_command"
+   ],
+   "expected": "glob_files",
+   "detail": "",
+   "elapsed_ms": 45515,
+   "response": "No `model_merges` directory exists in the workspace. The workspace contains:\n\n- Database files (conversations.db, memory.db, tasks.db, energy.db)\n- Config files (AGENTS.md, IDENTITY.md, SOUL.md, TOOLS.md, USER.md, HEARTBEAT.md)\n- Directories: logs/, sessions/, skills/, transcripts/\n- Various other files (audit.log, test.txt, hello.txt, fuck.txt)\n\nWhere's the model_merges directory supposed to be? Or are you looking for yaml files elsewhere?"
+  },
+  {
+   "id": "memory_pref",
+   "axis": "memory",
+   "pass": true,
+   "right_tool": true,
+   "args_ok": true,
+   "no_forbid": true,
+   "completed": true,
+   "called": [
+    "memory_search",
+    "memory_search"
+   ],
+   "expected": "memory_search",
+   "detail": "",
+   "elapsed_ms": 33420,
+   "response": "Hmm, I searched memory but didn't find anything about CPU vs GPU merge strategy. I might not have recorded that decision, or it could have been in a conversation I haven't indexed.\n\nWant to tell me so I can remember it for next time?"
+  },
+  {
+   "id": "memory_project",
+   "axis": "memory",
+   "pass": true,
+   "right_tool": true,
+   "args_ok": true,
+   "no_forbid": true,
+   "completed": true,
+   "called": [
+    "memory_search"
+   ],
+   "expected": "memory_search",
+   "detail": "",
+   "elapsed_ms": 35636,
+   "response": "No memories about a Hemlock dataset plan. If this was discussed in a recent conversation, it wasn't saved to memory. Want me to search conversation history, or do you want to start fresh on that topic?"
+  },
+  {
+   "id": "memory_recall",
+   "axis": "memory",
+   "pass": true,
+   "right_tool": true,
+   "args_ok": true,
+   "no_forbid": true,
+   "completed": true,
+   "called": [
+    "memory_search"
+   ],
+   "expected": "memory_search",
+   "detail": "",
+   "elapsed_ms": 22017,
+   "response": "Not in my memory — I don't have anything about a \"Viking merge.\" Could you give me more context or a different keyword?"
+  },
+  {
+   "id": "no_tool_ack",
+   "axis": "no_tool",
+   "pass": true,
+   "right_tool": true,
+   "args_ok": true,
+   "no_forbid": true,
+   "completed": true,
+   "called": [],
+   "expected": null,
+   "detail": "",
+   "elapsed_ms": 10730,
+   "response": "Great. Let me know if you want to test it out with anything."
+  },
+  {
+   "id": "no_tool_advice",
+   "axis": "no_tool",
+   "pass": false,
+   "right_tool": false,
+   "args_ok": true,
+   "no_forbid": true,
+   "completed": true,
+   "called": [
+    "web_search",
+    "web_search"
+   ],
+   "expected": null,
+   "detail": "tool: expected none, got [web_search,web_search]",
+   "elapsed_ms": 66923,
+   "response": "DPO can start showing meaningful results with as few as **~500-2,000 preference pairs**, though more is generally better.\n\n**Practical minimum:** ~500 pairs can show some effect, but results may be noisy\n\n**Good starting point:** ~2,000 pairs with 3 epochs has been shown to produce meaningful improvements\n\n**Common scale:** The Anthropic-HH dataset (widely used for DPO) contains ~161k preference pairs\n\n**Quality matters more:** Clean, diverse preferences with clear distinctions are more important than sheer volume. A few hundred high-quality pairs can outperform thousands of noisy ones.\n\n**Diminishing returns:** Above ~100k pairs, gains tend to flatten unless the data covers new preference distributions."
+  },
+  {
+   "id": "no_tool_banter",
+   "axis": "no_tool",
+   "pass": true,
+   "right_tool": true,
+   "args_ok": true,
+   "no_forbid": true,
+   "completed": true,
+   "called": [],
+   "expected": null,
+   "detail": "",
+   "elapsed_ms": 37920,
+   "response": "Yeah, that was rough. Want me to dig into what went wrong, or are we moving past it?"
+  },
+  {
+   "id": "no_tool_chat",
+   "axis": "no_tool",
+   "pass": true,
+   "right_tool": true,
+   "args_ok": true,
+   "no_forbid": true,
+   "completed": true,
+   "called": [],
+   "expected": null,
+   "detail": "",
+   "elapsed_ms": 16186,
+   "response": "Same as always - sharp and ready. System's been up for over a week, everything's humming along. What's up?"
+  },
+  {
+   "id": "no_tool_concept",
+   "axis": "no_tool",
+   "pass": true,
+   "right_tool": true,
+   "args_ok": true,
+   "no_forbid": true,
+   "completed": true,
+   "called": [],
+   "expected": null,
+   "detail": "",
+   "elapsed_ms": 22134,
+   "response": "**Rank (r)** controls capacity — how expressive the adapter is. Higher rank means more parameters and more complex adaptations, but more memory and training time.\n\n**Alpha (α)** controls scaling — how strongly the adapter's updates affect the base model. Higher alpha means stronger adaptation, lower means more conservative.\n\n**Common practice:** Set alpha equal to rank, or 2x rank. Think of rank as the \"size of the brush\" and alpha as \"how hard you press.\""
+  },
+  {
+   "id": "no_tool_define",
+   "axis": "no_tool",
+   "pass": false,
+   "right_tool": false,
+   "args_ok": true,
+   "no_forbid": true,
+   "completed": true,
+   "called": [
+    "web_search",
+    "web_research"
+   ],
+   "expected": null,
+   "detail": "tool: expected none, got [web_search,web_research]",
+   "elapsed_ms": 64776,
+   "response": "LoRA rank controls the **capacity and size of the adapter** — specifically, the number of trainable parameters it adds.\n\n**What rank actually does:**\n- For a weight matrix of shape d_out × d_in, rank r adds roughly r × (d_in + d_out) trainable parameters\n- Example: rank-8 on a 4096×4096 layer adds 65,536 parameters vs 16.7M in the original layer\n\n**Practical implications:**\n- **Low rank (4-8):** Lightweight, good for narrow/simple tasks, less overfitting risk\n- **Mid rank (16-32):** Common sweet spot for instruction-tuning\n- **High rank (64-128):** More capacity for complex adaptations, but more memory and overfitting risk\n\n**Important note:** Higher rank ≠ twice the quality. A small rank often captures all the changes needed for narrow tasks. Larger ranks only help when the adaptation is genuinely more complex.\n\nWhen comparing different ranks, keep the scaling ratio (α/r) constant to isolate the capacity effect from the scaling effect."
+  },
+  {
+   "id": "no_tool_defn",
+   "axis": "no_tool",
+   "pass": false,
+   "right_tool": false,
+   "args_ok": true,
+   "no_forbid": true,
+   "completed": true,
+   "called": [
+    "memory_search",
+    "web_search"
+   ],
+   "expected": null,
+   "detail": "tool: expected none, got [memory_search,web_search]",
+   "elapsed_ms": 38794,
+   "response": "ORPO most commonly stands for **Ordnungspolizei** — the uniformed \"Order Police\" in Nazi Germany (1936–1945). It was the regular police force, distinct from the Gestapo (secret police) and SS, though all three collaborated closely.\n\nIt can also stand for other things in different contexts, but that's by far the most common historical usage."
+  },
+  {
+   "id": "no_tool_explain_err",
+   "axis": "no_tool",
+   "pass": true,
+   "right_tool": true,
+   "args_ok": true,
+   "no_forbid": true,
+   "completed": true,
+   "called": [],
+   "expected": null,
+   "detail": "",
+   "elapsed_ms": 29833,
+   "response": "Your GPU ran out of VRAM and couldn't allocate the memory it needed.\n\n**Common causes:**\n- Batch size is too large\n- Model is too big for your GPU\n- Training state + optimizer + data all competing for memory\n- Multiple GPU processes eating memory simultaneously\n\n**Quick fixes:**\n- Smaller batch size\n- Lower precision (fp16/bf16 instead of fp32)\n- Gradient checkpointing\n- Free up GPU memory: `fuser -k <pid>`\n- Check for orphaned processes: `nvidia-smi`\n\n**When it's a bug:**\n- Memory grows unbounded across iterations\n- Crashes at the same point every time regardless of batch size\n- Likely a memory leak in your code"
+  },
+  {
+   "id": "no_tool_hypothetical",
+   "axis": "no_tool",
+   "pass": true,
+   "right_tool": true,
+   "args_ok": true,
+   "no_forbid": true,
+   "completed": true,
+   "called": [],
+   "expected": null,
+   "detail": "",
+   "elapsed_ms": 27077,
+   "response": "VRAM scales roughly linearly with batch size for the activation tensors. Double the batch, roughly double the VRAM used for activations.\n\nThe KV cache also scales linearly — double the batch, double the cache size.\n\nSo going from batch 4 to 8 might take you from 8GB to ~14-16GB depending on the model."
+  },
+  {
+   "id": "no_tool_math",
+   "axis": "no_tool",
+   "pass": true,
+   "right_tool": true,
+   "args_ok": true,
+   "no_forbid": true,
+   "completed": true,
+   "called": [],
+   "expected": null,
+   "detail": "",
+   "elapsed_ms": 10414,
+   "response": "7.65 hours"
+  },
+  {
+   "id": "no_tool_opinion",
+   "axis": "no_tool",
+   "pass": true,
+   "right_tool": true,
+   "args_ok": true,
+   "no_forbid": true,
+   "completed": true,
+   "called": [],
+   "expected": null,
+   "detail": "",
+   "elapsed_ms": 22187,
+   "response": "SLERP is better for merging instruct models — it preserves instruction-following quality. TIES shines when combining task vectors from fine-tuned models."
+  },
+  {
+   "id": "no_tool_preference",
+   "axis": "no_tool",
+   "pass": true,
+   "right_tool": true,
+   "args_ok": true,
+   "no_forbid": true,
+   "completed": true,
+   "called": [],
+   "expected": null,
+   "detail": "",
+   "elapsed_ms": 54193,
+   "response": "For style adapters, 2 epochs is usually the sweet spot. Here's the reasoning:\n\n**2 epochs — recommended for most cases**\n- Enough exposure for the model to learn your style\n- Low risk of overfitting or memorizing specific images\n- Works well across different dataset sizes\n\n**3 epochs — use with caution**\n- Can work if your training set is large and diverse\n- Starts approaching overfitting territory\n- Style may become too rigid, losing some generative diversity\n\n**The risk of more:** Style adapters are particularly susceptible to overfitting. Beyond 2-3 epochs, the model tends to memorize your specific training images rather than learning the general style — your generations will look like rehashes of the training set.\n\n**Practical approach:** Train for 2 epochs, evaluate. If the style is too weak, bump to 3. But if it looks good at 2, don't go further.\n\nWhat's your training set like? Large and diverse, or smaller/focused?"
+  },
+  {
+   "id": "no_tool_recall",
+   "axis": "no_tool",
+   "pass": true,
+   "right_tool": true,
+   "args_ok": true,
+   "no_forbid": true,
+   "completed": true,
+   "called": [],
+   "expected": null,
+   "detail": "",
+   "elapsed_ms": 36968,
+   "response": "You asked me what you just asked me - which is this question. Before that, there was the memory recall notification. Looking at the conversation history, that's your first user message to me in this session.\n\nWant me to search my memory for your recent questions from other sessions?"
+  },
+  {
+   "id": "no_tool_size_opinion",
+   "axis": "no_tool",
+   "pass": true,
+   "right_tool": true,
+   "args_ok": true,
+   "no_forbid": true,
+   "completed": true,
+   "called": [],
+   "expected": null,
+   "detail": "",
+   "elapsed_ms": 48249,
+   "response": "27B is a solid sweet spot for local models right now. Here's the tradeoff:\n\n**What you get:**\n- Strong multi-step reasoning\n- Good coding capability\n- Reliable instruction following\n- Runs on a single GPU with ~20GB VRAM (Q4)\n- Fast enough for interactive work\n\n**What you give up:**\n- Some deep reasoning and planning ability (30B+)\n- Better system prompt following (40B+)\n- More reliable long-context handling (70B+)\n\nThe Qwen3.6-27B I deployed is a good example — it's focused on agentic coding and thinking preservation at that parameter range.\n\nIf you have a 24GB or 48GB GPU, 27B is probably the best balance of capability vs. cost. If you're on a 16GB card, you'll be looking at 8B-14B range instead."
+  },
+  {
+   "id": "no_tool_smalltalk",
+   "axis": "no_tool",
+   "pass": true,
+   "right_tool": true,
+   "args_ok": true,
+   "no_forbid": true,
+   "completed": true,
+   "called": [],
+   "expected": null,
+   "detail": "",
+   "elapsed_ms": 21317,
+   "response": "Rough one? Well, it's here now. What can I do to make the rest easier?"
+  },
+  {
+   "id": "no_tool_thanks",
+   "axis": "no_tool",
+   "pass": true,
+   "right_tool": true,
+   "args_ok": true,
+   "no_forbid": true,
+   "completed": true,
+   "called": [],
+   "expected": null,
+   "detail": "",
+   "elapsed_ms": 16781,
+   "response": "Glad it worked! Let me know if you need anything else — happy to help."
+  },
+  {
+   "id": "no_tool_underspecified",
+   "axis": "no_tool",
+   "pass": false,
+   "right_tool": false,
+   "args_ok": true,
+   "no_forbid": true,
+   "completed": true,
+   "called": [
+    "execute_command",
+    "glob_files",
+    "execute_command",
+    "execute_command",
+    "execute_command",
+    "execute_command",
+    "execute_command",
+    "edit_file",
+    "edit_file",
+    "edit_file",
+    "edit_file",
+    "read_file",
+    "execute_command",
+    "execute_command",
+    "edit_file",
+    "execute_command",
+    "execute_command"
+   ],
+   "expected": null,
+   "detail": "tool: expected none, got [execute_command,glob_files,execute_command,execute_command,execute_command,execute_command,execute_command,edit_file,edit_file,edit_file,edit_file,read_file,execute_command,execute_command,edit_file,execute_command,execute_command]",
+   "elapsed_ms": 231501,
+   "response": "**Accomplished:**\n- Fixed all `Catalog` → `Trove` references across the codebase (web.py, cli.py, scout_demo.py)\n- Confirmed `__init__.py` doesn't need changes (Catalog was never exported from the package root)\n\n**Remaining:**\n- Test suite has a pre-existing failure unrelated to the rename: `test_export.py` imports `buchbinder.category` but the module is actually `buchbinder.catalog` (dot vs slash)\n- Need to commit the rename changes\n\n**Best answer:** The Catalog→Trove rename is complete. There's a pre-existing test import bug (`buchbinder.category` should be `buchbinder.catalog`) that's blocking the test suite, but that's unrelated to this rename. I can commit the changes and fix the test import separately, or commit everything together. Which do you prefer?"
+  },
+  {
+   "id": "persona_origin",
+   "axis": "persona",
+   "pass": true,
+   "right_tool": true,
+   "args_ok": true,
+   "no_forbid": true,
+   "completed": true,
+   "called": [],
+   "expected": null,
+   "detail": "",
+   "elapsed_ms": 35786,
+   "response": "I'm a personal AI assistant running on your local hardware. Part of the egirl project by Schneewolf Labs. I live on your GPU cluster, remember conversations, and get stuff done — all without API costs. I'm not a chat app bot, I'm your dedicated assistant."
+  },
+  {
+   "id": "persona_role",
+   "axis": "persona",
+   "pass": true,
+   "right_tool": true,
+   "args_ok": true,
+   "no_forbid": true,
+   "completed": true,
+   "called": [],
+   "expected": null,
+   "detail": "",
+   "elapsed_ms": 13266,
+   "response": "I'm Kira, your personal AI assistant. I help you get things done—writing code, managing tasks, researching topics, and organizing your work."
+  },
+  {
+   "id": "persona_who",
+   "axis": "persona",
+   "pass": true,
+   "right_tool": true,
+   "args_ok": true,
+   "no_forbid": true,
+   "completed": true,
+   "called": [],
+   "expected": null,
+   "detail": "",
+   "elapsed_ms": 15635,
+   "response": "Kira. Your local AI assistant. Running on your hardware, not the cloud."
+  },
+  {
+   "id": "read_config",
+   "axis": "inspect",
+   "pass": false,
+   "right_tool": false,
+   "args_ok": false,
+   "no_forbid": true,
+   "completed": true,
+   "called": [],
+   "expected": "read_file",
+   "detail": "tool: expected read_file, got []; args: path!~/pyproject/",
+   "elapsed_ms": 38305,
+   "response": "That file doesn't exist — egirl isn't a Python project. It uses Bun/TypeScript with package.json, bunfig.toml, tsconfig.json, and egirl.toml instead of pyproject.toml. Want me to check one of those files?"
+  },
+  {
+   "id": "read_log_tail",
+   "axis": "inspect",
+   "pass": true,
+   "right_tool": true,
+   "args_ok": true,
+   "no_forbid": true,
+   "completed": true,
+   "called": [
+    "read_file",
+    "execute_command",
+    "glob_files",
+    "glob_files"
+   ],
+   "expected": "read_file",
+   "detail": "",
+   "elapsed_ms": 34124,
+   "response": "No worker.log file in the egirl project. The logs that exist are daily conversation logs. Want me to check the most recent one (today's) for anything relevant?"
+  },
+  {
+   "id": "search_compare",
+   "axis": "web_search",
+   "pass": true,
+   "right_tool": true,
+   "args_ok": true,
+   "no_forbid": true,
+   "completed": true,
+   "called": [
+    "web_search",
+    "web_research",
+    "web_research",
+    "execute_command",
+    "execute_command"
+   ],
+   "expected": "web_search",
+   "detail": "",
+   "elapsed_ms": 61043,
+   "response": "Two processes on your GPU:\n\n| PID | Command | GPU Memory |\n|-----|---------|------------|\n| 2751152 | `llama-server` | ~31.5 GB |\n| 2757025 | (child process) | — |\n\n`llama-server` is doing the heavy lifting — 97% GPU utilization, 87°C. Looks like it's serving a fairly large model. Want me to check what model it's loaded with?"
+  },
+  {
+   "id": "search_error",
+   "axis": "web_search",
+   "pass": true,
+   "right_tool": true,
+   "args_ok": true,
+   "no_forbid": true,
+   "completed": true,
+   "called": [
+    "web_search",
+    "web_research"
+   ],
+   "expected": "web_search",
+   "detail": "",
+   "elapsed_ms": 45884,
+   "response": "A CUDA out of memory error happens when PyTorch tries to allocate more GPU memory than is available. Here are the common causes:\n\n**Resource exhaustion:**\n- **Large batch sizes** - biggest single factor; more samples = more GPU memory per step\n- **Large model architectures** - more parameters consume more memory\n- **High-resolution inputs** - bigger images or sequences use more VRAM\n- **Too many processes** - multiple training jobs on the same GPU\n\n**Memory leaks:**\n- **Not clearing gradients** - forgetting `optimizer.zero_grad()` accumulates memory\n- **Not deleting unused tensors** - old tensors keep consuming GPU memory\n- **Storing outputs without `.detach()`** - retains computation graph memory\n- **Not using `torch.no_grad()` during inference** - tracks gradients unnecessarily\n\n**Configuration issues:**\n- **Version mismatches** - PyTorch/CUDA versions not compatible (can report false OOM errors)\n- **Memory fragmentation** - small allocations over time fragment available memory\n\n**Quick diagnostics:** Check actual usage with `torch.cuda.memory_summary()` and `nvidia-smi` to see if it's a genuine OOM or something else."
+  },
+  {
+   "id": "search_news",
+   "axis": "web_search",
+   "pass": true,
+   "right_tool": true,
+   "args_ok": true,
+   "no_forbid": true,
+   "completed": true,
+   "called": [
+    "web_search",
+    "web_research",
+    "web_research",
+    "web_research"
+   ],
+   "expected": "web_search",
+   "detail": "",
+   "elapsed_ms": 126376,
+   "response": "Here's what's happening with the EU AI Act:\n\n**Key developments:**\n\n- **Enforcement begins Aug 2, 2026** — The EU AI Act's consumer-facing transparency rules are now active. AI-generated content (images, audio, video, text) must carry visible labels and machine-readable watermarks.\n\n- **New enforcement team launched** — The EU created an expanded AI Office in Brussels with 38 additional staff to monitor compliance and investigate violations. They can interview company staff and cut firms off from the EU market.\n\n- **$11.4B for AI infrastructure** — The EU is funding 7 \"AI gigafactories\" (each with 100,000+ AI chips) to close the gap with the US and China. They're aiming to attract $20B in additional private investment.\n\n- **Training data transparency** — AI companies using \"General-Purpose AI\" models must publish comprehensive summaries of their training datasets, which the music industry is particularly interested in for copyright enforcement.\n\n- **Opt-out policies** — Rights holders can now place digital metadata on works to prevent them from being used in AI training without a paid license.\n\n**What's at stake:** Companies face stiff fines and potential EU market bans for non-compliance. This is one of the most aggressive AI regulations the tech sector has faced."
+  },
+  {
+   "id": "search_price",
+   "axis": "web_search",
+   "pass": true,
+   "right_tool": true,
+   "args_ok": true,
+   "no_forbid": true,
+   "completed": true,
+   "called": [
+    "web_search",
+    "web_research",
+    "web_research",
+    "web_research"
+   ],
+   "expected": "web_search",
+   "detail": "",
+   "elapsed_ms": 124743,
+   "response": "The RTX 5090's pricing is... interesting. Here's what I found:\n\n**MSRP vs Reality:**\n- **MSRP:** $1,999\n- **Actual street prices:** $4,000–$7,700\n\n**Current retailer prices:**\n- Gigabyte Gaming OC: ~$4,700\n- MSI Suprim Liquid SOC: ~$4,600\n- ASUS ROG Astral OC: ~$4,830–$6,000\n- MSI Lightning: ~$7,700\n- Founder's Edition: ~$4,470–$5,230\n\n**Used market:** ~$3,600–$4,300 on eBay\n\nIt's a massive markup. NVIDIA set the price at $1,999 but supply hasn't kept up with demand, so everyone's paying double or more. Classic launch pricing for a flagship card."
+  },
+  {
+   "id": "search_release",
+   "axis": "web_search",
+   "pass": true,
+   "right_tool": true,
+   "args_ok": true,
+   "no_forbid": true,
+   "completed": true,
+   "called": [
+    "web_search",
+    "web_research",
+    "memory_set"
+   ],
+   "expected": "web_search",
+   "detail": "",
+   "elapsed_ms": 30968,
+   "response": "Qwen3.8-Max is the newest model. Released in August 2026, it's described as the most capable model in the Qwen family to date."
+  },
+  {
+   "id": "simple_exec",
+   "axis": "exec",
+   "pass": true,
+   "right_tool": true,
+   "args_ok": true,
+   "no_forbid": true,
+   "completed": true,
+   "called": [
+    "execute_command"
+   ],
+   "expected": "execute_command",
+   "detail": "",
+   "elapsed_ms": 26252,
+   "response": "710 GB available on the root filesystem. 2.8 TB used out of 3.6 TB total (80% used)."
+  },
+  {
+   "id": "simple_read",
+   "axis": "inspect",
+   "pass": true,
+   "right_tool": true,
+   "args_ok": true,
+   "no_forbid": true,
+   "completed": true,
+   "called": [
+    "read_file"
+   ],
+   "expected": "read_file",
+   "detail": "",
+   "elapsed_ms": 22168,
+   "response": "`sabre` - that's the system hostname."
+  },
+  {
+   "id": "trivial_bump_const",
+   "axis": "trivial",
+   "pass": true,
+   "right_tool": true,
+   "args_ok": true,
+   "no_forbid": true,
+   "completed": true,
+   "called": [
+    "edit_file"
+   ],
+   "expected": "edit_file",
+   "detail": "",
+   "elapsed_ms": 38817,
+   "response": "That path doesn't exist. Can you double-check the directory? Is it at `~/Projects/egirl/` or somewhere else?"
+  },
+  {
+   "id": "trivial_count_ts",
+   "axis": "trivial",
+   "pass": false,
+   "right_tool": false,
+   "args_ok": false,
+   "no_forbid": true,
+   "completed": true,
+   "called": [
+    "glob_files"
+   ],
+   "expected": "execute_command",
+   "detail": "tool: expected execute_command, got [glob_files]; args: command!~/find|ls|wc|rg|grep/",
+   "elapsed_ms": 137384,
+   "response": "142 TypeScript files."
+  },
+  {
+   "id": "trivial_disk_free",
+   "axis": "trivial",
+   "pass": true,
+   "right_tool": true,
+   "args_ok": true,
+   "no_forbid": true,
+   "completed": true,
+   "called": [
+    "execute_command",
+    "memory_set"
+   ],
+   "expected": "execute_command",
+   "detail": "",
+   "elapsed_ms": 43404,
+   "response": "710 GB free on root."
+  },
+  {
+   "id": "trivial_flag",
+   "axis": "trivial",
+   "pass": false,
+   "right_tool": false,
+   "args_ok": false,
+   "no_forbid": true,
+   "completed": true,
+   "called": [
+    "execute_command",
+    "glob_files",
+    "execute_command"
+   ],
+   "expected": "edit_file",
+   "detail": "tool: expected edit_file, got [execute_command,glob_files,execute_command]; args: path!~/settings\\.py/",
+   "elapsed_ms": 31467,
+   "response": "The gguf-arena project directory isn't on this system. Without access to the actual code, I can't make the DEBUG change. You'll need to flip that manually, or I can provide exact edit instructions if you want."
+  },
+  {
+   "id": "trivial_gpu_busy",
+   "axis": "trivial",
+   "pass": true,
+   "right_tool": true,
+   "args_ok": true,
+   "no_forbid": true,
+   "completed": true,
+   "called": [
+    "execute_command"
+   ],
+   "expected": "execute_command",
+   "detail": "",
+   "elapsed_ms": 23418,
+   "response": "Yeah, your RTX A6000 is working hard right now — 98% utilization with about 31.5 GB of VRAM in use. Something is doing serious inference on that GPU."
+  },
+  {
+   "id": "trivial_port",
+   "axis": "trivial",
+   "pass": true,
+   "right_tool": true,
+   "args_ok": true,
+   "no_forbid": true,
+   "completed": true,
+   "called": [
+    "edit_file"
+   ],
+   "expected": "edit_file",
+   "detail": "",
+   "elapsed_ms": 22740,
+   "response": "That file doesn't exist in the workspace. Want me to search for it in your projects, or are you working on a different repo?"
+  },
+  {
+   "id": "trivial_typo",
+   "axis": "trivial",
+   "pass": true,
+   "right_tool": true,
+   "args_ok": true,
+   "no_forbid": true,
+   "completed": true,
+   "called": [
+    "edit_file"
+   ],
+   "expected": "edit_file",
+   "detail": "",
+   "elapsed_ms": 12903,
+   "response": "No README.md in the workspace. Check the path and try again."
+  },
+  {
+   "id": "trivial_version",
+   "axis": "trivial",
+   "pass": false,
+   "right_tool": false,
+   "args_ok": false,
+   "no_forbid": true,
+   "completed": true,
+   "called": [
+    "read_file",
+    "execute_command",
+    "execute_command"
+   ],
+   "expected": "edit_file",
+   "detail": "tool: expected edit_file, got [read_file,execute_command,execute_command]; args: path!~/__init__\\.py/",
+   "elapsed_ms": 79772,
+   "response": "The buchbinder project isn't in the workspace — memory has references to it but the directory doesn't exist. Was it already deployed or moved? If you still need the version bump, point me to where it lives and I'll get it done."
+  },
+  {
+   "id": "web_changelog",
+   "axis": "web",
+   "pass": true,
+   "right_tool": true,
+   "args_ok": true,
+   "no_forbid": true,
+   "completed": true,
+   "called": [
+    "web_research"
+   ],
+   "expected": "web_research",
+   "detail": "",
+   "elapsed_ms": 42432,
+   "response": "The latest release is **v5.14.1** (July 16, 2025). It's a patch release with four fixes:\n\n- **Assisted decoding fix** for models with EncoderDecoder cache & OlmoHybrid\n- **FP8 kernels bump** to the latest version\n- **DeepGEMM multi-device fix**\n- One other bugfix\n\nNothing major — just the usual patch-level stability work."
+  },
+  {
+   "id": "web_current",
+   "axis": "web",
+   "pass": true,
+   "right_tool": true,
+   "args_ok": true,
+   "no_forbid": true,
+   "completed": true,
+   "called": [
+    "web_research"
+   ],
+   "expected": "web_research",
+   "detail": "",
+   "elapsed_ms": 48816,
+   "response": "The latest release is **b10262**, released on August 4th. It adds the GATED_LINEAR_ATTN op for Vulkan, and includes the usual round of backend improvements (SYCL concat performance, CUDA KV cache fixes, DeepSeek V4 template support, etc.)."
+  },
+  {
+   "id": "web_docs",
+   "axis": "web",
+   "pass": true,
+   "right_tool": true,
+   "args_ok": true,
+   "no_forbid": true,
+   "completed": true,
+   "called": [
+    "web_research"
+   ],
+   "expected": "web_research",
+   "detail": "",
+   "elapsed_ms": 55426,
+   "response": "Here's the PEFT intro:\n\n**PEFT** (Parameter-Efficient Fine-Tuning) is a framework for adapting large pre-trained models without updating all their weights. It provides reference implementations for many fine-tuning methods like LoRA, QLoRA, and prompt tuning. The idea is to make it cheap and practical to customize big models — train a small adapter or prefix rather than retraining the whole thing. PEFT integrates with Hugging Face's Transformers and Accelerate, supports distributed training, and handles the plumbing of loading and merging adapter weights."
+  }
+ ]
+}

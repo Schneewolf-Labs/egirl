@@ -13,7 +13,8 @@
  * - Autonomous (heartbeat/task) actions are energy-gated
  */
 
-import { Database } from 'bun:sqlite'
+import type { Database } from 'bun:sqlite'
+import { openDatabase } from '../util/db'
 import { log } from '../util/logger'
 import { getToolCost } from './costs'
 
@@ -54,7 +55,7 @@ export class EnergyBudget {
 
   constructor(dbPath: string, config: Partial<EnergyConfig> = {}) {
     this.config = { ...ENERGY_DEFAULTS, ...config }
-    this.db = new Database(dbPath)
+    this.db = openDatabase(dbPath)
     this.initialize()
   }
 
@@ -203,7 +204,11 @@ export class EnergyBudget {
   }> {
     const rows = this.db
       .query(
-        'SELECT tool_name, cost, balance_after, context, created_at FROM energy_ledger ORDER BY created_at DESC LIMIT ?',
+        // Tie-break on id. created_at has millisecond resolution, so two spends in the same
+        // millisecond — which is what consecutive tool calls actually are — order arbitrarily,
+        // and "most recent first" silently came back oldest-first. id is monotonic, so it
+        // resolves ties by true insertion order.
+        'SELECT tool_name, cost, balance_after, context, created_at FROM energy_ledger ORDER BY created_at DESC, id DESC LIMIT ?',
       )
       .all(limit) as Array<{
       tool_name: string

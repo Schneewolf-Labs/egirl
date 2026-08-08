@@ -82,21 +82,42 @@ export async function chatWithContextWindow(args: {
   const { provider, systemPrompt, messages, conversationSummary, tools, contextLength, tokenizer } =
     args
 
-  const messagesForFitting = conversationSummary
-    ? [formatSummaryMessage(conversationSummary), ...messages]
-    : messages
+  // The conversation summary used to be injected as its own system message ahead of the history,
+  // which put a system message at index 1. Qwen's chat template refuses that outright:
+  //
+  //   400 Unable to generate parser for this template
+  //   raise_exception('System message must be at the beginning')
+  //
+  // so every long agentic run hard-failed the moment the summariser fired — precisely the
+  // long-running sessions egirl exists for. Folding the summary into the leading system prompt
+  // keeps the same information in the same position and makes it non-droppable during fitting,
+  // which is what you want from a summary anyway.
+  const effectiveSystemPrompt = conversationSummary
+    ? `${systemPrompt}\n\n${String(formatSummaryMessage(conversationSummary).content)}`
+    : systemPrompt
 
   const fitResult = await fitToContextWindow(
-    systemPrompt,
-    messagesForFitting,
+    effectiveSystemPrompt,
+    messages,
     tools,
     { contextLength },
     tokenizer,
   )
 
+  // Defensive: hoist any stray system message out of the history instead of sending it inline.
+  // Anything that appends one mid-conversation would otherwise resurrect the bug above, and a
+  // 400 from a Jinja template is a very indirect way to discover that.
+  const strays = fitResult.messages.filter((m) => m.role === 'system')
+  const history = fitResult.messages.filter((m) => m.role !== 'system')
+  if (strays.length) {
+    log.warn('agent', `Hoisted ${strays.length} inline system message(s) into the system prompt`)
+  }
   const fittedMessages: ChatMessage[] = [
-    { role: 'system', content: systemPrompt },
-    ...fitResult.messages,
+    {
+      role: 'system',
+      content: [effectiveSystemPrompt, ...strays.map((m) => String(m.content))].join('\n\n'),
+    },
+    ...history,
   ]
 
   log.debug(
@@ -128,16 +149,22 @@ export async function chatWithContextWindow(args: {
     )
 
     const refitResult = await fitToContextWindow(
-      systemPrompt,
-      messagesForFitting,
+      effectiveSystemPrompt,
+      messages,
       tools,
       { contextLength: error.contextSize },
       tokenizer,
     )
 
+    // Same hoist as above — this retry path would otherwise reintroduce the inline system
+    // message whenever the server's real n_ctx differs from the configured one.
+    const retryStrays = refitResult.messages.filter((m) => m.role === 'system')
     const retryMessages: ChatMessage[] = [
-      { role: 'system', content: systemPrompt },
-      ...refitResult.messages,
+      {
+        role: 'system',
+        content: [effectiveSystemPrompt, ...retryStrays.map((m) => String(m.content))].join('\n\n'),
+      },
+      ...refitResult.messages.filter((m) => m.role !== 'system'),
     ]
 
     const response = await chatWithRetry({

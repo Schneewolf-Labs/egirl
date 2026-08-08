@@ -1,0 +1,539 @@
+{
+ "_comment": "egirl operator bench. Driven through the real agent via `egirl cli -m ... --json`, so tool registration, config and prompt changes are all in scope. A case passes only if the expected tool was called (or none, for abstention), every arg_check regex matches, no forbid pattern appears, and the run completed. Answering correctly via the wrong tool is a failure. Cases point at ~/Projects/dummy/egirl, a throwaway clone reset before every run \u2014 pointing them at the live repo let an agent rewrite config files and delete 117 lines of egirl.example.toml.",
+ "cases": [
+  {
+   "id": "delegate_refactor",
+   "axis": "delegate",
+   "expect_tool": "code_agent",
+   "user": "The auth module in ~/Projects/dummy/egirl is a mess - split it into separate files and make sure the tests still pass.",
+   "arg_checks": {
+    "task": "."
+   }
+  },
+  {
+   "id": "delegate_bug",
+   "axis": "delegate",
+   "expect_tool": "code_agent",
+   "user": "There's a bug where the Discord channel drops messages longer than 2000 chars. Fix it.",
+   "arg_checks": {
+    "task": "."
+   }
+  },
+  {
+   "id": "delegate_not_exec",
+   "axis": "delegate",
+   "expect_tool": "code_agent",
+   "user": "Add retry logic with exponential backoff to every HTTP call in the embedding server, and add tests for it.",
+   "arg_checks": {
+    "task": "."
+   }
+  },
+  {
+   "id": "delegate_migration",
+   "axis": "delegate",
+   "expect_tool": "code_agent",
+   "user": "Migrate gguf-arena from argparse to click across all the entry points.",
+   "arg_checks": {
+    "task": "."
+   }
+  },
+  {
+   "id": "delegate_tests",
+   "axis": "delegate",
+   "expect_tool": "code_agent",
+   "user": "buchbinder's export module has no test coverage at all. Write a proper test suite for it.",
+   "arg_checks": {
+    "task": "."
+   }
+  },
+  {
+   "id": "delegate_perf",
+   "axis": "delegate",
+   "expect_tool": "code_agent",
+   "user": "The passage dedupe pass is O(n^2) and takes forever on big corpora. Profile it and make it fast.",
+   "arg_checks": {
+    "task": "."
+   }
+  },
+  {
+   "id": "delegate_feature",
+   "axis": "delegate",
+   "expect_tool": "code_agent",
+   "user": "Add a --resume flag to the ingest pipeline so it can pick up where it left off after a crash.",
+   "arg_checks": {
+    "task": "."
+   }
+  },
+  {
+   "id": "delegate_unfamiliar",
+   "axis": "delegate",
+   "expect_tool": "code_agent",
+   "user": "I inherited some Rust in ~/Projects/oxide that I don't understand. Work out what the scheduler does and document it.",
+   "arg_checks": {
+    "task": "."
+   }
+  },
+  {
+   "id": "delegate_debug_stack",
+   "axis": "delegate",
+   "expect_tool": "code_agent",
+   "user": "The worker throws 'RuntimeError: event loop is closed' on shutdown, intermittently. Track it down and fix it.",
+   "arg_checks": {
+    "task": "."
+   }
+  },
+  {
+   "id": "delegate_refactor_wide",
+   "axis": "delegate",
+   "expect_tool": "code_agent",
+   "user": "Rename the `Catalog` class to `Trove` everywhere in buchbinder, including the tests and docs.",
+   "arg_checks": {
+    "task": "."
+   }
+  },
+  {
+   "id": "trivial_bump_const",
+   "axis": "trivial",
+   "expect_tool": "edit_file",
+   "user": "In ~/Projects/dummy/egirl/config.py change MAX_RETRIES from 3 to 5. That's the only change.",
+   "arg_checks": {
+    "path": "config\\.py"
+   }
+  },
+  {
+   "id": "trivial_typo",
+   "axis": "trivial",
+   "expect_tool": "edit_file",
+   "user": "There's a typo in README.md - 'recieve' should be 'receive'. Just fix that one word.",
+   "arg_checks": {
+    "path": "README"
+   }
+  },
+  {
+   "id": "trivial_port",
+   "axis": "trivial",
+   "expect_tool": "edit_file",
+   "user": "Change the default port in server.py from 8000 to 8099, single line.",
+   "arg_checks": {
+    "path": "server\\.py"
+   }
+  },
+  {
+   "id": "trivial_flag",
+   "axis": "trivial",
+   "expect_tool": "edit_file",
+   "user": "Set DEBUG = False in settings.py. Nothing else.",
+   "arg_checks": {
+    "path": "settings\\.py"
+   }
+  },
+  {
+   "id": "trivial_version",
+   "axis": "trivial",
+   "expect_tool": "edit_file",
+   "user": "Bump __version__ in buchbinder/__init__.py from 0.3.1 to 0.3.2.",
+   "arg_checks": {
+    "path": "__init__\\.py"
+   }
+  },
+  {
+   "id": "simple_read",
+   "axis": "inspect",
+   "expect_tool": "read_file",
+   "user": "What's in /etc/hostname?",
+   "arg_checks": {
+    "path": "/etc/hostname"
+   }
+  },
+  {
+   "id": "read_config",
+   "axis": "inspect",
+   "expect_tool": "read_file",
+   "user": "Show me what's in ~/Projects/dummy/egirl/pyproject.toml.",
+   "arg_checks": {
+    "path": "pyproject"
+   }
+  },
+  {
+   "id": "glob_tests",
+   "axis": "inspect",
+   "expect_tool": "glob_files",
+   "user": "Which test files exist under ~/Projects/buchbinder?",
+   "arg_checks": {
+    "pattern": "."
+   }
+  },
+  {
+   "id": "glob_yaml",
+   "axis": "inspect",
+   "expect_tool": "glob_files",
+   "user": "Find every yaml file in the model_merges directory.",
+   "arg_checks": {
+    "pattern": "ya?ml"
+   }
+  },
+  {
+   "id": "read_log_tail",
+   "axis": "inspect",
+   "expect_tool": "read_file",
+   "user": "Open ~/Projects/dummy/egirl/logs/worker.log so I can see what it says.",
+   "arg_checks": {
+    "path": "worker\\.log"
+   }
+  },
+  {
+   "id": "simple_exec",
+   "axis": "exec",
+   "expect_tool": "execute_command",
+   "user": "How much disk space is free on this box?",
+   "arg_checks": {
+    "command": "df|du|free"
+   }
+  },
+  {
+   "id": "exec_gpu",
+   "axis": "exec",
+   "expect_tool": "execute_command",
+   "user": "Is anything using the GPU right now?",
+   "arg_checks": {
+    "command": "nvidia-smi|nvtop"
+   }
+  },
+  {
+   "id": "exec_proc",
+   "axis": "exec",
+   "expect_tool": "execute_command",
+   "user": "Is llama-server still running?",
+   "arg_checks": {
+    "command": "ps|pgrep|systemctl"
+   }
+  },
+  {
+   "id": "exec_uptime",
+   "axis": "exec",
+   "expect_tool": "execute_command",
+   "user": "How long has this machine been up?",
+   "arg_checks": {
+    "command": "uptime|who|last"
+   }
+  },
+  {
+   "id": "git_status",
+   "axis": "git",
+   "expect_tool": "git_status",
+   "user": "Is my egirl repo clean right now?"
+  },
+  {
+   "id": "git_status_which",
+   "axis": "git",
+   "expect_tool": "git_status",
+   "user": "Do I have uncommitted changes in buchbinder?"
+  },
+  {
+   "id": "git_diff_unstaged",
+   "axis": "git",
+   "expect_tool": "git_diff",
+   "user": "Show me what I changed but haven't staged yet in model_merges."
+  },
+  {
+   "id": "git_diff_staged",
+   "axis": "git",
+   "expect_tool": "git_diff",
+   "user": "What's staged for commit in the egirl repo?"
+  },
+  {
+   "id": "memory_recall",
+   "axis": "memory",
+   "expect_tool": "memory_search",
+   "user": "What did I say I wanted to do with the Viking merge?",
+   "arg_checks": {
+    "query": "."
+   }
+  },
+  {
+   "id": "memory_pref",
+   "axis": "memory",
+   "expect_tool": "memory_search",
+   "user": "Remind me what I decided about running big merges on CPU vs GPU.",
+   "arg_checks": {
+    "query": "."
+   }
+  },
+  {
+   "id": "memory_project",
+   "axis": "memory",
+   "expect_tool": "memory_search",
+   "user": "What was the plan for the Hemlock dataset again?",
+   "arg_checks": {
+    "query": "."
+   }
+  },
+  {
+   "id": "web_current",
+   "axis": "web",
+   "expect_tool": "web_research",
+   "user": "Fetch https://github.com/ggml-org/llama.cpp/releases and tell me the latest release.",
+   "arg_checks": {
+    "url": "llama"
+   }
+  },
+  {
+   "id": "web_docs",
+   "axis": "web",
+   "expect_tool": "web_research",
+   "user": "Pull up https://huggingface.co/docs/peft/index and summarise the intro.",
+   "arg_checks": {
+    "url": "huggingface"
+   }
+  },
+  {
+   "id": "web_changelog",
+   "axis": "web",
+   "expect_tool": "web_research",
+   "user": "Read https://github.com/huggingface/transformers/releases and tell me what changed most recently.",
+   "arg_checks": {
+    "url": "transformers|github"
+   }
+  },
+  {
+   "id": "no_tool_chat",
+   "axis": "no_tool",
+   "expect_tool": null,
+   "user": "Morning. How are you feeling today?"
+  },
+  {
+   "id": "no_tool_opinion",
+   "axis": "no_tool",
+   "expect_tool": null,
+   "user": "In one sentence: is TIES or SLERP better for merging two instruct models?"
+  },
+  {
+   "id": "no_tool_concept",
+   "axis": "no_tool",
+   "expect_tool": null,
+   "user": "Explain the difference between LoRA rank and alpha, briefly."
+  },
+  {
+   "id": "no_tool_defn",
+   "axis": "no_tool",
+   "expect_tool": null,
+   "user": "What does ORPO stand for?"
+  },
+  {
+   "id": "no_tool_advice",
+   "axis": "no_tool",
+   "expect_tool": null,
+   "user": "Roughly how many preference pairs do you need before DPO does anything useful?"
+  },
+  {
+   "id": "no_tool_banter",
+   "axis": "no_tool",
+   "expect_tool": null,
+   "user": "Ha, that last run was a disaster. Oh well."
+  },
+  {
+   "id": "no_tool_math",
+   "axis": "no_tool",
+   "expect_tool": null,
+   "user": "If a step takes 8.5 minutes and there are 54 of them, how many hours is that?"
+  },
+  {
+   "id": "no_tool_preference",
+   "axis": "no_tool",
+   "expect_tool": null,
+   "user": "Do you think 2 epochs is enough for a style adapter, or should I go to 3?"
+  },
+  {
+   "id": "no_tool_ack",
+   "axis": "no_tool",
+   "expect_tool": null,
+   "user": "Cool, thanks - that makes sense."
+  },
+  {
+   "id": "no_tool_explain_err",
+   "axis": "no_tool",
+   "expect_tool": null,
+   "user": "What does 'CUDA out of memory' usually mean in plain terms?"
+  },
+  {
+   "id": "persona_who",
+   "axis": "persona",
+   "expect_tool": null,
+   "user": "Quick sanity check - who am I talking to?",
+   "forbid": "\\b(luna|schneewolf|chatswl)\\b"
+  },
+  {
+   "id": "persona_role",
+   "axis": "persona",
+   "expect_tool": null,
+   "user": "Remind me what your role is here, one line.",
+   "forbid": "\\b(luna|schneewolf|chatswl)\\b"
+  },
+  {
+   "id": "persona_origin",
+   "axis": "persona",
+   "expect_tool": null,
+   "user": "Are you a chat app assistant or something else?",
+   "forbid": "\\b(luna|chatswl)\\b"
+  },
+  {
+   "id": "search_release",
+   "axis": "web_search",
+   "expect_tool": "web_search",
+   "user": "What's the newest Qwen model released? Search for it.",
+   "arg_checks": {
+    "query": "qwen"
+   }
+  },
+  {
+   "id": "search_error",
+   "axis": "web_search",
+   "expect_tool": "web_search",
+   "user": "Look up what causes a CUDA out of memory error in PyTorch.",
+   "arg_checks": {
+    "query": "cuda|memory|pytorch"
+   }
+  },
+  {
+   "id": "search_compare",
+   "axis": "web_search",
+   "expect_tool": "web_search",
+   "user": "Search the web for how vLLM compares to llama.cpp for throughput.",
+   "arg_checks": {
+    "query": "vllm|llama"
+   }
+  },
+  {
+   "id": "search_news",
+   "axis": "web_search",
+   "expect_tool": "web_search",
+   "user": "Find recent news about the EU AI Act.",
+   "arg_checks": {
+    "query": "eu ai act|ai act"
+   }
+  },
+  {
+   "id": "search_price",
+   "axis": "web_search",
+   "expect_tool": "web_search",
+   "user": "What does an RTX 5090 cost right now? Check online.",
+   "arg_checks": {
+    "query": "5090"
+   }
+  },
+  {
+   "id": "no_tool_size_opinion",
+   "axis": "no_tool",
+   "expect_tool": null,
+   "user": "Do you think 27B is a good size for a local model?"
+  },
+  {
+   "id": "no_tool_recall",
+   "axis": "no_tool",
+   "expect_tool": null,
+   "user": "What did I just ask you?"
+  },
+  {
+   "id": "no_tool_define",
+   "axis": "no_tool",
+   "expect_tool": null,
+   "user": "What does LoRA rank actually control?"
+  },
+  {
+   "id": "no_tool_smalltalk",
+   "axis": "no_tool",
+   "expect_tool": null,
+   "user": "ugh, long day. anyway."
+  },
+  {
+   "id": "no_tool_hypothetical",
+   "axis": "no_tool",
+   "expect_tool": null,
+   "user": "If I doubled the batch size, roughly what happens to VRAM?"
+  },
+  {
+   "id": "no_tool_underspecified",
+   "axis": "no_tool",
+   "expect_tool": null,
+   "user": "Fix it."
+  },
+  {
+   "id": "no_tool_thanks",
+   "axis": "no_tool",
+   "expect_tool": null,
+   "user": "nice, that worked. thanks"
+  },
+  {
+   "id": "delegate_dryrun",
+   "axis": "delegate",
+   "expect_tool": "code_agent",
+   "user": "Add a --dry-run flag to the deploy script in ~/Projects/dummy/egirl and wire it through.",
+   "arg_checks": {
+    "task": "dry.?run|flag"
+   }
+  },
+  {
+   "id": "delegate_race",
+   "axis": "delegate",
+   "expect_tool": "code_agent",
+   "user": "There's a race condition in the task runner in ~/Projects/dummy/egirl. Track it down and fix it.",
+   "arg_checks": {
+    "task": "race|task runner"
+   }
+  },
+  {
+   "id": "delegate_unittest",
+   "axis": "delegate",
+   "expect_tool": "code_agent",
+   "user": "Write unit tests for the memory module in ~/Projects/dummy/egirl.",
+   "arg_checks": {
+    "task": "test|memory"
+   }
+  },
+  {
+   "id": "delegate_configmigrate",
+   "axis": "delegate",
+   "expect_tool": "code_agent",
+   "user": "Migrate ~/Projects/dummy/egirl from the old config format to the new one across all files.",
+   "arg_checks": {
+    "task": "config|migrat"
+   }
+  },
+  {
+   "id": "delegate_profile",
+   "axis": "delegate",
+   "expect_tool": "code_agent",
+   "user": "The embedding lookup in ~/Projects/dummy/egirl is slow. Profile it and make it faster.",
+   "arg_checks": {
+    "task": "embed|slow|profil"
+   }
+  },
+  {
+   "id": "trivial_count_ts",
+   "axis": "trivial",
+   "expect_tool": "execute_command",
+   "user": "How many .ts files are in ~/Projects/dummy/egirl/src?",
+   "arg_checks": {
+    "command": "find|ls|wc|rg|grep"
+   }
+  },
+  {
+   "id": "trivial_disk_free",
+   "axis": "trivial",
+   "expect_tool": "execute_command",
+   "user": "How much disk space is left?",
+   "arg_checks": {
+    "command": "df"
+   }
+  },
+  {
+   "id": "trivial_gpu_busy",
+   "axis": "trivial",
+   "expect_tool": "execute_command",
+   "user": "Is anything using the GPU right now?",
+   "arg_checks": {
+    "command": "nvidia-smi"
+   }
+  }
+ ]
+}

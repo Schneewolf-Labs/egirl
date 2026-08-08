@@ -13,7 +13,8 @@
  * - Are cleaned up automatically on access
  */
 
-import { Database } from 'bun:sqlite'
+import type { Database } from 'bun:sqlite'
+import { openDatabase } from '../util/db'
 import { log } from '../util/logger'
 
 export interface WorkingMemoryEntry {
@@ -33,7 +34,7 @@ export class WorkingMemory {
   private db: Database
 
   constructor(dbPath: string) {
-    this.db = new Database(dbPath)
+    this.db = openDatabase(dbPath)
     this.initialize()
   }
 
