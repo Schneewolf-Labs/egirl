@@ -483,5 +483,11 @@ export function createLlamaCppProvider(
   maxConcurrent?: number,
   defaultTemperature?: number,
 ): LLMProvider {
-  return new LlamaCppProvider(endpoint, model, staleStreamTimeoutMs, maxConcurrent, defaultTemperature)
+  return new LlamaCppProvider(
+    endpoint,
+    model,
+    staleStreamTimeoutMs,
+    maxConcurrent,
+    defaultTemperature,
+  )
 }

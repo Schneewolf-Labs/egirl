@@ -204,7 +204,11 @@ export class EnergyBudget {
   }> {
     const rows = this.db
       .query(
-        'SELECT tool_name, cost, balance_after, context, created_at FROM energy_ledger ORDER BY created_at DESC LIMIT ?',
+        // Tie-break on id. created_at has millisecond resolution, so two spends in the same
+        // millisecond — which is what consecutive tool calls actually are — order arbitrarily,
+        // and "most recent first" silently came back oldest-first. id is monotonic, so it
+        // resolves ties by true insertion order.
+        'SELECT tool_name, cost, balance_after, context, created_at FROM energy_ledger ORDER BY created_at DESC, id DESC LIMIT ?',
       )
       .all(limit) as Array<{
       tool_name: string

@@ -11,8 +11,8 @@ import {
   taskRunnerEnabled,
   taskRunnerOffReason,
 } from '../tasks'
-import type { ToolResult } from '../tools/types'
 import { createTaskTools } from '../tools/builtin/tasks'
+import type { ToolResult } from '../tools/types'
 import { applyLogLevel } from '../util/args'
 import { log } from '../util/logger'
 
@@ -88,7 +88,9 @@ export async function runCLI(config: RuntimeConfig, args: string[]): Promise<voi
             const started = startedAt.get(callId) ?? startedAt.get(name)
             // Match the most recent unresolved entry for this tool: ids are not guaranteed
             // to be present on every provider dialect.
-            const entry = [...toolCalls].reverse().find((t) => t.name === name && t.ok === undefined)
+            const entry = [...toolCalls]
+              .reverse()
+              .find((t) => t.name === name && t.ok === undefined)
             if (entry) {
               entry.ok = result.success
               // A failed tool's output is the error message; keep a short prefix so a bench can

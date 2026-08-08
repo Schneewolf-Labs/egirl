@@ -1,6 +1,6 @@
 import type { Database } from 'bun:sqlite'
-import { openDatabase } from '../util/db'
 import type { ChatMessage, ToolCall } from '../providers/types'
+import { openDatabase } from '../util/db'
 import { log } from '../util/logger'
 
 export interface SessionInfo {
