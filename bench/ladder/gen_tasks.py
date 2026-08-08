@@ -50,7 +50,16 @@ def find_functions(repo: Path):
     """Every top-level function and method, with the source span of its body."""
     out = []
     for py in sorted(repo.rglob("*.py")):
-        if any(p in py.parts for p in ("tests", "test", ".git", "__pycache__")):
+        # Excluding only tests/.git/__pycache__ let this walk straight into virtualenvs:
+        # grimoire reported 238,222 "candidate functions" because it was enumerating
+        # site-packages, and would then have tried to blank functions inside installed
+        # dependencies. Vendored code is never the task.
+        SKIP = {
+            "tests", "test", ".git", "__pycache__", "venv", ".venv", "env", ".env",
+            "site-packages", "dist-packages", "node_modules", "build", "dist",
+            ".tox", ".mypy_cache", ".pytest_cache", "third_party", "vendor", "migrations",
+        }
+        if any(p in SKIP for p in py.parts):
             continue
         try:
             tree = ast.parse(py.read_text())
