@@ -32,6 +32,7 @@ export function createProviderRegistry(config: RuntimeConfig): ProviderRegistry 
     config.local.model,
     config.local.staleStreamTimeoutMs,
     config.local.maxConcurrent,
+    config.local.temperature,
   )
 
   return { local }

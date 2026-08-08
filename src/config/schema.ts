@@ -84,6 +84,7 @@ const baseProperties = {
      * all prefill. Finite so a genuinely hung stream still fails.
      */
     stale_stream_timeout_ms: Type.Optional(Type.Number({ default: 300_000 })),
+    temperature: Type.Optional(Type.Number({ minimum: 0, maximum: 2 })),
     embeddings: Type.Optional(
       Type.Object({
         provider: Type.Optional(
@@ -377,6 +378,8 @@ export interface RuntimeConfig {
     cacheSlots: number
     toolFormat: string
     staleStreamTimeoutMs: number
+    /** Sampling temperature. Undefined lets llama.cpp use its own default (0.8). */
+    temperature?: number
     embeddings?: {
       provider: 'qwen3-vl' | 'llamacpp' | 'openai'
       endpoint: string

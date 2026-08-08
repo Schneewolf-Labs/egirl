@@ -81,15 +81,22 @@ export class LlamaCppProvider implements LLMProvider {
   private capabilities: LlamaCppCapabilities | null = null
   private staleStreamTimeoutMs: number
   private gate: Semaphore
+  // Nothing set a temperature, so llama.cpp applied its own default (0.8). That is fine for
+  // ordinary use and ruinous for measurement: two identical bench runs disagreed on 13 of 67
+  // cases, a 19% flip rate, which is larger than any model difference worth detecting. Setting
+  // this to 0 makes runs comparable.
+  private defaultTemperature: number | undefined
 
   constructor(
     endpoint: string,
     model: string,
     staleStreamTimeoutMs?: number,
     maxConcurrent?: number,
+    defaultTemperature?: number,
   ) {
     this.endpoint = endpoint.replace(/\/$/, '')
     this.name = `llamacpp/${model}`
+    this.defaultTemperature = defaultTemperature
     this.staleStreamTimeoutMs = staleStreamTimeoutMs ?? DEFAULT_STALE_STREAM_TIMEOUT_MS
     // 0 or negative disables the limit, for a server with plenty of slots
     this.gate = new Semaphore(maxConcurrent ?? 0)
@@ -156,7 +163,7 @@ export class LlamaCppProvider implements LLMProvider {
       signal: req.signal,
       body: JSON.stringify({
         messages,
-        temperature: req.temperature,
+        temperature: req.temperature ?? this.defaultTemperature,
         max_tokens: req.max_tokens,
         stream: shouldStream,
         // Qwen3 supports enable_thinking parameter via llama.cpp
@@ -474,6 +481,7 @@ export function createLlamaCppProvider(
   model: string,
   staleStreamTimeoutMs?: number,
   maxConcurrent?: number,
+  defaultTemperature?: number,
 ): LLMProvider {
-  return new LlamaCppProvider(endpoint, model, staleStreamTimeoutMs, maxConcurrent)
+  return new LlamaCppProvider(endpoint, model, staleStreamTimeoutMs, maxConcurrent, defaultTemperature)
 }

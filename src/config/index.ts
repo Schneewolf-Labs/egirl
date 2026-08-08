@@ -247,13 +247,28 @@ export function loadConfig(options: LoadConfigOptions = {}): RuntimeConfig {
       path: workspacePath,
     },
     local: {
-      endpoint: toml.local?.endpoint ?? defaultToml.local.endpoint,
-      model: toml.local?.model ?? defaultToml.local.model,
+      // EGIRL_LOCAL_ENDPOINT / EGIRL_LOCAL_MODEL point a single run at a different llama-server
+      // without touching egirl.toml. That is what makes it possible to bench the same cases
+      // against another machine — a 4090 running a Q4 quant, say — and compare the results,
+      // rather than only ever measuring the box that happens to hold the config file.
+      endpoint:
+        process.env.EGIRL_LOCAL_ENDPOINT ?? toml.local?.endpoint ?? defaultToml.local.endpoint,
+      model: process.env.EGIRL_LOCAL_MODEL ?? toml.local?.model ?? defaultToml.local.model,
       contextLength: toml.local?.context_length ?? defaultToml.local.context_length,
       maxConcurrent: toml.local?.max_concurrent ?? defaultToml.local.max_concurrent,
       cacheSlots: toml.local?.cache_slots ?? defaultToml.local.cache_slots ?? 1,
       toolFormat: toml.local?.tool_format ?? defaultToml.local.tool_format ?? 'auto',
       staleStreamTimeoutMs: toml.local?.stale_stream_timeout_ms ?? 300_000,
+      // Undefined means "let the server decide", which is llama.cpp's 0.8. Set 0 to make runs
+      // reproducible — see EGIRL_LOCAL_TEMPERATURE, which the bench uses.
+      ...(process.env.EGIRL_LOCAL_TEMPERATURE !== undefined || toml.local?.temperature !== undefined
+        ? {
+            temperature:
+              process.env.EGIRL_LOCAL_TEMPERATURE !== undefined
+                ? Number(process.env.EGIRL_LOCAL_TEMPERATURE)
+                : toml.local?.temperature,
+          }
+        : {}),
       ...(toml.local?.embeddings && {
         embeddings: {
           provider: toml.local.embeddings.provider ?? 'qwen3-vl',

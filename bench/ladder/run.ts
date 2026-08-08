@@ -86,6 +86,11 @@ function runAgent(prompt: string, timeoutMs: number): Promise<{
     const child = spawn('bun', ['run', 'src/index.ts', 'cli', '-m', prompt, '--json', '--quiet'], {
       cwd: ROOT,
       stdio: ['ignore', 'pipe', 'pipe'],
+      // Pin sampling, as the tool bench does. Without this the same task flips between runs —
+      // two passes over the same ten tasks gave 8/10 and 9/10, and disagreed on which episodes
+      // counted as escalation trajectories. When the output is training data rather than a
+      // score, that means the dataset itself is partly a sample of noise.
+      env: { ...process.env, EGIRL_LOCAL_TEMPERATURE: process.env.EGIRL_LOCAL_TEMPERATURE ?? '0' },
     })
     let out = ''
     child.stdout.on('data', (d) => (out += d))
