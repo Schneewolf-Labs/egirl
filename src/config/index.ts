@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, readFileSync } from 'fs'
 import { homedir } from 'os'
 import { join, resolve } from 'path'
 import { parse } from 'smol-toml'
+import { peerTokenEnvKey } from '../peers/protocol'
 import { setTheme } from '../ui/theme'
 import {
   ConfigFragmentSchema,
@@ -381,6 +382,7 @@ export function loadConfig(options: LoadConfigOptions = {}): RuntimeConfig {
       github: toml.tools?.github ?? false,
       tasks: toml.tools?.tasks ?? false,
       codeAgent: toml.tools?.code_agent ?? false,
+      peers: toml.tools?.peers ?? true,
       webResearch: toml.tools?.web_research ?? true,
       webSearch: toml.tools?.web_search ?? true,
       screenshot: toml.tools?.screenshot ?? true,
@@ -464,6 +466,18 @@ export function loadConfig(options: LoadConfigOptions = {}): RuntimeConfig {
       url: toml.searxng.url,
       ...(searxngApiKey && { apiKey: searxngApiKey }),
     }
+  }
+
+  if (toml.peers && toml.peers.length > 0) {
+    config.peers = toml.peers.map((p) => {
+      const token = process.env[peerTokenEnvKey(p.name)]
+      return {
+        name: p.name,
+        url: p.url.replace(/\/+$/, ''),
+        ...(token && { token }),
+        timeoutMs: p.timeout_ms ?? 120_000,
+      }
+    })
   }
 
   return config

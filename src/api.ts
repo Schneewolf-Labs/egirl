@@ -1,5 +1,6 @@
 import type { AgentFactory, AgentLoop } from './agent'
 import type { MemoryCategory, MemoryManager } from './memory'
+import { formatInboundPeerMessage, PEER_PROTOCOL, peerSessionId } from './peers/protocol'
 import type { Task, TaskRunner, TaskStore } from './tasks'
 import { log } from './util/logger'
 
@@ -20,6 +21,8 @@ export interface APIDeps {
   taskRunner?: TaskRunner
   /** why the runner is absent, so a 503 can name the flag instead of just saying "disabled" */
   taskOffReason?: string
+  /** Identity announced to peer agents on /peer/identity and in /peer/message replies. */
+  selfName?: string
 }
 
 type JSONValue = string | number | boolean | null | JSONValue[] | { [k: string]: JSONValue }
@@ -108,6 +111,37 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
             provider: response.provider,
             input_tokens: response.usage.input_tokens,
             output_tokens: response.usage.output_tokens,
+            turns: response.turns,
+          })
+        }
+
+        // --- Peers (agent-to-agent, egirl-peer protocol — see docs/peers.md) ---
+        if (method === 'GET' && path === '/peer/identity') {
+          return json({
+            service: 'egirl',
+            protocol: PEER_PROTOCOL,
+            name: deps.selfName ?? 'egirl',
+          })
+        }
+
+        if (method === 'POST' && path === '/peer/message') {
+          const body = await readJson(req)
+          const from = body.from
+          const message = body.message
+          if (typeof from !== 'string' || !from.trim()) return err('from required')
+          if (typeof message !== 'string' || !message.trim()) return err('message required')
+          const protocol = body.protocol
+          if (typeof protocol === 'string' && !protocol.startsWith('egirl-peer/')) {
+            return err(`unsupported protocol "${protocol}" (this instance speaks ${PEER_PROTOCOL})`)
+          }
+          const sessionId = peerSessionId(from)
+          const agent = getOrCreateAgent(sessionId, deps)
+          const response = await agent.run(formatInboundPeerMessage(from, message))
+          return json({
+            protocol: PEER_PROTOCOL,
+            from: deps.selfName ?? 'egirl',
+            content: response.content,
+            session_id: sessionId,
             turns: response.turns,
           })
         }

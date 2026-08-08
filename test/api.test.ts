@@ -100,6 +100,60 @@ describe('API server', () => {
     expect(res.status).toBe(404)
   })
 
+  test('GET /peer/identity announces the egirl-peer protocol', async () => {
+    const res = await fetch(`${base}/peer/identity`)
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { service: string; protocol: string; name: string }
+    expect(body.service).toBe('egirl')
+    expect(body.protocol).toBe('egirl-peer/1')
+    expect(body.name).toBe('egirl')
+  })
+
+  test('POST /peer/message runs the agent under a peer session', async () => {
+    const res = await fetch(`${base}/peer/message`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ protocol: 'egirl-peer/1', from: 'luna', message: 'status?' }),
+    })
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { content: string; session_id: string; from: string }
+    expect(body.session_id).toBe('peer:luna')
+    expect(body.from).toBe('egirl')
+    // The inbound message is wrapped so the agent knows it's talking to another agent
+    expect(body.content).toContain('[agent-to-agent]')
+    expect(body.content).toContain('status?')
+  })
+
+  test('POST /peer/message persists the peer conversation session', async () => {
+    await fetch(`${base}/peer/message`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ from: 'luna', message: 'first' }),
+    })
+    const res = await fetch(`${base}/sessions/peer:luna`)
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { message_count: number }
+    expect(body.message_count).toBe(2)
+  })
+
+  test('POST /peer/message without from or message returns 400', async () => {
+    const res = await fetch(`${base}/peer/message`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ message: 'hi' }),
+    })
+    expect(res.status).toBe(400)
+  })
+
+  test('POST /peer/message rejects unknown protocols', async () => {
+    const res = await fetch(`${base}/peer/message`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ protocol: 'other-proto/9', from: 'luna', message: 'hi' }),
+    })
+    expect(res.status).toBe(400)
+  })
+
   test('GET / on unknown path returns 404', async () => {
     const res = await fetch(`${base}/does-not-exist`)
     expect(res.status).toBe(404)

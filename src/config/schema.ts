@@ -228,6 +228,19 @@ const baseProperties = {
     }),
   ),
 
+  // Other egirl instances this one can message over the egirl-peer HTTP
+  // protocol (see docs/peers.md). Bearer tokens come from .env, not here:
+  // EGIRL_PEER_<NAME>_TOKEN must hold the peer's EGIRL_API_TOKEN.
+  peers: Type.Optional(
+    Type.Array(
+      Type.Object({
+        name: Type.String(),
+        url: Type.String(),
+        timeout_ms: Type.Optional(Type.Number({ default: 120_000 })),
+      }),
+    ),
+  ),
+
   energy: Type.Optional(
     Type.Object({
       enabled: Type.Boolean({ default: true }),
@@ -307,6 +320,7 @@ const baseProperties = {
       github: Type.Boolean({ default: false }),
       tasks: Type.Boolean({ default: false }),
       code_agent: Type.Boolean({ default: false }),
+      peers: Type.Boolean({ default: true }),
       web_research: Type.Boolean({ default: true }),
       web_search: Type.Boolean({ default: true }),
       screenshot: Type.Boolean({ default: true }),
@@ -479,6 +493,12 @@ export interface RuntimeConfig {
     url: string
     apiKey?: string
   }
+  peers?: Array<{
+    name: string
+    url: string
+    token?: string
+    timeoutMs: number
+  }>
   energy: {
     enabled: boolean
     maxEnergy: number
@@ -527,6 +547,7 @@ export interface RuntimeConfig {
     github: boolean
     tasks: boolean
     codeAgent: boolean
+    peers: boolean
     webResearch: boolean
     webSearch: boolean
     screenshot: boolean
