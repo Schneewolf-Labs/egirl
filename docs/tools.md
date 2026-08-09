@@ -12,6 +12,7 @@ egirl ships with ~50 built-in tools across 8 categories that the agent can invok
 | Browser | 11 | `browser_navigate`, `browser_click`, `browser_fill`, `browser_snapshot`, `browser_screenshot`, `browser_select`, `browser_check`, `browser_hover`, `browser_wait`, `browser_eval`, `browser_close` |
 | Tasks | 8 | `task_add`, `task_propose`, `task_list`, `task_pause`, `task_resume`, `task_cancel`, `task_run_now`, `task_history` |
 | Delegation | 1 | `code_agent` — drive the configured code agent (the primary tool) |
+| Peers | 2 | `peer_message`, `peer_list` — agent-to-agent messaging with other egirl instances |
 | Other | 4 | `screenshot`, `web_research`, `web_search`, `tool_search` |
 
 ## Tool Architecture
@@ -382,6 +383,47 @@ Search the web via a SearxNG instance. Pairs with `web_research` for a search-th
 **Example:**
 ```json
 {"name": "web_search", "arguments": {"query": "SearxNG JSON API format", "num_results": 5}}
+```
+
+---
+
+## peer_message
+
+Send a message to another egirl agent (a "peer") and wait for its reply. The peer runs the message through its own agent loop — its own memory, tools, and machine — and the loop's final reply is returned. See [peers.md](peers.md) for the protocol.
+
+**Source:** `src/tools/builtin/peers.ts`
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `peer` | string | Yes | Name of a configured peer (case-insensitive) |
+| `message` | string | Yes | The message — must be self-contained, the peer doesn't share conversation context |
+| `timeout_ms` | number | No | Max wait for the reply (default: the peer's configured `timeout_ms`, usually 120000) |
+
+**Behavior:**
+- Requires at least one `[[peers]]` entry in `egirl.toml`; otherwise the tool is not registered
+- Sends the `egirl-peer/1` envelope with this instance's name as `from`
+- Sends a Bearer token from `EGIRL_PEER_<NAME>_TOKEN` if set
+- A timeout returns a failure but the peer's side of the conversation persists — asking again later continues it
+- Truncates replies at ~30,000 characters
+
+**Example:**
+```json
+{"name": "peer_message", "arguments": {"peer": "luna", "message": "Is the staging deploy green on your box?"}}
+```
+
+---
+
+## peer_list
+
+List configured peer egirl agents and check whether each one is currently reachable (via `GET /peer/identity`, 5s timeout per peer).
+
+**Source:** `src/tools/builtin/peers.ts`
+
+No parameters.
+
+**Example:**
+```json
+{"name": "peer_list", "arguments": {}}
 ```
 
 ---

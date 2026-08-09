@@ -52,6 +52,14 @@ permission_mode = "default"
 # host = "127.0.0.1"
 # port = 3000
 
+# Cross-egirl agent-to-agent messaging (egirl-peer protocol, see docs/peers.md).
+# Each peer is another egirl instance with its HTTP API running. If the peer
+# sets EGIRL_API_TOKEN, put the same value in EGIRL_PEER_<NAME>_TOKEN in .env.
+# [[peers]]
+# name = "luna"
+# url = "http://192.168.1.20:3000"
+# timeout_ms = 120000
+
 [safety]
 enabled = true
 

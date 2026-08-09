@@ -4,6 +4,7 @@ export {
   createCodeAgentTool,
   createGitHubTools,
   createMemoryTools,
+  createPeerTools,
   createProcessTools,
   createTaskTools,
   createWebSearchTool,
@@ -16,6 +17,7 @@ export {
   gitShowTool,
   gitStatusTool,
   globTool,
+  type PeerToolsConfig,
   readTool,
   screenshotTool,
   type WebSearchConfig,
@@ -56,6 +58,7 @@ import {
   createCodeAgentTool,
   createGitHubTools,
   createMemoryTools,
+  createPeerTools,
   createProcessTools,
   createWebSearchTool,
   editTool,
@@ -165,6 +168,16 @@ export function createDefaultToolExecutor(
   // Web research
   if (t.webResearch) {
     executor.register(webResearchTool)
+  }
+
+  // Peer agents (agent-to-agent messaging over the egirl-peer HTTP protocol).
+  // No warning when unconfigured — unlike web_search, having no peers is the normal state.
+  if (t.peers && config.peers && config.peers.length > 0) {
+    const pt = createPeerTools({
+      selfName: config.source.instance ?? 'egirl',
+      peers: config.peers,
+    })
+    executor.registerAll([pt.peerMessageTool, pt.peerListTool])
   }
 
   // Web search (available if searxng is configured)
