@@ -113,7 +113,7 @@ export async function runDoctor(config: RuntimeConfig): Promise<void> {
     })
   } else {
     const provider = config.channels.codeAgent.provider ?? 'claude'
-    const binary = provider === 'codex' ? 'codex' : 'claude'
+    const binary = provider === 'codex' ? 'codex' : provider === 'opencode' ? 'opencode' : 'claude'
     const binaryFound = commandExists(binary)
     results.push({
       label: 'code agent config',
