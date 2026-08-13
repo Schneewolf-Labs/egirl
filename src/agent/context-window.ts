@@ -324,6 +324,26 @@ export async function fitToContextWindow(
     }
   }
 
+  // A single oversized group at the end — a web_search returning ten results, a fetched page,
+  // a long tool result — is bigger than the tail budget on its own, so the loop above breaks on
+  // its first iteration and keeps *nothing recent*. The model is then left holding the first
+  // user message plus a summary, with the turn it is supposed to answer deleted, and it
+  // confabulates a new task. Observed: a research run made sixteen searches, compaction logged
+  // "kept head + 0 tail groups", and the model replied by scaffolding an unrelated project.
+  //
+  // The most recent group is the one thing that must survive. Keep it even when it does not fit;
+  // going over the soft budget is recoverable, losing the current turn is not.
+  if (tailGroups.length === 0) {
+    for (let g = groups.length - 1; g >= headGroupCount; g--) {
+      const group = groups[g]
+      if (group) {
+        tailGroups.push(group)
+        tailTokens += group.tokens
+        break
+      }
+    }
+  }
+
   // Collect fitted messages: head + tail (with middle dropped)
   const result: ChatMessage[] = []
   const keptGroupIndices = new Set<number>()
