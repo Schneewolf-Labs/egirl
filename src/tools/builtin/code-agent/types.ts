@@ -8,6 +8,8 @@ export type { CodeAgentProvider }
 
 export interface CodeAgentConfig {
   provider?: CodeAgentProvider
+  /** Ordered fallback chain. Takes precedence over `provider` when non-empty. */
+  providers?: CodeAgentProvider[]
   permissionMode: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan'
   model?: string
   workingDir: string

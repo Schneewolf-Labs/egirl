@@ -27,6 +27,10 @@ function deepPartial(schema: TSchema): TSchema {
 
 const CodeAgentChannelSchema = Type.Object({
   provider: codeAgentProviderSchema,
+  // Ordered fallback chain. When a backend cannot run the task at all — missing binary, expired
+  // credentials, exhausted credits, an empty transcript — the next one is tried. An agent that
+  // ran and reported failure is *not* retried; see shouldFailover.
+  providers: Type.Optional(Type.Array(codeAgentProviderSchema)),
   permission_mode: Type.Union(
     [
       Type.Literal('default'),
@@ -420,6 +424,7 @@ export interface RuntimeConfig {
     }
     codeAgent?: {
       provider?: CodeAgentProvider
+      providers?: CodeAgentProvider[]
       permissionMode: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan'
       model?: string
       workingDir: string

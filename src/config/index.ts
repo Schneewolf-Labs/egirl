@@ -7,6 +7,7 @@ import { parse } from 'smol-toml'
 import { peerTokenEnvKey } from '../peers/protocol'
 import { setTheme } from '../ui/theme'
 import {
+  type CodeAgentProvider,
   ConfigFragmentSchema,
   type EgirlConfig,
   InstanceFragmentSchema,
@@ -444,6 +445,8 @@ export function loadConfig(options: LoadConfigOptions = {}): RuntimeConfig {
     const cc = codeAgentChannel
     config.channels.codeAgent = {
       provider: cc.provider ?? 'claude',
+      // `claude_code` is the legacy alias for this channel and has no providers list.
+      providers: 'providers' in cc ? (cc.providers as CodeAgentProvider[] | undefined) : undefined,
       permissionMode: cc.permission_mode ?? 'bypassPermissions',
       model: cc.model,
       workingDir: cc.working_dir ? expandPath(cc.working_dir, workspacePath) : workspacePath,
