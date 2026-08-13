@@ -96,6 +96,34 @@ function codexWorkingIndex(screen: string): number {
   )
 }
 
+/**
+ * A clean exit with nothing on the screen is not success.
+ *
+ * Codex can exit 0 in a tenth of a second having done nothing — most often because it was pointed
+ * at a directory where the task makes no sense. Reporting that as success is worse than reporting
+ * an error: the operator model reads "completed", tells the user the work is underway, and the
+ * absence of any change is never surfaced. Observed live: a task to fix a failing suite ran in the
+ * persona workspace instead of the target repo, returned `success: true` with an empty transcript
+ * in 0.1s, and the agent replied "the code agent is working on it".
+ *
+ * Exported for testing — the spawn path cannot be exercised without a real codex binary.
+ */
+export function interpretCodexExit(
+  exitCode: number | null,
+  output: string,
+  workingDir: string,
+  seconds: string,
+): { success: boolean; output: string } | undefined {
+  if (output.trim().length > 0) return undefined
+  return {
+    success: false,
+    output:
+      `Code agent produced no output (exit ${exitCode ?? 'null'}, ${seconds}s) in ${workingDir}. ` +
+      'Nothing was done. The usual cause is a working directory where the task does not apply — ' +
+      'check that working_dir points at the repository the task refers to.',
+  }
+}
+
 function codexTranscriptLooksComplete(screen: string): boolean {
   const workingIndex = codexWorkingIndex(screen)
   const completionIndex = codexCompletionIndex(screen)
@@ -322,6 +350,13 @@ export const runCodexCodeAgent: CodeAgentBackend = (config, task, workingDir) =>
           success: false,
           output: `Code agent error: Codex exited with code ${exitCode}\n\n${output}`,
         })
+        return
+      }
+
+      const empty = interpretCodexExit(exitCode, output, workingDir, duration())
+      if (empty) {
+        log.error('code-agent', `Codex exited ${exitCode} with no output after ${duration()}s`)
+        finish(empty)
         return
       }
 
