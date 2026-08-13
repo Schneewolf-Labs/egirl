@@ -89,6 +89,17 @@ const baseProperties = {
      */
     stale_stream_timeout_ms: Type.Optional(Type.Number({ default: 300_000 })),
     temperature: Type.Optional(Type.Number({ minimum: 0, maximum: 2 })),
+    // A second, usually smaller model for side work: compaction summaries, memory extraction.
+    // These run on every compaction and every few turns, and they do not need the operator
+    // model's capability — but they do occupy its slot and its context while they run.
+    auxiliary: Type.Optional(
+      Type.Object({
+        endpoint: Type.Optional(Type.String()),
+        model: Type.String(),
+        max_concurrent: Type.Optional(Type.Number({ minimum: 1 })),
+        temperature: Type.Optional(Type.Number({ minimum: 0, maximum: 2 })),
+      }),
+    ),
     embeddings: Type.Optional(
       Type.Object({
         provider: Type.Optional(
@@ -398,6 +409,13 @@ export interface RuntimeConfig {
     staleStreamTimeoutMs: number
     /** Sampling temperature. Undefined lets llama.cpp use its own default (0.8). */
     temperature?: number
+    /** Optional smaller model for summarisation and memory extraction. */
+    auxiliary?: {
+      endpoint: string
+      model: string
+      maxConcurrent?: number
+      temperature?: number
+    }
     embeddings?: {
       provider: 'qwen3-vl' | 'llamacpp' | 'openai'
       endpoint: string

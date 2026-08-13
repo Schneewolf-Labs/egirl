@@ -21,8 +21,19 @@ max_concurrent = 2                 # in-flight requests against the endpoint; se
 # cache_slots = 0                  # >0 pins a session to a server KV slot (sabrewing only)
 # stale_stream_timeout_ms = 90000   # raise well above your worst-case prefill time
 
+# [local.auxiliary]
+# A second, smaller model for side work: compaction summaries and memory extraction.
+# These run on every compaction and every few turns. They do not need the operator model's
+# capability, but they do occupy its slot and compete for its context while they run — a summary
+# generated under context pressure is how a long research task loses the thread.
+# endpoint = "http://localhost:8099"   # defaults to the main endpoint
+# model = "qwen3-vl-4b"
+# max_concurrent = 1
+# temperature = 0                      # default; summaries want determinism, not variety
+
 # Optional. Uncomment when you have an embeddings service running to enable memory.
-# [local.embeddings]
+
+[local.embeddings]
 # provider = "qwen3-vl"
 # endpoint = "http://localhost:8082"
 # model = "qwen3-vl-embedding-2b"

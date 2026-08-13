@@ -24,6 +24,16 @@ export {
 
 export interface ProviderRegistry {
   local: LLMProvider
+  /**
+   * Optional smaller model for side work — compaction summaries and memory extraction.
+   *
+   * Those run on every compaction and every few turns, and they neither need the operator model's
+   * capability nor should they occupy its slot: a summary generated under context pressure is what
+   * turned a sixteen-search research run into "fresh project scaffolded", and it was produced by
+   * the same 27B that was mid-task. Undefined means "use the main provider", which is the previous
+   * behaviour exactly.
+   */
+  auxiliary?: LLMProvider
 }
 
 export function createProviderRegistry(config: RuntimeConfig): ProviderRegistry {
@@ -35,5 +45,16 @@ export function createProviderRegistry(config: RuntimeConfig): ProviderRegistry 
     config.local.temperature,
   )
 
-  return { local }
+  const auxiliary = config.local.auxiliary
+    ? createLlamaCppProvider(
+        config.local.auxiliary.endpoint,
+        config.local.auxiliary.model,
+        config.local.staleStreamTimeoutMs,
+        config.local.auxiliary.maxConcurrent ?? 1,
+        // Summaries and extractions want determinism far more than variety.
+        config.local.auxiliary.temperature ?? 0,
+      )
+    : undefined
+
+  return auxiliary ? { local, auxiliary } : { local }
 }

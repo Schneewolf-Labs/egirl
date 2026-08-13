@@ -41,6 +41,11 @@ export interface AgentLoopDeps {
   config: RuntimeConfig
   toolExecutor: ToolExecutor
   localProvider: LLMProvider
+  /**
+   * Optional smaller model for compaction summaries and memory extraction. Falls back to
+   * localProvider when absent, which is the previous behaviour.
+   */
+  auxProvider?: LLMProvider
   sessionId: string
   memory?: MemoryManager
   conversationStore?: ConversationStore

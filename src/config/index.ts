@@ -271,6 +271,17 @@ export function loadConfig(options: LoadConfigOptions = {}): RuntimeConfig {
                 : toml.local?.temperature,
           }
         : {}),
+      ...(toml.local?.auxiliary && {
+        auxiliary: {
+          // Defaults to the main endpoint: the common setup is one llama-server holding both
+          // models, or a second server on another port.
+          endpoint:
+            toml.local.auxiliary.endpoint ?? toml.local.endpoint ?? defaultToml.local.endpoint,
+          model: toml.local.auxiliary.model,
+          maxConcurrent: toml.local.auxiliary.max_concurrent,
+          temperature: toml.local.auxiliary.temperature,
+        },
+      }),
       ...(toml.local?.embeddings && {
         embeddings: {
           provider: toml.local.embeddings.provider ?? 'qwen3-vl',

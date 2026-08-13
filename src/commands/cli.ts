@@ -53,6 +53,7 @@ export async function runCLI(config: RuntimeConfig, args: string[]): Promise<voi
     config,
     toolExecutor,
     localProvider: providers.local,
+    auxProvider: providers.auxiliary,
     sessionId,
     memory,
     conversationStore: conversations,
@@ -168,6 +169,7 @@ export async function runCLI(config: RuntimeConfig, args: string[]): Promise<voi
       store: taskStore,
       toolExecutor,
       localProvider: providers.local,
+      auxProvider: providers.auxiliary,
       memory,
       transcript,
       outbound,
@@ -200,6 +202,7 @@ export async function runCLI(config: RuntimeConfig, args: string[]): Promise<voi
         runner: taskRunner,
         toolExecutor,
         localProvider: providers.local,
+        auxProvider: providers.auxiliary,
         memory,
         transcript,
       })

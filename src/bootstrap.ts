@@ -243,6 +243,8 @@ export async function createAppServices(config: RuntimeConfig): Promise<AppServi
   const codeAgentConfig = getCodeAgentConfig(config)
   const permissionSupervisor = createPermissionSupervisor({
     config: config.permissionSupervisor,
+    // Deliberately the main model: the supervisor decides whether an action is safe to run,
+    // which is not side work and must not silently drop to a smaller model.
     localProvider: providers.local,
     memory,
   })

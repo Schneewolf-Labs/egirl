@@ -51,6 +51,7 @@ export async function runServe(config: RuntimeConfig, args: string[]): Promise<v
       config,
       toolExecutor,
       localProvider: providers.local,
+      auxProvider: providers.auxiliary,
       sessionId,
       memory,
       conversationStore: conversations,
@@ -95,6 +96,7 @@ export async function runServe(config: RuntimeConfig, args: string[]): Promise<v
       store: taskStore,
       toolExecutor,
       localProvider: providers.local,
+      auxProvider: providers.auxiliary,
       memory,
       transcript,
       outbound,
@@ -149,6 +151,7 @@ export async function runServe(config: RuntimeConfig, args: string[]): Promise<v
         runner: taskRunner,
         toolExecutor,
         localProvider: providers.local,
+        auxProvider: providers.auxiliary,
         memory,
         transcript,
       })
