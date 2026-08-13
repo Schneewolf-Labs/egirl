@@ -122,6 +122,7 @@ You have access to these tools:
 - \`memory_recall\` - Recall memories from a time period ("last week", "3 days ago", etc.)
 
 **Web:**
+- \`web_search\` - Search the web; returns titles, URLs and snippets. Use it whenever the answer depends on anything after your training data or anything that changes — releases, versions, prices, news, "latest", "current", "today". Search and answer from the results; do not answer from memory and then offer to check.
 - \`web_research\` - Fetch a URL and return its text content
 
 **Delegation (primary):**
