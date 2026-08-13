@@ -333,10 +333,12 @@ export async function fitToContextWindow(
   //
   // The most recent group is the one thing that must survive. Keep it even when it does not fit;
   // going over the soft budget is recoverable, losing the current turn is not.
+  let forcedGroup: MessageGroup | undefined
   if (tailGroups.length === 0) {
     for (let g = groups.length - 1; g >= headGroupCount; g--) {
       const group = groups[g]
       if (group) {
+        forcedGroup = group
         tailGroups.push(group)
         tailTokens += group.tokens
         break
@@ -363,9 +365,21 @@ export async function fitToContextWindow(
   for (const group of tailGroups) {
     const gIdx = groups.indexOf(group)
     keptGroupIndices.add(gIdx)
+    // The forced group was kept despite not fitting, so it has to be trimmed to the budget or
+    // the provider rejects the whole request ("Prompt (25751 tokens) exceeds context size").
+    // Losing the tail of one oversized tool result is survivable; losing the request is not.
+    const perMessage =
+      group === forcedGroup
+        ? Math.max(64, Math.floor(tailBudget / Math.max(1, group.endIdx - group.startIdx + 1)))
+        : 0
     for (let j = group.startIdx; j <= group.endIdx; j++) {
       const msg = processed[j]
-      if (msg) result.push(msg)
+      if (!msg) continue
+      if (perMessage > 0 && typeof msg.content === 'string') {
+        result.push({ ...msg, content: truncateToolResultSync(msg.content, perMessage) })
+      } else {
+        result.push(msg)
+      }
     }
   }
 

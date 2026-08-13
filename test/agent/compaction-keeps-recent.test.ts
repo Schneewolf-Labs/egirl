@@ -55,3 +55,25 @@ describe('compaction keeps the most recent turn', () => {
     expect(result.map((m) => String(m.content)).join('\n')).toContain('huge and final')
   })
 })
+
+describe('compaction respects the context limit', () => {
+  test('the forced group is truncated to fit, not passed through whole', async () => {
+    // Keeping an oversized final group unconditionally trades a silent context loss for a hard
+    // provider rejection: "Prompt (25751 tokens) exceeds context size (16384 tokens)". Observed on
+    // a real research run — compaction correctly kept the newest group and the request then failed
+    // outright. The group has to survive *and* fit.
+    const messages: ChatMessage[] = [
+      { role: 'user', content: 'Research task.' },
+      { role: 'assistant', content: bulk(20, 'filler') },
+      { role: 'user', content: bulk(2000, 'ENORMOUS SEARCH RESULTS') },
+    ]
+
+    const { messages: result } = await fitToContextWindow('System', messages, [], tiny)
+    const kept = result.map((m) => String(m.content)).join('\n')
+
+    expect(kept).toContain('ENORMOUS SEARCH RESULTS')
+    // Rough token estimate; must land under the window rather than blowing past it.
+    const estimated = kept.length / 3.5
+    expect(estimated).toBeLessThan(tiny.contextLength)
+  })
+})
