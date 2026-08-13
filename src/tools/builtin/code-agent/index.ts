@@ -3,6 +3,7 @@ import { log } from '../../../util/logger'
 import type { Tool, ToolResult } from '../../types'
 import { runClaudeCodeAgent } from './claude'
 import { runCodexCodeAgent } from './codex'
+import { runOpencodeCodeAgent } from './opencode'
 import type { CodeAgentBackend, CodeAgentConfig } from './types'
 
 export type { CodeAgentConfig, CodeAgentProvider } from './types'
@@ -12,6 +13,7 @@ export type { CodeAgentConfig, CodeAgentProvider } from './types'
 const BACKENDS: Record<CodeAgentProvider, CodeAgentBackend> = {
   claude: runClaudeCodeAgent,
   codex: runCodexCodeAgent,
+  opencode: runOpencodeCodeAgent,
 }
 
 /**

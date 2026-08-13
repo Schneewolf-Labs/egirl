@@ -2,9 +2,9 @@ import { type Static, type TSchema, Type } from '@sinclair/typebox'
 
 export type ThinkingLevel = 'off' | 'low' | 'medium' | 'high'
 
-// Single source of truth for code-agent backends. Adding a third (e.g.
-// 'opencode') here flows into the config schema and the dispatch map.
-export const CODE_AGENT_PROVIDERS = ['claude', 'codex'] as const
+// Single source of truth for code-agent backends. A new literal here flows
+// into the config schema and the dispatch map.
+export const CODE_AGENT_PROVIDERS = ['claude', 'codex', 'opencode'] as const
 export type CodeAgentProvider = (typeof CODE_AGENT_PROVIDERS)[number]
 
 const codeAgentProviderSchema = Type.Union(

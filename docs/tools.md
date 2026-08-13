@@ -554,7 +554,7 @@ Show the contents of a specific commit: message, author, date, and diff.
 
 ## code_agent
 
-Delegate a coding task to an autonomous code agent. Backends are Claude Code via the `@anthropic-ai/claude-agent-sdk` or Codex via the local interactive `codex` CLI.
+Delegate a coding task to an autonomous code agent. Backends are Claude Code via the `@anthropic-ai/claude-agent-sdk`, Codex via the local interactive `codex` CLI, or OpenCode via a locally-spawned `opencode serve` HTTP server.
 
 **Source:** `src/tools/builtin/code-agent/`
 
@@ -564,10 +564,11 @@ Delegate a coding task to an autonomous code agent. Backends are Claude Code via
 | `working_dir` | string | No | Working directory for the task (defaults to configured workspace) |
 
 **Behavior:**
-- Launches Claude Code using the Agent SDK's `query()` function, or Codex using its interactive terminal UI through a PTY
+- Launches Claude Code using the Agent SDK's `query()` function, Codex using its interactive terminal UI through a PTY, or OpenCode by spawning `opencode serve` and driving it over HTTP
 - The code agent has full filesystem and command execution access
 - Provider, permission mode, model, and max turns are configured in `[channels.code_agent]` in `egirl.toml`; `[channels.claude_code]` remains a backward-compatible fallback
 - For Codex, egirl runs the interactive CLI and asks the local model to answer numbered trust, permission, and clarification prompts
+- For OpenCode, egirl routes each structured permission event from the server's SSE stream through the local model supervisor
 - Default timeout is 5 minutes; the session is aborted if exceeded
 - Returns the agent's final result with metadata (turns, cost, duration, session ID)
 - If the agent completes without producing a result, returns `success: false`

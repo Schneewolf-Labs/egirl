@@ -6,6 +6,7 @@ Supported backends:
 
 - **Claude Code** through `@anthropic-ai/claude-agent-sdk`
 - **Codex** through the local interactive `codex` CLI in a PTY
+- **OpenCode** through a locally-spawned `opencode serve` HTTP server
 
 ## Mental Model
 
@@ -41,7 +42,7 @@ Configure the backend under `[channels.code_agent]`:
 
 ```toml
 [channels.code_agent]
-provider = "claude"          # "claude" or "codex"
+provider = "claude"          # "claude", "codex", or "opencode"
 permission_mode = "default"  # or "bypassPermissions"
 working_dir = "~/projects/myrepo"
 # model = "sonnet"
@@ -98,6 +99,30 @@ Codex permission modes map to CLI sandbox choices:
 
 Codex ignores `max_turns`; the CLI decides when the interactive task is complete.
 
+## OpenCode Backend
+
+OpenCode uses the installed `opencode` CLI. egirl spawns `opencode serve` (bound to `127.0.0.1`, random port) for the duration of the task, creates a session over its HTTP API, and sends the task as a prompt. Permission requests arrive as structured events over the server's `/event` SSE stream and are routed through the local model supervisor the same way Claude Code's tool permissions are — no terminal screen-scraping involved.
+
+```toml
+[channels.code_agent]
+provider = "opencode"
+permission_mode = "default"
+working_dir = "~/projects/myrepo"
+# model = "anthropic/claude-sonnet-4-5"  # "provider/model" format
+```
+
+Requirements:
+
+- Install and authenticate the local `opencode` CLI (`opencode auth login`).
+- OpenCode ignores `max_turns`; the server decides when the prompt turn is complete.
+
+OpenCode permission modes:
+
+| egirl mode | OpenCode behavior |
+|------------|--------------------|
+| `bypassPermissions` | every permission request is auto-approved (`once`) without consulting the supervisor |
+| anything else | each permission request is routed through the local model supervisor |
+
 ## Using the Tool
 
 The local model decides when to call `code_agent`. Typical tasks:
@@ -141,7 +166,7 @@ permission_mode = "bypassPermissions"
 working_dir = "~/projects/myrepo"
 ```
 
-To switch the tool to Codex, change only the provider and any backend-specific model value:
+To switch the tool to Codex or OpenCode, change only the provider and any backend-specific model value:
 
 ```toml
 [channels.code_agent]
@@ -150,7 +175,7 @@ permission_mode = "default"
 working_dir = "~/projects/myrepo"
 ```
 
-Keep `[channels.claude_code]` if you still use the direct `cc` command. It is not required for Codex-backed `code_agent`.
+Keep `[channels.claude_code]` if you still use the direct `cc` command. It is not required for Codex- or OpenCode-backed `code_agent`.
 
 ## Related Docs
 

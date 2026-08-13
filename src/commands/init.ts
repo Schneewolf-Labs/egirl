@@ -4,7 +4,7 @@ import { colors, DIM, RESET } from '../ui/theme'
 
 interface InitOptions {
   force: boolean
-  provider: 'claude' | 'codex'
+  provider: 'claude' | 'codex' | 'opencode'
   endpoint: string
   workspace: string
 }
@@ -27,8 +27,8 @@ function parseOptions(args: string[]): InitOptions {
 
     if (arg === '--provider') {
       const value = args[++i]
-      if (value !== 'claude' && value !== 'codex') {
-        throw new Error('--provider must be "claude" or "codex"')
+      if (value !== 'claude' && value !== 'codex' && value !== 'opencode') {
+        throw new Error('--provider must be "claude", "codex", or "opencode"')
       }
       options.provider = value
       continue
@@ -86,6 +86,7 @@ provider = "${options.provider}"
 permission_mode = "default"
 # model = "sonnet"        # Claude example
 # model = "gpt-5.5"       # Codex example
+# model = "anthropic/claude-sonnet-4-5"  # opencode example
 # working_dir = "~/projects/myrepo"
 # max_turns = 30          # Claude backend only
 
