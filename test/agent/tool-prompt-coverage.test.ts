@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test'
 import { buildSystemPrompt } from '../../src/agent/context'
 import { loadConfig } from '../../src/config'
-import { createDefaultToolExecutor } from '../../src/tools'
 import type { RuntimeConfig } from '../../src/config/schema'
+import { createDefaultToolExecutor } from '../../src/tools'
 
 /**
  * Every tool the model is handed must also be described in the system prompt.
