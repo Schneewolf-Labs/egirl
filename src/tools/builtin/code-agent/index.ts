@@ -1,3 +1,4 @@
+import { homedir } from 'os'
 import type { CodeAgentProvider } from '../../../config/schema'
 import { log } from '../../../util/logger'
 import type { Tool, ToolResult } from '../../types'
@@ -6,6 +7,7 @@ import { runCodexCodeAgent } from './codex'
 import { resolveProviderChain, shouldFailover } from './failover'
 import { runOpencodeCodeAgent } from './opencode'
 import type { CodeAgentBackend, CodeAgentConfig } from './types'
+import { resolveWorkingDir } from './working-dir'
 
 export type { CodeAgentConfig, CodeAgentProvider } from './types'
 
@@ -43,7 +45,10 @@ export function createCodeAgentTool(config: CodeAgentConfig): Tool {
           },
           working_dir: {
             type: 'string',
-            description: 'Working directory for the task (defaults to configured workspace)',
+            description:
+              'Absolute path to the repository or directory the task refers to. Set this whenever ' +
+              'the task concerns a specific project — without it the agent runs in the persona ' +
+              'workspace, where the task usually makes no sense.',
           },
         },
         required: ['task'],
@@ -52,7 +57,16 @@ export function createCodeAgentTool(config: CodeAgentConfig): Tool {
 
     async execute(params: Record<string, unknown>, cwd: string): Promise<ToolResult> {
       const task = params.task as string
-      const workingDir = (params.working_dir as string) ?? config.workingDir ?? cwd
+      const { dir: workingDir, inferred } = resolveWorkingDir({
+        explicit: params.working_dir as string | undefined,
+        task,
+        configured: config.workingDir,
+        cwd,
+        home: homedir(),
+      })
+      if (inferred) {
+        log.info('code-agent', `Inferred working_dir from the task text: ${workingDir}`)
+      }
       const chain = resolveProviderChain(config.providers, config.provider, 'claude')
 
       log.info(
