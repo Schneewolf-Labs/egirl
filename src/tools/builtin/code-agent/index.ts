@@ -3,6 +3,7 @@ import { log } from '../../../util/logger'
 import type { Tool, ToolResult } from '../../types'
 import { runClaudeCodeAgent } from './claude'
 import { runCodexCodeAgent } from './codex'
+import { resolveProviderChain, shouldFailover } from './failover'
 import { runOpencodeCodeAgent } from './opencode'
 import type { CodeAgentBackend, CodeAgentConfig } from './types'
 
@@ -52,16 +53,42 @@ export function createCodeAgentTool(config: CodeAgentConfig): Tool {
     async execute(params: Record<string, unknown>, cwd: string): Promise<ToolResult> {
       const task = params.task as string
       const workingDir = (params.working_dir as string) ?? config.workingDir ?? cwd
-      const provider = config.provider ?? 'claude'
+      const chain = resolveProviderChain(config.providers, config.provider, 'claude')
 
       log.info(
         'code-agent',
-        `Starting ${provider} task: ${task.substring(0, 100)}${task.length > 100 ? '...' : ''}`,
+        `Starting ${chain[0]} task: ${task.substring(0, 100)}${task.length > 100 ? '...' : ''}`,
       )
-      log.debug('code-agent', `Working dir: ${workingDir}`)
+      log.debug('code-agent', `Working dir: ${workingDir}  providers: ${chain.join(' -> ')}`)
 
-      const backend = BACKENDS[provider] ?? runClaudeCodeAgent
-      return backend(config, task, workingDir)
+      const attempted: string[] = []
+      let last: ToolResult | undefined
+
+      for (const provider of chain) {
+        const backend = BACKENDS[provider] ?? runClaudeCodeAgent
+        const result = await backend({ ...config, provider }, task, workingDir)
+        attempted.push(provider)
+        last = result
+
+        if (result.success) {
+          // Say which provider answered when it was not the first choice, so a silent
+          // degradation to a cheaper or weaker agent is visible in the transcript.
+          return attempted.length > 1
+            ? { ...result, output: `${result.output}\n\n[failed over: ${attempted.join(' -> ')}]` }
+            : result
+        }
+
+        if (!shouldFailover(result)) return result
+
+        log.warn('code-agent', `${provider} could not run the task; trying the next provider`)
+      }
+
+      return {
+        success: false,
+        output:
+          `All configured code agents failed (${attempted.join(', ')}).\n\n` +
+          `Last error:\n${last?.output ?? 'no output'}`,
+      }
     },
   }
 }

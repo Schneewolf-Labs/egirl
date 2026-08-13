@@ -31,6 +31,12 @@ max_concurrent = 2                 # in-flight requests against the endpoint; se
 
 [channels.code_agent]
 provider = "codex"         # "codex", "claude", or "opencode"
+# providers = ["codex", "opencode", "claude"]
+#   Ordered fallback chain, tried left to right. Takes precedence over `provider`.
+#   The next backend is tried only when this one could not run the task at all: binary missing,
+#   expired credentials, exhausted credits, rate limit, or an empty transcript. An agent that ran
+#   and reported it could not solve the problem is NOT retried — that is its answer, and running
+#   another agent over the same tree costs more and risks conflicting edits.
 permission_mode = "default"
 # model = "gpt-5.5"        # Codex example
 # model = "sonnet"         # Claude example
