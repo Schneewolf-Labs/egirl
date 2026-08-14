@@ -3,6 +3,7 @@ import { join } from 'path'
 import { sanitizedEnv } from '../../../util/env'
 import { log } from '../../../util/logger'
 import type { ToolResult } from '../../types'
+import { NODE_BINARY_MISSING, nodeBinary } from './node-binary'
 import { DEFAULT_TIMEOUT_MS, stripAnsi } from './shared'
 import type { CodeAgentBackend, CodeAgentConfig } from './types'
 
@@ -173,6 +174,14 @@ export const runCodexCodeAgent: CodeAgentBackend = (config, task, workingDir) =>
   const startTime = Date.now()
   const timeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS
 
+  // `node` by name resolves to bun under this project's bunfig -- see node-binary.ts. Checked
+  // before the promise body, which cannot settle until its timer exists.
+  const nodeBin = nodeBinary()
+  if (!nodeBin) {
+    log.error('code-agent', NODE_BINARY_MISSING)
+    return Promise.resolve({ success: false, output: NODE_BINARY_MISSING })
+  }
+
   return new Promise<ToolResult>((resolvePromise) => {
     let rawOutput = ''
     let jsonBuffer = ''
@@ -196,7 +205,7 @@ export const runCodexCodeAgent: CodeAgentBackend = (config, task, workingDir) =>
     const encodedArgs = Buffer.from(JSON.stringify(codexArgs(config, task, workingDir))).toString(
       'base64',
     )
-    const proc = spawn('node', [runnerPath, workingDir, encodedArgs], {
+    const proc = spawn(nodeBin, [runnerPath, workingDir, encodedArgs], {
       cwd: workingDir,
       env: {
         ...sanitizedEnv(),
