@@ -16,7 +16,10 @@ try {
   process.exit(1)
 }
 
-const proc = pty.spawn('codex', args, {
+// Overridable so the flush behaviour below can be tested without a real codex install.
+const CODEX_BIN = process.env.EGIRL_CODEX_BIN || 'codex'
+
+const proc = pty.spawn(CODEX_BIN, args, {
   name: 'xterm-256color',
   cols: 100,
   rows: 30,
@@ -32,16 +35,42 @@ function send(event) {
   console.log(JSON.stringify(event))
 }
 
+const rl = readline.createInterface({ input: process.stdin })
+
+/**
+ * Exit without throwing away what codex said.
+ *
+ * `console.log` to a pipe is asynchronous, and the parent always gives this process piped stdio.
+ * The previous version called `process.exit()` directly inside `onExit`, which discards whatever
+ * is still queued -- so any codex run that finished quickly arrived at the parent as a clean exit
+ * with an empty transcript.
+ *
+ * That is not a cosmetic loss. The parent treats an empty transcript as "produced no output" and
+ * reports a working directory problem, so the actual reason (a rejected flag, a failed login, a
+ * usage error) was destroyed by the reporting path. Observed live: codex printed a usage error to
+ * the pty and the parent received zero bytes.
+ *
+ * Setting `exitCode` and releasing stdin lets the queue drain and the process end on its own. The
+ * timer is a backstop for a parent that has stopped reading, and is unref'd so it never keeps an
+ * otherwise-finished process alive.
+ */
+function shutdown(code) {
+  rl.close()
+  process.stdin.pause()
+  process.exitCode = code
+  const forced = setTimeout(() => process.exit(code), 5000)
+  if (typeof forced.unref === 'function') forced.unref()
+}
+
 proc.onData((data) => {
   send({ type: 'data', data })
 })
 
 proc.onExit(({ exitCode, signal }) => {
   send({ type: 'exit', exitCode, signal })
-  process.exit(exitCode ?? 0)
+  shutdown(exitCode ?? 0)
 })
 
-const rl = readline.createInterface({ input: process.stdin })
 rl.on('line', (line) => {
   try {
     const event = JSON.parse(line)
