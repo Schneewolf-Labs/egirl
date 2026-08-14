@@ -33,6 +33,7 @@ export interface TaskRunnerDeps {
   store: TaskStore
   toolExecutor: ToolExecutor
   localProvider: LLMProvider
+  auxProvider?: LLMProvider
   memory: MemoryManager | undefined
   transcript?: TranscriptLogger
   outbound: Map<string, OutboundChannel>
@@ -319,6 +320,7 @@ export class TaskRunner {
       config: this.deps.config,
       toolExecutor: this.deps.toolExecutor,
       localProvider: this.deps.localProvider,
+      auxProvider: this.deps.auxProvider,
       sessionId: `task:${task.id}`,
       memory: this.deps.memory,
       transcript: this.deps.transcript,

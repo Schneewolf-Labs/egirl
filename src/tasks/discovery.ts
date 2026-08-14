@@ -39,6 +39,7 @@ export interface DiscoveryDeps {
   runner: TaskRunner
   toolExecutor: ToolExecutor
   localProvider: LLMProvider
+  auxProvider?: LLMProvider
   memory: MemoryManager | undefined
   transcript?: TranscriptLogger
 }
@@ -124,6 +125,7 @@ export class Discovery {
         config: this.deps.config,
         toolExecutor: this.deps.toolExecutor,
         localProvider: this.deps.localProvider,
+        auxProvider: this.deps.auxProvider,
         sessionId: 'discovery',
         memory: this.deps.memory,
         transcript: this.deps.transcript,

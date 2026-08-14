@@ -48,6 +48,7 @@ export async function runDiscord(config: RuntimeConfig, args: string[]): Promise
       config,
       toolExecutor,
       localProvider: providers.local,
+      auxProvider: providers.auxiliary,
       sessionId,
       memory,
       conversationStore: conversations,
@@ -73,6 +74,7 @@ export async function runDiscord(config: RuntimeConfig, args: string[]): Promise
       store: taskStore,
       toolExecutor,
       localProvider: providers.local,
+      auxProvider: providers.auxiliary,
       memory,
       transcript,
       outbound,
@@ -125,6 +127,7 @@ export async function runDiscord(config: RuntimeConfig, args: string[]): Promise
         runner: taskRunner,
         toolExecutor,
         localProvider: providers.local,
+        auxProvider: providers.auxiliary,
         memory,
         transcript,
       })

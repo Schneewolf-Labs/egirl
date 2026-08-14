@@ -27,6 +27,7 @@ export async function runXMPP(config: RuntimeConfig, args: string[]): Promise<vo
     config,
     toolExecutor,
     localProvider: providers.local,
+    auxProvider: providers.auxiliary,
     sessionId: 'xmpp:default',
     memory,
     conversationStore: conversations,
