@@ -6,6 +6,7 @@ export {
   createMemoryTools,
   createPeerTools,
   createProcessTools,
+  createSkillReadTool,
   createTaskTools,
   createWebSearchTool,
   editTool,
@@ -51,6 +52,7 @@ export type { Tool, ToolDefinition, ToolResult } from './types'
 import type { BrowserManager } from '../browser'
 import type { RuntimeConfig } from '../config'
 import type { MemoryManager } from '../memory'
+import type { Skill } from '../skills/types'
 import { log } from '../util/logger'
 import {
   type CodeAgentConfig,
@@ -75,6 +77,7 @@ import {
   webResearchTool,
   writeTool,
 } from './builtin'
+import { createSkillReadTool as buildSkillReadTool } from './builtin/skill'
 import { createToolExecutor } from './executor'
 import type { ProcessRegistry } from './process-registry'
 import type { Tool, ToolResult } from './types'
@@ -111,6 +114,7 @@ export function createDefaultToolExecutor(
   github?: GitHubConfig,
   browser?: BrowserManager,
   processRegistry?: ProcessRegistry,
+  skills?: Skill[],
 ) {
   const executor = createToolExecutor()
   const t = config.tools
@@ -213,6 +217,13 @@ export function createDefaultToolExecutor(
         memoryStub('memory_get', 'Retrieve a specific memory by key', 'key'),
       ])
     }
+  }
+
+  // Skills are listed in the prompt by name and description only; this fetches a body on demand.
+  // Registered only when skills are loaded, so the model is never offered a tool with nothing
+  // behind it.
+  if (skills && skills.length > 0) {
+    executor.register(buildSkillReadTool(skills))
   }
 
   // Code agent tool (available if claude code config provided)

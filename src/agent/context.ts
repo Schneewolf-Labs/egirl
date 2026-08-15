@@ -163,18 +163,21 @@ Use tools proactively to gather information rather than asking. Use git tools di
  * Build the skills section for the system prompt
  */
 function buildSkillsSection(skills: Skill[]): string {
-  const lines: string[] = ['## Available Skills', '']
+  // Names and descriptions only. The body arrives via `skill_read` when a skill is actually
+  // needed -- see src/tools/builtin/skill.ts for why this is not simply inlined.
+  const lines: string[] = [
+    '## Available Skills',
+    '',
+    'These are what you know how to do. The instructions are not here: call `skill_read` with the',
+    'skill name to load them before you act on one.',
+    '',
+  ]
 
   for (const skill of skills) {
     const emoji = skill.metadata.openclaw?.emoji ?? ''
     const prefix = emoji ? `${emoji} ` : ''
-    lines.push(`### ${prefix}${skill.name}`)
-    if (skill.description) {
-      lines.push(skill.description)
-    }
-    lines.push('')
-    lines.push(skill.content)
-    lines.push('')
+    const description = skill.description || '(no description)'
+    lines.push(`- **${prefix}${skill.name}** — ${description}`)
   }
 
   return lines.join('\n')
