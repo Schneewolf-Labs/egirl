@@ -257,6 +257,7 @@ export async function createAppServices(config: RuntimeConfig): Promise<AppServi
     getGitHubConfig(config),
     browser,
     processRegistry,
+    skills,
   )
   toolExecutor.setSafety(buildSafetyConfig(config))
   if (energy) {
