@@ -8,8 +8,8 @@
 
 import { describe, expect, test } from 'bun:test'
 import { buildSystemPrompt } from '../../src/agent/context'
-import type { Skill } from '../../src/skills/types'
 import type { RuntimeConfig } from '../../src/config'
+import type { Skill } from '../../src/skills/types'
 
 const BODY_MARKER = 'STEP_ONE_RUN_HEMLOCKC'
 
@@ -56,7 +56,8 @@ describe('skills section', () => {
 
   test('prompt cost scales with skill count, not skill size', () => {
     const small = buildSystemPrompt(config(), { skills: [skill('a', 'does a', 100)] }).full.length
-    const large = buildSystemPrompt(config(), { skills: [skill('a', 'does a', 40_000)] }).full.length
+    const large = buildSystemPrompt(config(), { skills: [skill('a', 'does a', 40_000)] }).full
+      .length
     // A 400x larger body must not move the prompt.
     expect(large).toBe(small)
   })

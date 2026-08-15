@@ -12,8 +12,8 @@
  */
 
 import { describe, expect, test } from 'bun:test'
-import { createSkillReadTool } from '../../src/tools/builtin/skill'
 import type { Skill } from '../../src/skills/types'
+import { createSkillReadTool } from '../../src/tools/builtin/skill'
 
 function skill(name: string, description: string, content: string): Skill {
   return {
