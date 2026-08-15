@@ -256,6 +256,27 @@ const baseProperties = {
     ),
   ),
 
+  // MCP servers whose tools are exposed to the agent. Either `command` (stdio, spawned) or
+  // `url` (streamable HTTP). Tools are namespaced <server>_<tool> so two servers offering the
+  // same tool name cannot shadow each other.
+  mcp: Type.Optional(
+    Type.Object({
+      servers: Type.Optional(
+        Type.Array(
+          Type.Object({
+            name: Type.String(),
+            command: Type.Optional(Type.String()),
+            args: Type.Optional(Type.Array(Type.String())),
+            env: Type.Optional(Type.Record(Type.String(), Type.String())),
+            url: Type.Optional(Type.String()),
+            headers: Type.Optional(Type.Record(Type.String(), Type.String())),
+            timeout_ms: Type.Optional(Type.Number({ default: 30_000 })),
+          }),
+        ),
+      ),
+    }),
+  ),
+
   energy: Type.Optional(
     Type.Object({
       enabled: Type.Boolean({ default: true }),
@@ -522,6 +543,17 @@ export interface RuntimeConfig {
     token?: string
     timeoutMs: number
   }>
+  mcp?: {
+    servers: Array<{
+      name: string
+      command?: string
+      args?: string[]
+      env?: Record<string, string>
+      url?: string
+      headers?: Record<string, string>
+      timeoutMs?: number
+    }>
+  }
   energy: {
     enabled: boolean
     maxEnergy: number

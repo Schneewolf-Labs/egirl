@@ -494,6 +494,36 @@ export function loadConfig(options: LoadConfigOptions = {}): RuntimeConfig {
     })
   }
 
+  if (toml.mcp?.servers && toml.mcp.servers.length > 0) {
+    config.mcp = {
+      servers: toml.mcp.servers.map((m) => ({
+        name: m.name,
+        ...(m.command && { command: m.command }),
+        ...(m.args && { args: m.args }),
+        // Values of the form $VAR are read from the environment, so a token lives in .env rather
+        // than in a config file that gets committed.
+        ...(m.env && {
+          env: Object.fromEntries(
+            Object.entries(m.env).map(([k, v]) => [
+              k,
+              v.startsWith('$') ? (process.env[v.slice(1)] ?? '') : v,
+            ]),
+          ),
+        }),
+        ...(m.url && { url: m.url }),
+        ...(m.headers && {
+          headers: Object.fromEntries(
+            Object.entries(m.headers).map(([k, v]) => [
+              k,
+              v.startsWith('$') ? (process.env[v.slice(1)] ?? '') : v,
+            ]),
+          ),
+        }),
+        timeoutMs: m.timeout_ms ?? 30_000,
+      })),
+    }
+  }
+
   return config
 }
 
