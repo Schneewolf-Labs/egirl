@@ -21,7 +21,27 @@ export interface FitResult {
  * Estimate tokens for a string. Fallback when no tokenizer is available.
  * Uses chars/3.5 ratio (slightly conservative to avoid undercount).
  */
+/**
+ * A tool result that is a data URL is an image, not prose.
+ *
+ * The screenshot tool returns `data:image/png;base64,...` -- 2.5MB of base64 for a 3440x1440
+ * capture. Two things then went wrong. Counted as text it estimates ~730k tokens, and truncated
+ * to the 8k tool-result budget it becomes 28k characters of base64 cut mid-stream, which
+ * llama.cpp rejects with "Failed to load image or audio file". The screenshot tool could not
+ * work in a real conversation at all; sending the identical image outside the agent succeeds.
+ *
+ * It is converted to an `image_url` part before it reaches the model, where it is already
+ * budgeted at IMAGE_TOKENS, so the string form should never be measured or cut as text.
+ */
+export function isDataUrl(text: string): boolean {
+  return text.startsWith('data:') && text.includes(';base64,')
+}
+
+/** Rough cost of one image once the provider converts it to an image_url part. */
+export const IMAGE_TOKENS = 1000
+
 function estimateStringTokens(text: string): number {
+  if (isDataUrl(text)) return IMAGE_TOKENS
   return Math.ceil(text.length / 3.5)
 }
 
@@ -29,6 +49,8 @@ function estimateStringTokens(text: string): number {
  * Count tokens for a string, preferring the real tokenizer when provided.
  */
 async function countStringTokens(text: string, tokenizer?: Tokenizer): Promise<number> {
+  // Ahead of the tokenizer: it would happily count 2.5MB of base64 as ~640k real tokens.
+  if (isDataUrl(text)) return IMAGE_TOKENS
   if (tokenizer) return tokenizer.countTokens(text)
   return estimateStringTokens(text)
 }
@@ -49,7 +71,7 @@ async function countMessageTokens(message: ChatMessage, tokenizer?: Tokenizer): 
       if (part.type === 'text') {
         tokens += await countStringTokens(part.text, tokenizer)
       } else if (part.type === 'image_url') {
-        tokens += 1000 // rough estimate for vision tokens
+        tokens += IMAGE_TOKENS
       }
     }
   }
@@ -134,6 +156,8 @@ export function estimateMessageTokens(message: ChatMessage): number {
  * Returns the original string if within budget, otherwise truncates.
  */
 export function truncateToolResultSync(content: string, maxTokens: number): string {
+  // Cutting a data URL produces a corrupt image rather than a shorter one.
+  if (isDataUrl(content)) return content
   const estimatedTokens = estimateStringTokens(content)
   if (estimatedTokens <= maxTokens) return content
 
@@ -150,6 +174,11 @@ async function truncateToolResult(
   tokenizer?: Tokenizer,
 ): Promise<ChatMessage> {
   if (message.role !== 'tool' || typeof message.content !== 'string') {
+    return message
+  }
+
+  // Same reason as truncateToolResultSync: half a base64 image is not a smaller image.
+  if (isDataUrl(message.content)) {
     return message
   }
 
