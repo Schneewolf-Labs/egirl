@@ -3,6 +3,7 @@ import { BrowserManager } from './browser'
 import type { RuntimeConfig } from './config'
 import { type ConversationStore, createConversationStore } from './conversation'
 import { createEnergyBudget, type EnergyBudget } from './energy'
+import { connectMcpServers, type McpConnection } from './mcp/client'
 import {
   createEmbeddingProvider,
   createMemoryManager,
@@ -46,6 +47,7 @@ export interface AppServices {
   stats: StatsTracker
   transcript: TranscriptLogger | undefined
   skills: Skill[]
+  mcpConnections: McpConnection[]
   browser: BrowserManager
   processRegistry: ProcessRegistry
 }
@@ -259,6 +261,15 @@ export async function createAppServices(config: RuntimeConfig): Promise<AppServi
     processRegistry,
     skills,
   )
+  // MCP tools join the same executor as the builtins, so safety, energy and permissions apply to
+  // them identically. A server that is down costs its own tools and nothing else.
+  const mcpConnections: McpConnection[] = []
+  if (config.mcp?.servers?.length) {
+    const { tools: mcpTools, connections } = await connectMcpServers(config.mcp.servers)
+    mcpConnections.push(...connections)
+    if (mcpTools.length > 0) toolExecutor.registerAll(mcpTools)
+  }
+
   toolExecutor.setSafety(buildSafetyConfig(config))
   if (energy) {
     toolExecutor.setEnergy(energy)
@@ -276,6 +287,7 @@ export async function createAppServices(config: RuntimeConfig): Promise<AppServi
     memory,
     workingMemory,
     energy,
+    mcpConnections,
     conversations,
     taskStore,
     toolExecutor,
