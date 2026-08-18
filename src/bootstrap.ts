@@ -12,6 +12,7 @@ import {
   type MemoryManager,
   type WorkingMemory,
 } from './memory'
+import { discoverPeers, mergePeers, registerSelf } from './peers/discovery'
 import { createPermissionSupervisor } from './permissions/supervisor'
 import { createProviderRegistry, type ProviderRegistry } from './providers'
 import { buildSafetyConfig } from './safety/config-bridge'
@@ -268,6 +269,44 @@ export async function createAppServices(config: RuntimeConfig): Promise<AppServi
     const { tools: mcpTools, connections } = await connectMcpServers(config.mcp.servers)
     mcpConnections.push(...connections)
     if (mcpTools.length > 0) toolExecutor.registerAll(mcpTools)
+
+    // Peer discovery, once the registry's tools exist. Announce this instance, then resolve
+    // peers from the registry and add any the config did not already name. Config wins on a
+    // collision: a hand-pinned URL was pinned for a reason.
+    //
+    // Everything here is best-effort. A registry that is unreachable leaves the statically
+    // configured peers exactly as they were -- an optional source of addresses must never be
+    // able to stop the agent from starting.
+    if (config.peerDiscovery?.enabled) {
+      try {
+        const registry = config.peerDiscovery.registry ?? 'wald'
+        const selfName = config.peerDiscovery.selfName ?? config.source.instance ?? 'egirl'
+        await registerSelf({
+          tools: mcpTools,
+          selfName,
+          registry,
+          selfUrl: config.peerDiscovery.selfUrl,
+          capabilities: config.peerDiscovery.capabilities,
+        })
+        const found = await discoverPeers({ tools: mcpTools, selfName, registry })
+        const before = config.peers?.length ?? 0
+        config.peers = mergePeers(config.peers ?? [], found)
+        if (config.peers.length !== before) {
+          log.info(
+            'peers',
+            `Discovered ${config.peers.length - before} peer(s) from '${registry}': ${config.peers
+              .slice(before)
+              .map((p) => p.name)
+              .join(', ')}`,
+          )
+        }
+      } catch (error) {
+        log.warn(
+          'peers',
+          `Peer discovery failed, using configured peers: ${(error as Error).message}`,
+        )
+      }
+    }
   }
 
   toolExecutor.setSafety(buildSafetyConfig(config))

@@ -256,6 +256,23 @@ const baseProperties = {
     ),
   ),
 
+  // Resolve peers from a Wald agent registry rather than listing them here. Discovery
+  // supplies addresses only -- tokens still come from EGIRL_PEER_<NAME>_TOKEN, because the
+  // registry stores a reference to where a secret lives, never the secret.
+  peer_discovery: Type.Optional(
+    Type.Object({
+      enabled: Type.Boolean({ default: false }),
+      // MCP server name the registry is configured under, in [[mcp.servers]].
+      registry: Type.Optional(Type.String({ default: 'wald' })),
+      // How this instance announces itself; defaults to the selected instance name.
+      self_name: Type.Optional(Type.String()),
+      // This instance's own peer endpoint, so others can reach it. Without it the instance
+      // discovers peers but does not publish itself.
+      self_url: Type.Optional(Type.String()),
+      capabilities: Type.Optional(Type.Array(Type.String())),
+    }),
+  ),
+
   // MCP servers whose tools are exposed to the agent. Either `command` (stdio, spawned) or
   // `url` (streamable HTTP). Tools are namespaced <server>_<tool> so two servers offering the
   // same tool name cannot shadow each other.
@@ -543,6 +560,13 @@ export interface RuntimeConfig {
     token?: string
     timeoutMs: number
   }>
+  peerDiscovery?: {
+    enabled: boolean
+    registry?: string
+    selfName?: string
+    selfUrl?: string
+    capabilities?: string[]
+  }
   mcp?: {
     servers: Array<{
       name: string
