@@ -91,6 +91,27 @@ function deepMerge<T extends ConfigFragment>(base: T, ...overrides: unknown[]): 
   return result as T
 }
 
+/**
+ * Substitute `$VAR` from the environment inside a string, anywhere it appears.
+ *
+ * The obvious shape for an auth header is `"Bearer $WALD_TOKEN"`, and matching only when the
+ * whole value is `$VAR` sends that through verbatim — the server then rejects a token that
+ * reads, literally, `Bearer $WALD_TOKEN`. That failure looks like a bad credential rather
+ * than a config bug, which is a long way to walk for a missing substitution.
+ *
+ * An unset variable expands to empty rather than staying literal: a header that is visibly
+ * missing its token fails immediately and legibly, where `$WALD_TOKEN` reaching the wire
+ * invites the reader to think the value was somehow sent.
+ */
+export function expandEnvVars(values: Record<string, string>): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(values).map(([k, v]) => [
+      k,
+      v.replace(/\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?/g, (_, name) => process.env[name] ?? ''),
+    ]),
+  )
+}
+
 function stripCompositionSections(toml: EgirlConfig): ConfigFragment {
   const {
     defaults: _defaults,
@@ -500,25 +521,11 @@ export function loadConfig(options: LoadConfigOptions = {}): RuntimeConfig {
         name: m.name,
         ...(m.command && { command: m.command }),
         ...(m.args && { args: m.args }),
-        // Values of the form $VAR are read from the environment, so a token lives in .env rather
-        // than in a config file that gets committed.
-        ...(m.env && {
-          env: Object.fromEntries(
-            Object.entries(m.env).map(([k, v]) => [
-              k,
-              v.startsWith('$') ? (process.env[v.slice(1)] ?? '') : v,
-            ]),
-          ),
-        }),
+        // $VAR is read from the environment, so a token lives in .env rather than in a config
+        // file that gets committed.
+        ...(m.env && { env: expandEnvVars(m.env) }),
         ...(m.url && { url: m.url }),
-        ...(m.headers && {
-          headers: Object.fromEntries(
-            Object.entries(m.headers).map(([k, v]) => [
-              k,
-              v.startsWith('$') ? (process.env[v.slice(1)] ?? '') : v,
-            ]),
-          ),
-        }),
+        ...(m.headers && { headers: expandEnvVars(m.headers) }),
         timeoutMs: m.timeout_ms ?? 30_000,
       })),
     }
