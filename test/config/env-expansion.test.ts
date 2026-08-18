@@ -22,9 +22,11 @@ describe('mcp $VAR expansion', () => {
     expect(expandEnvVars({ k: '$WALD_TEST_TOKEN' })).toEqual({ k: 'secret123' })
   })
 
-  test('supports ${BRACED} form', () => {
+  test('supports the braced form', () => {
     process.env.WALD_TEST_TOKEN = 'secret123'
-    expect(expandEnvVars({ k: '${WALD_TEST_TOKEN}' })).toEqual({ k: 'secret123' })
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: the literal braced form is exactly what this case exercises
+    const braced = '${WALD_TEST_TOKEN}'
+    expect(expandEnvVars({ k: braced })).toEqual({ k: 'secret123' })
   })
 
   test('an unset variable expands to empty rather than staying literal', () => {
