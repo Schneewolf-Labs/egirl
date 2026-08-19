@@ -10,7 +10,8 @@ import { runNew } from './commands/new'
 import { runServe } from './commands/serve'
 import { showStatus } from './commands/status'
 import { runXMPP } from './commands/xmpp'
-import { loadConfig, type RuntimeConfig } from './config'
+import { findConfigFile, loadConfig, type RuntimeConfig } from './config'
+import { loadInstanceEnv } from './config/env-files'
 import { BOLD, colors, DIM, RESET } from './ui/theme'
 import { log } from './util/logger'
 import { bootstrapWorkspace } from './workspace/bootstrap'
@@ -77,6 +78,13 @@ async function main() {
   if (command === 'help' || command === '--help' || command === '-h') {
     showHelp()
     return
+  }
+
+  // Before loadConfig, because config expands $VAR from process.env: an instance whose Wald
+  // token lives in .env.<instance> would otherwise resolve the shared one from .env.
+  const instanceEnv = loadInstanceEnv(instance, findConfigFile() ?? undefined)
+  if (instanceEnv) {
+    log.info('main', `Loaded ${instanceEnv.path} (${instanceEnv.keys.length} var(s))`)
   }
 
   let config: RuntimeConfig

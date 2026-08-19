@@ -7,6 +7,14 @@ dist/
 # Environment
 .env
 .env.local
+# Per-instance secrets: .env.zero, .env.ops-big
+.env.*
+!.env.example
+
+# Per-machine instance config. egirl.toml is tracked, so live endpoints and instance layout
+# appended to it show up as a permanent working-tree diff and are one `git add -A` from being
+# committed. Fragments keep that out of the repo.
+egirl.d/
 
 # Workspace (keep templates)
 workspace/*

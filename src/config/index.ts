@@ -6,6 +6,7 @@ import { join, resolve } from 'path'
 import { parse } from 'smol-toml'
 import { peerTokenEnvKey } from '../peers/protocol'
 import { setTheme } from '../ui/theme'
+import { loadConfigFragments } from './fragments'
 import {
   type CodeAgentProvider,
   ConfigFragmentSchema,
@@ -89,6 +90,27 @@ function deepMerge<T extends ConfigFragment>(base: T, ...overrides: unknown[]): 
   }
 
   return result as T
+}
+
+/**
+ * Substitute `$VAR` from the environment inside a string, anywhere it appears.
+ *
+ * The obvious shape for an auth header is `"Bearer $WALD_TOKEN"`, and matching only when the
+ * whole value is `$VAR` sends that through verbatim — the server then rejects a token that
+ * reads, literally, `Bearer $WALD_TOKEN`. That failure looks like a bad credential rather
+ * than a config bug, which is a long way to walk for a missing substitution.
+ *
+ * An unset variable expands to empty rather than staying literal: a header that is visibly
+ * missing its token fails immediately and legibly, where `$WALD_TOKEN` reaching the wire
+ * invites the reader to think the value was somehow sent.
+ */
+export function expandEnvVars(values: Record<string, string>): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(values).map(([k, v]) => [
+      k,
+      v.replace(/\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?/g, (_, name) => process.env[name] ?? ''),
+    ]),
+  )
 }
 
 function stripCompositionSections(toml: EgirlConfig): ConfigFragment {
@@ -213,7 +235,19 @@ const defaultToml: EgirlConfig = {
 
 export function loadConfig(options: LoadConfigOptions = {}): RuntimeConfig {
   const configPath = findConfigFile()
-  const loadedToml: EgirlConfig = configPath ? loadTomlConfig(configPath) : defaultToml
+  const baseToml: EgirlConfig = configPath ? loadTomlConfig(configPath) : defaultToml
+
+  // Fragments merge over the base in filename order, so `egirl.d/zero.toml` can define an
+  // instance without the main config being touched. Composition is by deep merge rather than
+  // replacement: two fragments adding different instances both land, and a fragment overriding
+  // one key of a profile leaves the rest of it alone.
+  const fragments = configPath ? loadConfigFragments(configPath) : []
+  const loadedToml = (
+    fragments.length > 0
+      ? deepMerge(baseToml as unknown as ConfigFragment, ...fragments.map((f) => f.toml))
+      : baseToml
+  ) as EgirlConfig
+
   const resolved = resolveTomlConfig(loadedToml, options)
   const toml = resolved.toml
 
@@ -233,6 +267,7 @@ export function loadConfig(options: LoadConfigOptions = {}): RuntimeConfig {
   const config: RuntimeConfig = {
     source: {
       ...(configPath && { path: configPath }),
+      ...(fragments.length > 0 && { fragments: fragments.map((fragment) => fragment.path) }),
       ...(resolved.instance && { instance: resolved.instance }),
       ...(resolved.profile && { profile: resolved.profile }),
       ...(resolved.persona && { persona: resolved.persona }),
@@ -500,25 +535,11 @@ export function loadConfig(options: LoadConfigOptions = {}): RuntimeConfig {
         name: m.name,
         ...(m.command && { command: m.command }),
         ...(m.args && { args: m.args }),
-        // Values of the form $VAR are read from the environment, so a token lives in .env rather
-        // than in a config file that gets committed.
-        ...(m.env && {
-          env: Object.fromEntries(
-            Object.entries(m.env).map(([k, v]) => [
-              k,
-              v.startsWith('$') ? (process.env[v.slice(1)] ?? '') : v,
-            ]),
-          ),
-        }),
+        // $VAR is read from the environment, so a token lives in .env rather than in a config
+        // file that gets committed.
+        ...(m.env && { env: expandEnvVars(m.env) }),
         ...(m.url && { url: m.url }),
-        ...(m.headers && {
-          headers: Object.fromEntries(
-            Object.entries(m.headers).map(([k, v]) => [
-              k,
-              v.startsWith('$') ? (process.env[v.slice(1)] ?? '') : v,
-            ]),
-          ),
-        }),
+        ...(m.headers && { headers: expandEnvVars(m.headers) }),
         timeoutMs: m.timeout_ms ?? 30_000,
       })),
     }
