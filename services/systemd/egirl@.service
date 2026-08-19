@@ -1,0 +1,48 @@
+# Templated user unit: one instance per unit, named by the part after the @.
+#
+#   systemctl --user enable --now egirl@zero
+#   systemctl --user status egirl@zero
+#   journalctl --user -u egirl@zero -f
+#
+# Install:
+#   mkdir -p ~/.config/systemd/user
+#   cp services/systemd/egirl@.service ~/.config/systemd/user/
+#   # edit WorkingDirectory and ExecStart below to match this checkout and your bun path
+#   systemctl --user daemon-reload
+#
+# Instances are user units, not system units, because everything they touch -- the persona
+# workspace, the SQLite databases, the code agent's own credentials -- lives in $HOME and is
+# owned by one person. A system unit would run as root or need its own user, and then the code
+# agent's subscription auth is in the wrong home directory.
+#
+# Run `loginctl enable-linger $USER` once if you want instances to start at boot rather than at
+# first login. Without it a headless box will not start them until you ssh in.
+
+[Unit]
+Description=egirl instance %i
+Documentation=https://github.com/Schneewolf-Labs/egirl
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/Projects/egirl
+ExecStart=%h/.bun/bin/bun run src/index.ts --instance %i api
+
+# The operator model lives in another process (often on another machine) and may be loading,
+# swapping weights, or briefly gone. Restarting into that is normal, so back off rather than
+# hammering it -- and do not let a genuine misconfiguration retry forever.
+Restart=on-failure
+RestartSec=10
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+# SIGINT rather than SIGTERM: the agent loop treats it as the same interrupt the CLI sends, so
+# an in-flight turn unwinds and the SQLite handles close instead of being killed mid-write.
+KillSignal=SIGINT
+TimeoutStopSec=30
+
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=default.target
