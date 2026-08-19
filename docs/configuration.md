@@ -160,9 +160,38 @@ port = 3001
 
 The existing top-level config remains valid and acts as the base. Resolution order is top-level config, selected profile, selected persona, then selected instance.
 
+#### Config fragments (`egirl.d/`)
+
+Any `*.toml` in an `egirl.d/` directory beside `egirl.toml` is merged over the main config, in filename order. Fragments are deep-merged, so two fragments adding different instances both land, and a fragment overriding one key of a profile leaves the rest of it alone.
+
+```
+egirl.toml          # shared base: safety, tools, skills, MCP servers
+egirl.d/zero.toml   # one instance
+egirl.d/ops.toml    # another
+```
+
+This is where per-machine instance config belongs. `egirl.toml` is tracked in git, so live endpoints and instance layout appended to it show up as a permanent working-tree diff and are one `git add -A` from being committed; `egirl.d/` is gitignored.
+
+A fragment that fails to parse stops startup rather than being skipped — a skipped fragment means an instance silently missing, or running on the base config's defaults, which is worse than not starting because it looks like it worked.
+
+#### Per-instance secrets (`.env.<instance>`)
+
+`.env.zero` beside `.env` is loaded when `--instance zero` is selected, and **overrides** `.env`.
+
+```
+.env          # DISCORD_TOKEN, shared defaults
+.env.zero     # WALD_TOKEN scoped to this instance
+```
+
+Without this every instance presents the same identity to every service it reaches — two operators pointing at the same Wald send the same bearer token, so neither the registry nor its audit log can tell them apart.
+
+Precedence is most-specific-wins, and that includes variables already in the environment: Bun loads `.env` into `process.env` before egirl runs, so a loader that declined to overwrite would silently do nothing for exactly the keys the instance file exists to override. The tradeoff is that a variable exported in your shell also loses to the instance file.
+
+Parsing is deliberately minimal — comments, `export` prefixes, and quoted values, but no interpolation. The file holds tokens, and a parser that reinterprets a `$` or `#` inside one corrupts the secret.
+
 #### Scaffolding an instance
 
-`new` writes the persona files, appends the config block, and picks an API port that is neither claimed elsewhere in the config nor currently bound:
+`new` writes the persona files, writes an `egirl.d/<name>.toml` fragment, and picks an API port that is neither claimed elsewhere in the config nor currently bound:
 
 ```bash
 bun run start new zero --profile big-box --theme neon      # reuse an existing profile
@@ -170,7 +199,7 @@ bun run start new zero --endpoint http://10.0.0.5:8214 \
                        --model qwen3.8-27b                 # define a profile too
 ```
 
-It refuses rather than overwrites: an existing instance name, an existing persona workspace, or an unknown profile all stop it before anything is written. Pass `--port` to override the automatic choice.
+It refuses rather than overwrites: an existing instance name (in the base config *or* any fragment), an existing persona workspace, or an unknown profile all stop it before anything is written. Pass `--port` to override the automatic choice.
 
 The generated `IDENTITY.md`, `SOUL.md`, and `AGENTS.md` are neutral starting points rather than a copy of the default persona — fill in `SOUL.md` before first run, since that file does most of the work in shaping behaviour.
 

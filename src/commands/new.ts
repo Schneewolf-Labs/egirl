@@ -1,8 +1,9 @@
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
 import { homedir } from 'os'
-import { join } from 'path'
+import { dirname, join } from 'path'
 import { parse } from 'smol-toml'
 import { findConfigFile } from '../config'
+import { FRAGMENT_DIR, loadConfigFragments } from '../config/fragments'
 import {
   collectConfiguredPorts,
   findFreePort,
@@ -109,15 +110,22 @@ export async function runNew(args: string[]): Promise<void> {
     throw new Error('No egirl.toml found. Run `bun run start init` first.')
   }
 
-  const toml = parse(readFileSync(configPath, 'utf-8')) as unknown
+  // The effective config is the base plus every fragment, so both have to be consulted: an
+  // instance defined only in egirl.d/ is just as real a collision as one in the base file, and a
+  // port scan that misses fragments hands out a port a sibling already claimed.
+  const base = parse(readFileSync(configPath, 'utf-8')) as Record<string, unknown>
+  const fragments = loadConfigFragments(configPath)
+  const sources: unknown[] = [base, ...fragments.map((fragment) => fragment.toml)]
 
-  if (instanceNames(toml).includes(options.name)) {
-    throw new Error(`Instance "${options.name}" already exists in ${configPath}`)
+  for (const source of sources) {
+    if (instanceNames(source).includes(options.name)) {
+      throw new Error(`Instance "${options.name}" already exists`)
+    }
   }
 
   // Either reuse a profile that exists, or define one from an endpoint. Naming a profile that is
   // not there fails at load time with a less obvious message than this one.
-  const profiles = profileNames(toml)
+  const profiles = sources.flatMap(profileNames)
   if (options.profile && !profiles.includes(options.profile)) {
     throw new Error(
       `Unknown profile "${options.profile}". Defined: ${profiles.join(', ') || '(none)'}`,
@@ -130,9 +138,9 @@ export async function runNew(args: string[]): Promise<void> {
     )
   }
 
-  const port = options.port ?? (await findFreePort(collectConfiguredPorts(toml)))
+  const port = options.port ?? (await findFreePort(sources.flatMap(collectConfiguredPorts)))
 
-  const workspace = personaWorkspace(toml, options.name)
+  const workspace = personaWorkspace(base, options.name)
   if (existsSync(workspace)) {
     throw new Error(`Workspace ${workspace} already exists`)
   }
@@ -152,8 +160,17 @@ export async function runNew(args: string[]): Promise<void> {
     console.log(`${c.success}write${RESET} ${join(workspace, filename)}`)
   }
 
-  appendFileSync(configPath, renderInstanceToml(scaffold))
-  console.log(`${c.success}write${RESET} ${configPath} ${DIM}(instance ${options.name})${RESET}`)
+  // A fragment rather than an append to the shared config: editing one instance should not put
+  // the others at risk, and egirl.toml is tracked in git, so appending live host and token
+  // details to it puts them one `git add -A` from being committed.
+  const fragmentDir = join(dirname(configPath), FRAGMENT_DIR)
+  const fragmentPath = join(fragmentDir, `${options.name}.toml`)
+  if (existsSync(fragmentPath)) {
+    throw new Error(`${fragmentPath} already exists`)
+  }
+  mkdirSync(fragmentDir, { recursive: true })
+  writeFileSync(fragmentPath, renderInstanceToml(scaffold))
+  console.log(`${c.success}write${RESET} ${fragmentPath}`)
 
   console.log(`\n${c.primary}Instance${RESET} ${options.name}`)
   console.log(`  ${DIM}profile${RESET}   ${options.profile ?? options.name}`)
