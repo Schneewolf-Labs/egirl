@@ -529,6 +529,18 @@ export function loadConfig(options: LoadConfigOptions = {}): RuntimeConfig {
     })
   }
 
+  if (toml.peer_discovery?.enabled) {
+    config.peerDiscovery = {
+      enabled: true,
+      ...(toml.peer_discovery.registry && { registry: toml.peer_discovery.registry }),
+      ...(toml.peer_discovery.self_name && { selfName: toml.peer_discovery.self_name }),
+      ...(toml.peer_discovery.self_url && { selfUrl: toml.peer_discovery.self_url }),
+      ...(toml.peer_discovery.capabilities && {
+        capabilities: toml.peer_discovery.capabilities,
+      }),
+    }
+  }
+
   if (toml.mcp?.servers && toml.mcp.servers.length > 0) {
     config.mcp = {
       servers: toml.mcp.servers.map((m) => ({

@@ -106,6 +106,35 @@ The receiving instance just needs its API running (`bun run start api` with `[ch
 
 The tools register whenever at least one peer is configured; set `peers = false` under `[tools]` to turn them off without deleting the config.
 
+### Discovery
+
+Declaring peers statically means every instance carries an entry for every other instance: N instances, N-1 entries each, and adding one means editing N configs. A [Wald](https://github.com/Schneewolf-Labs/Wald) agent registry inverts that — each instance announces itself once and asks who else is there.
+
+```toml
+[[mcp.servers]]
+name = "wald"
+url = "http://wald.internal:8091/mcp"
+headers = { Authorization = "Bearer $WALD_TOKEN" }
+
+[peer_discovery]
+enabled = true
+registry = "wald"                        # the [[mcp.servers]] name, default "wald"
+self_url = "http://192.168.1.10:3000"    # so others can reach this instance
+capabilities = ["coding", "vision"]      # optional, advertised to the registry
+```
+
+On startup the instance registers itself with `protocol = "egirl-peer/1"`, then adds any registry peers the config did not already name. A peer that moves, or a new instance appearing, needs no config edit anywhere.
+
+Three things worth knowing:
+
+**Discovery covers addresses, not credentials.** Wald deliberately stores a *reference* to where a secret lives rather than the secret, so it can tell you a peer exists at a URL and cannot hand you the token to talk to it. Tokens still come from `EGIRL_PEER_<NAME>_TOKEN`, exactly as for static peers.
+
+**Configuration wins on a collision.** A peer pinned by hand in `[[peers]]` is never overridden by the registry — someone pinned that URL for a reason, and a registry silently winning is a confusing way to find out it changed.
+
+**A registry that is down is not fatal.** Static peers keep working, discovery contributes nothing, and the agent starts. An optional source of addresses should never be able to stop an agent from running.
+
+Only agents registered with `protocol = "egirl-peer/1"` are treated as peers, so a hub shared with unrelated MCP agents does not pollute the peer list. Agents with no published `endpoint_url`, or whose status is not `active`, are skipped.
+
 ## Tools
 
 ### `peer_message`

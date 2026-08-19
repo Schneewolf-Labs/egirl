@@ -170,3 +170,12 @@ dirs = ["~/.egirl/skills", "{workspace}/skills"]
 #
 # [instances.ops-big.channels.api]
 # port = 3001
+
+# Resolve peers from a Wald agent registry instead of listing them above. Discovery supplies
+# addresses only -- tokens still come from EGIRL_PEER_<NAME>_TOKEN. Config wins on a name
+# collision, and an unreachable registry leaves the static peers untouched.
+# [peer_discovery]
+# enabled = true
+# registry = "wald"                      # name of the [[mcp.servers]] entry
+# self_url = "http://192.168.1.10:3000"  # so other instances can reach this one
+# capabilities = ["coding", "vision"]
