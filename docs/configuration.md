@@ -160,6 +160,37 @@ port = 3001
 
 The existing top-level config remains valid and acts as the base. Resolution order is top-level config, selected profile, selected persona, then selected instance.
 
+#### Scaffolding an instance
+
+`new` writes the persona files, appends the config block, and picks an API port that is neither claimed elsewhere in the config nor currently bound:
+
+```bash
+bun run start new zero --profile big-box --theme neon      # reuse an existing profile
+bun run start new zero --endpoint http://10.0.0.5:8214 \
+                       --model qwen3.8-27b                 # define a profile too
+```
+
+It refuses rather than overwrites: an existing instance name, an existing persona workspace, or an unknown profile all stop it before anything is written. Pass `--port` to override the automatic choice.
+
+The generated `IDENTITY.md`, `SOUL.md`, and `AGENTS.md` are neutral starting points rather than a copy of the default persona — fill in `SOUL.md` before first run, since that file does most of the work in shaping behaviour.
+
+#### Running an instance as a service
+
+`services/systemd/egirl@.service` is a templated user unit, one instance per unit:
+
+```bash
+mkdir -p ~/.config/systemd/user
+cp services/systemd/egirl@.service ~/.config/systemd/user/
+# edit WorkingDirectory and ExecStart to match your checkout
+systemctl --user daemon-reload
+systemctl --user enable --now egirl@zero
+journalctl --user -u egirl@zero -f
+```
+
+Run `loginctl enable-linger $USER` once if instances should start at boot rather than at first login.
+
+`doctor` checks the whole dependency graph — operator endpoint, what it is actually serving, auxiliary model, embeddings, MCP servers, and API port — so `--instance zero doctor` is worth running before enabling the unit.
+
 ### `[channels.xmpp]`
 
 Required only when running `xmpp` (or `serve` with XMPP configured). XMPP credentials (`XMPP_USERNAME`, `XMPP_PASSWORD`) go in `.env`.

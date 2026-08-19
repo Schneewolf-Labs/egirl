@@ -6,6 +6,7 @@ import { runCLI } from './commands/cli'
 import { runDiscord } from './commands/discord'
 import { runDoctor } from './commands/doctor'
 import { runInit } from './commands/init'
+import { runNew } from './commands/new'
 import { runServe } from './commands/serve'
 import { showStatus } from './commands/status'
 import { runXMPP } from './commands/xmpp'
@@ -51,6 +52,25 @@ async function main() {
 
   if (command === 'init') {
     await runInit(commandArgs)
+    return
+  }
+
+  // Runs before loadConfig on purpose: `new` edits the config that loadConfig would read, and
+  // the instance it creates does not exist yet, so resolving one here would always fail.
+  //
+  // Caught here rather than left to the top-level handler, which hands the Error to the logger
+  // and prints `{}` -- every failure this command has is a message the user needs to read
+  // ("unknown profile", "instance already exists").
+  if (command === 'new') {
+    try {
+      await runNew(commandArgs)
+    } catch (error) {
+      const c = colors()
+      console.error(
+        `${c.error}error${RESET} ${error instanceof Error ? error.message : String(error)}`,
+      )
+      process.exit(1)
+    }
     return
   }
 
@@ -128,6 +148,7 @@ ${c.primary}Usage${RESET}
 ${c.primary}Commands${RESET}
   ${c.accent}cli${RESET}            Start interactive CLI ${DIM}(default)${RESET}
   ${c.accent}init${RESET}           Create starter egirl.toml and .env files
+  ${c.accent}new${RESET}            Scaffold a new instance: persona files, config block, free API port
   ${c.accent}doctor${RESET}         Check local model, config, and code-agent setup
   ${c.accent}discord${RESET}        Start Discord bot
   ${c.accent}xmpp${RESET}           Start XMPP bot (self-hosted chat)
@@ -150,6 +171,7 @@ ${c.primary}CLI / Code Agent Options${RESET}
 ${c.primary}Examples${RESET}
   ${DIM}$${RESET} bun run start init --provider codex       ${DIM}# Write starter config${RESET}
   ${DIM}$${RESET} bun run start doctor                      ${DIM}# Check setup${RESET}
+  ${DIM}$${RESET} bun run start new zero --profile big-box  ${DIM}# Scaffold an instance${RESET}
   ${DIM}$${RESET} bun run start --instance ops-big cli       ${DIM}# Run a named instance${RESET}
   ${DIM}$${RESET} bun run cli                              ${DIM}# Interactive chat${RESET}
   ${DIM}$${RESET} bun run start discord                    ${DIM}# Discord bot${RESET}
