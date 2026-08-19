@@ -421,6 +421,8 @@ export type EgirlConfig = Static<typeof EgirlConfigSchema>
 export interface RuntimeConfig {
   source: {
     path?: string
+    /** egirl.d/*.toml merged over the main config, in load order. */
+    fragments?: string[]
     instance?: string
     profile?: string
     persona?: string

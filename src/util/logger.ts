@@ -10,6 +10,53 @@ interface LogEntry {
   timestamp: Date
 }
 
+/**
+ * Render an Error the way a person reads one.
+ *
+ * `JSON.stringify(new Error('boom'))` is `{}` — `message`, `stack` and `name` are all
+ * non-enumerable, so the one field anybody wanted is the one field dropped. Every
+ * `log.error(category, message, error)` call in this codebase was printing its message and then a
+ * literal `{}` underneath it.
+ *
+ * `cause` is followed because that chain is usually where the real failure is: a config load that
+ * failed because a TOML parse failed because a file was unreadable reports only the outermost of
+ * the three without it.
+ */
+function describeError(error: Error): string {
+  const lines: string[] = [error.stack ?? `${error.name}: ${error.message}`]
+
+  let cause: unknown = error.cause
+  // Bounded: cause chains are short in practice, but a cycle would otherwise spin here forever.
+  for (let depth = 0; cause instanceof Error && depth < 8; depth++) {
+    lines.push(`caused by: ${cause.stack ?? `${cause.name}: ${cause.message}`}`)
+    cause = cause.cause
+  }
+
+  return lines.join('\n')
+}
+
+/** An Error nested inside a payload loses its message exactly the way a top-level one does. */
+function errorReplacer(_key: string, value: unknown): unknown {
+  if (value instanceof Error) {
+    return { name: value.name, message: value.message, stack: value.stack }
+  }
+  return value
+}
+
+function formatData(data: unknown): string {
+  if (typeof data === 'string') return data
+  if (data instanceof Error) return describeError(data)
+
+  try {
+    // Errors are not the only thing this expression got wrong: a circular reference makes
+    // JSON.stringify throw, and a throw inside the logger takes down the call site that was only
+    // trying to report a problem.
+    return JSON.stringify(data, errorReplacer, 2) ?? String(data)
+  } catch {
+    return String(data)
+  }
+}
+
 function levelColor(level: LogLevel): string {
   const c = colors()
   switch (level) {
@@ -50,9 +97,7 @@ class Logger {
     let msg = `${color}[${time}] ${levelPad}${RESET} ${DIM}[${entry.category}]${RESET} ${entry.message}`
 
     if (entry.data !== undefined) {
-      const dataStr =
-        typeof entry.data === 'string' ? entry.data : JSON.stringify(entry.data, null, 2)
-      msg += `\n${dataStr}`
+      msg += `\n${formatData(entry.data)}`
     }
 
     return msg

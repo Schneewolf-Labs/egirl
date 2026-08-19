@@ -6,6 +6,7 @@ import { join, resolve } from 'path'
 import { parse } from 'smol-toml'
 import { peerTokenEnvKey } from '../peers/protocol'
 import { setTheme } from '../ui/theme'
+import { loadConfigFragments } from './fragments'
 import {
   type CodeAgentProvider,
   ConfigFragmentSchema,
@@ -234,7 +235,19 @@ const defaultToml: EgirlConfig = {
 
 export function loadConfig(options: LoadConfigOptions = {}): RuntimeConfig {
   const configPath = findConfigFile()
-  const loadedToml: EgirlConfig = configPath ? loadTomlConfig(configPath) : defaultToml
+  const baseToml: EgirlConfig = configPath ? loadTomlConfig(configPath) : defaultToml
+
+  // Fragments merge over the base in filename order, so `egirl.d/zero.toml` can define an
+  // instance without the main config being touched. Composition is by deep merge rather than
+  // replacement: two fragments adding different instances both land, and a fragment overriding
+  // one key of a profile leaves the rest of it alone.
+  const fragments = configPath ? loadConfigFragments(configPath) : []
+  const loadedToml = (
+    fragments.length > 0
+      ? deepMerge(baseToml as unknown as ConfigFragment, ...fragments.map((f) => f.toml))
+      : baseToml
+  ) as EgirlConfig
+
   const resolved = resolveTomlConfig(loadedToml, options)
   const toml = resolved.toml
 
@@ -254,6 +267,7 @@ export function loadConfig(options: LoadConfigOptions = {}): RuntimeConfig {
   const config: RuntimeConfig = {
     source: {
       ...(configPath && { path: configPath }),
+      ...(fragments.length > 0 && { fragments: fragments.map((fragment) => fragment.path) }),
       ...(resolved.instance && { instance: resolved.instance }),
       ...(resolved.profile && { profile: resolved.profile }),
       ...(resolved.persona && { persona: resolved.persona }),
