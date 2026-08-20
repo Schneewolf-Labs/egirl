@@ -36,6 +36,13 @@ import type { AgentLoopDeps, AgentLoopOptions, AgentResponse } from './types'
 /** Maximum number of continuation retries when response is truncated (finish_reason: length) */
 const MAX_CONTINUATION_RETRIES = 3
 
+/**
+ * Cap on each recovery nudge (stranded tool call, empty-after-tools). Hermes uses 3; one was
+ * measurably not enough -- a 27B that mangles a call under context pressure often needs a
+ * second clean look at the instruction.
+ */
+const MAX_RECOVERY_NUDGES = 3
+
 export type AgentFactory = (sessionId: string) => AgentLoop
 
 export class AgentLoop {
@@ -134,7 +141,9 @@ export class AgentLoop {
     let continuationRetries = 0
     let accumulatedContent = ''
     let validationRetried = false
-    let strandedToolRetried = false
+    let strandedToolRetries = 0
+    let emptyAfterToolsRetries = 0
+    let toolsRan = false
 
     // Persistence and transcript closure run in `finally` so a provider error
     // mid-run doesn't lose the user message and tool activity already in context.
@@ -220,6 +229,8 @@ export class AgentLoop {
             }),
           )
 
+          toolsRan = true
+
           if (signal?.aborted) {
             log.info('agent', 'Agent run aborted after tool execution')
             break
@@ -266,19 +277,47 @@ export class AgentLoop {
 
         // The model tried to act, but its call did not parse -- the markup is still sitting
         // in the content. Accepting it as an answer would end the turn and print raw XML at
-        // the user, discarding the action silently. Hand it back once and let it retry; a
-        // model that mangled its JSON will usually get it right the second time.
-        if (!strandedToolRetried && hasStrandedToolCall(response.content)) {
-          strandedToolRetried = true
-          log.info('agent', 'Tool call could not be parsed; asking the model to reissue it')
-          addMessage(this.context, { role: 'assistant', content: response.content })
+        // the user, discarding the action silently. Hand it back and let it retry: a model
+        // that mangled its JSON usually gets it right on a clean re-issue. Both halves of
+        // the pair are ephemeral -- the mangled markup and the nudge exist only to drive
+        // this retry, and persisting them would replay the failure into future context.
+        if (strandedToolRetries < MAX_RECOVERY_NUDGES && hasStrandedToolCall(response.content)) {
+          strandedToolRetries++
+          log.info(
+            'agent',
+            `Tool call could not be parsed; asking for a reissue (${strandedToolRetries}/${MAX_RECOVERY_NUDGES})`,
+          )
+          addMessage(this.context, {
+            role: 'assistant',
+            content: response.content,
+            ephemeral: true,
+          })
           addMessage(this.context, {
             role: 'user',
             content:
               '[System: Your last tool call could not be parsed and was not executed. Reissue it as a single <tool_call> block containing valid JSON: {"name": "<tool>", "arguments": {...}}. Do not repeat this notice.]',
+            ephemeral: true,
           })
           accumulatedContent = ''
           continuationRetries = 0
+          continue
+        }
+
+        // Tools just ran and the model came back with nothing -- no text, no further calls.
+        // Ending the turn here surfaces an empty reply with work visibly half-done. Point it
+        // back at the tool results it ignored. Same ephemeral contract as above.
+        if (!response.content.trim() && toolsRan && emptyAfterToolsRetries < MAX_RECOVERY_NUDGES) {
+          emptyAfterToolsRetries++
+          log.info(
+            'agent',
+            `Empty response after tool execution; re-prompting (${emptyAfterToolsRetries}/${MAX_RECOVERY_NUDGES})`,
+          )
+          addMessage(this.context, {
+            role: 'user',
+            content:
+              '[System: You executed tool calls but returned an empty response. Process the tool results above and continue with the task.]',
+            ephemeral: true,
+          })
           continue
         }
 

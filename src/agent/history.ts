@@ -48,9 +48,13 @@ export class ConversationHistory {
     if (!this.store) return
 
     try {
-      // Recall messages are regenerated per run — persisting them would
-      // accumulate stale recalled context in reloaded history.
-      const newMessages = messages.slice(this.persistedIndex).filter((m) => !isRecallMessage(m))
+      // Recall messages are regenerated per run — persisting them would accumulate stale
+      // recalled context in reloaded history. Ephemeral messages are in-run recovery
+      // scaffolding (a mangled tool call and its reissue nudge) — persisting those would
+      // replay the model's own failure into every future session.
+      const newMessages = messages
+        .slice(this.persistedIndex)
+        .filter((m) => !isRecallMessage(m) && !m.ephemeral)
       if (newMessages.length > 0) {
         this.store.appendMessages(this.sessionId, newMessages)
       }

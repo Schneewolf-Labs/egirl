@@ -7,6 +7,12 @@ export interface ChatMessage {
   content: string | ContentPart[]
   tool_call_id?: string
   tool_calls?: ToolCall[]
+  /**
+   * Recovery scaffolding, not conversation. A mangled tool call and the nudge asking for its
+   * reissue exist only to drive an in-run retry; persisting them would replay the model's own
+   * failure into every future session's context. Skipped by history persistence.
+   */
+  ephemeral?: boolean
 }
 
 export interface ToolCall {
