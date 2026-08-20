@@ -22,6 +22,15 @@ export interface ValidationResult {
 export interface AgentEventHandler {
   /** Called when the model emits thinking text alongside tool calls */
   onThinking?(text: string): void
+  /**
+   * Called for each streamed token of the model's reasoning, before any answer exists.
+   *
+   * Distinct from `onThinking`, which fires once with the completed block after generation
+   * finishes. On a reasoning model most of a turn is spent here — measured 96% of output
+   * tokens on one Qwen3.8 turn — so without this the interface has nothing to show for
+   * minutes at a stretch and looks hung.
+   */
+  onThinkingToken?(token: string): void
   /** Called when tool calls are about to be executed */
   onToolCallStart?(calls: ToolCall[]): void
   /** Called after each tool finishes executing */

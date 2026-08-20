@@ -6,6 +6,8 @@ import { colors, DIM, RESET } from '../ui/theme'
 export interface CLIEventState {
   streamed: boolean
   showThinking: boolean
+  /** Reasoning was already printed live, so the block that arrives at the end is a duplicate. */
+  streamedThinking: boolean
 }
 
 function truncateResult(output: string, maxLen: number): string {
@@ -38,10 +40,25 @@ export function createCLIEventHandler(showThinking: boolean): {
   handler: AgentEventHandler
   state: CLIEventState
 } {
-  const state: CLIEventState = { streamed: false, showThinking }
+  const state: CLIEventState = { streamed: false, showThinking, streamedThinking: false }
 
   const handler: AgentEventHandler = {
+    // Reasoning as it happens. On a reasoning model this is most of the turn, so printing it
+    // live is the difference between watching the model work and staring at a blank terminal
+    // for a minute. Dimmed and unprefixed per token: it is context, not the answer.
+    onThinkingToken(token: string) {
+      if (!state.showThinking) return
+      if (!state.streamedThinking) {
+        const c = colors()
+        process.stdout.write(`${DIM}${c.info}[thinking]${RESET}${DIM}\n`)
+        state.streamedThinking = true
+      }
+      process.stdout.write(`${DIM}${token}${RESET}`)
+    },
+
     onThinking(text: string) {
+      // Already shown token by token; reprinting the assembled block would double it.
+      if (state.streamedThinking) return
       if (!state.showThinking || !text.trim()) return
       const c = colors()
       const lines = text.trim().split('\n')
@@ -84,6 +101,8 @@ export function createCLIEventHandler(showThinking: boolean): {
     onToken(token: string) {
       if (!state.streamed) {
         const c = colors()
+        // Close the reasoning block so the answer does not run on from the last thought.
+        if (state.streamedThinking) process.stdout.write('\n')
         process.stdout.write(`\n${c.secondary}egirl>${RESET} `)
         state.streamed = true
       }

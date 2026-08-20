@@ -34,7 +34,11 @@ const content = (text: string) => ({ choices: [{ delta: { content: text } }] })
 async function chatAgainst(
   body: ReadableStream<Uint8Array>,
   staleMs?: number,
-): Promise<{ response: Awaited<ReturnType<LlamaCppProvider['chat']>>; tokens: string[] }> {
+): Promise<{
+  response: Awaited<ReturnType<LlamaCppProvider['chat']>>
+  tokens: string[]
+  thinkingTokens: string[]
+}> {
   const realFetch = globalThis.fetch
   // @ts-expect-error test double
   globalThis.fetch = async (url: string | URL | Request) => {
@@ -46,13 +50,15 @@ async function chatAgainst(
   }
 
   const tokens: string[] = []
+  const thinkingTokens: string[] = []
   try {
     const provider = new LlamaCppProvider('http://stub', 'test', staleMs)
     const response = await provider.chat({
       messages: [{ role: 'user', content: 'hi' }],
       onToken: (t) => tokens.push(t),
+      onThinkingToken: (t) => thinkingTokens.push(t),
     })
-    return { response, tokens }
+    return { response, tokens, thinkingTokens }
   } finally {
     globalThis.fetch = realFetch
   }
@@ -109,6 +115,14 @@ describe('out-of-band reasoning', () => {
     })
     const { response } = await chatAgainst(stalled, 30)
     expect(response.finish_reason).toBe('length')
+  })
+
+  test('reasoning is streamed as it arrives, not held until the end', async () => {
+    // The point of the callback: something to display while the model is still deliberating.
+    const { thinkingTokens } = await chatAgainst(
+      sseStream([reasoning('first '), reasoning('second '), content('answer')]),
+    )
+    expect(thinkingTokens).toEqual(['first ', 'second '])
   })
 
   test('inline <think> tags still work', async () => {

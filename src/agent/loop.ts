@@ -158,6 +158,7 @@ export class AgentLoop {
             contextLength: this.config.local.contextLength,
             tokenizer: this.tokenizer,
             onToken: events?.onToken,
+            onThinkingToken: events?.onThinkingToken,
             thinking,
             signal,
             cacheSlot: this.cacheSlot(),
@@ -338,6 +339,7 @@ export class AgentLoop {
         tokenizer: this.tokenizer,
         cacheSlot: this.cacheSlot(),
         onToken: events?.onToken,
+        onThinkingToken: events?.onThinkingToken,
         thinking,
         signal,
       })

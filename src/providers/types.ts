@@ -35,6 +35,12 @@ export interface ChatRequest {
   max_tokens?: number
   /** If provided, the provider streams tokens via this callback */
   onToken?: (token: string) => void
+  /**
+   * If provided, the provider streams reasoning tokens via this callback as they arrive.
+   * A server that splits reasoning into its own field emits nothing on `onToken` until the
+   * model stops deliberating, which on a hard question is minutes of apparent silence.
+   */
+  onThinkingToken?: (token: string) => void
   /** Extended thinking / reasoning configuration */
   thinking?: ThinkingConfig
   /** Abort signal — cancels the in-flight HTTP request / generation */

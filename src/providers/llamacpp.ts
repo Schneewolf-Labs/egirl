@@ -211,6 +211,7 @@ export class LlamaCppProvider implements LLMProvider {
         response.body,
         req.onToken ?? (() => {}),
         (req.tools?.length ?? 0) > 0,
+        req.onThinkingToken,
       )
       content = result.content
       reasoning = result.reasoning
@@ -283,6 +284,7 @@ export class LlamaCppProvider implements LLMProvider {
     body: ReadableStream<Uint8Array>,
     onToken: (token: string) => void,
     hasTools: boolean,
+    onThinkingToken: (token: string) => void = () => {},
   ): Promise<{
     content: string
     reasoning: string
@@ -367,6 +369,7 @@ export class LlamaCppProvider implements LLMProvider {
             const reasoningToken = parsed.choices?.[0]?.delta?.reasoning_content
             if (reasoningToken) {
               fullReasoning += reasoningToken
+              onThinkingToken(reasoningToken)
               resetStaleTimer()
             }
 
