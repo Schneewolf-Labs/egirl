@@ -150,6 +150,13 @@ export function createDefaultToolExecutor(
     executor.register(execTool)
   }
 
+  // Search over the agent's own past conversations. Gated only on persistence existing: it
+  // reads what is already stored, needs no embeddings, and an agent that can remember
+  // should be able to look things up.
+  if (conversationStore) {
+    executor.register(createSessionSearchTool(conversationStore))
+  }
+
   // Background process registry (start/list/output/send_input/stop)
   if (t.process && processRegistry) {
     const pt = createProcessTools(processRegistry)

@@ -261,6 +261,7 @@ export async function createAppServices(config: RuntimeConfig): Promise<AppServi
     browser,
     processRegistry,
     skills,
+    conversations,
   )
   // MCP tools join the same executor as the builtins, so safety, energy and permissions apply to
   // them identically. A server that is down costs its own tools and nothing else.

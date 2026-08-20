@@ -109,3 +109,32 @@ describe('session_search tool', () => {
     expect(result.output).toContain('No past-conversation matches')
   })
 })
+
+describe('registration', () => {
+  test('session_search is offered when a conversation store exists', async () => {
+    // The tool worked in isolation while never being registered -- Zero reported "my tool
+    // list has no session_search" in production. This pins the actual wiring.
+    const { createDefaultToolExecutor } = await import('../../src/tools/index')
+    const { makeConfig, makeWorkspace } = await import('../agent/helpers')
+    const store = makeStore()
+    const executor = createDefaultToolExecutor(
+      makeConfig(makeWorkspace()),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      store,
+    )
+    const names = executor.getDefinitions().map((d) => d.name)
+    expect(names).toContain('session_search')
+  })
+
+  test('absent store, absent tool', async () => {
+    const { createDefaultToolExecutor } = await import('../../src/tools/index')
+    const { makeConfig, makeWorkspace } = await import('../agent/helpers')
+    const executor = createDefaultToolExecutor(makeConfig(makeWorkspace()))
+    expect(executor.getDefinitions().map((d) => d.name)).not.toContain('session_search')
+  })
+})
