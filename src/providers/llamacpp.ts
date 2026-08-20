@@ -1,6 +1,7 @@
 import { buildToolsSection, parseToolCalls } from '../tools/format'
 import { log } from '../util/logger'
 import { formatMessagesForQwen3 } from './qwen3-format'
+import { withReasoningFloor } from './reasoning-floors'
 import type {
   ChatMessage,
   ChatRequest,
@@ -97,7 +98,12 @@ export class LlamaCppProvider implements LLMProvider {
     this.endpoint = endpoint.replace(/\/$/, '')
     this.name = `llamacpp/${model}`
     this.defaultTemperature = defaultTemperature
-    this.staleStreamTimeoutMs = staleStreamTimeoutMs ?? DEFAULT_STALE_STREAM_TIMEOUT_MS
+    // Floored per model family: a reasoning model's thinking phase outlasts the chat-model
+    // default, and the timer also spans prefill, which emits nothing on a large cold context.
+    this.staleStreamTimeoutMs = withReasoningFloor(
+      model,
+      staleStreamTimeoutMs ?? DEFAULT_STALE_STREAM_TIMEOUT_MS,
+    )
     // 0 or negative disables the limit, for a server with plenty of slots
     this.gate = new Semaphore(maxConcurrent ?? 0)
   }
