@@ -171,11 +171,14 @@ function historyView(msgs){
 async function loadHistory(){
   log.innerHTML='';
   try{
+    // 404 is expected for a fresh session id -- it just means nothing has been said yet.
     const r=await fetch('sessions/'+encodeURIComponent(sid),{headers:H()});
-    if(!r.ok)return;
-    const d=await r.json();
-    for(const msg of historyView(d.messages))add(msg.text,msg.who);
-    if(d.has_summary)add('older messages are compacted into a summary','sys');
+    if(r.ok){
+      const d=await r.json();
+      // The summary stands in for the OLDEST messages, so it sits above them, not below.
+      if(d.has_summary)add('older messages are compacted into a summary','sys');
+      for(const msg of historyView(d.messages))add(msg.text,msg.who);
+    }
     if(!log.children.length)add('new conversation — say hi','sys');
   }catch(e){add('could not load history: '+(e.message||e),'sys')}
 }
