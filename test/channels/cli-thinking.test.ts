@@ -35,6 +35,56 @@ function captureStdout(run: () => void): string {
   return chunks.join('')
 }
 
+/** A StatusLine that records phase changes instead of animating. */
+function fakeStatus(): { phases: string[]; line: Parameters<typeof createCLIEventHandler>[1] } {
+  const phases: string[] = []
+  return {
+    phases,
+    line: {
+      set: (phase: string) => phases.push(phase),
+      clear: () => {},
+      stop: () => {},
+    } as NonNullable<Parameters<typeof createCLIEventHandler>[1]>,
+  }
+}
+
+describe('spinner and streamed text never compete', () => {
+  // The spinner repaints on stderr; streamed text goes to stdout. In a terminal they share a
+  // screen, so an animation running while text streams would overwrite the output. Whenever
+  // there is text to watch, the spinner has to be off.
+  test('reasoning shown: the spinner stands down so text can stream', () => {
+    const { phases, line } = fakeStatus()
+    const { handler } = createCLIEventHandler(true, line)
+    captureStdout(() => handler.onThinkingToken?.('deliberating'))
+    expect(phases).toEqual(['idle'])
+  })
+
+  test('reasoning hidden: the spinner is the only feedback, so it runs', () => {
+    const { phases, line } = fakeStatus()
+    const { handler } = createCLIEventHandler(false, line)
+    captureStdout(() => handler.onThinkingToken?.('deliberating'))
+    expect(phases).toEqual(['thinking'])
+  })
+
+  test('the answer streaming in stops the spinner', () => {
+    const { phases, line } = fakeStatus()
+    const { handler } = createCLIEventHandler(false, line)
+    captureStdout(() => handler.onToken?.('answer'))
+    expect(phases).toContain('idle')
+  })
+
+  test('a running tool is named, and finishing it returns to waiting', () => {
+    // Nothing prints while a tool runs, so this is the one phase with no text of its own.
+    const { phases, line } = fakeStatus()
+    const { handler } = createCLIEventHandler(false, line)
+    captureStdout(() => {
+      handler.onToolCallStart?.([{ id: '1', name: 'read_file', arguments: {} }])
+      handler.onToolCallComplete?.('1', 'read_file', { success: true, output: 'ok' })
+    })
+    expect(phases).toEqual(['tool', 'waiting'])
+  })
+})
+
 describe('live reasoning in the CLI', () => {
   test('reasoning tokens print as they arrive', () => {
     const { handler } = createCLIEventHandler(true)

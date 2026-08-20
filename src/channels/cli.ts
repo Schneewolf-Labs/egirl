@@ -16,6 +16,7 @@ import {
 } from './cli-commands'
 import { createCLIEventHandler } from './cli-events'
 import { captureDuringRun } from './cli-live-input'
+import { contextBar, createStatusLine } from './cli-status'
 import type { Channel } from './types'
 
 export class CLIChannel implements Channel {
@@ -174,9 +175,15 @@ export class CLIChannel implements Channel {
             ),
         })
 
+        // 'waiting' rather than 'thinking': nothing has come back yet, so this is prefill,
+        // which on a large context is minutes of genuine silence before the model even starts
+        // reasoning. Calling that "thinking" would be a guess presented as fact.
+        const status = createStatusLine()
+        status.set('waiting')
+
         try {
           console.log()
-          const { handler, state } = createCLIEventHandler(this.showThinking)
+          const { handler, state } = createCLIEventHandler(this.showThinking, status)
           const response = await this.agent.run(pending, {
             events: handler,
             thinking: this.thinkingOverride.current,
@@ -195,8 +202,21 @@ export class CLIChannel implements Channel {
           const message = error instanceof Error ? error.message : String(error)
           console.error(`\n${c.error}Error:${RESET} ${message}\n`)
         } finally {
+          status.stop()
           keys.stop()
           this.session.end()
+        }
+
+        // Printed every turn rather than on demand, because the moment context pressure
+        // matters -- the turn before compaction discards the middle of the conversation -- is
+        // exactly the moment nobody thinks to type /context.
+        try {
+          const ctx = await this.agent.contextStatus()
+          console.log(
+            `${DIM}context${RESET} ${contextBar(ctx.utilization, ctx.totalUsed, ctx.contextLength)}\n`,
+          )
+        } catch {
+          // A status readout must never break a turn that already succeeded.
         }
 
         // Anything typed during the turn runs now rather than waiting for another return --
