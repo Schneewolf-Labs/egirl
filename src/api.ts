@@ -2,7 +2,9 @@ import type { AgentFactory, AgentLoop } from './agent'
 import type { MemoryCategory, MemoryManager } from './memory'
 import { formatInboundPeerMessage, PEER_PROTOCOL, peerSessionId } from './peers/protocol'
 import type { Task, TaskRunner, TaskStore } from './tasks'
+import { getTheme } from './ui/theme'
 import { log } from './util/logger'
+import { renderChatPage } from './web-ui'
 
 export interface APIConfig {
   host: string
@@ -81,17 +83,36 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
     port,
     async fetch(req) {
       // Auth (optional — skip when no token is configured)
-      if (bearerToken) {
+      const url = new URL(req.url)
+      const wantsPage =
+        req.method === 'GET' &&
+        url.pathname === '/' &&
+        (req.headers.get('accept') ?? '').includes('text/html')
+
+      // The page itself is served unauthenticated so the browser has somewhere to type the token;
+      // every endpoint behind it still requires one. The page contains no data on its own.
+      if (bearerToken && !wantsPage) {
         const auth = req.headers.get('authorization') ?? ''
         if (auth !== `Bearer ${bearerToken}`) return err('unauthorized', 401)
       }
 
-      const url = new URL(req.url)
       const path = url.pathname
       const method = req.method
 
       try {
         if (method === 'GET' && path === '/') {
+          // A browser gets the chat page; anything else keeps the JSON it was getting before,
+          // so scripts and health checks are unaffected by this existing at all.
+          if ((req.headers.get('accept') ?? '').includes('text/html')) {
+            return new Response(
+              renderChatPage({
+                name: deps.selfName ?? 'egirl',
+                theme: getTheme(),
+                hasToken: Boolean(bearerToken),
+              }),
+              { headers: { 'content-type': 'text/html; charset=utf-8' } },
+            )
+          }
           return json({ service: 'egirl', version: '0.2.0' })
         }
 
