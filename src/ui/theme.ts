@@ -103,7 +103,31 @@ const mono: Theme = {
   },
 }
 
-const THEMES: Record<string, Theme> = { egirl, midnight, neon, mono }
+/**
+ * vapor -- Purple vaporwave. Ultraviolet primary, magenta secondary, cyan accents.
+ *
+ * The palette is doing work rather than decoration: a long agent turn produces reasoning, tool
+ * calls, tool output and final text interleaved, and at a glance those need to separate. Violet
+ * carries the agent's own voice, magenta marks structure, and cyan is reserved for tools -- the
+ * one thing you scan for when something has gone wrong. Muted is a desaturated indigo rather
+ * than grey so that de-emphasised text still reads as part of the same picture.
+ */
+const vapor: Theme = {
+  name: 'vapor',
+  label: 'Purple Vaporwave',
+  colors: {
+    primary: c256(141), // ultraviolet -- agent voice, prompts
+    secondary: c256(207), // hot magenta -- name, headings
+    accent: c256(87), // cyan -- tool calls, separators
+    muted: c256(103), // dusty indigo -- metadata, reasoning
+    success: c256(120), // mint
+    error: c256(211), // sunset pink
+    warning: c256(222), // peach
+    info: c256(147), // periwinkle
+  },
+}
+
+const THEMES: Record<string, Theme> = { egirl, vapor, midnight, neon, mono }
 
 /** ANSI text modifiers */
 export const RESET = '\x1b[0m'

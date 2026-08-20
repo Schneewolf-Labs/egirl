@@ -1,6 +1,7 @@
 import * as readline from 'readline'
 import type { AgentLoop } from '../agent'
 import type { ThinkingConfig } from '../providers/types'
+import { handleCommand, SessionController } from '../session/controller'
 import { colors, DIM, RESET } from '../ui/theme'
 import { log } from '../util/logger'
 import {
@@ -14,6 +15,7 @@ import {
   handleWipeCommand,
 } from './cli-commands'
 import { createCLIEventHandler } from './cli-events'
+import { captureDuringRun } from './cli-live-input'
 import type { Channel } from './types'
 
 export class CLIChannel implements Channel {
@@ -23,6 +25,8 @@ export class CLIChannel implements Channel {
   private running = false
   private thinkingOverride: { current: ThinkingConfig | undefined } = { current: undefined }
   private showThinking: boolean
+  /** Queue, abort handle and mutable settings -- everything that outlives a single turn. */
+  private session = new SessionController()
 
   constructor(agent: AgentLoop, options?: { showThinking?: boolean }) {
     this.agent = agent
@@ -104,6 +108,16 @@ export class CLIChannel implements Channel {
       handleWipeCommand(this.commandCtx())
       return true
     }
+    const sessionCmd = handleCommand(input, this.session)
+    if (sessionCmd.handled) {
+      if (sessionCmd.quit) {
+        this.rl?.close()
+        return true
+      }
+      if (sessionCmd.message) console.log(`${colors().accent}${sessionCmd.message}${RESET}\n`)
+      return true
+    }
+
     if (input === '/prompt') {
       handlePromptCommand(this.commandCtx())
       return true
@@ -146,22 +160,49 @@ export class CLIChannel implements Channel {
         return
       }
 
-      try {
-        console.log()
-        const { handler, state } = createCLIEventHandler(this.showThinking)
-        const response = await this.agent.run(trimmed, {
-          events: handler,
-          thinking: this.thinkingOverride.current,
+      let pending: string | undefined = trimmed
+      while (pending !== undefined) {
+        const signal = this.session.begin()
+        // Escape aborts, and anything typed lands in the queue rather than in a buffer nobody
+        // is reading. Torn down in `finally` so a thrown error cannot leave the terminal in raw
+        // mode -- which makes it unusable until the window is closed.
+        const keys = captureDuringRun(this.session, {
+          onInterrupt: () => console.log(`\n${c.warning}interrupting…${RESET}`),
+          onQueued: (text) =>
+            console.log(
+              `${DIM}  queued: ${text.slice(0, 60)}${text.length > 60 ? '…' : ''}${RESET}`,
+            ),
         })
 
-        if (!state.streamed && response.content) {
-          console.log(`\n${c.secondary}egirl>${RESET} ${response.content}\n`)
+        try {
+          console.log()
+          const { handler, state } = createCLIEventHandler(this.showThinking)
+          const response = await this.agent.run(pending, {
+            events: handler,
+            thinking: this.thinkingOverride.current,
+            maxTurns: this.session.get().maxTurns,
+            signal,
+          })
+
+          if (this.session.wasInterrupted) {
+            console.log(`\n${c.warning}stopped.${RESET}\n`)
+          } else if (!state.streamed && response.content) {
+            console.log(`\n${c.secondary}egirl>${RESET} ${response.content}\n`)
+          }
+
+          log.debug('cli', `[${response.provider}]`)
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error)
+          console.error(`\n${c.error}Error:${RESET} ${message}\n`)
+        } finally {
+          keys.stop()
+          this.session.end()
         }
 
-        log.debug('cli', `[${response.provider}]`)
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error)
-        console.error(`\n${c.error}Error:${RESET} ${message}\n`)
+        // Anything typed during the turn runs now rather than waiting for another return --
+        // a queued message that sits unseen is worse than one that was never accepted.
+        pending = this.session.drain()
+        if (pending) console.log(`${c.accent}you>${RESET} ${pending}`)
       }
 
       this.prompt()
