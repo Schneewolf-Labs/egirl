@@ -51,6 +51,7 @@ export type { Tool, ToolDefinition, ToolResult } from './types'
 
 import type { BrowserManager } from '../browser'
 import type { RuntimeConfig } from '../config'
+import type { ConversationStore } from '../conversation'
 import type { MemoryManager } from '../memory'
 import type { Skill } from '../skills/types'
 import { log } from '../util/logger'
@@ -77,6 +78,7 @@ import {
   webResearchTool,
   writeTool,
 } from './builtin'
+import { createSessionSearchTool } from './builtin/session-search'
 import { createSkillReadTool as buildSkillReadTool } from './builtin/skill'
 import { createToolExecutor } from './executor'
 import type { ProcessRegistry } from './process-registry'
@@ -115,6 +117,7 @@ export function createDefaultToolExecutor(
   browser?: BrowserManager,
   processRegistry?: ProcessRegistry,
   skills?: Skill[],
+  conversationStore?: ConversationStore,
 ) {
   const executor = createToolExecutor()
   const t = config.tools

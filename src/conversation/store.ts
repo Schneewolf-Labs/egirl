@@ -59,7 +59,117 @@ export class ConversationStore {
       ON messages(session_id, id)
     `)
 
+    this.initializeSearch()
+
     log.debug('conversation', 'Conversation store initialized')
+  }
+
+  /**
+   * Full-text index over message content, kept in sync by triggers.
+   *
+   * External-content FTS5 rather than a copy: the index stores only tokens and rowids, and
+   * reads join back to `messages` for everything else. Messages are inserted and deleted but
+   * never updated, so two triggers cover the whole write surface. Failure here downgrades to
+   * "search unavailable" rather than breaking conversation persistence -- an agent that
+   * cannot search its past is degraded; one that cannot remember it is broken.
+   */
+  private searchAvailable = false
+
+  private initializeSearch(): void {
+    try {
+      // Backfill detection has to happen BEFORE the CREATE: with external-content FTS5,
+      // COUNT(*) on the index table proxies to the content table, so comparing row counts
+      // after creation always reports "fully indexed" -- an empty index and a complete one
+      // are indistinguishable that way. "The table did not exist yet" is the one reliable
+      // signal that existing messages predate the index.
+      const hadIndex = !!this.db
+        .query(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'messages_fts'`)
+        .get()
+
+      this.db.run(`
+        CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts
+        USING fts5(content, content='messages', content_rowid='id')
+      `)
+      this.db.run(`
+        CREATE TRIGGER IF NOT EXISTS messages_fts_ai AFTER INSERT ON messages BEGIN
+          INSERT INTO messages_fts(rowid, content) VALUES (new.id, new.content);
+        END
+      `)
+      this.db.run(`
+        CREATE TRIGGER IF NOT EXISTS messages_fts_ad AFTER DELETE ON messages BEGIN
+          INSERT INTO messages_fts(messages_fts, rowid, content)
+          VALUES ('delete', old.id, old.content);
+        END
+      `)
+
+      if (!hadIndex) {
+        const msgCount = (
+          this.db.query('SELECT COUNT(*) as c FROM messages').get() as { c: number }
+        ).c
+        if (msgCount > 0) {
+          log.info('conversation', `Building message search index over ${msgCount} messages`)
+          this.db.run(`INSERT INTO messages_fts(messages_fts) VALUES ('rebuild')`)
+        }
+      }
+
+      this.searchAvailable = true
+    } catch (error) {
+      log.warn('conversation', 'FTS5 unavailable — session search disabled:', error)
+    }
+  }
+
+  /**
+   * Search message content across all sessions.
+   *
+   * The query is user/model text, not FTS5 grammar: terms are extracted and quoted so
+   * characters FTS5's parser rejects outside a phrase ("+", "(", '"', …) cannot produce a
+   * syntax error -- hermes-agent's session search learned this list the hard way.
+   */
+  searchMessages(
+    query: string,
+    opts: { limit?: number; excludeSession?: string } = {},
+  ): Array<{ sessionId: string; role: string; snippet: string; createdAt: number }> {
+    if (!this.searchAvailable) return []
+    const terms = query.match(/[\p{L}\p{N}'.]+/gu) ?? []
+    if (terms.length === 0) return []
+    const quoted = terms.map((t) => `"${t.replaceAll('"', '')}"`)
+
+    // All terms first; when that finds nothing and there were several, fall back to ANY.
+    // A half-remembered query usually has one term that is wrong ("was it offset or
+    // header?"), and strict AND would punish exactly the queries this tool exists for.
+    const andHits = this.runSearch(quoted.join(' '), opts)
+    if (andHits.length > 0 || quoted.length < 2) return andHits
+    return this.runSearch(quoted.join(' OR '), opts)
+  }
+
+  private runSearch(
+    match: string,
+    opts: { limit?: number; excludeSession?: string },
+  ): Array<{ sessionId: string; role: string; snippet: string; createdAt: number }> {
+    try {
+      const rows = this.db
+        .query(`
+          SELECT m.session_id as sessionId, m.role as role, m.created_at as createdAt,
+            snippet(messages_fts, 0, '»', '«', ' … ', 14) as snippet
+          FROM messages_fts f
+          JOIN messages m ON m.id = f.rowid
+          WHERE messages_fts MATCH ?
+            AND m.role IN ('user', 'assistant')
+            AND m.session_id != ?
+          ORDER BY rank
+          LIMIT ?
+        `)
+        .all(match, opts.excludeSession ?? '', opts.limit ?? 12)
+      return rows as Array<{
+        sessionId: string
+        role: string
+        snippet: string
+        createdAt: number
+      }>
+    } catch (error) {
+      log.warn('conversation', 'Session search failed:', error)
+      return []
+    }
   }
 
   loadMessages(sessionId: string): ChatMessage[] {
