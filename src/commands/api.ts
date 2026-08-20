@@ -104,6 +104,7 @@ export async function runAPI(config: RuntimeConfig, args: string[]): Promise<voi
     ...(taskRunner ? {} : { taskOffReason: taskRunnerOffReason(config, !!taskStore) }),
     config,
     selfName: config.source.instance ?? 'egirl',
+    ...(conversations ? { conversationStore: conversations } : {}),
   })
 
   const shutdown = async () => {

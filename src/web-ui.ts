@@ -72,6 +72,16 @@ td:first-child{color:var(--dim);white-space:nowrap;width:1%;padding-right:1.2rem
 .mem .s{color:var(--dim);font-size:.72rem;float:right}
 .row{display:flex;gap:.5rem;padding:.65rem;border-bottom:1px solid var(--line);flex:none}
 .chip{display:inline-block;padding:.1rem .45rem;border-radius:.3rem;background:var(--user);color:var(--dim);font-size:.72rem;margin-right:.3rem}
+/* Session picker: which conversation this window is, and a way to be a different one. */
+.sessrow{display:flex;gap:.4rem;padding:.45rem .65rem;border-bottom:1px solid var(--line);flex:none;align-items:center}
+.sessrow select{flex:1;min-width:0;background:var(--user);color:var(--fg);border:1px solid var(--line);
+  border-radius:.45rem;padding:.3rem .5rem;font:inherit;font-size:.8rem}
+.sessrow select:focus{outline:none;border-color:var(--p)}
+.sessrow button{background:none;border:1px solid var(--line);border-radius:.45rem;color:var(--dim);
+  padding:.25rem .6rem;font:inherit;font-size:.8rem;cursor:pointer;white-space:nowrap}
+.sessrow button:hover{color:var(--s);border-color:var(--s)}
+.queued{opacity:.7}
+.queued::before{content:'♡ queued · ';color:var(--s);font-style:italic;font-size:.78rem}
 </style></head><body>
 <header><b>${esc(name)}</b><span class="meta" id="hmeta">connecting…</span><span class="sp" id="status">ready</span></header>
 <nav id="tabs">
@@ -82,6 +92,7 @@ td:first-child{color:var(--dim);white-space:nowrap;width:1%;padding-right:1.2rem
 </nav>
 <main>
   <section class="tab" data-name="chat" data-on>
+    <div class="sessrow"><select id="sess" title="session"></select><button id="snew" title="start a fresh conversation">+ new</button></div>
     <div id="log"></div>
     <form id="f"><textarea id="m" rows="1" placeholder="Message ${esc(name)}…" autofocus></textarea><button class="go" id="b">Send</button></form>
   </section>
@@ -101,8 +112,8 @@ td:first-child{color:var(--dim);white-space:nowrap;width:1%;padding-right:1.2rem
 </main>
 <script>
 const $=id=>document.getElementById(id);
-const log=$('log'),f=$('f'),m=$('m'),b=$('b'),status=$('status');
-const sid=localStorage.getItem('egirl-sid')||('web:'+Math.random().toString(36).slice(2,10));
+const log=$('log'),f=$('f'),m=$('m'),b=$('b'),status=$('status'),sessSel=$('sess');
+let sid=localStorage.getItem('egirl-sid')||('web:'+Math.random().toString(36).slice(2,10));
 localStorage.setItem('egirl-sid',sid);
 ${hasToken ? `let tok=localStorage.getItem('egirl-token');if(!tok){tok=prompt('API token');if(tok)localStorage.setItem('egirl-token',tok)}` : 'const tok=null;'}
 const H=()=>{const h={'Content-Type':'application/json'};if(tok)h['Authorization']='Bearer '+tok;return h};
@@ -121,26 +132,94 @@ $('tabs').onclick=e=>{
 function add(text,cls){const d=document.createElement('div');d.className='msg '+cls;d.textContent=text;
   log.appendChild(d);log.scrollTop=log.scrollHeight;return d}
 
+// ---- Sessions -------------------------------------------------------------
+// The picker shows every conversation the store knows, from every channel -- the point is
+// picking up on the web what was started in the CLI. Times render as "how long ago" because
+// that is the question a picker answers: which of these was I just talking to?
+function ago(ts){if(!ts)return'';const s=(Date.now()-ts)/1000;
+  if(s<90)return'just now';if(s<3600)return Math.round(s/60)+'m ago';
+  if(s<86400)return Math.round(s/3600)+'h ago';return Math.round(s/86400)+'d ago'}
+
+async function loadSessions(){
+  try{
+    const d=await (await fetch('sessions',{headers:H()})).json();
+    const list=d.sessions||[];
+    if(!list.some(x=>x.id===sid)) list.unshift({id:sid,channel:'web',message_count:0});
+    sessSel.innerHTML=list.map(x=>{
+      const label=x.id+' · '+(x.message_count||0)+' msg'+(x.last_active_at?' · '+ago(x.last_active_at):'')+(x.busy?' · working…':'');
+      return '<option value="'+esc(x.id)+'"'+(x.id===sid?' selected':'')+'>'+esc(label)+'</option>';
+    }).join('');
+  }catch(e){/* the picker failing must not take the chat down with it */}
+}
+
+// History as the conversation looked, not as the model sees it: tool plumbing and injected
+// [System:] notes are context, and a transcript full of them buries what was actually said.
+function historyView(msgs){
+  const out=[];
+  for(const msg of msgs||[]){
+    if(msg.role==='user'){
+      if(msg.content.startsWith('[')||msg.content.includes('<tool_response>'))continue;
+      out.push({who:'me',text:msg.content});
+    }else if(msg.role==='assistant'){
+      const text=msg.content.replace(/<tool_call>[\\s\\S]*?(<\\/tool_call>|$)/g,'').trim();
+      if(text)out.push({who:'her',text});
+    }
+  }
+  return out;
+}
+
+async function loadHistory(){
+  log.innerHTML='';
+  try{
+    const r=await fetch('sessions/'+encodeURIComponent(sid),{headers:H()});
+    if(!r.ok)return;
+    const d=await r.json();
+    for(const msg of historyView(d.messages))add(msg.text,msg.who);
+    if(d.has_summary)add('older messages are compacted into a summary','sys');
+    if(!log.children.length)add('new conversation — say hi','sys');
+  }catch(e){add('could not load history: '+(e.message||e),'sys')}
+}
+
+function switchSession(id){
+  sid=id;localStorage.setItem('egirl-sid',sid);
+  loaded.prompt=0;$('sysprompt').textContent='loading…';
+  loadHistory();m.focus();
+}
+sessSel.onchange=()=>switchSession(sessSel.value);
+$('snew').onclick=()=>{
+  const id='web:'+Math.random().toString(36).slice(2,10);
+  const o=document.createElement('option');o.value=id;o.textContent=id+' · 0 msg';
+  sessSel.prepend(o);sessSel.value=id;switchSession(id);
+};
+
 m.addEventListener('input',()=>{m.style.height='auto';m.style.height=Math.min(m.scrollHeight,144)+'px'});
 m.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();f.requestSubmit()}});
 
+// ---- Sending --------------------------------------------------------------
+// Send stays enabled while she works: the server queues per session, so typing ahead is the
+// same contract as the CLI -- later messages wait their turn instead of interleaving. Each
+// send keeps its own placeholder, so replies land in the bubbles that asked for them.
+let inflight=0;
 f.onsubmit=async e=>{
   e.preventDefault();
   const text=m.value.trim(); if(!text) return;
-  add(text,'me'); m.value=''; m.style.height='auto';
-  b.disabled=true; status.textContent='thinking…';
+  const mine=add(text,'me'); m.value=''; m.style.height='auto';
+  const wasBusy=inflight>0; inflight++;
+  if(wasBusy)mine.classList.add('queued');
+  status.textContent=wasBusy?'queued ('+inflight+')':'thinking…';
   const ph=add('…','her pending'); const t0=Date.now();
   try{
     const r=await fetch('chat',{method:'POST',headers:H(),body:JSON.stringify({message:text,session_id:sid})});
     if(!r.ok) throw new Error('HTTP '+r.status+(r.status===401?' — bad or missing token':''));
     const d=await r.json();
+    mine.classList.remove('queued');
     ph.className='msg her'; ph.textContent=d.content||'(empty reply)';
     status.textContent=Math.round((Date.now()-t0)/1000)+'s · '+(d.output_tokens??'?')+' tok · '+(d.turns??'?')+' turns';
   }catch(err){
     // Rendered in place: a local model can take minutes, and a swallowed error is
     // indistinguishable from one that is merely slow.
     ph.className='msg her fail'; ph.textContent=String(err.message||err); status.textContent='failed';
-  }finally{ b.disabled=false; m.focus() }
+  }finally{ inflight--; m.focus() }
 };
 
 async function loadPrompt(){
@@ -193,6 +272,11 @@ $('mq').addEventListener('keydown',e=>{if(e.key==='Enter')searchMem()});
 // Identity is fetched immediately even though its tab is lazy: the header should say what you
 // are talking to before you say anything to it.
 loadInfo(); loaded.info=1;
+// The conversation you were having is the first thing the page should show, not an empty box.
+loadSessions(); loadHistory();
+// Sessions started elsewhere (the CLI, a peer) appear without a reload; 30s is fresh enough
+// for a picker and cheap enough to leave running in a background tab.
+setInterval(loadSessions,30000);
 </script></body></html>`
 }
 

@@ -1,5 +1,6 @@
 import type { AgentFactory, AgentLoop } from './agent'
 import type { RuntimeConfig } from './config'
+import type { SessionInfo } from './conversation'
 import type { MemoryCategory, MemoryManager } from './memory'
 import { formatInboundPeerMessage, PEER_PROTOCOL, peerSessionId } from './peers/protocol'
 import type { Task, TaskRunner, TaskStore } from './tasks'
@@ -28,6 +29,12 @@ export interface APIDeps {
   selfName?: string
   /** Read-only view of what this process is running, for GET /info. */
   config?: RuntimeConfig
+  /**
+   * Session listing for GET /sessions. The in-process agents map only knows sessions this
+   * server has touched; the store knows every conversation from every channel, which is what
+   * a session picker actually wants to show.
+   */
+  conversationStore?: { listSessions(): SessionInfo[] }
 }
 
 type JSONValue = string | number | boolean | null | JSONValue[] | { [k: string]: JSONValue }
@@ -81,6 +88,40 @@ function taskToJson(t: Task): JSONValue {
 export function startAPIServer(config: APIConfig, deps: APIDeps) {
   const { host, port, bearerToken } = config
 
+  // Per-session run chains. agent.run() deliberately does not serialize (the mutex guards
+  // only tool execution, so separate sessions can batch on the server) -- which means two
+  // POST /chat requests on the SAME session would interleave their turns into one context.
+  // Chaining requests per session turns "send while she is working" into a queue, the same
+  // contract the CLI gives typed-ahead input. `pending` is how many turns are waiting or
+  // running, so the UI can say "queued" honestly instead of guessing.
+  const chains = new Map<string, { tail: Promise<unknown>; pending: number }>()
+
+  function enqueueRun<T>(
+    sessionId: string,
+    run: () => Promise<T>,
+  ): { done: Promise<T>; position: number } {
+    const chain = chains.get(sessionId) ?? { tail: Promise.resolve(), pending: 0 }
+    const position = chain.pending
+    chain.pending++
+    // The tail never rejects (see below), so chaining directly off it is safe.
+    const done = chain.tail.then(run)
+    // Settle before bookkeeping: swallowing the rejection HERE is what keeps one failed turn
+    // from poisoning every turn queued behind it, and keeps `done` -- which the handler
+    // awaits -- the only place the error surfaces. A bare .finally(done) would mint a second,
+    // unhandled copy of the rejection.
+    chain.tail = done
+      .then(
+        () => {},
+        () => {},
+      )
+      .then(() => {
+        chain.pending--
+        if (chain.pending <= 0) chains.delete(sessionId)
+      })
+    chains.set(sessionId, chain)
+    return { done, position }
+  }
+
   const server = Bun.serve({
     hostname: host,
     port,
@@ -128,7 +169,8 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
           }
           const sessionId = (body.session_id as string | undefined) ?? 'api:default'
           const agent = getOrCreateAgent(sessionId, deps)
-          const response = await agent.run(message)
+          const { done, position } = enqueueRun(sessionId, () => agent.run(message))
+          const response = await done
           return json({
             content: response.content,
             session_id: sessionId,
@@ -136,6 +178,8 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
             input_tokens: response.usage.input_tokens,
             output_tokens: response.usage.output_tokens,
             turns: response.turns,
+            // How many turns ran before this one got its slot; 0 means it ran immediately.
+            queued_behind: position,
           })
         }
 
@@ -208,7 +252,9 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
           }
           const sessionId = peerSessionId(from)
           const agent = getOrCreateAgent(sessionId, deps)
-          const response = await agent.run(formatInboundPeerMessage(from, message))
+          const response = await enqueueRun(sessionId, () =>
+            agent.run(formatInboundPeerMessage(from, message)),
+          ).done
           return json({
             protocol: PEER_PROTOCOL,
             from: deps.selfName ?? 'egirl',
@@ -219,15 +265,51 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
         }
 
         // --- Sessions ---
+        // Every conversation from every channel, newest first -- the CLI session started on the
+        // train shows up here so the browser at work can pick it up. The store is the source of
+        // truth; the chains map layers on what is running right now.
+        if (method === 'GET' && path === '/sessions') {
+          const persisted = deps.conversationStore?.listSessions() ?? []
+          const seen = new Set(persisted.map((s) => s.id))
+          const sessions: JSONValue[] = persisted.map((s) => ({
+            id: s.id,
+            channel: s.channel,
+            message_count: s.messageCount,
+            last_active_at: s.lastActiveAt,
+            busy: chains.has(s.id),
+          }))
+          // In-memory agents the store has not persisted (persistence off, or nothing said yet).
+          for (const id of deps.agents.keys()) {
+            if (seen.has(id)) continue
+            sessions.push({
+              id,
+              channel: id.split(':')[0] ?? 'api',
+              message_count: deps.agents.get(id)?.getContext().messages.length ?? 0,
+              last_active_at: null,
+              busy: chains.has(id),
+            })
+          }
+          return json({ sessions })
+        }
+
         if (method === 'GET' && path.startsWith('/sessions/')) {
-          const sessionId = path.slice('/sessions/'.length)
-          const agent = deps.agents.get(sessionId)
+          const sessionId = decodeURIComponent(path.slice('/sessions/'.length))
+          // Hydrate from disk for sessions the store knows -- opening a CLI conversation in
+          // the browser must load its history, not 404 because this server never touched it.
+          // Unknown ids still 404: a GET that conjures sessions out of typos would make the
+          // list fill with ghosts.
+          let agent = deps.agents.get(sessionId)
+          if (!agent) {
+            const known = deps.conversationStore?.listSessions().some((s) => s.id === sessionId)
+            if (known) agent = getOrCreateAgent(sessionId, deps)
+          }
           if (!agent) return err('session not found', 404)
           const ctx = agent.getContext()
           return json({
             session_id: ctx.sessionId,
             message_count: ctx.messages.length,
             has_summary: !!ctx.conversationSummary,
+            busy: chains.has(sessionId),
             messages: ctx.messages.map((m) => ({
               role: m.role,
               content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
@@ -236,7 +318,7 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
         }
 
         if (method === 'DELETE' && path.startsWith('/sessions/')) {
-          const sessionId = path.slice('/sessions/'.length)
+          const sessionId = decodeURIComponent(path.slice('/sessions/'.length))
           const agent = deps.agents.get(sessionId)
           if (agent) {
             agent.resetSession()
