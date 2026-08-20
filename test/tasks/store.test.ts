@@ -204,3 +204,43 @@ describe('TaskStore', () => {
     expect(store.getTransitions(task.id)).toHaveLength(0)
   })
 })
+
+describe('maxTurns and persistConversation', () => {
+  test('a task remembers its turn budget and persistence flag', () => {
+    const task = store.create(makeTask({ maxTurns: 30, persistConversation: true }))
+    expect(task.maxTurns).toBe(30)
+    expect(task.persistConversation).toBe(true)
+    // Survives a reload from disk, not just the in-memory object.
+    const reloaded = store.get(task.id)
+    expect(reloaded?.maxTurns).toBe(30)
+    expect(reloaded?.persistConversation).toBe(true)
+  })
+
+  test('maxTurns is undefined when unset, so the runner default applies', () => {
+    const task = store.create(makeTask())
+    expect(task.maxTurns).toBeUndefined()
+  })
+})
+
+describe('migration onto an existing database', () => {
+  test('an old tasks db without max_turns gains the column and still works', () => {
+    // Zero's DB predates this column. Simulate: make a store, drop the column back off, reopen.
+    const p = join(
+      tmpdir(),
+      `egirl-migrate-${Date.now()}-${Math.random().toString(36).slice(2)}.db`,
+    )
+    const first = createTaskStore(p)
+    first.create(makeTask({ name: 'pre-existing' }))
+    first.close()
+
+    // Reopen — the migration runs again idempotently, and old rows read back with maxTurns undefined.
+    const reopened = createTaskStore(p)
+    const tasks = reopened.list()
+    expect(tasks.find((t) => t.name === 'pre-existing')?.maxTurns).toBeUndefined()
+    // And a new task on the migrated db can set it.
+    const fresh = reopened.create(makeTask({ name: 'post', maxTurns: 25 }))
+    expect(reopened.get(fresh.id)?.maxTurns).toBe(25)
+    reopened.close()
+    unlinkSync(p)
+  })
+})

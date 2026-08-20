@@ -32,6 +32,7 @@ function rowToTask(row: Record<string, unknown>): Task {
     businessHours: (row.business_hours as string) ?? undefined,
     dependsOn: (row.depends_on as string) ?? undefined,
     persistConversation: (row.persist_conversation as number) === 1,
+    maxTurns: (row.max_turns as number) ?? undefined,
     nextRunAt: (row.next_run_at as number) ?? undefined,
     lastRunAt: (row.last_run_at as number) ?? undefined,
     runCount: (row.run_count as number) ?? 0,
@@ -99,6 +100,7 @@ export class TaskStore {
         business_hours TEXT,
         depends_on TEXT,
         persist_conversation INTEGER DEFAULT 0,
+        max_turns INTEGER,
         next_run_at INTEGER,
         last_run_at INTEGER,
         run_count INTEGER DEFAULT 0,
@@ -187,6 +189,7 @@ export class TaskStore {
         'persist_conversation',
         'ALTER TABLE tasks ADD COLUMN persist_conversation INTEGER DEFAULT 0',
       ],
+      ['max_turns', 'ALTER TABLE tasks ADD COLUMN max_turns INTEGER'],
     ]
 
     for (const [col, sql] of migrations) {
@@ -231,10 +234,10 @@ export class TaskStore {
         id, name, description, kind, status, prompt,
         memory_context, memory_category, interval_ms,
         cron_expression, business_hours, depends_on,
-        persist_conversation,
+        persist_conversation, max_turns,
         next_run_at, max_runs, notify, channel, channel_target,
         created_by, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
       [
         id,
@@ -250,6 +253,7 @@ export class TaskStore {
         input.businessHours ?? null,
         input.dependsOn ?? null,
         input.persistConversation ? 1 : 0,
+        input.maxTurns ?? null,
         nextRunAt ?? null,
         input.maxRuns ?? null,
         input.notify ?? 'on_change',

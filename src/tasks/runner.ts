@@ -333,7 +333,7 @@ export class TaskRunner {
     }
 
     const agent = new AgentLoop(deps)
-    const response = await agent.run(task.prompt, { maxTurns: 10, signal })
+    const response = await agent.run(task.prompt, { maxTurns: task.maxTurns ?? 10, signal })
 
     if (this.deps.memory) {
       const storeMemory = this.deps.memory

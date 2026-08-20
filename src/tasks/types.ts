@@ -20,6 +20,8 @@ export interface Task {
   businessHours: string | undefined
   dependsOn: string | undefined
   persistConversation: boolean
+  /** Per-run turn budget. Undefined uses the runner default (10). */
+  maxTurns: number | undefined
   nextRunAt: number | undefined
   lastRunAt: number | undefined
   runCount: number
@@ -47,6 +49,7 @@ export interface NewTask {
   businessHours?: string
   dependsOn?: string
   persistConversation?: boolean
+  maxTurns?: number
   maxRuns?: number
   notify?: TaskNotify
   channel: string
