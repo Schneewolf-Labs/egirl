@@ -86,3 +86,42 @@ describe('renderChatPage', () => {
     expect(html).toContain('session_id')
   })
 })
+
+describe('console panels', () => {
+  const html = () => renderChatPage({ name: 'zero', theme: egirlish, hasToken: false })
+
+  test('has chat, memory, prompt and info tabs', () => {
+    for (const tab of ['chat', 'memory', 'prompt', 'info']) {
+      expect(html()).toContain(`data-tab="${tab}"`)
+    }
+  })
+
+  test('fetches identity, prompt and memory from relative paths', () => {
+    // Relative, because the page is opened by IP, by hostname and through tunnels -- an absolute
+    // URL works for exactly one of those.
+    const h = html()
+    expect(h).toContain("fetch('info'")
+    expect(h).toContain("fetch('prompt?session_id=")
+    expect(h).toContain("fetch('memory?limit=")
+  })
+
+  test('loads identity eagerly and the rest lazily', () => {
+    // The header should say what you are talking to before you say anything to it; the system
+    // prompt and memory store should not be fetched by merely opening the page.
+    const h = html()
+    expect(h).toContain('loadInfo(); loaded.info=1;')
+    expect(h).toContain("if(t==='prompt')loadPrompt()")
+  })
+
+  test('escapes memory values, which are model-authored text', () => {
+    // Memory contents are written by the agent and can contain anything; rendering them raw
+    // would make the store a stored-XSS vector against its own console.
+    expect(html()).toContain('const esc=')
+    expect(html()).toContain('esc(x.value)')
+  })
+
+  test('explains a disabled memory store rather than showing an error', () => {
+    expect(html()).toContain('r.status===503')
+    expect(html()).toContain('Memory is disabled')
+  })
+})

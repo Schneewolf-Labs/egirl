@@ -1,25 +1,21 @@
 /**
- * A chat page for the HTTP API.
+ * A console for the HTTP API.
  *
- * The API already exposes everything a conversation needs; what it lacked was somewhere to type.
- * Reaching an instance meant ssh and a terminal, or hand-rolled curl -- fine at a desk, useless
- * from a phone, and the reason a whole XMPP server got stood up before anyone noticed the simpler
- * option was three lines of fetch().
+ * The first version of this was a text box. That closed the "no way to reach an instance from a
+ * phone" gap and nothing else -- it could have been talking to any agent, and everything the CLI
+ * shows about what an instance *is* was missing.
  *
- * Deliberately one self-contained string rather than a build step, a framework, or a second
- * service. It is served by the API process that already exists, on the port already configured
- * per instance, behind the token already supported. Nothing new to run, nothing new to secure.
+ * The endpoints for the rest already existed (`/memory`, `/tasks`, `/sessions`) or were one route
+ * away (`/info`, `/prompt`). What was missing was somewhere to look at them. So this is four
+ * panels over the same API rather than a chat client with extras bolted on, and the browser gets
+ * the views a terminal is bad at: a searchable memory store and a scrollable system prompt.
+ *
+ * Still one self-contained string. A build step would buy component ergonomics and cost the
+ * property that makes this maintainable -- that the whole surface is visible in one file.
  */
 
 import type { Theme } from './ui/theme'
 
-/**
- * The page, with the instance's own palette baked in.
- *
- * Colours come from the same theme the CLI uses, so an instance looks like itself in a browser
- * -- which matters more than it sounds when several are running and they are distinguished only
- * by what they say.
- */
 export function renderChatPage(opts: { name: string; theme: Theme; hasToken: boolean }): string {
   const { name, theme, hasToken } = opts
   const p = hex(theme.colors.primary)
@@ -31,40 +27,96 @@ export function renderChatPage(opts: { name: string; theme: Theme; hasToken: boo
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="color-scheme" content="dark light">
 <style>
-:root{--p:${p};--s:${s};--a:${a};--bg:#0d0e12;--fg:#e6e8ee;--dim:#8b90a0;--line:#1e2028;--user:#171a22}
-@media(prefers-color-scheme:light){:root{--bg:#fcfcfe;--fg:#1a1c22;--dim:#6b7080;--line:#e4e6ec;--user:#f0f1f5}}
+:root{--p:${p};--s:${s};--a:${a};
+  --bg:#0b0a12;--panel:#12111c;--fg:#e8e6f2;--dim:#8c86a8;--line:#221f33;--user:#1a1828}
+@media(prefers-color-scheme:light){:root{--bg:#faf9fd;--panel:#f2f0f8;--fg:#1c1a26;--dim:#6a6580;--line:#e2dff0;--user:#eceaf6}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
-     display:flex;flex-direction:column;height:100dvh}
-header{padding:.7rem 1rem;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:.6rem;flex:none}
-header b{color:var(--s);font-size:.95rem;letter-spacing:.02em}
-header span{color:var(--dim);font-size:.75rem;margin-left:auto}
-#log{flex:1;overflow-y:auto;padding:1rem;display:flex;flex-direction:column;gap:.85rem;-webkit-overflow-scrolling:touch}
-.msg{max-width:min(46rem,92%);padding:.6rem .85rem;border-radius:.7rem;white-space:pre-wrap;word-wrap:break-word;overflow-wrap:anywhere}
+body{margin:0;background:var(--bg);color:var(--fg);height:100dvh;display:flex;flex-direction:column;
+  font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+a{color:var(--a)}
+/* Header doubles as identity: which agent, which model, which box. */
+header{flex:none;padding:.55rem .9rem;border-bottom:1px solid var(--line);display:flex;align-items:baseline;gap:.6rem;
+  background:linear-gradient(90deg,color-mix(in srgb,var(--p) 14%,transparent),transparent 60%)}
+header b{color:var(--s);letter-spacing:.04em}
+header .meta{color:var(--dim);font-size:.72rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+header .sp{margin-left:auto;color:var(--dim);font-size:.72rem;white-space:nowrap}
+nav{flex:none;display:flex;gap:.15rem;padding:0 .5rem;border-bottom:1px solid var(--line);overflow-x:auto}
+nav button{background:none;border:0;border-bottom:2px solid transparent;color:var(--dim);
+  padding:.5rem .75rem;font:inherit;font-size:.82rem;cursor:pointer;white-space:nowrap}
+nav button[aria-selected=true]{color:var(--s);border-bottom-color:var(--s)}
+main{flex:1;overflow:hidden;display:flex;flex-direction:column}
+.tab{display:none;flex:1;overflow:hidden;flex-direction:column}
+.tab[data-on]{display:flex}
+#log{flex:1;overflow-y:auto;padding:1rem;display:flex;flex-direction:column;gap:.8rem}
+.msg{max-width:min(46rem,94%);padding:.55rem .8rem;border-radius:.65rem;white-space:pre-wrap;overflow-wrap:anywhere}
 .me{align-self:flex-end;background:var(--user)}
-.her{align-self:flex-start;border:1px solid var(--line);border-left:2px solid var(--p)}
-.her code,.me code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.88em;background:#0000001a;padding:.1em .3em;border-radius:.25em}
+.her{align-self:flex-start;border:1px solid var(--line);border-left:2px solid var(--p);background:var(--panel)}
+.sys{align-self:center;color:var(--dim);font-size:.78rem;font-style:italic}
 .pending{color:var(--dim);font-style:italic}
 .fail{border-left-color:#ff5f87;color:#ff9db4}
-form{display:flex;gap:.5rem;padding:.7rem;border-top:1px solid var(--line);flex:none;
-     padding-bottom:calc(.7rem + env(safe-area-inset-bottom))}
-textarea{flex:1;resize:none;background:var(--user);color:var(--fg);border:1px solid var(--line);
-         border-radius:.6rem;padding:.55rem .7rem;font:inherit;max-height:9rem}
-textarea:focus{outline:none;border-color:var(--p)}
-button{background:var(--p);color:#fff;border:0;border-radius:.6rem;padding:0 1.05rem;font:inherit;font-weight:600;cursor:pointer}
-button:disabled{opacity:.45;cursor:default}
+form{flex:none;display:flex;gap:.5rem;padding:.65rem;border-top:1px solid var(--line);
+  padding-bottom:calc(.65rem + env(safe-area-inset-bottom))}
+textarea,input[type=search]{flex:1;background:var(--user);color:var(--fg);border:1px solid var(--line);
+  border-radius:.55rem;padding:.5rem .7rem;font:inherit;resize:none;max-height:9rem}
+textarea:focus,input:focus{outline:none;border-color:var(--p)}
+button.go{background:var(--p);color:#fff;border:0;border-radius:.55rem;padding:0 1rem;font:inherit;font-weight:600;cursor:pointer}
+button.go:disabled{opacity:.45;cursor:default}
+.pad{padding:1rem;overflow-y:auto;flex:1}
+pre{white-space:pre-wrap;overflow-wrap:anywhere;background:var(--panel);border:1px solid var(--line);
+  border-radius:.5rem;padding:.8rem;font:12.5px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;margin:0}
+table{width:100%;border-collapse:collapse;font-size:.85rem}
+td{padding:.35rem .5rem;border-bottom:1px solid var(--line);vertical-align:top}
+td:first-child{color:var(--dim);white-space:nowrap;width:1%;padding-right:1.2rem}
+.mem{border:1px solid var(--line);border-left:2px solid var(--a);border-radius:.5rem;padding:.55rem .7rem;margin-bottom:.55rem;background:var(--panel)}
+.mem .k{color:var(--a);font-size:.78rem;font-family:ui-monospace,monospace}
+.mem .s{color:var(--dim);font-size:.72rem;float:right}
+.row{display:flex;gap:.5rem;padding:.65rem;border-bottom:1px solid var(--line);flex:none}
+.chip{display:inline-block;padding:.1rem .45rem;border-radius:.3rem;background:var(--user);color:var(--dim);font-size:.72rem;margin-right:.3rem}
 </style></head><body>
-<header><b>${esc(name)}</b><span id="status">ready</span></header>
-<div id="log"></div>
-<form id="f"><textarea id="m" rows="1" placeholder="Message ${esc(name)}…" autofocus></textarea><button id="b">Send</button></form>
+<header><b>${esc(name)}</b><span class="meta" id="hmeta">connecting…</span><span class="sp" id="status">ready</span></header>
+<nav id="tabs">
+  <button data-tab="chat" aria-selected="true">chat</button>
+  <button data-tab="memory" aria-selected="false">memory</button>
+  <button data-tab="prompt" aria-selected="false">prompt</button>
+  <button data-tab="info" aria-selected="false">info</button>
+</nav>
+<main>
+  <section class="tab" data-name="chat" data-on>
+    <div id="log"></div>
+    <form id="f"><textarea id="m" rows="1" placeholder="Message ${esc(name)}…" autofocus></textarea><button class="go" id="b">Send</button></form>
+  </section>
+
+  <section class="tab" data-name="memory">
+    <div class="row"><input type="search" id="mq" placeholder="Search memories…"><button class="go" id="mgo">Search</button></div>
+    <div class="pad" id="mres"><p style="color:var(--dim)">Search the agent's long-term memory. Results are ranked by relevance.</p></div>
+  </section>
+
+  <section class="tab" data-name="prompt">
+    <div class="pad"><pre id="sysprompt">loading…</pre></div>
+  </section>
+
+  <section class="tab" data-name="info">
+    <div class="pad"><table id="infotbl"></table></div>
+  </section>
+</main>
 <script>
-const log=document.getElementById('log'),f=document.getElementById('f'),m=document.getElementById('m'),
-      b=document.getElementById('b'),status=document.getElementById('status');
-// Session id is per browser, so reloading the page continues the conversation rather than
-// silently starting a new one the agent has no memory of.
+const $=id=>document.getElementById(id);
+const log=$('log'),f=$('f'),m=$('m'),b=$('b'),status=$('status');
 const sid=localStorage.getItem('egirl-sid')||('web:'+Math.random().toString(36).slice(2,10));
 localStorage.setItem('egirl-sid',sid);
-${hasToken ? `const tok=localStorage.getItem('egirl-token')||prompt('API token');if(tok)localStorage.setItem('egirl-token',tok);` : 'const tok=null;'}
+${hasToken ? `let tok=localStorage.getItem('egirl-token');if(!tok){tok=prompt('API token');if(tok)localStorage.setItem('egirl-token',tok)}` : 'const tok=null;'}
+const H=()=>{const h={'Content-Type':'application/json'};if(tok)h['Authorization']='Bearer '+tok;return h};
+const esc=t=>String(t??'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+
+// Tabs are plain show/hide. Loaded lazily so opening the page does not fetch the system prompt
+// and the whole memory store before anything has been typed.
+const loaded={};
+$('tabs').onclick=e=>{
+  const t=e.target.dataset.tab; if(!t) return;
+  for(const btn of $('tabs').children) btn.setAttribute('aria-selected', String(btn.dataset.tab===t));
+  for(const s of document.querySelectorAll('.tab')) s.toggleAttribute('data-on', s.dataset.name===t);
+  if(!loaded[t]){loaded[t]=1; if(t==='prompt')loadPrompt(); if(t==='info')loadInfo()}
+};
 
 function add(text,cls){const d=document.createElement('div');d.className='msg '+cls;d.textContent=text;
   log.appendChild(d);log.scrollTop=log.scrollHeight;return d}
@@ -77,22 +129,70 @@ f.onsubmit=async e=>{
   const text=m.value.trim(); if(!text) return;
   add(text,'me'); m.value=''; m.style.height='auto';
   b.disabled=true; status.textContent='thinking…';
-  const ph=add('…','her pending');
-  const started=Date.now();
+  const ph=add('…','her pending'); const t0=Date.now();
   try{
-    const h={'Content-Type':'application/json'}; if(tok) h['Authorization']='Bearer '+tok;
-    const r=await fetch('chat',{method:'POST',headers:h,body:JSON.stringify({message:text,session_id:sid})});
+    const r=await fetch('chat',{method:'POST',headers:H(),body:JSON.stringify({message:text,session_id:sid})});
     if(!r.ok) throw new Error('HTTP '+r.status+(r.status===401?' — bad or missing token':''));
     const d=await r.json();
     ph.className='msg her'; ph.textContent=d.content||'(empty reply)';
-    status.textContent=Math.round((Date.now()-started)/1000)+'s · '+(d.output_tokens??'?')+' tok';
+    status.textContent=Math.round((Date.now()-t0)/1000)+'s · '+(d.output_tokens??'?')+' tok · '+(d.turns??'?')+' turns';
   }catch(err){
-    // Shown in place rather than swallowed: a local model behind this can take a long time, and
-    // a silent failure is indistinguishable from one that is merely slow.
-    ph.className='msg her fail'; ph.textContent=String(err.message||err);
-    status.textContent='failed';
+    // Rendered in place: a local model can take minutes, and a swallowed error is
+    // indistinguishable from one that is merely slow.
+    ph.className='msg her fail'; ph.textContent=String(err.message||err); status.textContent='failed';
   }finally{ b.disabled=false; m.focus() }
 };
+
+async function loadPrompt(){
+  try{
+    const r=await fetch('prompt?session_id='+encodeURIComponent(sid),{headers:H()});
+    const d=await r.json();
+    $('sysprompt').textContent=d.systemPrompt||'(empty)';
+    $('sysprompt').insertAdjacentHTML('beforebegin','<p style="color:var(--dim);font-size:.8rem">'+d.length+' characters — IDENTITY, SOUL, AGENTS, USER and tool descriptions as the model receives them.</p>');
+  }catch(e){ $('sysprompt').textContent='failed to load: '+e.message }
+}
+
+async function loadInfo(){
+  try{
+    const d=await (await fetch('info',{headers:H()})).json();
+    const rows=[
+      ['name',d.name],['instance',d.instance],['persona',d.persona],['profile',d.profile],['theme',d.theme],
+      ['model',d.model],['endpoint',d.endpoint],['context',d.contextLength?d.contextLength.toLocaleString()+' tokens':null],
+      ['auxiliary',d.auxiliary?d.auxiliary.model+' @ '+d.auxiliary.endpoint:'none — compaction runs on the operator'],
+      ['embeddings',d.embeddings?d.embeddings.model+' ('+d.embeddings.dimensions+'d)':'none — memory disabled'],
+      ['memory',d.memory?'enabled':'disabled'],
+      ['code agent',d.codeAgent||'off'],['thinking',d.thinking],
+      ['permissions',d.permissions?d.permissions.mode+' · default '+d.permissions.defaultAction:null],
+      ['workspace',d.workspace],
+    ];
+    $('infotbl').innerHTML=rows.filter(r=>r[1]!=null&&r[1]!=='')
+      .map(r=>'<tr><td>'+esc(r[0])+'</td><td>'+esc(r[1])+'</td></tr>').join('');
+    const tools=d.tools?Object.entries(d.tools).filter(([,v])=>v).map(([k])=>'<span class="chip">'+esc(k)+'</span>').join(''):'';
+    if(tools) $('infotbl').insertAdjacentHTML('beforeend','<tr><td>tools</td><td>'+tools+'</td></tr>');
+    $('hmeta').textContent=[d.model,d.instance].filter(Boolean).join(' · ');
+  }catch(e){ $('infotbl').innerHTML='<tr><td>error</td><td>'+esc(e.message)+'</td></tr>' }
+}
+
+async function searchMem(){
+  const q=$('mq').value.trim(); if(!q) return;
+  $('mres').innerHTML='<p style="color:var(--dim)">searching…</p>';
+  try{
+    const r=await fetch('memory?limit=25&q='+encodeURIComponent(q),{headers:H()});
+    if(r.status===503){$('mres').innerHTML='<p style="color:var(--dim)">Memory is disabled on this instance — no embeddings configured.</p>';return}
+    const d=await r.json();
+    if(!d.results||!d.results.length){$('mres').innerHTML='<p style="color:var(--dim)">nothing found</p>';return}
+    $('mres').innerHTML=d.results.map(x=>
+      '<div class="mem"><span class="s">'+(x.score!=null?x.score.toFixed(3):'')+'</span>'+
+      '<div class="k">'+esc(x.key)+(x.category?' · '+esc(x.category):'')+'</div>'+
+      '<div>'+esc(x.value)+'</div></div>').join('');
+  }catch(e){ $('mres').innerHTML='<p style="color:#ff9db4">'+esc(e.message)+'</p>' }
+}
+$('mgo').onclick=searchMem;
+$('mq').addEventListener('keydown',e=>{if(e.key==='Enter')searchMem()});
+
+// Identity is fetched immediately even though its tab is lazy: the header should say what you
+// are talking to before you say anything to it.
+loadInfo(); loaded.info=1;
 </script></body></html>`
 }
 
@@ -104,9 +204,8 @@ function esc(s: string): string {
 }
 
 /**
- * The CLI palette is 256-colour ANSI; a browser needs hex. Mapped through the standard xterm
- * cube so an instance's colours are the same ones its terminal shows, not an approximation
- * chosen by eye.
+ * The CLI palette is 256-colour ANSI; a browser needs hex. Mapped through the standard xterm cube
+ * so an instance's colours are the ones its terminal shows rather than an approximation.
  */
 function hex(ansi: string): string {
   const m = /38;5;(\d+)m/.exec(ansi)

@@ -1,4 +1,5 @@
 import type { AgentFactory, AgentLoop } from './agent'
+import type { RuntimeConfig } from './config'
 import type { MemoryCategory, MemoryManager } from './memory'
 import { formatInboundPeerMessage, PEER_PROTOCOL, peerSessionId } from './peers/protocol'
 import type { Task, TaskRunner, TaskStore } from './tasks'
@@ -25,6 +26,8 @@ export interface APIDeps {
   taskOffReason?: string
   /** Identity announced to peer agents on /peer/identity and in /peer/message replies. */
   selfName?: string
+  /** Read-only view of what this process is running, for GET /info. */
+  config?: RuntimeConfig
 }
 
 type JSONValue = string | number | boolean | null | JSONValue[] | { [k: string]: JSONValue }
@@ -133,6 +136,54 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
             input_tokens: response.usage.input_tokens,
             output_tokens: response.usage.output_tokens,
             turns: response.turns,
+          })
+        }
+
+        // --- Introspection -------------------------------------------------
+        // What this process actually is. The console shows it because a chat window with no
+        // identity is indistinguishable from any other instance's, and getting that wrong means
+        // talking to the wrong agent without noticing.
+        if (method === 'GET' && path === '/info') {
+          const cfg = deps.config
+          return json({
+            name: deps.selfName ?? 'egirl',
+            instance: cfg?.source.instance ?? null,
+            persona: cfg?.source.persona ?? null,
+            profile: cfg?.source.profile ?? null,
+            theme: cfg?.theme ?? null,
+            workspace: cfg?.workspace.path ?? null,
+            model: cfg?.local.model ?? null,
+            endpoint: cfg?.local.endpoint ?? null,
+            contextLength: cfg?.local.contextLength ?? null,
+            auxiliary: cfg?.local.auxiliary
+              ? { model: cfg.local.auxiliary.model, endpoint: cfg.local.auxiliary.endpoint }
+              : null,
+            memory: Boolean(deps.memory),
+            embeddings: cfg?.local.embeddings
+              ? { model: cfg.local.embeddings.model, dimensions: cfg.local.embeddings.dimensions }
+              : null,
+            tools: cfg?.tools ?? null,
+            codeAgent: cfg?.channels.codeAgent?.provider ?? null,
+            thinking: cfg?.thinking.level ?? null,
+            permissions: cfg
+              ? {
+                  mode: cfg.permissionSupervisor.mode,
+                  defaultAction: cfg.permissionSupervisor.defaultAction,
+                }
+              : null,
+          })
+        }
+
+        // The composed system prompt -- IDENTITY, SOUL, AGENTS, USER and tool descriptions as the
+        // model actually receives them. Reading it is the fastest way to understand why an agent
+        // behaves the way it does, and it was previously only visible through the CLI.
+        if (method === 'GET' && path === '/prompt') {
+          const sessionId = url.searchParams.get('session_id') ?? 'api:default'
+          const agent = getOrCreateAgent(sessionId, deps)
+          const ctx = agent.getContext()
+          return json({
+            systemPrompt: ctx.systemPrompt,
+            length: ctx.systemPrompt.length,
           })
         }
 
