@@ -199,6 +199,9 @@ export class LlamaCppProvider implements LLMProvider {
     }
 
     let content: string
+    // Reasoning delivered out-of-band in `reasoning_content` rather than as inline `<think>`
+    // tags. Empty when the server inlines it; `extractThinkingTags` handles that case below.
+    let reasoning = ''
     let usage = { prompt_tokens: 0, completion_tokens: 0 }
     let model = this.name
     let finish_reason: string | undefined
@@ -210,16 +213,21 @@ export class LlamaCppProvider implements LLMProvider {
         (req.tools?.length ?? 0) > 0,
       )
       content = result.content
+      reasoning = result.reasoning
       usage = result.usage
       model = result.model ?? this.name
       finish_reason = result.finish_reason
     } else {
       const data = (await response.json()) as {
-        choices: Array<{ message: { content: string }; finish_reason?: string }>
+        choices: Array<{
+          message: { content: string; reasoning_content?: string }
+          finish_reason?: string
+        }>
         usage: { prompt_tokens: number; completion_tokens: number }
         model: string
       }
       content = data.choices[0]?.message?.content ?? ''
+      reasoning = data.choices[0]?.message?.reasoning_content ?? ''
       usage = data.usage ?? usage
       model = data.model ?? this.name
       finish_reason = data.choices[0]?.finish_reason ?? undefined
@@ -260,7 +268,9 @@ export class LlamaCppProvider implements LLMProvider {
         output_tokens: usage.completion_tokens,
       },
       model,
-      thinking: thinking || undefined,
+      // Inline tags win when present; `reasoning` covers servers that split it into its own
+      // field, where extractThinkingTags has nothing to find.
+      thinking: thinking || reasoning || undefined,
       finish_reason: toolCalls.length > 0 ? 'tool_calls' : (finish_reason ?? 'stop'),
     }
   }
@@ -275,6 +285,7 @@ export class LlamaCppProvider implements LLMProvider {
     hasTools: boolean,
   ): Promise<{
     content: string
+    reasoning: string
     usage: { prompt_tokens: number; completion_tokens: number }
     model?: string
     finish_reason?: string
@@ -283,6 +294,7 @@ export class LlamaCppProvider implements LLMProvider {
     const reader = body.getReader()
 
     let fullContent = ''
+    let fullReasoning = ''
     let buffer = ''
     let inToolCall = false
     let inThink = false
@@ -334,7 +346,10 @@ export class LlamaCppProvider implements LLMProvider {
 
           try {
             const parsed = JSON.parse(data) as {
-              choices?: Array<{ delta?: { content?: string }; finish_reason?: string | null }>
+              choices?: Array<{
+                delta?: { content?: string; reasoning_content?: string }
+                finish_reason?: string | null
+              }>
               usage?: { prompt_tokens: number; completion_tokens: number }
               model?: string
             }
@@ -343,6 +358,17 @@ export class LlamaCppProvider implements LLMProvider {
             if (parsed.model) model = parsed.model
             const chunkFinish = parsed.choices?.[0]?.finish_reason
             if (chunkFinish) finish_reason = chunkFinish
+
+            // Servers running `--reasoning-format deepseek` strip `<think>` out of the content
+            // and stream it here instead. Those deltas are still the model working, so they have
+            // to reset the stale timer: a reasoning model can deliberate for minutes before it
+            // emits a single content token, and treating that silence as a hang aborts the
+            // generation just as it was about to answer.
+            const reasoningToken = parsed.choices?.[0]?.delta?.reasoning_content
+            if (reasoningToken) {
+              fullReasoning += reasoningToken
+              resetStaleTimer()
+            }
 
             const token = parsed.choices?.[0]?.delta?.content
             if (!token) continue
@@ -425,7 +451,7 @@ export class LlamaCppProvider implements LLMProvider {
       onToken(buffer)
     }
 
-    return { content: fullContent, usage, model, finish_reason }
+    return { content: fullContent, reasoning: fullReasoning, usage, model, finish_reason }
   }
 
   /**
