@@ -177,7 +177,16 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
             skillsDir && (message === '/learn' || message.startsWith('/learn '))
               ? buildLearnPrompt(message.slice('/learn'.length), skillsDir)
               : message
-          const { done, position } = enqueueRun(sessionId, () => agent.run(toRun))
+          // Attached images: data: URLs only, capped at 4. A remote URL here would have the
+          // agent's server fetching arbitrary addresses on behalf of whoever holds the token.
+          const images = Array.isArray(body.images)
+            ? (body.images as unknown[])
+                .filter((u): u is string => typeof u === 'string' && u.startsWith('data:image/'))
+                .slice(0, 4)
+            : undefined
+          const { done, position } = enqueueRun(sessionId, () =>
+            agent.run(toRun, images?.length ? { images } : {}),
+          )
           const response = await done
           return json({
             content: response.content,

@@ -81,6 +81,13 @@ td:first-child{color:var(--dim);white-space:nowrap;width:1%;padding-right:1.2rem
   padding:.25rem .6rem;font:inherit;font-size:.8rem;cursor:pointer;white-space:nowrap}
 .sessrow button:hover{color:var(--s);border-color:var(--s)}
 .queued{opacity:.7}
+.clip{background:none;border:1px solid var(--line);border-radius:.55rem;color:var(--dim);width:2.3rem;font:inherit;font-size:1.1rem;cursor:pointer;flex:none}
+.clip:hover{color:var(--s);border-color:var(--s)}
+.attachrow{display:flex;gap:.4rem;padding:.4rem .65rem 0;flex-wrap:wrap}
+.attachrow img{height:3.2rem;border-radius:.4rem;border:1px solid var(--line)}
+.attachrow .x{position:absolute;top:-.4rem;right:-.4rem;background:var(--bg);border:1px solid var(--line);border-radius:50%;width:1.1rem;height:1.1rem;line-height:1;font-size:.7rem;color:var(--dim);cursor:pointer;padding:0}
+.attachrow .thumb{position:relative}
+.msg img{max-width:14rem;border-radius:.45rem;display:block;margin-top:.3rem}
 .queued::before{content:'♡ queued · ';color:var(--s);font-style:italic;font-size:.78rem}
 </style></head><body>
 <header><b>${esc(name)}</b><span class="meta" id="hmeta">connecting…</span><span class="sp" id="status">ready</span></header>
@@ -94,7 +101,8 @@ td:first-child{color:var(--dim);white-space:nowrap;width:1%;padding-right:1.2rem
   <section class="tab" data-name="chat" data-on>
     <div class="sessrow"><select id="sess" title="session"></select><button id="snew" title="start a fresh conversation">+ new</button></div>
     <div id="log"></div>
-    <form id="f"><textarea id="m" rows="1" placeholder="Message ${esc(name)}…" autofocus></textarea><button class="go" id="b">Send</button></form>
+    <div id="attach" class="attachrow" hidden></div>
+    <form id="f"><button type="button" id="pick" class="clip" title="attach an image">+</button><input type="file" id="file" accept="image/*" multiple hidden><textarea id="m" rows="1" placeholder="Message ${esc(name)}…" autofocus></textarea><button class="go" id="b">Send</button></form>
   </section>
 
   <section class="tab" data-name="memory">
@@ -196,6 +204,40 @@ $('snew').onclick=()=>{
 };
 
 m.addEventListener('input',()=>{m.style.height='auto';m.style.height=Math.min(m.scrollHeight,144)+'px'});
+
+// ---- Image attachments ----------------------------------------------------
+// Downscaled client-side: a phone photo is 12MP of base64 nobody needs -- the vision encoder
+// sees ~1k px. Longest edge 1280 keeps detail and keeps the request under control.
+let pending_imgs=[];
+async function addImage(fileOrBlob){
+  if(pending_imgs.length>=4)return;
+  const url=await new Promise(res=>{
+    const img=new Image();
+    img.onload=()=>{
+      const scale=Math.min(1,1280/Math.max(img.width,img.height));
+      const c=document.createElement('canvas');
+      c.width=Math.round(img.width*scale);c.height=Math.round(img.height*scale);
+      c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+      res(c.toDataURL('image/jpeg',0.9));
+    };
+    img.src=URL.createObjectURL(fileOrBlob);
+  });
+  pending_imgs.push(url);renderAttach();
+}
+function renderAttach(){
+  const a=$('attach');
+  a.hidden=pending_imgs.length===0;
+  a.innerHTML=pending_imgs.map((u,i)=>'<span class="thumb"><img src="'+u+'"><button type="button" class="x" data-i="'+i+'">×</button></span>').join('');
+}
+$('attach').onclick=e=>{const i=e.target.dataset.i;if(i!=null){pending_imgs.splice(Number(i),1);renderAttach()}};
+$('pick').onclick=()=>$('file').click();
+$('file').onchange=async()=>{for(const f of $('file').files)await addImage(f);$('file').value='';m.focus()};
+// Paste an image straight into the message box, like any chat app.
+m.addEventListener('paste',e=>{
+  for(const item of e.clipboardData?.items??[]){
+    if(item.type.startsWith('image/')){e.preventDefault();const f=item.getAsFile();if(f)addImage(f)}
+  }
+});
 m.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();f.requestSubmit()}});
 
 // ---- Sending --------------------------------------------------------------
@@ -205,14 +247,16 @@ m.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefau
 let inflight=0;
 f.onsubmit=async e=>{
   e.preventDefault();
-  const text=m.value.trim(); if(!text) return;
-  const mine=add(text,'me'); m.value=''; m.style.height='auto';
+  const text=m.value.trim(); if(!text&&pending_imgs.length===0) return;
+  const imgs=pending_imgs; pending_imgs=[]; renderAttach();
+  const mine=add(text||'(image)','me'); m.value=''; m.style.height='auto';
+  for(const u of imgs){const im=document.createElement('img');im.src=u;mine.appendChild(im)}
   const wasBusy=inflight>0; inflight++;
   if(wasBusy)mine.classList.add('queued');
   status.textContent=wasBusy?'queued ('+inflight+')':'thinking…';
   const ph=add('…','her pending'); const t0=Date.now();
   try{
-    const r=await fetch('chat',{method:'POST',headers:H(),body:JSON.stringify({message:text,session_id:sid})});
+    const r=await fetch('chat',{method:'POST',headers:H(),body:JSON.stringify({message:text||'(see attached image)',session_id:sid,images:imgs.length?imgs:undefined})});
     if(!r.ok) throw new Error('HTTP '+r.status+(r.status===401?' — bad or missing token':''));
     const d=await r.json();
     mine.classList.remove('queued');

@@ -17,6 +17,12 @@ export interface AgentLoopOptions {
   planningMode?: boolean
   /** Abort signal — checked between turns and after tool execution */
   signal?: AbortSignal
+  /**
+   * Images attached to the user message, as data: URLs. Rendered as image_url content parts
+   * alongside the text -- the same shape the screenshot tool already feeds the provider, so
+   * a vision-enabled server sees them and a text-only one degrades to the text.
+   */
+  images?: string[]
 }
 
 export interface AgentResponse {

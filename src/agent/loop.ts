@@ -124,7 +124,19 @@ export class AgentLoop {
       : userMessage
 
     this.transcript?.turnStart(this.context.sessionId, userMessage)
-    addMessage(this.context, { role: 'user', content: userContent })
+    // Attached images ride the same message as the text, in the content-part shape the
+    // provider already renders for the screenshot tool.
+    if (options.images?.length) {
+      addMessage(this.context, {
+        role: 'user',
+        content: [
+          { type: 'text', text: userContent },
+          ...options.images.map((url) => ({ type: 'image_url' as const, image_url: { url } })),
+        ],
+      })
+    } else {
+      addMessage(this.context, { role: 'user', content: userContent })
+    }
 
     await injectRecalledMemory({
       userMessage,

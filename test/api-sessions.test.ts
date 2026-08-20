@@ -194,3 +194,43 @@ describe('sessions over the API', () => {
     }
   })
 })
+
+describe('image attachments', () => {
+  test('data URLs reach the agent as content parts; remote URLs are dropped', async () => {
+    let seen: unknown
+    const deps3: APIDeps = {
+      agentFactory: (id) =>
+        ({
+          async run(_msg: string, options?: { images?: string[] }) {
+            seen = options?.images
+            return {
+              content: 'saw it',
+              provider: 'test',
+              usage: { input_tokens: 1, output_tokens: 1 },
+              turns: 1,
+            }
+          },
+          getContext: () => ({ sessionId: id, systemPrompt: '', messages: [] }),
+          resetSession() {},
+        }) as unknown as AgentLoop,
+      agents: new Map(),
+    }
+    const s3 = startAPIServer({ host: '127.0.0.1', port: 3896 } as APIConfig, deps3)
+    try {
+      const res = await fetch('http://127.0.0.1:3896/chat', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          message: 'what is this?',
+          session_id: 'img',
+          // One legitimate data URL, one SSRF attempt, one junk entry.
+          images: ['data:image/png;base64,iVBORw0KGgo=', 'http://169.254.169.254/latest', 42],
+        }),
+      })
+      expect(res.status).toBe(200)
+      expect(seen).toEqual(['data:image/png;base64,iVBORw0KGgo='])
+    } finally {
+      s3.stop(true)
+    }
+  })
+})

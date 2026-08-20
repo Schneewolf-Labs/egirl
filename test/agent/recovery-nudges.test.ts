@@ -148,3 +148,32 @@ describe('empty response after tools', () => {
     expect(response.content).toBe('[The model returned an empty response.]')
   })
 })
+
+describe('image attachments in the run loop', () => {
+  test('images ride the user message as content parts', async () => {
+    let seenContent: unknown
+    const provider: LLMProvider = {
+      name: 'stub',
+      async chat(req: ChatRequest): Promise<ChatResponse> {
+        seenContent = req.messages.at(-1)?.content
+        return stubResponse({ content: 'a serious operator, one cyan accent' })
+      },
+    }
+    const agent = new AgentLoop({
+      config: makeConfig(makeWorkspace()),
+      toolExecutor: makeExecutorWithNoop(),
+      localProvider: provider,
+      sessionId: 'test:images',
+    })
+    await agent.run('what do you think of this?', {
+      images: ['data:image/png;base64,AAAA'],
+    })
+    expect(Array.isArray(seenContent)).toBe(true)
+    const parts = seenContent as Array<{ type: string }>
+    expect(parts[0]).toEqual({ type: 'text', text: 'what do you think of this?' })
+    expect(parts[1]).toEqual({
+      type: 'image_url',
+      image_url: { url: 'data:image/png;base64,AAAA' },
+    })
+  })
+})
