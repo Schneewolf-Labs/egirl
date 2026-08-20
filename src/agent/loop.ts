@@ -43,6 +43,13 @@ const MAX_CONTINUATION_RETRIES = 3
  */
 const MAX_RECOVERY_NUDGES = 3
 
+/**
+ * Retries for a with-no-tools empty response. Distinct from MAX_RECOVERY_NUDGES because these
+ * retries add no message -- the request is identical, so the KV-cached prefill makes each one
+ * cheap -- and the deterministic-empty rule usually cuts them off before the cap anyway.
+ */
+const MAX_EMPTY_RETRIES = 2
+
 export type AgentFactory = (sessionId: string) => AgentLoop
 
 export class AgentLoop {
@@ -144,6 +151,8 @@ export class AgentLoop {
     let strandedToolRetries = 0
     let emptyAfterToolsRetries = 0
     let toolsRan = false
+    let emptyRetries = 0
+    let prevEmptyWasZeroOutput = false
 
     // Persistence and transcript closure run in `finally` so a provider error
     // mid-run doesn't lose the user message and tool activity already in context.
@@ -319,6 +328,35 @@ export class AgentLoop {
             ephemeral: true,
           })
           continue
+        }
+
+        // An empty response with no tools in play at all. Previously this surfaced as a blank
+        // reply; now it retries, bounded by hermes's deterministic-empty rule: two consecutive
+        // attempts with output_tokens === 0 mean the same prompt will keep producing the same
+        // empty, so further retries are burned prefill for nothing. An attempt that generated
+        // SOMETHING (output_tokens > 0 with empty content -- reasoning ate the budget, or
+        // think-stripping ate the text) is not deterministic and keeps its budget: sampling
+        // can land differently next time.
+        if (!response.content.trim() && !toolsRan) {
+          const zeroOutput = response.usage.output_tokens === 0
+          if (emptyRetries < MAX_EMPTY_RETRIES && !(zeroOutput && prevEmptyWasZeroOutput)) {
+            emptyRetries++
+            prevEmptyWasZeroOutput = zeroOutput
+            log.warn(
+              'agent',
+              `Empty response (output_tokens=${response.usage.output_tokens}), retrying (${emptyRetries}/${MAX_EMPTY_RETRIES})`,
+            )
+            continue
+          }
+          log.warn(
+            'agent',
+            zeroOutput && prevEmptyWasZeroOutput
+              ? 'Empty response is deterministic (two zero-output attempts) — giving up'
+              : `Empty response after ${emptyRetries} retries — giving up`,
+          )
+          finalContent = '[The model returned an empty response.]'
+          addMessage(this.context, { role: 'assistant', content: finalContent })
+          break
         }
 
         finalContent = accumulatedContent + response.content

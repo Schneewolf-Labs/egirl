@@ -120,14 +120,16 @@ describe('empty response after tools', () => {
     expect(response.content).toBe('the tool returned nothing unusual')
   })
 
-  test('an empty FIRST response is not nudged (no tools ran)', async () => {
-    // That failure class belongs to the empty-response guard, not this nudge -- re-prompting
-    // "process the tool results above" when there are none would gaslight the model.
+  test('an empty FIRST response goes to the empty guard, not this nudge', async () => {
+    // Re-prompting "process the tool results above" when there are none would gaslight the
+    // model. The empty-response guard owns this class: plain identical retries, no message.
     let calls = 0
+    const seen: string[] = []
     const provider: LLMProvider = {
       name: 'stub',
-      async chat(_req: ChatRequest): Promise<ChatResponse> {
+      async chat(req: ChatRequest): Promise<ChatResponse> {
         calls++
+        seen.push(JSON.stringify(req.messages))
         return stubResponse({ content: '' })
       },
     }
@@ -137,7 +139,12 @@ describe('empty response after tools', () => {
       localProvider: provider,
       sessionId: 'test:empty-first',
     })
-    await agent.run('hello?')
-    expect(calls).toBe(1)
+    const response = await agent.run('hello?')
+    // output_tokens=5 in the stub: generated-but-empty, so the full retry budget applies.
+    expect(calls).toBe(3)
+    // No nudge was injected -- every attempt saw the identical request.
+    expect(new Set(seen).size).toBe(1)
+    expect(seen[0]).not.toContain('tool results')
+    expect(response.content).toBe('[The model returned an empty response.]')
   })
 })
