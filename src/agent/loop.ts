@@ -26,6 +26,7 @@ import {
 import type { AgentEventHandler } from './events'
 import { ConversationHistory } from './history'
 import { injectRecalledMemory } from './recall'
+import { isRepetitionDominated } from './repetition-guard'
 import type { SessionMutex } from './session-mutex'
 import { type ContextStatus, computeContextStatus } from './status'
 import { reportTokenBudget, TokenBudgetTracker } from './token-budget'
@@ -232,6 +233,21 @@ export class AgentLoop {
           continuationRetries < MAX_CONTINUATION_RETRIES &&
           response.content.length > 0
         ) {
+          // A repetition loop also finishes with finish_reason=length -- the model spent its
+          // whole budget echoing one fragment. Continuing would stitch MORE of the echo onto
+          // the answer (hermes's incident: one turn, 60k chars, 31 Discord messages). Abort
+          // the turn with what we have instead of asking for another round of it.
+          if (isRepetitionDominated(response.content)) {
+            log.warn(
+              'agent',
+              `Truncated response is repetition-dominated (${response.content.length} chars) — aborting continuation`,
+            )
+            finalContent =
+              `${accumulatedContent + response.content}\n\n` +
+              `[Response aborted: the model entered a repetition loop.]`
+            addMessage(this.context, { role: 'assistant', content: finalContent })
+            break
+          }
           continuationRetries++
           accumulatedContent += response.content
           log.info(
