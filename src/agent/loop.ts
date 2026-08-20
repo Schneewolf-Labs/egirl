@@ -28,6 +28,7 @@ import { ConversationHistory } from './history'
 import { injectRecalledMemory } from './recall'
 import { isRepetitionDominated } from './repetition-guard'
 import type { SessionMutex } from './session-mutex'
+import { SpiralDetector, turnSignature } from './spiral-guard'
 import { type ContextStatus, computeContextStatus } from './status'
 import { reportTokenBudget, TokenBudgetTracker } from './token-budget'
 import { runToolCalls } from './tool-runner'
@@ -157,6 +158,7 @@ export class AgentLoop {
     let lastThinking: string | undefined
     let isPlanning = !!planningMode
     const seenToolCalls = new Set<string>()
+    const spiral = new SpiralDetector()
     let continuationRetries = 0
     let accumulatedContent = ''
     let validationRetried = false
@@ -238,6 +240,23 @@ export class AgentLoop {
         }
 
         if (response.tool_calls && response.tool_calls.length > 0) {
+          // Cross-turn spiral: the model has now issued the same call with the same arguments
+          // enough times in a row that it is looping, not working (the RE case: reissuing the
+          // same execute_command). Break before running it again and burning the budget. Only
+          // tool-executing turns are counted -- the stranded, continuation and empty paths
+          // return identical responses by design and are already bounded by their own caps.
+          if (spiral.record(turnSignature(response.content, response.tool_calls))) {
+            log.warn(
+              'agent',
+              `Agent is repeating the same action across turns (turn ${turns}) — aborting run`,
+            )
+            finalContent =
+              `${accumulatedContent + response.content}\n\n` +
+              `[Run aborted: the agent began repeating the same action without progress.]`
+            addMessage(this.context, { role: 'assistant', content: response.content })
+            break
+          }
+
           await this.exclusive(() =>
             runToolCalls({
               response,
