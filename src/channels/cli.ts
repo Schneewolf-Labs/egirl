@@ -1,5 +1,6 @@
 import * as readline from 'readline'
 import type { AgentLoop } from '../agent'
+import { buildLearnPrompt } from '../agent/learn-prompt'
 import type { ThinkingConfig } from '../providers/types'
 import { handleCommand, SessionController } from '../session/controller'
 import { colors, DIM, RESET } from '../ui/theme'
@@ -28,10 +29,13 @@ export class CLIChannel implements Channel {
   private showThinking: boolean
   /** Queue, abort handle and mutable settings -- everything that outlives a single turn. */
   private session = new SessionController()
+  /** Target directory for /learn-authored skills; undefined disables the command. */
+  private skillsDir: string | undefined
 
-  constructor(agent: AgentLoop, options?: { showThinking?: boolean }) {
+  constructor(agent: AgentLoop, options?: { showThinking?: boolean; skillsDir?: string }) {
     this.agent = agent
     this.showThinking = options?.showThinking ?? true
+    this.skillsDir = options?.skillsDir
   }
 
   /** Outbound: print a background task result to stdout */
@@ -58,7 +62,7 @@ export class CLIChannel implements Channel {
       `\n${c.secondary}✦ egirl${RESET} ${DIM}— enter sends · esc interrupts · typing mid-turn queues · /exit quits${RESET}`,
     )
     console.log(
-      `${DIM}  /think /plan /context /compact /wipe /prompt /debug /auto /maxturns /reasoning /queue /settings${RESET}\n`,
+      `${DIM}  /think /plan /learn /context /compact /wipe /prompt /debug /auto /maxturns /reasoning /queue /settings${RESET}\n`,
     )
 
     this.prompt()
@@ -162,6 +166,18 @@ export class CLIChannel implements Channel {
       }
 
       let pending: string | undefined = trimmed
+      // /learn rewrites the input and then runs as an ordinary turn -- the agent does the
+      // distillation with its own tools, so interrupt/queue/status behave as in any turn.
+      if (trimmed === '/learn' || trimmed.startsWith('/learn ')) {
+        if (!this.skillsDir) {
+          console.log(
+            `${DIM}No skills directory configured — add [skills] dirs to egirl.toml.${RESET}\n`,
+          )
+          this.prompt()
+          return
+        }
+        pending = buildLearnPrompt(trimmed.slice('/learn'.length), this.skillsDir)
+      }
       while (pending !== undefined) {
         const signal = this.session.begin()
         // Escape aborts, and anything typed lands in the queue rather than in a buffer nobody
@@ -243,7 +259,7 @@ export class CLIChannel implements Channel {
 
 export function createCLIChannel(
   agent: AgentLoop,
-  options?: { showThinking?: boolean },
+  options?: { showThinking?: boolean; skillsDir?: string },
 ): CLIChannel {
   return new CLIChannel(agent, options)
 }

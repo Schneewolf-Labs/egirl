@@ -153,7 +153,10 @@ export async function runCLI(config: RuntimeConfig, args: string[]): Promise<voi
   }
 
   // Interactive CLI mode
-  const cli = createCLIChannel(agent, { showThinking: config.thinking.showThinking })
+  const cli = createCLIChannel(agent, {
+    showThinking: config.thinking.showThinking,
+    skillsDir: config.skills.dirs[0],
+  })
 
   // Set up background task runner if task store is available
   let taskRunner: ReturnType<typeof createTaskRunner> | undefined

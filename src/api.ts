@@ -1,4 +1,5 @@
 import type { AgentFactory, AgentLoop } from './agent'
+import { buildLearnPrompt } from './agent/learn-prompt'
 import type { RuntimeConfig } from './config'
 import type { SessionInfo } from './conversation'
 import type { MemoryCategory, MemoryManager } from './memory'
@@ -169,7 +170,14 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
           }
           const sessionId = (body.session_id as string | undefined) ?? 'api:default'
           const agent = getOrCreateAgent(sessionId, deps)
-          const { done, position } = enqueueRun(sessionId, () => agent.run(message))
+          // /learn works from every surface the same way: rewrite the input, run a normal
+          // turn. The agent distills and saves the skill with its own tools.
+          const skillsDir = deps.config?.skills.dirs[0]
+          const toRun =
+            skillsDir && (message === '/learn' || message.startsWith('/learn '))
+              ? buildLearnPrompt(message.slice('/learn'.length), skillsDir)
+              : message
+          const { done, position } = enqueueRun(sessionId, () => agent.run(toRun))
           const response = await done
           return json({
             content: response.content,
