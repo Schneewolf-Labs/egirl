@@ -52,7 +52,7 @@ export async function handlePlanCommand(message: string, ctx: CommandContext): P
     })
 
     if (!state.streamed && response.content) {
-      console.log(`\n${c.secondary}egirl>${RESET} ${response.content}\n`)
+      console.log(`\n${c.secondary}✦ egirl${RESET} ${response.content}\n`)
     }
 
     if (!response.isPlan) return
@@ -69,7 +69,7 @@ export async function handlePlanCommand(message: string, ctx: CommandContext): P
       })
 
       if (!execState.streamed && execResponse.content) {
-        console.log(`\n${c.secondary}egirl>${RESET} ${execResponse.content}\n`)
+        console.log(`\n${c.secondary}✦ egirl${RESET} ${execResponse.content}\n`)
       }
     } else {
       console.log(

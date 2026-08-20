@@ -14,7 +14,7 @@ import {
   handleThinkCommand,
   handleWipeCommand,
 } from './cli-commands'
-import { createCLIEventHandler } from './cli-events'
+import { createCLIEventHandler, renderQueuedMessage } from './cli-events'
 import { captureDuringRun } from './cli-live-input'
 import { contextBar, createStatusLine } from './cli-status'
 import type { Channel } from './types'
@@ -55,10 +55,10 @@ export class CLIChannel implements Channel {
 
     const c = colors()
     console.log(
-      `\n${c.primary}egirl CLI${RESET} ${DIM}— Type your message and press Enter. Type "/exit" to quit.${RESET}`,
+      `\n${c.secondary}✦ egirl${RESET} ${DIM}— enter sends · esc interrupts · typing mid-turn queues · /exit quits${RESET}`,
     )
     console.log(
-      `${DIM}Commands: /think <off|low|medium|high>, /plan <message>, /context, /compact, /wipe, /prompt, /debug, /clear, /exit${RESET}\n`,
+      `${DIM}  /think /plan /context /compact /wipe /prompt /debug /auto /maxturns /reasoning /queue /settings${RESET}\n`,
     )
 
     this.prompt()
@@ -134,7 +134,7 @@ export class CLIChannel implements Channel {
     if (!this.running || !this.rl) return
 
     const c = colors()
-    this.rl.question(`${c.primary}you>${RESET} `, async (input) => {
+    this.rl.question(`${c.primary}✦ you${RESET} `, async (input) => {
       if (!this.running) return
 
       const trimmed = input.trim()
@@ -169,10 +169,7 @@ export class CLIChannel implements Channel {
         // mode -- which makes it unusable until the window is closed.
         const keys = captureDuringRun(this.session, {
           onInterrupt: () => console.log(`\n${c.warning}interrupting…${RESET}`),
-          onQueued: (text) =>
-            console.log(
-              `${DIM}  queued: ${text.slice(0, 60)}${text.length > 60 ? '…' : ''}${RESET}`,
-            ),
+          onQueued: (text) => console.log(renderQueuedMessage(text)),
         })
 
         // 'waiting' rather than 'thinking': nothing has come back yet, so this is prefill,
@@ -194,7 +191,7 @@ export class CLIChannel implements Channel {
           if (this.session.wasInterrupted) {
             console.log(`\n${c.warning}stopped.${RESET}\n`)
           } else if (!state.streamed && response.content) {
-            console.log(`\n${c.secondary}egirl>${RESET} ${response.content}\n`)
+            console.log(`\n${c.secondary}✦ egirl${RESET} ${response.content}\n`)
           }
 
           log.debug('cli', `[${response.provider}]`)
@@ -222,7 +219,7 @@ export class CLIChannel implements Channel {
         // Anything typed during the turn runs now rather than waiting for another return --
         // a queued message that sits unseen is worse than one that was never accepted.
         pending = this.session.drain()
-        if (pending) console.log(`${c.accent}you>${RESET} ${pending}`)
+        if (pending) console.log(`${c.primary}✦ you${RESET} ${pending}`)
       }
 
       this.prompt()

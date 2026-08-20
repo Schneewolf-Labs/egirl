@@ -11,11 +11,39 @@ export interface CLIEventState {
   streamedThinking: boolean
 }
 
-function truncateResult(output: string, maxLen: number): string {
+/**
+ * A turn reads as a list of events, each opened by a bullet, with a tool's output hanging off
+ * its call rather than floating loose in the scrollback. The glyphs do the structural work so
+ * the text itself needs no prefixes.
+ *
+ * The shapes are Claude Code's -- bullet per event, elbow for attached output -- because that
+ * layout survives long sessions. The dressing is ours: vapor palette, a sparkle where the
+ * answer starts, a heart on messages the user slipped in mid-turn.
+ */
+const BULLET = '✦'
+const ELBOW = '⎿'
+const SPARK = '✧'
+const HEART = '♡'
+
+/** Result lines shown before the rest is summarized away. */
+const MAX_RESULT_LINES = 4
+
+/**
+ * Trim output to a few lines and say how many were withheld.
+ *
+ * By line rather than by character: a character cap cuts mid-token and leaves output that
+ * looks corrupted rather than shortened, and "+18 lines" tells you how much you are not
+ * seeing, which a trailing ellipsis does not.
+ */
+export function previewLines(
+  output: string,
+  maxLines: number = MAX_RESULT_LINES,
+): { lines: string[]; hidden: number } {
   const trimmed = output.trim()
-  if (!trimmed) return ''
-  if (trimmed.length <= maxLen) return trimmed
-  return `${trimmed.substring(0, maxLen)}...`
+  if (!trimmed) return { lines: [], hidden: 0 }
+  const all = trimmed.split('\n')
+  if (all.length <= maxLines) return { lines: all, hidden: 0 }
+  return { lines: all.slice(0, maxLines), hidden: all.length - maxLines }
 }
 
 function formatArgs(args: Record<string, unknown>): string {
@@ -61,7 +89,7 @@ export function createCLIEventHandler(
       status?.set('idle')
       if (!state.streamedThinking) {
         const c = colors()
-        process.stdout.write(`${DIM}${c.info}[thinking]${RESET}${DIM}\n`)
+        process.stdout.write(`\n${c.info}${SPARK} thinking${RESET}${DIM}\n`)
         state.streamedThinking = true
       }
       process.stdout.write(`${DIM}${token}${RESET}`)
@@ -73,15 +101,11 @@ export function createCLIEventHandler(
       if (state.streamedThinking) return
       if (!state.showThinking || !text.trim()) return
       const c = colors()
-      const lines = text.trim().split('\n')
-      const maxLines = 20
-      const display =
-        lines.length > maxLines
-          ? [...lines.slice(0, maxLines), `  ... (${lines.length - maxLines} more lines)`].join(
-              '\n',
-            )
-          : text.trim()
-      process.stdout.write(`${DIM}${c.info}[thinking]${RESET}${DIM}\n${display}${RESET}\n`)
+      const { lines, hidden } = previewLines(text, 20)
+      const display = hidden
+        ? [...lines, `${DIM}… +${hidden} lines${RESET}`].join('\n')
+        : lines.join('\n')
+      process.stdout.write(`\n${c.info}${SPARK} thinking${RESET}\n${DIM}${display}${RESET}\n`)
     },
 
     onToolCallStart(calls: ToolCall[]) {
@@ -89,12 +113,16 @@ export function createCLIEventHandler(
       const c = colors()
       for (const call of calls) {
         const args = formatArgs(call.arguments)
+        // Bullet in the accent, name carrying its own weight, args dimmed: at a glance the
+        // scrollback reads as a list of what she did, not a wall of grey.
         if (args.includes('\n')) {
           process.stdout.write(
-            `${DIM}  ${c.accent}>${RESET}${DIM} ${call.name}(\n${args}\n  )${RESET}\n`,
+            `\n${c.accent}${BULLET}${RESET} ${c.primary}${call.name}${RESET}${DIM}(\n${args}\n  )${RESET}\n`,
           )
         } else {
-          process.stdout.write(`${DIM}  ${c.accent}>${RESET}${DIM} ${call.name}(${args})${RESET}\n`)
+          process.stdout.write(
+            `\n${c.accent}${BULLET}${RESET} ${c.primary}${call.name}${RESET}${DIM}(${args})${RESET}\n`,
+          )
         }
       }
       // Now the wait is the tool, not the model — say which one is running.
@@ -104,14 +132,21 @@ export function createCLIEventHandler(
     onToolCallComplete(_callId: string, name: string, result: ToolResult) {
       status?.clear()
       const c = colors()
-      // Named `outcome` rather than `status`: the status line is in scope here.
-      const outcome = result.success ? `${c.success}ok${RESET}` : `${c.error}err${RESET}`
-      const preview = truncateResult(result.output, 200)
-      process.stdout.write(`${DIM}  < ${name} ${outcome}${RESET}\n`)
-      if (preview) {
-        for (const line of preview.split('\n')) {
-          process.stdout.write(`${DIM}    ${line}${RESET}\n`)
+      const { lines, hidden } = previewLines(result.output)
+      // Output hangs off the call it belongs to. Success needs no announcement -- the output
+      // is the announcement -- but a failure gets named in the error color.
+      const head = result.success ? '' : ` ${c.error}${name} failed${RESET}`
+      if (lines.length === 0) {
+        process.stdout.write(
+          `  ${c.muted}${ELBOW}${RESET}${head}${head ? '' : ` ${DIM}(no output)${RESET}`}\n`,
+        )
+      } else {
+        process.stdout.write(`  ${c.muted}${ELBOW}${RESET}${head}${head ? '\n' : ''}`)
+        for (const [i, line] of lines.entries()) {
+          const pad = i === 0 && !head ? ' ' : '    '
+          process.stdout.write(`${pad}${DIM}${line}${RESET}\n`)
         }
+        if (hidden) process.stdout.write(`    ${c.muted}… +${hidden} lines${RESET}\n`)
       }
       // Control returns to the model, which will deliberate again before its next move.
       status?.set('waiting')
@@ -125,7 +160,7 @@ export function createCLIEventHandler(
         const c = colors()
         // Close the reasoning block so the answer does not run on from the last thought.
         if (state.streamedThinking) process.stdout.write('\n')
-        process.stdout.write(`\n${c.secondary}egirl>${RESET} `)
+        process.stdout.write(`\n${c.secondary}${BULLET} egirl${RESET} `)
         state.streamed = true
       }
       process.stdout.write(token)
@@ -139,4 +174,17 @@ export function createCLIEventHandler(
   }
 
   return { handler, state }
+}
+
+/**
+ * A message the user typed while the turn was still running.
+ *
+ * Rendered inside the turn with a heart, the way Claude Code surfaces mid-turn input --
+ * acknowledged where it happened, picked up when the turn ends. The heart is not decoration:
+ * it marks the one line in the event stream that came from the user.
+ */
+export function renderQueuedMessage(text: string): string {
+  const c = colors()
+  const shown = text.length > 60 ? `${text.slice(0, 60)}…` : text
+  return `  ${c.secondary}${HEART}${RESET} ${DIM}queued:${RESET} ${shown}`
 }

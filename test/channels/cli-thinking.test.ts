@@ -92,7 +92,7 @@ describe('live reasoning in the CLI', () => {
       handler.onThinkingToken?.('weigh')
       handler.onThinkingToken?.('ing it')
     })
-    expect(strip(out)).toContain('[thinking]')
+    expect(strip(out)).toContain('✧ thinking')
     expect(strip(out)).toContain('weighing it')
   })
 
@@ -132,7 +132,7 @@ describe('live reasoning in the CLI', () => {
       handler.onToken?.('391')
     })
     const plain = strip(out)
-    expect(plain.indexOf('egirl>')).toBeGreaterThan(plain.indexOf('...so 391'))
-    expect(plain).toContain('\n\negirl>')
+    expect(plain.indexOf('✦ egirl')).toBeGreaterThan(plain.indexOf('...so 391'))
+    expect(plain).toContain('\n\n✦ egirl')
   })
 })
