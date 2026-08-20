@@ -10,7 +10,7 @@ import type {
   Tokenizer,
 } from '../providers/types'
 import type { ToolExecutor } from '../tools'
-import { hasStrandedToolCall } from '../tools/format'
+import { hasStrandedToolCall, stripStrandedToolCalls } from '../tools/format'
 import type { TranscriptLogger } from '../tracking/transcript'
 import { log } from '../util/logger'
 import { runAutoExtraction } from './background'
@@ -359,8 +359,14 @@ export class AgentLoop {
           break
         }
 
-        finalContent = accumulatedContent + response.content
-        addMessage(this.context, { role: 'assistant', content: response.content })
+        // Recovery exhausted but markup still present: strip it rather than print raw XML
+        // as the reply. The note says a call was dropped; the broken JSON helps nobody.
+        const finalPiece = hasStrandedToolCall(response.content)
+          ? stripStrandedToolCalls(response.content)
+          : response.content
+
+        finalContent = accumulatedContent + finalPiece
+        addMessage(this.context, { role: 'assistant', content: finalPiece })
 
         if (events?.onPostResponseValidation && !validationRetried) {
           const validation = await events.onPostResponseValidation(finalContent)

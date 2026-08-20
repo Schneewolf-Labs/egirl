@@ -9,7 +9,7 @@
 
 import { describe, expect, test } from 'bun:test'
 import { parseJsonToolCalls } from '../../src/tools/dialects'
-import { hasStrandedToolCall, hasToolCalls } from '../../src/tools/format'
+import { hasStrandedToolCall, hasToolCalls, stripStrandedToolCalls } from '../../src/tools/format'
 
 describe('doubled brace-quote before the first argument', () => {
   // Emitted verbatim by huihui-qwen3.8-27b-q8 on a ~113k-token context: the call is correct
@@ -63,5 +63,42 @@ describe('hasStrandedToolCall', () => {
 
   test('prose that merely mentions tool calls is not stranded', () => {
     expect(hasStrandedToolCall('I could not emit a valid tool call for that.')).toBe(false)
+  })
+})
+
+describe('missing name key', () => {
+  // Emitted verbatim by Zero (huihui-qwen3.8-q8) on 2026-08-20, persistently enough that
+  // three reissue nudges could not shake it: the "name": key dropped, bare value first.
+  const nameless = `<tool_call>\n{"execute_command", "arguments": {"command": "find /home/zero/.egirl -maxdepth 3 | head -80"}}\n</tool_call>`
+
+  test('the call is recovered with its name and arguments', () => {
+    const { toolCalls } = parseJsonToolCalls(nameless)
+    expect(toolCalls).toHaveLength(1)
+    expect(toolCalls[0]?.name).toBe('execute_command')
+    expect(toolCalls[0]?.arguments.command).toBe('find /home/zero/.egirl -maxdepth 3 | head -80')
+  })
+
+  test('a mangled ARGUMENT object is never rewritten into a call name', () => {
+    // The same malformation inside arguments must not invent {"name":"command"...}: the
+    // repair is anchored on a following "arguments" key, which this does not have.
+    const argMangled = `<tool_call>\n{"name":"noop","arguments":{"command", "ls"}}\n</tool_call>`
+    const { toolCalls } = parseJsonToolCalls(argMangled)
+    expect(toolCalls.filter((c) => c.name === 'command')).toHaveLength(0)
+  })
+})
+
+describe('stripStrandedToolCalls', () => {
+  test('unparseable markup is replaced with an honest note', () => {
+    const junk = 'I will check.\n<tool_call>\n{"nmae": ???}\n</tool_call>'
+    const out = stripStrandedToolCalls(junk)
+    expect(out).toContain('I will check.')
+    expect(out).toContain('failed to parse')
+    expect(out).not.toContain('<tool_call>')
+    expect(out).not.toContain('nmae')
+  })
+
+  test('an unclosed block at end of content is stripped too', () => {
+    const out = stripStrandedToolCalls('half a call: <tool_call>\n{"broken')
+    expect(out).not.toContain('{"broken')
   })
 })

@@ -141,6 +141,15 @@ const NAME_QUOTE_RE = /"name"\s*:\s*"?([a-zA-Z_][a-zA-Z0-9_]*)"?\s*([,}])/
  */
 const BRACE_DUP_RE = /\{\s*"\{"(?!\s*:)/g
 
+/**
+ * The name KEY dropped entirely -- `{"execute_command", "arguments": {...}}` for
+ * `{"name": "execute_command", "arguments": {...}}`. Observed from the same q8 27B under
+ * context pressure, persistently enough that three reissue nudges could not shake it.
+ * Anchored on the following "arguments" key, so a mangled *argument* object (`{"command",
+ * "ls"}`) can never be rewritten into a fake call name.
+ */
+const BARE_NAME_RE = /\{\s*"([a-zA-Z_][a-zA-Z0-9_]*)"\s*,\s*(?="arguments"\s*:)/g
+
 function parseCallObject(jsonStr: string): Record<string, unknown> | undefined {
   const attempt = (text: string): Record<string, unknown> | undefined => {
     try {
@@ -170,7 +179,11 @@ function parseCallObject(jsonStr: string): Record<string, unknown> | undefined {
   // A legitimate object keyed on `{` would be `{"{":`, so the lookahead leaves it alone; and
   // as with every repair here, the result is used only if it parses into a named call.
   const braceFixed = jsonStr.replace(BRACE_DUP_RE, '{"')
-  return braceFixed === jsonStr ? undefined : attempt(braceFixed)
+  const braceResult = braceFixed === jsonStr ? undefined : attempt(braceFixed)
+  if (braceResult) return braceResult
+
+  const bareNameFixed = jsonStr.replace(BARE_NAME_RE, '{"name":"$1",')
+  return bareNameFixed === jsonStr ? undefined : attempt(bareNameFixed)
 }
 
 export function parseJsonToolCalls(content: string): {
@@ -191,7 +204,10 @@ export function parseJsonToolCalls(content: string): {
     if (candidates.length === 0 || !candidates.some((o) => parseCallObject(o))) {
       // A stray brace-quote desynchronizes extraction the same way, so it has to be repaired
       // at this level too -- BRACE_DUP_RE alone inside parseCallObject never gets a chance.
-      const repaired = chunk.replace(NAME_QUOTE_RE, '"name":"$1"$2').replace(BRACE_DUP_RE, '{"')
+      const repaired = chunk
+        .replace(NAME_QUOTE_RE, '"name":"$1"$2')
+        .replace(BRACE_DUP_RE, '{"')
+        .replace(BARE_NAME_RE, '{"name":"$1",')
       if (repaired !== chunk) candidates = jsonObjects(repaired)
     }
     for (const objText of candidates) {

@@ -92,3 +92,18 @@ export function hasToolCalls(content: string): boolean {
 export function hasStrandedToolCall(content: string): boolean {
   return content.includes('<tool_call>') && !hasToolCalls(content)
 }
+
+/**
+ * Remove tool-call markup that survived every repair and reissue attempt.
+ *
+ * Called when recovery gives up: the alternative is printing raw XML as the agent's reply.
+ * The replacement note is honest about what happened without dumping the broken call.
+ */
+export function stripStrandedToolCalls(content: string): string {
+  return content
+    .replace(
+      /<tool_call>[\s\S]*?(<\/tool_call>|$)/g,
+      '[a tool call failed to parse and was dropped]',
+    )
+    .trim()
+}
