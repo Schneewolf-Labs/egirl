@@ -262,6 +262,11 @@ export class ConversationStore {
     })()
   }
 
+  /** Rows changed by the most recent direct statement, excluding trigger sub-changes. */
+  private directChanges(): number {
+    return (this.db.query('SELECT changes() as c').get() as { c: number }).c
+  }
+
   compact(options: { maxAgeDays: number; maxMessages: number }): CompactResult {
     const cutoff = Date.now() - options.maxAgeDays * 86_400_000
     let sessionsDeleted = 0
@@ -274,8 +279,11 @@ export class ConversationStore {
         .all(cutoff) as Array<{ id: string }>
 
       for (const { id } of expired) {
-        const msgResult = this.db.run('DELETE FROM messages WHERE session_id = ?', [id])
-        messagesDeleted += msgResult.changes
+        this.db.run('DELETE FROM messages WHERE session_id = ?', [id])
+        // changes() rather than run().changes: the FTS delete trigger writes index rows per
+        // deleted message (measured 7 reported for 1 real), and Bun's counter includes
+        // trigger and shadow-table effects. SQL changes() counts only the direct DELETE.
+        messagesDeleted += this.directChanges()
         this.db.run('DELETE FROM sessions WHERE id = ?', [id])
         sessionsDeleted++
       }
@@ -292,7 +300,7 @@ export class ConversationStore {
 
       for (const { session_id, count } of oversized) {
         const excess = count - options.maxMessages
-        const result = this.db.run(
+        this.db.run(
           `
           DELETE FROM messages
           WHERE id IN (
@@ -304,7 +312,7 @@ export class ConversationStore {
         `,
           [session_id, excess],
         )
-        messagesDeleted += result.changes
+        messagesDeleted += this.directChanges()
       }
     })()
 
