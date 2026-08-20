@@ -80,3 +80,15 @@ export function formatToolCall(name: string, args: Record<string, unknown>): str
 export function hasToolCalls(content: string): boolean {
   return toolDialect().parseToolCalls(content).toolCalls.length > 0
 }
+
+/**
+ * Tool-call markup that the parser could not turn into a call.
+ *
+ * Worth telling apart from ordinary prose, because the two want opposite handling: prose is
+ * the model's answer, while a stranded call is an action that was attempted and lost. Treated
+ * as an answer it ends the turn and prints raw markup at the user -- which reads, from the
+ * outside, as the model thinking, calling a tool, and then simply stopping.
+ */
+export function hasStrandedToolCall(content: string): boolean {
+  return content.includes('<tool_call>') && !hasToolCalls(content)
+}

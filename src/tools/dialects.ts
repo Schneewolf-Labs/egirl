@@ -135,6 +135,12 @@ function jsonObjects(text: string): string[] {
  */
 const NAME_QUOTE_RE = /"name"\s*:\s*"?([a-zA-Z_][a-zA-Z0-9_]*)"?\s*([,}])/
 
+/**
+ * A doubled brace-quote before the first key -- `{"{"command": "ls"}` for `{"command": "ls"}`.
+ * The lookahead spares a legitimate object keyed on `{`, which would be `{"{":`.
+ */
+const BRACE_DUP_RE = /\{\s*"\{"(?!\s*:)/g
+
 function parseCallObject(jsonStr: string): Record<string, unknown> | undefined {
   const attempt = (text: string): Record<string, unknown> | undefined => {
     try {
@@ -153,7 +159,18 @@ function parseCallObject(jsonStr: string): Record<string, unknown> | undefined {
   if (singleQuoted) return singleQuoted
 
   const nameFixed = jsonStr.replace(NAME_QUOTE_RE, '"name":"$1"$2')
-  return nameFixed === jsonStr ? undefined : attempt(nameFixed)
+  const nameResult = nameFixed === jsonStr ? undefined : attempt(nameFixed)
+  if (nameResult) return nameResult
+
+  // A doubled brace-quote before the first argument key -- `"arguments":{"{"command": "ls"}}`
+  // instead of `"arguments":{"command": "ls"}`. Observed from a q8 27B on a long context: the
+  // call is entirely well-formed apart from those two characters, and without this the whole
+  // action is discarded and the raw markup surfaces as the model's answer.
+  //
+  // A legitimate object keyed on `{` would be `{"{":`, so the lookahead leaves it alone; and
+  // as with every repair here, the result is used only if it parses into a named call.
+  const braceFixed = jsonStr.replace(BRACE_DUP_RE, '{"')
+  return braceFixed === jsonStr ? undefined : attempt(braceFixed)
 }
 
 export function parseJsonToolCalls(content: string): {
@@ -172,7 +189,9 @@ export function parseJsonToolCalls(content: string): {
     // "name" key and a bare identifier, so it cannot invent a call out of prose.
     let candidates = jsonObjects(chunk)
     if (candidates.length === 0 || !candidates.some((o) => parseCallObject(o))) {
-      const repaired = chunk.replace(NAME_QUOTE_RE, '"name":"$1"$2')
+      // A stray brace-quote desynchronizes extraction the same way, so it has to be repaired
+      // at this level too -- BRACE_DUP_RE alone inside parseCallObject never gets a chance.
+      const repaired = chunk.replace(NAME_QUOTE_RE, '"name":"$1"$2').replace(BRACE_DUP_RE, '{"')
       if (repaired !== chunk) candidates = jsonObjects(repaired)
     }
     for (const objText of candidates) {

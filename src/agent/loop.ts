@@ -10,6 +10,7 @@ import type {
   Tokenizer,
 } from '../providers/types'
 import type { ToolExecutor } from '../tools'
+import { hasStrandedToolCall } from '../tools/format'
 import type { TranscriptLogger } from '../tracking/transcript'
 import { log } from '../util/logger'
 import { runAutoExtraction } from './background'
@@ -132,6 +133,7 @@ export class AgentLoop {
     let continuationRetries = 0
     let accumulatedContent = ''
     let validationRetried = false
+    let strandedToolRetried = false
 
     // Persistence and transcript closure run in `finally` so a provider error
     // mid-run doesn't lose the user message and tool activity already in context.
@@ -243,6 +245,24 @@ export class AgentLoop {
             content:
               '[System: Your previous response was cut off. Continue exactly where you left off.]',
           })
+          continue
+        }
+
+        // The model tried to act, but its call did not parse -- the markup is still sitting
+        // in the content. Accepting it as an answer would end the turn and print raw XML at
+        // the user, discarding the action silently. Hand it back once and let it retry; a
+        // model that mangled its JSON will usually get it right the second time.
+        if (!strandedToolRetried && hasStrandedToolCall(response.content)) {
+          strandedToolRetried = true
+          log.info('agent', 'Tool call could not be parsed; asking the model to reissue it')
+          addMessage(this.context, { role: 'assistant', content: response.content })
+          addMessage(this.context, {
+            role: 'user',
+            content:
+              '[System: Your last tool call could not be parsed and was not executed. Reissue it as a single <tool_call> block containing valid JSON: {"name": "<tool>", "arguments": {...}}. Do not repeat this notice.]',
+          })
+          accumulatedContent = ''
+          continuationRetries = 0
           continue
         }
 
