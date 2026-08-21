@@ -1,35 +1,38 @@
-# egirl — Local AI that Drives Code Agents
+# egirl — A Local AI That Runs Its Own Loop
 
 ## What This Is
 
-egirl is a long-running local AI agent that acts as the **human in the loop** for code agents. The local LLM plans, remembers, supervises, and delegates; Claude Code or Codex does the heavy engineering work. Around that core sits memory, a toolbelt shaped like a human's hands (shell, files, git, browser, web), and a couple of ways to talk to it (CLI + Discord).
+egirl is a long-running local AI agent built on one premise: **the agent is the human in the loop.** In an ordinary harness a person supplies the judgment the model lacks — when to stop, when to keep going, when the work has drifted, when to write things down, when to ask for help. Run the agent unattended and every one of those becomes a gap that has to be real code. egirl is that code: a single instance you point at a goal, leave alone for days, and that either finishes it or comes back with a specific question — on owned hardware, where compute is not the constraint. It runs indefinitely by default and stops only for reasons that genuinely warrant stopping.
+
+It is a capable local operator that does the work itself. Around that core sits the autonomy engine — unbounded runs, consolidation-break checkpoints, mechanical failure detectors (stuck-inference abort, reasoning/repeat spiral), context recycle-from-NOTES, and `report`-to-a-supervisor at the edge of its own authority — plus long-running memory, a toolbelt shaped like a human's hands (shell, files, git, browser, web), and several ways to talk to it (CLI, Discord, XMPP, HTTP API). `code_agent` (Claude Code / Codex) is one tool among many for handing off engineering work — available, not central. See `docs/autonomy-loop.md` for the control model.
 
 Single user. Single operator model. No cloud escalation, no routing decisions — the local LLM is the operator, and it escalates to *tools*, not to other models.
 
 ## The Mental Model
 
-> **One local LLM is the operator. It escalates to tools, not to other models. The most important tool is `code_agent`.**
+> **One local LLM is the operator. It does the work and runs its own loop. It escalates to tools, not to other models.**
 
-If you ever catch yourself adding "what if we route this to a bigger model" logic, stop. That's not what this is. If the local model can't do something itself, it calls `code_agent` for code work, or `execute_command` / `browser_*` / `web_research` / `git_*` for everything else.
+If you ever catch yourself adding "what if we route this to a bigger model" logic, stop. That's not what this is. If the local model can't do something itself, it calls a tool — `execute_command` / `browser_*` / `web_research` / `git_*` for the work, `report` to reach a supervisor (human or peer agent) at the edge of its authority, and `code_agent` for a code handoff when one actually earns its keep. For a capable operator, delegation mostly costs context continuity; the lever is a stronger operator, not a delegation hop.
 
 ## Purpose
 
 egirl is built for one person at Schneewolf Labs. It behaves like a competent colleague who:
 - Remembers what you've been working on
-- Knows how to drive a configured code agent for real project work
+- Can be pointed at a goal and left to run it — checkpointing to notes, surviving its own context window, and reporting back when it hits a real decision or finishes
 - Can run shell commands, read/write files, interact with git and GitHub, browse the web
+- Knows how to drive a configured code agent when a code handoff earns its keep
 - Wakes up on a cron to check in on things
-- Talks back through Discord DMs or the terminal
+- Talks back through Discord DMs, XMPP, or the terminal
 
 Feature priorities:
-- **Build**: Anything that makes local → code agent delegation better, or that makes the long-running memory richer.
+- **Build**: Anything that makes an instance run longer and more autonomously (the loop, checkpointing, context survival, supervision), that makes the long-running memory richer, or that makes local → code agent delegation better when it's warranted.
 - **Skip**: Generic assistant features (weather, jokes, trivia). Multi-model routing. Multi-user anything. Hypothetical future integrations.
-- **Prioritize**: Depth over breadth. One code-agent delegation flow that works well beats five half-wired remote providers.
+- **Prioritize**: Depth over breadth. One autonomy loop that holds over days beats five half-wired remote providers.
 
 ## Design Philosophy
 
 1. **Local LLM is the operator.** No model routing, no escalation to remote LLMs. Delegate to *tools* (code_agent, execute_command, browser_*) when the local model isn't the right executor.
-2. **Long-running by design.** Memory survives restarts. Cron wakes it up. Conversations persist.
+2. **Long-running and autonomous by design.** Runs are unbounded and self-managing: checkpoint to notes, recycle context from disk, stop on a real mechanical failure or a real decision — not a turn counter. Memory survives restarts. Cron wakes it up. Conversations persist.
 3. **One user, one cluster.** No auth, no pairing, no multi-user anything.
 4. **Flat and readable.** Minimal abstraction. If you can grep for it, don't wrap it.
 5. **Steal good ideas.** OpenClaw's skill format: yes. Their 50-layer gateway abstraction: no.
@@ -43,7 +46,7 @@ Feature priorities:
 | Local LLM | llama.cpp HTTP server (OpenAI-compatible API) |
 | Code agent | Claude Agent SDK or interactive Codex CLI (subscription auth) |
 | Database | `bun:sqlite` for memory, conversations, tasks |
-| Embeddings | Qwen3-VL-Embedding served via Python (see `services/embeddings/`) |
+| Embeddings | `Qwen/Qwen3-VL-Embedding-2B` (2048-dim), served via Python CPU-only; launched by `scripts/serve-embeddings.sh` → `embedding-server/serve-embedding.py` |
 | Discord | `discord.js` |
 | Browser | `playwright` |
 | Config | TOML (`smol-toml`), validated with TypeBox |
