@@ -169,6 +169,7 @@ const baseProperties = {
       max_messages: Type.Number({ default: 1000 }),
       compact_on_startup: Type.Boolean({ default: true }),
       context_compaction: Type.Boolean({ default: true }),
+      consolidation_interval: Type.Number({ default: 0 }),
     }),
   ),
 
@@ -508,6 +509,8 @@ export interface RuntimeConfig {
     maxMessages: number
     compactOnStartup: boolean
     contextCompaction: boolean
+    /** Turns between consolidation-break nudges (0 = off). See docs/autonomy-loop.md. */
+    consolidationInterval: number
   }
   memory: {
     proactiveRetrieval: boolean

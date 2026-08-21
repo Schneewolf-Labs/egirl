@@ -227,6 +227,7 @@ const defaultToml: EgirlConfig = {
     max_messages: 1000,
     compact_on_startup: true,
     context_compaction: true,
+    consolidation_interval: 0,
   },
   skills: {
     dirs: ['~/.egirl/skills', '{workspace}/skills'],
@@ -335,6 +336,7 @@ export function loadConfig(options: LoadConfigOptions = {}): RuntimeConfig {
       maxMessages: toml.conversation?.max_messages ?? 1000,
       compactOnStartup: toml.conversation?.compact_on_startup ?? true,
       contextCompaction: toml.conversation?.context_compaction ?? true,
+      consolidationInterval: toml.conversation?.consolidation_interval ?? 0,
     },
     channels: {},
     safety: {

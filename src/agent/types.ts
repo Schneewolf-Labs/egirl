@@ -23,6 +23,12 @@ export interface AgentLoopOptions {
    * a vision-enabled server sees them and a text-only one degrades to the text.
    */
   images?: string[]
+  /**
+   * Turns between consolidation-break nudges (0 = off). Overrides the config default for this
+   * run. A long autonomous task sets this; an interactive chat leaves it off. See
+   * docs/autonomy-loop.md.
+   */
+  consolidationInterval?: number
 }
 
 export interface AgentResponse {

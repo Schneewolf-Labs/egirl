@@ -167,6 +167,9 @@ export class AgentLoop {
     let toolsRan = false
     let emptyRetries = 0
     let prevEmptyWasZeroOutput = false
+    // Turns between consolidation breaks (0 = off). Per-run option wins over config default.
+    const consolidationInterval =
+      options.consolidationInterval ?? this.config.conversation.consolidationInterval ?? 0
 
     // Persistence and transcript closure run in `finally` so a provider error
     // mid-run doesn't lose the user message and tool activity already in context.
@@ -178,6 +181,19 @@ export class AgentLoop {
         }
 
         turns++
+
+        // Consolidation break: every `consolidationInterval` turns, inject one checkpoint turn
+        // telling the agent to externalize what it has learned before continuing. This keeps
+        // the durable record current (so an interruption loses nothing), breaks a reasoning
+        // rut by forcing an act-and-continue, and — most importantly — creates the restore
+        // point that context recycling depends on. See docs/autonomy-loop.md.
+        if (consolidationInterval > 0 && turns > 1 && (turns - 1) % consolidationInterval === 0) {
+          addMessage(this.context, {
+            role: 'user',
+            content:
+              '[System: Checkpoint. Pause new work and consolidate — write everything you have learned since your last checkpoint to your durable notes, and save any artifacts to files. Assume this run could end at any moment: nothing important should live only in this conversation. Then continue where you left off.]',
+          })
+        }
 
         const tools = isPlanning ? [] : this.toolExecutor.getDefinitions()
 
