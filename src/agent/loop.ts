@@ -38,6 +38,13 @@ import type { AgentLoopDeps, AgentLoopOptions, AgentResponse } from './types'
 const MAX_CONTINUATION_RETRIES = 3
 
 /**
+ * Hard turn ceiling for an unbounded run. Not a normal stop — the failure detectors and the
+ * agent's own conclusion end a healthy run long before this. Reaching it means every detector
+ * failed to catch a runaway, which is logged as an error. High enough to never bound real work.
+ */
+const UNBOUNDED_SAFETY_CEILING = 10_000
+
+/**
  * Cap on each recovery nudge (stranded tool call, empty-after-tools). Hermes uses 3; one was
  * measurably not enough -- a 27B that mangles a call under context pressure often needs a
  * second clean look at the instruction.
@@ -111,7 +118,12 @@ export class AgentLoop {
   private async doRun(userMessage: string, options: AgentLoopOptions): Promise<AgentResponse> {
     await this.compactor.drain()
 
-    const { maxTurns = 10, events, planningMode, signal } = options
+    const { events, planningMode, signal } = options
+    // Unbounded runs replace the turn cap with a far-off safety ceiling: the run is meant to
+    // end on a mechanical failure, a semantic report, or a human — not an artificial count.
+    // The ceiling is a backstop only; hitting it means a detector that should have fired
+    // didn't, which is a bug, not a normal exit. See docs/autonomy-loop.md.
+    const maxTurns = options.unbounded ? UNBOUNDED_SAFETY_CEILING : (options.maxTurns ?? 10)
     const turnStartedAt = Date.now()
 
     const thinking: ThinkingConfig | undefined =
@@ -463,7 +475,16 @@ export class AgentLoop {
       }
 
       if (turns >= maxTurns && !finalContent && !signal?.aborted) {
-        log.warn('agent', `Exhausted max turns (${maxTurns}) without a final response`)
+        if (options.unbounded) {
+          // The safety ceiling is not a normal exit: a healthy unbounded run ends on a
+          // failure detector or its own conclusion. Reaching it means one didn't fire.
+          log.error(
+            'agent',
+            `Unbounded run hit the ${UNBOUNDED_SAFETY_CEILING}-turn safety ceiling — a failure detector should have stopped it sooner`,
+          )
+        } else {
+          log.warn('agent', `Exhausted max turns (${maxTurns}) without a final response`)
+        }
         finalContent = await this.forceFinalResponse(totalUsage, thinking, events, signal)
         events?.onResponseComplete?.()
       }

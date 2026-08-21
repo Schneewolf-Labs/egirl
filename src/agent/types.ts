@@ -29,6 +29,12 @@ export interface AgentLoopOptions {
    * docs/autonomy-loop.md.
    */
   consolidationInterval?: number
+  /**
+   * Run without a normal turn cap. `maxTurns` is ignored in favour of a far-off safety
+   * ceiling; the run ends on a mechanical failure, a semantic report, or its own conclusion.
+   * For long autonomous tasks. See docs/autonomy-loop.md.
+   */
+  unbounded?: boolean
 }
 
 export interface AgentResponse {
