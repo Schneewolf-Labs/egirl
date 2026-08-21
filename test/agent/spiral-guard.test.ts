@@ -128,3 +128,81 @@ describe('AgentLoop aborts a spiraling run', () => {
     expect(response.content).toBe('done, all three steps complete')
   })
 })
+
+// ---------------------------------------------------------------------------
+// Reasoning-loop detection (within-inference thinking spiral).
+// ---------------------------------------------------------------------------
+import { isReasoningLooping } from '../../src/agent/spiral-guard'
+
+describe('isReasoningLooping', () => {
+  test('a thinking block that loops on one fragment is caught', () => {
+    const loop = 'Let me reconsider the RFH header offset again to be certain of the layout. '
+    expect(isReasoningLooping(loop.repeat(30))).toBe(true)
+  })
+
+  test('varied genuine reasoning is not a loop', () => {
+    const real = Array.from(
+      { length: 25 },
+      (_, i) => `At offset ${i * 4} the field is a ${i % 2 ? 'length' : 'pointer'} of ${i} bytes.`,
+    ).join(' ')
+    expect(isReasoningLooping(real)).toBe(false)
+  })
+
+  test('absent or short thinking is never a loop', () => {
+    expect(isReasoningLooping(undefined)).toBe(false)
+    expect(isReasoningLooping('hmm, let me think')).toBe(false)
+  })
+})
+
+describe('turnSignature reasoning fingerprint', () => {
+  test('same content + calls but different thinking do not collide', () => {
+    const a = turnSignature(
+      'checking',
+      [{ name: 'x', arguments: {} }],
+      'because the header is 7 bytes',
+    )
+    const b = turnSignature(
+      'checking',
+      [{ name: 'x', arguments: {} }],
+      'because the offset is wrong',
+    )
+    expect(a).not.toBe(b)
+  })
+
+  test('identical reasoning across turns collides even with drifting content', () => {
+    const think = 'The type-1 payload must be RLE because the zeros cluster at the start.'
+    const a = turnSignature('step one', [{ name: 'x', arguments: {} }], think)
+    const b = turnSignature('step one', [{ name: 'x', arguments: {} }], think)
+    expect(a).toBe(b)
+  })
+
+  test('empty turn signature is still ignored by the detector', () => {
+    const d = new SpiralDetector()
+    const empty = turnSignature('', undefined, '')
+    expect(d.record(empty)).toBe(false)
+    expect(d.record(empty)).toBe(false)
+    expect(d.record(empty)).toBe(false)
+  })
+})
+
+describe('AgentLoop aborts a within-turn reasoning loop', () => {
+  test('a looping thinking block ends the run on the first offending turn', async () => {
+    const loop = 'I should re-examine the RFD header once more to be absolutely sure. '
+    const provider: LLMProvider = {
+      name: 'stub',
+      async chat(_req: ChatRequest): Promise<ChatResponse> {
+        return stubResponse({ content: 'still working', thinking: loop.repeat(30) })
+      },
+    }
+    const agent = new AgentLoop({
+      config: makeConfig(makeWorkspace()),
+      toolExecutor: makeExecutorWithNoop(),
+      localProvider: provider,
+      sessionId: 'test:reasoning-loop',
+    })
+    const response = await agent.run('analyze it', { maxTurns: 40 })
+    expect(response.content).toContain(
+      "[Run aborted: the agent's reasoning entered a repetition loop.]",
+    )
+  })
+})
