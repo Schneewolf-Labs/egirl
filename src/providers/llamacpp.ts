@@ -181,6 +181,11 @@ export class LlamaCppProvider implements LLMProvider {
         temperature: req.temperature ?? this.defaultTemperature,
         max_tokens: req.max_tokens,
         stream: shouldStream,
+        // A streamed response carries no usage unless it's explicitly requested — without this
+        // the final chunk omits token counts and every streamed turn reports output_tokens: 0,
+        // which throws off the token-budget and context-pressure accounting downstream. The
+        // non-streaming path got usage for free in its response body.
+        ...(shouldStream && { stream_options: { include_usage: true } }),
         // Qwen3 supports enable_thinking parameter via llama.cpp
         ...(isThinkingEnabled !== undefined && { enable_thinking: isThinkingEnabled }),
         // Servers with per-slot prefix caching (sabrewing) reuse this conversation's

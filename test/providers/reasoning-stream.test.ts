@@ -144,12 +144,15 @@ describe('always streams, even with no token callbacks', () => {
     // callbacks just default to no-ops.
     const realFetch = globalThis.fetch
     let requestedStream: boolean | undefined
+    let requestedUsage: boolean | undefined
     // @ts-expect-error test double
     globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
       if (String(url).includes('/props')) {
         return new Response(JSON.stringify({ model_path: 'test.gguf' }), { status: 200 })
       }
-      requestedStream = init?.body ? JSON.parse(init.body as string).stream : undefined
+      const body = init?.body ? JSON.parse(init.body as string) : {}
+      requestedStream = body.stream
+      requestedUsage = body.stream_options?.include_usage
       return new Response(sseStream([reasoning('thinking '), content('42')]), {
         status: 200,
         headers: { 'Content-Type': 'text/event-stream' },
@@ -160,11 +163,26 @@ describe('always streams, even with no token callbacks', () => {
       // No onToken / onThinkingToken — the background-task shape.
       const response = await provider.chat({ messages: [{ role: 'user', content: 'hi' }] })
       expect(requestedStream).toBe(true) // asked the server to stream despite no callbacks
+      expect(requestedUsage).toBe(true) // asked for usage so output_tokens isn't reported as 0
       expect(response.content).toBe('42') // assembled from the SSE stream, not response.json()
       expect(response.thinking).toBe('thinking ')
     } finally {
       globalThis.fetch = realFetch
     }
+  })
+
+  test('captures token usage from the final streamed chunk', async () => {
+    // llama.cpp emits usage only in a trailing chunk (choices: []) when include_usage is set.
+    // The reader must pick it up, or every streamed turn reports output_tokens: 0.
+    const { response } = await chatAgainst(
+      sseStream([
+        reasoning('think '),
+        content('answer'),
+        { choices: [], usage: { prompt_tokens: 128, completion_tokens: 42 } },
+      ]),
+    )
+    expect(response.usage.input_tokens).toBe(128)
+    expect(response.usage.output_tokens).toBe(42)
   })
 })
 
