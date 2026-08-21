@@ -206,10 +206,18 @@ reset-from-NOTES on context pressure · unbounded-run mode. After this, an insta
 runs indefinitely, checkpoints itself, survives its own context window, and stops
 only on genuine mechanical failure.
 
-**Phase 2 — semantic + interject** (the supervision layer):
-`POST /sessions/:id/interrupt` · the `report` tool over the peer await machinery ·
-`report_to` config accepting agent or human targets · the two report triggers wired
-into the loop (blocked → `ask`; goal-done → `notify`/`ask`).
+**Phase 2 — semantic + interject** (the supervision layer) — SHIPPED:
+task lifecycle over HTTP (`POST /tasks/:id/pause`|`resume`, `DELETE /tasks/:id`) ·
+`POST /sessions/:id/interrupt` (abort, or inject a message delivered at the next turn
+boundary — task sessions route through the runner) · the `report` tool (`[report] to`
+in egirl.toml: `peer:<name>` rides the peer protocol; `xmpp:<jid>`/`discord:<id>` ride
+outbound send plus the ReplyBroker, which routes the human's next inbound message to
+the parked ask instead of a new run) · the awaiting-input state (an unanswered ask
+sets `awaitingInput` on the tool result, surfaces through `AgentResponse`, and parks
+the task as `awaiting`; a chat reply on the task's session — persisted into its
+conversation — resumes it with `next_run_at = now`, so the reply seeds the next run) ·
+trigger guidance injected into unbounded task runs (blocked → `ask`; goal-done →
+`notify`/`ask`).
 
 ## Open questions
 
@@ -217,10 +225,9 @@ into the loop (blocked → `ask`; goal-done → `notify`/`ask`).
   agent reliably writes everything durable to NOTES.md/work. That discipline is still
   being hardened; until it is proven, keep lossy compaction as a fallback beneath the
   reset, and treat a reset that loses tracked progress as a bug in the capture prompt.
-- **`ask` blocks a run indefinitely waiting on a human.** A run parked on an
-  unanswered `ask` should persist cleanly (it already does via `persist_conversation`)
-  and resume when the reply arrives — the reply seeds the next run. Needs a durable
-  "awaiting input" run state so a parked run is distinguishable from a finished one.
+- **`ask` blocks a run indefinitely waiting on a human.** Resolved: an ask waits up
+  to `ask_timeout_ms` (default 30 min), then parks the task as `awaiting`; the reply,
+  sent to the task's session, is persisted into its conversation and reactivates it.
 - **Loop-driver vs. supervisor model boundary.** For the RE phase a capable local
   operator (Qwen3.8-27B) does the work directly and delegation would only cost context
   continuity. If the work later shifts to heavy code generation, the lever is a

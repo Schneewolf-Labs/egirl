@@ -358,6 +358,29 @@ describe('API task lifecycle', () => {
     expect(tasks.has('running1')).toBe(false)
   })
 
+  test('a chat reply on a parked task session resumes the task', async () => {
+    tasks.set('t1', { id: 't1', status: 'awaiting' })
+    const res = await fetch(`${base}/chat`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ message: 'use the DX9 build', session_id: 'task:t1' }),
+    })
+    expect(res.status).toBe(200)
+    expect(tasks.get('t1')?.status).toBe('active')
+    const resume = updates.find((u) => u.changes.status === 'active')
+    expect(resume?.changes.nextRunAt).toBeNumber()
+    expect(resume?.reason).toContain('resuming')
+  })
+
+  test('a chat on an active task session does not touch the task', async () => {
+    await fetch(`${base}/chat`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ message: 'just checking in', session_id: 'task:t1' }),
+    })
+    expect(updates).toHaveLength(0)
+  })
+
   test('lifecycle routes 404 on unknown tasks', async () => {
     for (const [method, url] of [
       ['POST', `${base}/tasks/nope/pause`],

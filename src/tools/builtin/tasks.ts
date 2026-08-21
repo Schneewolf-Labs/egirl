@@ -261,14 +261,25 @@ Options:
       parameters: {
         type: 'object',
         properties: {
-          status: { type: 'string', description: 'Filter: active, paused, proposed, done, failed' },
+          status: {
+            type: 'string',
+            description: 'Filter: active, paused, awaiting, proposed, done, failed',
+          },
         },
       },
     },
 
     async execute(params: Record<string, unknown>): Promise<ToolResult> {
       const filter = params.status
-        ? { status: params.status as 'active' | 'paused' | 'proposed' | 'done' | 'failed' }
+        ? {
+            status: params.status as
+              | 'active'
+              | 'paused'
+              | 'awaiting'
+              | 'proposed'
+              | 'done'
+              | 'failed',
+          }
         : undefined
 
       const tasks = store.list(filter)
@@ -341,8 +352,11 @@ Options:
       const id = params.id as string
       const task = store.get(id)
       if (!task) return { success: false, output: `Task ${id} not found.` }
-      if (task.status !== 'paused') {
-        return { success: false, output: `Task ${id} is not paused (status: ${task.status}).` }
+      if (task.status !== 'paused' && task.status !== 'awaiting') {
+        return {
+          success: false,
+          output: `Task ${id} is not paused or awaiting (status: ${task.status}).`,
+        }
       }
       store.update(id, { status: 'active', consecutiveFailures: 0, lastErrorKind: undefined })
       runner.activateTask(id)

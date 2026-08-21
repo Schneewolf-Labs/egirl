@@ -113,8 +113,9 @@ export function createReportTool(deps: ReportToolDeps): Tool {
           return {
             success: false,
             output: result.timedOut
-              ? `${result.error}\nNo answer within the wait window. Save your state to durable notes and either continue with your best judgment or end the run — the reply can seed a later run.`
+              ? `${result.error}\nNo answer within the wait window. Save your state to durable notes and end the run — it will be parked as awaiting input, and the reply will seed the next run.`
               : result.error,
+            ...(result.timedOut && { awaitingInput: true }),
           }
         }
         return { success: true, output: `${result.from} replied:\n\n${result.content}` }
@@ -156,7 +157,8 @@ export function createReportTool(deps: ReportToolDeps): Tool {
           success: false,
           output:
             `No reply from ${toRaw} within ${timeoutMs}ms. ` +
-            'Save your state to durable notes and either continue with your best judgment or end the run — the reply can seed a later run.',
+            'Save your state to durable notes and end the run — it will be parked as awaiting input, and the reply will seed the next run.',
+          awaitingInput: true,
         }
       }
       return { success: true, output: `Supervisor replied:\n\n${answer}` }

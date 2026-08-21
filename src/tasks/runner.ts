@@ -216,7 +216,10 @@ export class TaskRunner {
     log.info('tasks', `Executing task: ${task.name} (${task.id})`)
 
     try {
-      const result = await Promise.race([this.doExecute(task, signal), this.timeout(timeoutMs)])
+      const { content: result, awaitingInput } = await Promise.race([
+        this.doExecute(task, signal),
+        this.timeout(timeoutMs),
+      ])
       const resultHash = await hashString(result)
       const shouldNotify = this.shouldNotify(task, resultHash)
 
@@ -228,7 +231,17 @@ export class TaskRunner {
         lastResultHash: resultHash,
       })
 
-      if (task.kind === 'scheduled') {
+      if (awaitingInput) {
+        // The run asked its supervisor and no answer came: park instead of rescheduling.
+        // The scheduler skips non-active tasks, so the task sits here — visibly distinct
+        // from paused/done — until a reply arrives (POST /chat on its session resumes it)
+        // or a human resumes it directly.
+        this.deps.store.update(
+          task.id,
+          { status: 'awaiting' },
+          'Parked: report ask went unanswered — awaiting supervisor input',
+        )
+      } else if (task.kind === 'scheduled') {
         const nextRunAt = this.calculateTaskNextRun(task)
         this.deps.store.update(task.id, { nextRunAt })
       }
@@ -300,11 +313,14 @@ export class TaskRunner {
     }
   }
 
-  private async doExecute(task: Task, signal?: AbortSignal): Promise<string> {
+  private async doExecute(
+    task: Task,
+    signal?: AbortSignal,
+  ): Promise<{ content: string; awaitingInput: boolean }> {
     if (task.name === HEARTBEAT_TASK_NAME) {
       const prompt = await heartbeatPreCheck(this.deps.config.workspace.path)
       if (!prompt) {
-        return 'No unchecked items in HEARTBEAT.md'
+        return { content: 'No unchecked items in HEARTBEAT.md', awaitingInput: false }
       }
       return this.executePrompt({ ...task, prompt }, signal)
     }
@@ -312,12 +328,26 @@ export class TaskRunner {
     return this.executePrompt(task, signal)
   }
 
-  private async executePrompt(task: Task, signal?: AbortSignal): Promise<string> {
+  private async executePrompt(
+    task: Task,
+    signal?: AbortSignal,
+  ): Promise<{ content: string; awaitingInput: boolean }> {
     const cwd = this.deps.config.workspace.path
     const standup = await gatherStandup(cwd)
 
     const contextParts: string[] = []
     if (standup.context) contextParts.push(standup.context)
+
+    // The two semantic stops for an unbounded run (docs/autonomy-loop.md): blocked → ask,
+    // goal exhausted → report before ending. Only stated when the tool actually exists.
+    if (
+      task.unbounded &&
+      this.deps.toolExecutor.getDefinitions().some((d) => d.name === 'report')
+    ) {
+      contextParts.push(
+        '[This is an unbounded run. If you become blocked on a decision you cannot make yourself, use report (mode=ask) instead of guessing. If your goal is exhausted, report what you accomplished (mode=ask for direction, or mode=notify then end the run). Being blocked is a signal to report, not a failure.]',
+      )
+    }
 
     if (this.deps.memory && task.memoryContext) {
       for (const key of task.memoryContext) {
@@ -411,7 +441,7 @@ export class TaskRunner {
         .catch((err) => log.warn('tasks', `Lesson extraction failed for task ${taskId}: ${err}`))
     }
 
-    return response.content
+    return { content: response.content, awaitingInput: response.awaitingInput === true }
   }
 
   private shouldNotify(task: Task, resultHash: string): boolean {

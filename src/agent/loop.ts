@@ -229,6 +229,7 @@ export class AgentLoop {
     let strandedToolRetries = 0
     let emptyAfterToolsRetries = 0
     let toolsRan = false
+    let awaitingInput = false
     let emptyRetries = 0
     let prevEmptyWasZeroOutput = false
     // Turns between consolidation breaks (0 = off). Per-run option wins over config default.
@@ -384,7 +385,7 @@ export class AgentLoop {
             break
           }
 
-          await this.exclusive(() =>
+          const toolOutcome = await this.exclusive(() =>
             runToolCalls({
               response,
               context: this.context,
@@ -395,6 +396,7 @@ export class AgentLoop {
               signal,
             }),
           )
+          if (toolOutcome.awaitingInput) awaitingInput = true
 
           toolsRan = true
 
@@ -583,6 +585,7 @@ export class AgentLoop {
         thinking: lastThinking,
         continuationRetries: continuationRetries > 0 ? continuationRetries : undefined,
         aborted: signal?.aborted ? true : undefined,
+        awaitingInput: awaitingInput ? true : undefined,
       }
     } finally {
       this.activeRun = null

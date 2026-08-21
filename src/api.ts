@@ -191,6 +191,19 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
             agent.run(toRun, images?.length ? { images } : {}),
           )
           const response = await done
+          // A message landing on a parked task's session is the resume signal: the exchange
+          // just persisted into the task's conversation, so the next run starts from it.
+          if (sessionId.startsWith('task:') && deps.taskStore) {
+            const taskId = sessionId.slice('task:'.length)
+            const parked = deps.taskStore.get(taskId)
+            if (parked?.status === 'awaiting') {
+              deps.taskStore.update(
+                taskId,
+                { status: 'active', nextRunAt: Date.now() },
+                'Reply received on the task session — resuming',
+              )
+            }
+          }
           return json({
             content: response.content,
             session_id: sessionId,

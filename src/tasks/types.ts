@@ -1,7 +1,8 @@
 import type { TaskErrorKind } from './error-classify'
 
 export type TaskKind = 'scheduled' | 'oneshot'
-export type TaskStatus = 'proposed' | 'active' | 'paused' | 'done' | 'failed'
+/** 'awaiting' = parked on a supervisor reply (report ask went unanswered); resumes on reply. */
+export type TaskStatus = 'proposed' | 'active' | 'paused' | 'awaiting' | 'done' | 'failed'
 export type TaskNotify = 'always' | 'on_change' | 'on_failure' | 'never'
 export type RunStatus = 'running' | 'success' | 'failure' | 'skipped'
 export type ProposalStatus = 'pending' | 'approved' | 'rejected'

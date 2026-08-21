@@ -86,6 +86,8 @@ describe('report tool — channel target', () => {
     const result = await tool.execute({ mode: 'ask', message: 'anyone?', timeout_ms: 20 }, '.')
     expect(result.success).toBe(false)
     expect(result.output).toContain('durable notes')
+    // The park signal that lets the task runner mark the run awaiting-input.
+    expect(result.awaitingInput).toBe(true)
   })
 
   test('ask without a broker degrades with an explanation', async () => {
@@ -168,6 +170,16 @@ describe('report tool — peer target', () => {
     // Give the background send time to land for the next assertion.
     await new Promise((r) => setTimeout(r, 400))
     expect(received.some((r) => r.message.includes('slow milestone'))).toBe(true)
+  })
+
+  test('a peer ask that times out carries the park signal', async () => {
+    const tool = makePeerTool()
+    const result = await tool.execute(
+      { mode: 'ask', message: 'slow question', timeout_ms: 50 },
+      '.',
+    )
+    expect(result.success).toBe(false)
+    expect(result.awaitingInput).toBe(true)
   })
 
   test('unknown peer target errors cleanly', async () => {

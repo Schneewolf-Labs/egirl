@@ -53,6 +53,8 @@ export interface AgentResponse {
   continuationRetries?: number
   /** True if the run was cancelled via the abort signal */
   aborted?: boolean
+  /** True if a tool reported it is waiting on supervisor input that never came */
+  awaitingInput?: boolean
 }
 
 export interface AgentLoopDeps {

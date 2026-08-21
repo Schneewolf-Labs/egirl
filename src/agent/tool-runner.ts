@@ -22,7 +22,7 @@ export async function runToolCalls(args: {
   transcript: TranscriptLogger | null
   events?: AgentEventHandler
   signal?: AbortSignal
-}): Promise<void> {
+}): Promise<{ awaitingInput: boolean }> {
   const { response, context, executor, seenToolCalls, transcript, events, signal } = args
   const calls = response.tool_calls ?? []
 
@@ -42,6 +42,7 @@ export async function runToolCalls(args: {
   if (response.content && events?.onThinking) events.onThinking(response.content)
   events?.onToolCallStart?.(calls)
 
+  let awaitingInput = false
   const toolResults = await executeToolsWithHooks({
     toolCalls: calls,
     context,
@@ -52,6 +53,7 @@ export async function runToolCalls(args: {
   })
 
   for (const [callId, result] of toolResults) {
+    if (result.awaitingInput) awaitingInput = true
     log.debug(
       'agent',
       `Tool ${callId}: ${result.output.substring(0, 100)}${result.output.length > 100 ? '...' : ''}`,
@@ -78,6 +80,8 @@ export async function runToolCalls(args: {
       content: `[Warning: You called ${names} with the same arguments as a previous turn. This may indicate a loop. Try a different approach or respond with your current findings.]`,
     })
   }
+
+  return { awaitingInput }
 }
 
 async function executeToolsWithHooks(args: {
