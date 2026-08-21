@@ -22,6 +22,8 @@ export interface Task {
   persistConversation: boolean
   /** Per-run turn budget. Undefined uses the runner default (10). */
   maxTurns: number | undefined
+  /** Run unbounded (caps become a safety net; stops on failure/report/conclusion). */
+  unbounded: boolean
   nextRunAt: number | undefined
   lastRunAt: number | undefined
   runCount: number
@@ -50,6 +52,7 @@ export interface NewTask {
   dependsOn?: string
   persistConversation?: boolean
   maxTurns?: number
+  unbounded?: boolean
   maxRuns?: number
   notify?: TaskNotify
   channel: string

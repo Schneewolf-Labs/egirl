@@ -333,7 +333,12 @@ export class TaskRunner {
     }
 
     const agent = new AgentLoop(deps)
-    const response = await agent.run(task.prompt, { maxTurns: task.maxTurns ?? 10, signal })
+    const response = await agent.run(task.prompt, {
+      maxTurns: task.maxTurns ?? 10,
+      unbounded: task.unbounded,
+      // consolidationInterval falls through to the instance config default in the loop.
+      signal,
+    })
 
     if (this.deps.memory) {
       const storeMemory = this.deps.memory
