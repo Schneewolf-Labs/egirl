@@ -10,6 +10,7 @@
  */
 
 import { describe, expect, test } from 'bun:test'
+import { isRepetitionDominated } from '../../src/agent/repetition-guard'
 import { LlamaCppProvider } from '../../src/providers/llamacpp'
 
 /** Build an SSE body from raw chunk objects, as llama.cpp frames them. */
@@ -132,5 +133,63 @@ describe('out-of-band reasoning', () => {
     )
     expect(tokens.join('')).toBe('answer')
     expect(response.thinking).toBe('hmm')
+  })
+})
+
+describe('always streams, even with no token callbacks', () => {
+  test('a background request (no onToken) still streams and assembles content + reasoning', async () => {
+    // Task runs pass no onToken. Before the fix that took the non-streaming path — which has no
+    // stale timer and no reasoning handling, so a long reasoning generation aborted on the
+    // fetch's own timeout ("The operation timed out"). Now every request streams; the token
+    // callbacks just default to no-ops.
+    const realFetch = globalThis.fetch
+    let requestedStream: boolean | undefined
+    // @ts-expect-error test double
+    globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
+      if (String(url).includes('/props')) {
+        return new Response(JSON.stringify({ model_path: 'test.gguf' }), { status: 200 })
+      }
+      requestedStream = init?.body ? JSON.parse(init.body as string).stream : undefined
+      return new Response(sseStream([reasoning('thinking '), content('42')]), {
+        status: 200,
+        headers: { 'Content-Type': 'text/event-stream' },
+      })
+    }
+    try {
+      const provider = new LlamaCppProvider('http://stub', 'test')
+      // No onToken / onThinkingToken — the background-task shape.
+      const response = await provider.chat({ messages: [{ role: 'user', content: 'hi' }] })
+      expect(requestedStream).toBe(true) // asked the server to stream despite no callbacks
+      expect(response.content).toBe('42') // assembled from the SSE stream, not response.json()
+      expect(response.thinking).toBe('thinking ')
+    } finally {
+      globalThis.fetch = realFetch
+    }
+  })
+})
+
+describe('live reasoning-spiral guard', () => {
+  test('a looping reasoning stream is stopped early and returned as a spiral', async () => {
+    // A death-spiral reasons forever and never emits a final answer, so the agent loop's
+    // post-response spiral check never runs — only the stale timeout (minutes) would stop it.
+    // The stream guard stops it once the reasoning is repetition-dominated, returning the partial
+    // so the loop's own isReasoningLooping classifies the run as a spiral (abort, not retry).
+    const loop = 'I must reconsider this exact same point once more, again and again. '
+    const chunks: object[] = Array.from({ length: 80 }, () => reasoning(loop))
+    // A sentinel answer AFTER the loop: if the guard fires, generation stops before this.
+    chunks.push(content('SHOULD_NOT_APPEAR'))
+    const { response } = await chatAgainst(sseStream(chunks, 1), 10_000)
+    expect(response.content).not.toContain('SHOULD_NOT_APPEAR') // stopped before the sentinel
+    expect(isRepetitionDominated(response.thinking ?? '')).toBe(true) // loop will abort the run
+  })
+
+  test('normal (non-looping) reasoning is never mistaken for a spiral', async () => {
+    // Varied, progressing reasoning must stream through untouched, however long.
+    const chunks: object[] = Array.from({ length: 80 }, (_, i) =>
+      reasoning(`step ${i}: consider factor ${i * 7} and its distinct consequence ${i * 13}. `),
+    )
+    chunks.push(content('DONE'))
+    const { response } = await chatAgainst(sseStream(chunks, 1), 10_000)
+    expect(response.content).toBe('DONE') // reached the end, not aborted
   })
 })

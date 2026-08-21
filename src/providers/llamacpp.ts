@@ -1,3 +1,4 @@
+import { isRepetitionDominated } from '../agent/repetition-guard'
 import { buildToolsSection, parseToolCalls } from '../tools/format'
 import { log } from '../util/logger'
 import { formatMessagesForQwen3 } from './qwen3-format'
@@ -160,7 +161,15 @@ export class LlamaCppProvider implements LLMProvider {
     // raw content, breaking our parseToolCalls() extraction.
     const messages = this.formatMessages(req.messages, req.thinking, req.tools)
 
-    const shouldStream = !!req.onToken
+    // Always stream, even when the caller wants no live tokens (a background task passes no
+    // onToken). Streaming is the ONLY path that carries the stale-stream timeout — with its
+    // per-family reasoning floor — and resets it on both content AND reasoning_content deltas,
+    // so a multi-minute thinking phase isn't mistaken for a hang. It also keeps response chunks
+    // flowing, so the fetch's own body-timeout never fires mid-generation. The non-streaming
+    // path had neither: a long reasoning generation on a task run (no onToken) aborted with
+    // "The operation timed out" the moment it outran the fetch default, and stale_stream_timeout
+    // never applied. The assembled result is identical; callers with no onToken get a no-op.
+    const shouldStream = true
     const isThinkingEnabled = req.thinking && req.thinking.level !== 'off'
 
     const response = await fetch(`${this.endpoint}/v1/chat/completions`, {
@@ -306,6 +315,15 @@ export class LlamaCppProvider implements LLMProvider {
     let buffer = ''
     let inToolCall = false
     let inThink = false
+    // Live death-spiral guard. A reasoning model can loop forever without ever emitting a final
+    // answer, so the agent loop's post-response spiral check never runs and only the stale
+    // timeout stops it — minutes of wasted compute per spiral. Scan the accumulating reasoning
+    // on a cadence and stop generating the moment it is repetition-dominated. The partial
+    // reasoning is still returned, so the agent loop's own isReasoningLooping classifies the run
+    // as a spiral (an abort, not a retry) — this only makes the detection early, not different.
+    let spiralAborted = false
+    let lastSpiralScanLen = 0
+    const SPIRAL_SCAN_INTERVAL = 2000
     let usage = { prompt_tokens: 0, completion_tokens: 0 }
     let model: string | undefined
     let finish_reason: string | undefined
@@ -377,6 +395,20 @@ export class LlamaCppProvider implements LLMProvider {
               fullReasoning += reasoningToken
               onThinkingToken(reasoningToken)
               resetStaleTimer()
+              // Scan on a cadence, not every token — isRepetitionDominated walks a window and
+              // needs enough text to be meaningful (it fails open on short input).
+              if (fullReasoning.length - lastSpiralScanLen >= SPIRAL_SCAN_INTERVAL) {
+                lastSpiralScanLen = fullReasoning.length
+                if (isRepetitionDominated(fullReasoning)) {
+                  spiralAborted = true
+                  log.warn(
+                    'llamacpp',
+                    `Reasoning stream is looping (${fullReasoning.length} chars) — stopping generation`,
+                  )
+                  reader.cancel().catch(() => {})
+                  break
+                }
+              }
             }
 
             const token = parsed.choices?.[0]?.delta?.content
@@ -445,6 +477,7 @@ export class LlamaCppProvider implements LLMProvider {
             // Invalid JSON line, skip
           }
         }
+        if (spiralAborted) break
       }
     } finally {
       if (staleTimer) clearTimeout(staleTimer)
