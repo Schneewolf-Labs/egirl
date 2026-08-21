@@ -170,6 +170,105 @@ describe('API server', () => {
   })
 })
 
+describe('API task lifecycle', () => {
+  const agents = new Map<string, AgentLoop>()
+  let server: ReturnType<typeof startAPIServer>
+  const port = 3997
+  const base = `http://127.0.0.1:${port}`
+
+  // In-memory stand-ins that record what the API asked of them.
+  let tasks: Map<string, { id: string; status: string }>
+  let updates: Array<{ id: string; changes: Record<string, unknown>; reason?: string }>
+  let aborted: string[]
+  let activated: string[]
+
+  const taskStore = {
+    get: (id: string) => tasks.get(id),
+    update: (id: string, changes: Record<string, unknown>, reason?: string) => {
+      updates.push({ id, changes, reason })
+      const t = tasks.get(id)
+      if (t && typeof changes.status === 'string') t.status = changes.status
+    },
+    delete: (id: string) => tasks.delete(id),
+  }
+  const taskRunner = {
+    abortTask: (id: string) => {
+      aborted.push(id)
+      return id === 'running1'
+    },
+    activateTask: (id: string) => {
+      activated.push(id)
+    },
+  }
+
+  beforeEach(() => {
+    agents.clear()
+    tasks = new Map([
+      ['t1', { id: 't1', status: 'active' }],
+      ['running1', { id: 'running1', status: 'active' }],
+    ])
+    updates = []
+    aborted = []
+    activated = []
+    server = startAPIServer(
+      { host: '127.0.0.1', port },
+      {
+        agentFactory: (id) => stubAgent(id),
+        agents,
+        taskStore: taskStore as unknown as APIDeps['taskStore'],
+        taskRunner: taskRunner as unknown as APIDeps['taskRunner'],
+      },
+    )
+  })
+
+  afterEach(() => {
+    server.stop(true)
+  })
+
+  test('POST /tasks/:id/pause pauses the task', async () => {
+    const res = await fetch(`${base}/tasks/t1/pause`, { method: 'POST' })
+    expect(res.status).toBe(200)
+    expect(tasks.get('t1')?.status).toBe('paused')
+  })
+
+  test('POST /tasks/:id/resume reactivates and clears failures', async () => {
+    tasks.set('t1', { id: 't1', status: 'paused' })
+    const res = await fetch(`${base}/tasks/t1/resume`, { method: 'POST' })
+    expect(res.status).toBe(200)
+    expect(tasks.get('t1')?.status).toBe('active')
+    expect(updates[0]?.changes.consecutiveFailures).toBe(0)
+    expect(activated).toContain('t1')
+  })
+
+  test('DELETE /tasks/:id removes the task', async () => {
+    const res = await fetch(`${base}/tasks/t1`, { method: 'DELETE' })
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { aborted_running: boolean }
+    expect(body.aborted_running).toBe(false)
+    expect(tasks.has('t1')).toBe(false)
+  })
+
+  test('DELETE /tasks/:id aborts a running instance first', async () => {
+    const res = await fetch(`${base}/tasks/running1`, { method: 'DELETE' })
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { aborted_running: boolean }
+    expect(body.aborted_running).toBe(true)
+    expect(aborted).toContain('running1')
+    expect(tasks.has('running1')).toBe(false)
+  })
+
+  test('lifecycle routes 404 on unknown tasks', async () => {
+    for (const [method, url] of [
+      ['POST', `${base}/tasks/nope/pause`],
+      ['POST', `${base}/tasks/nope/resume`],
+      ['DELETE', `${base}/tasks/nope`],
+    ] as const) {
+      const res = await fetch(url, { method })
+      expect(res.status).toBe(404)
+    }
+  })
+})
+
 describe('API bearer auth', () => {
   const agents = new Map<string, AgentLoop>()
   let server: ReturnType<typeof startAPIServer>

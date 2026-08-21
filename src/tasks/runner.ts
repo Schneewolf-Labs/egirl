@@ -99,6 +99,18 @@ export class TaskRunner {
     return [...this.runningTasks.keys()]
   }
 
+  /**
+   * Abort a task's in-flight run. Returns false if the task is not currently executing.
+   * The run ends the same way a timeout does — through the AbortController the run was
+   * started with — so cleanup and run bookkeeping are identical to every other abort.
+   */
+  abortTask(taskId: string): boolean {
+    const controller = this.runningTasks.get(taskId)
+    if (!controller) return false
+    controller.abort('user')
+    return true
+  }
+
   /** Activate a task — set next_run for scheduled/oneshot */
   activateTask(taskId: string): void {
     const task = this.deps.store.get(taskId)

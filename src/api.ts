@@ -420,6 +420,43 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
           return json(taskToJson(task))
         }
 
+        // Lifecycle over HTTP — the same operations the task_* tools give the agent, for the
+        // human. Retiring a task used to mean editing tasks.db by hand.
+        if (method === 'POST' && path.match(/^\/tasks\/[^/]+\/pause$/)) {
+          if (!deps.taskStore) return err('tasks disabled', 503)
+          const id = path.split('/')[2] as string
+          const task = deps.taskStore.get(id)
+          if (!task) return err('task not found', 404)
+          deps.taskStore.update(id, { status: 'paused' }, 'paused via API')
+          return json({ ok: true, id, status: 'paused' })
+        }
+
+        if (method === 'POST' && path.match(/^\/tasks\/[^/]+\/resume$/)) {
+          if (!deps.taskStore) return err('tasks disabled', 503)
+          const id = path.split('/')[2] as string
+          const task = deps.taskStore.get(id)
+          if (!task) return err('task not found', 404)
+          deps.taskStore.update(
+            id,
+            { status: 'active', consecutiveFailures: 0, lastErrorKind: undefined },
+            'resumed via API',
+          )
+          deps.taskRunner?.activateTask(id)
+          return json({ ok: true, id, status: 'active' })
+        }
+
+        if (method === 'DELETE' && path.match(/^\/tasks\/[^/]+$/)) {
+          if (!deps.taskStore) return err('tasks disabled', 503)
+          const id = path.split('/')[2] as string
+          const task = deps.taskStore.get(id)
+          if (!task) return err('task not found', 404)
+          // A running instance is aborted first so the delete doesn't leave an orphaned run
+          // writing results for a task that no longer exists.
+          const aborted = deps.taskRunner?.abortTask(id) ?? false
+          deps.taskStore.delete(id)
+          return json({ ok: true, id, aborted_running: aborted })
+        }
+
         if (method === 'POST' && path.match(/^\/tasks\/[^/]+\/run$/)) {
           if (!deps.taskRunner) {
             return err(`tasks disabled: ${deps.taskOffReason ?? 'no task runner'}`, 503)
