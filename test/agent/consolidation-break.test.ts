@@ -82,3 +82,62 @@ describe('consolidation break', () => {
     expect(seen.some((s) => s.includes(NUDGE))).toBe(true)
   })
 })
+
+describe('context-pressure trigger', () => {
+  test('a nearly-full context fires the break even off-interval', async () => {
+    // Report input_tokens above 80% of the 32768 test context (>26214) so the context
+    // trigger fires; interval is large so only context pressure can cause it.
+    const seen: string[] = []
+    let n = 0
+    const provider: LLMProvider = {
+      name: 'stub',
+      async chat(req: ChatRequest): Promise<ChatResponse> {
+        seen.push(JSON.stringify(req.messages))
+        n++
+        if (n >= 5)
+          return stubResponse({ content: 'done', usage: { input_tokens: 30000, output_tokens: 1 } })
+        return stubResponse({
+          tool_calls: [{ id: `c${n}`, name: 'noop', arguments: { n } }],
+          finish_reason: 'tool_calls',
+          usage: { input_tokens: 30000, output_tokens: 1 },
+        })
+      },
+    }
+    const agent = new AgentLoop({
+      config: makeConfig(makeWorkspace()),
+      toolExecutor: makeExecutorWithNoop(),
+      localProvider: provider,
+      sessionId: 'test:ctx-pressure',
+    })
+    // interval 100 (never hits on turn count in a 5-turn run) — only context pressure can trigger.
+    await agent.run('go', { maxTurns: 6, consolidationInterval: 100 })
+    expect(seen.some((s) => s.includes('nearly full'))).toBe(true)
+  })
+
+  test('low context never fires the context trigger', async () => {
+    const seen: string[] = []
+    let n = 0
+    const provider: LLMProvider = {
+      name: 'stub',
+      async chat(req: ChatRequest): Promise<ChatResponse> {
+        seen.push(JSON.stringify(req.messages))
+        n++
+        if (n >= 5)
+          return stubResponse({ content: 'done', usage: { input_tokens: 500, output_tokens: 1 } })
+        return stubResponse({
+          tool_calls: [{ id: `c${n}`, name: 'noop', arguments: { n } }],
+          finish_reason: 'tool_calls',
+          usage: { input_tokens: 500, output_tokens: 1 },
+        })
+      },
+    }
+    const agent = new AgentLoop({
+      config: makeConfig(makeWorkspace()),
+      toolExecutor: makeExecutorWithNoop(),
+      localProvider: provider,
+      sessionId: 'test:ctx-low',
+    })
+    await agent.run('go', { maxTurns: 6, consolidationInterval: 100 })
+    expect(seen.some((s) => s.includes('nearly full'))).toBe(false)
+  })
+})

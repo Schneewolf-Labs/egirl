@@ -45,6 +45,13 @@ const MAX_CONTINUATION_RETRIES = 3
 const UNBOUNDED_SAFETY_CEILING = 10_000
 
 /**
+ * Context utilization at which a consolidation break fires regardless of the turn interval —
+ * the point where compaction is imminent, so durable capture must happen now. Matches the
+ * /context "getting tight" threshold so the two agree.
+ */
+const CONTEXT_BREAK_THRESHOLD = 0.8
+
+/**
  * Cap on each recovery nudge (stranded tool call, empty-after-tools). Hermes uses 3; one was
  * measurably not enough -- a 27B that mangles a call under context pressure often needs a
  * second clean look at the instruction.
@@ -182,6 +189,9 @@ export class AgentLoop {
     // Turns between consolidation breaks (0 = off). Per-run option wins over config default.
     const consolidationInterval =
       options.consolidationInterval ?? this.config.conversation.consolidationInterval ?? 0
+    // Input tokens of the last inference, for the context-pressure break trigger.
+    let lastInputTokens = 0
+    let lastContextBreakTurn = -Infinity
 
     // Persistence and transcript closure run in `finally` so a provider error
     // mid-run doesn't lose the user message and tool activity already in context.
@@ -194,17 +204,32 @@ export class AgentLoop {
 
         turns++
 
-        // Consolidation break: every `consolidationInterval` turns, inject one checkpoint turn
-        // telling the agent to externalize what it has learned before continuing. This keeps
-        // the durable record current (so an interruption loses nothing), breaks a reasoning
-        // rut by forcing an act-and-continue, and — most importantly — creates the restore
-        // point that context recycling depends on. See docs/autonomy-loop.md.
-        if (consolidationInterval > 0 && turns > 1 && (turns - 1) % consolidationInterval === 0) {
-          addMessage(this.context, {
-            role: 'user',
-            content:
-              '[System: Checkpoint. Pause new work and consolidate — write everything you have learned since your last checkpoint to your durable notes, and save any artifacts to files. Assume this run could end at any moment: nothing important should live only in this conversation. Then continue where you left off.]',
-          })
+        // Consolidation break: inject one checkpoint turn telling the agent to externalize
+        // what it has learned before continuing. It keeps the durable record current (so an
+        // interruption loses nothing), breaks a reasoning rut by forcing an act-and-continue,
+        // and — most importantly — ensures everything is on disk BEFORE compaction trims the
+        // conversation, so nothing real is ever lost to summarization. See docs/autonomy-loop.md.
+        //
+        // Two triggers, one mechanism. The interval trigger is a steady rhythm; the context
+        // trigger fires when the window is filling and compaction is imminent — which is exactly
+        // the moment durable capture matters most. The context trigger is rate-limited to one
+        // per interval window so a sustained-high context does not nag every turn.
+        if (consolidationInterval > 0) {
+          const onInterval = turns > 1 && (turns - 1) % consolidationInterval === 0
+          const utilization = lastInputTokens / Math.max(1, this.config.local.contextLength)
+          const contextPressed =
+            utilization >= CONTEXT_BREAK_THRESHOLD &&
+            turns - lastContextBreakTurn >= consolidationInterval
+          if (onInterval || contextPressed) {
+            if (contextPressed) lastContextBreakTurn = turns
+            const urgency = contextPressed
+              ? 'Context is nearly full and the conversation is about to be compacted. Write everything durable NOW'
+              : 'Pause new work and consolidate — write everything you have learned since your last checkpoint'
+            addMessage(this.context, {
+              role: 'user',
+              content: `[System: Checkpoint. ${urgency} to your durable notes, and save any artifacts to files. Assume this run could end at any moment: nothing important should live only in this conversation. Then continue where you left off.]`,
+            })
+          }
         }
 
         const tools = isPlanning ? [] : this.toolExecutor.getDefinitions()
@@ -242,6 +267,9 @@ export class AgentLoop {
         }
         const inferenceDuration = Date.now() - inferenceStart
 
+        // Input tokens are the whole prompt this turn — the running measure of context fill,
+        // used by the context-pressure consolidation trigger next iteration.
+        lastInputTokens = response.usage.input_tokens
         totalUsage.input_tokens += response.usage.input_tokens
         totalUsage.output_tokens += response.usage.output_tokens
 
