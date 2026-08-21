@@ -1,10 +1,5 @@
-import {
-  PEER_PROTOCOL,
-  type PeerEntry,
-  type PeerIdentity,
-  type PeerMessageResponse,
-  peerTokenEnvKey,
-} from '../../peers/protocol'
+import { peerHeaders, postPeerMessage } from '../../peers/client'
+import type { PeerEntry, PeerIdentity } from '../../peers/protocol'
 import type { Tool, ToolResult } from '../types'
 
 const IDENTITY_TIMEOUT = 5000
@@ -18,13 +13,6 @@ export interface PeerToolsConfig {
 
 function findPeer(peers: PeerEntry[], name: string): PeerEntry | undefined {
   return peers.find((p) => p.name.toLowerCase() === name.toLowerCase())
-}
-
-function peerHeaders(peer: PeerEntry): Record<string, string> {
-  return {
-    'content-type': 'application/json',
-    ...(peer.token && { authorization: `Bearer ${peer.token}` }),
-  }
 }
 
 async function fetchWithTimeout(
@@ -94,45 +82,13 @@ export function createPeerTools(config: PeerToolsConfig): {
 
       const timeoutMs = (params.timeout_ms as number | undefined) ?? peer.timeoutMs
 
-      try {
-        const res = await fetchWithTimeout(
-          `${peer.url}/peer/message`,
-          {
-            method: 'POST',
-            headers: peerHeaders(peer),
-            body: JSON.stringify({ protocol: PEER_PROTOCOL, from: config.selfName, message }),
-          },
-          timeoutMs,
-        )
-
-        if (!res.ok) {
-          const body = await res.text().catch(() => '')
-          const hint =
-            res.status === 401
-              ? ` (set ${peerTokenEnvKey(peer.name)} in .env to that instance's EGIRL_API_TOKEN)`
-              : ''
-          return {
-            success: false,
-            output: `Peer "${peer.name}" returned HTTP ${res.status} ${res.statusText}${hint}${body ? `\n${body.slice(0, 500)}` : ''}`,
-          }
-        }
-
-        const data = (await res.json()) as PeerMessageResponse
-        let content = data.content ?? ''
-        if (content.length > MAX_REPLY_LENGTH) {
-          content = `${content.slice(0, MAX_REPLY_LENGTH)}\n\n[Truncated — reply exceeded ${MAX_REPLY_LENGTH} characters]`
-        }
-        return { success: true, output: `${data.from ?? peer.name} replied:\n\n${content}` }
-      } catch (error) {
-        const msg = error instanceof Error ? error.message : String(error)
-        if (msg.includes('abort')) {
-          return {
-            success: false,
-            output: `Peer "${peer.name}" did not reply within ${timeoutMs}ms. It may still be working — its side of the conversation is preserved, so you can ask again later.`,
-          }
-        }
-        return { success: false, output: `Failed to reach peer "${peer.name}": ${msg}` }
+      const result = await postPeerMessage(peer, config.selfName, message, timeoutMs)
+      if (!result.ok) return { success: false, output: result.error }
+      let content = result.content
+      if (content.length > MAX_REPLY_LENGTH) {
+        content = `${content.slice(0, MAX_REPLY_LENGTH)}\n\n[Truncated — reply exceeded ${MAX_REPLY_LENGTH} characters]`
       }
+      return { success: true, output: `${result.from} replied:\n\n${content}` }
     },
   }
 

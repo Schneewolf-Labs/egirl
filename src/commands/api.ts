@@ -3,6 +3,7 @@ import { SessionMutex } from '../agent/session-mutex'
 import { startAPIServer } from '../api'
 import { createAppServices } from '../bootstrap'
 import type { RuntimeConfig } from '../config'
+import { registerReportTool } from '../report/register'
 import { gatherStandup } from '../standup'
 import { createTaskRunner, taskRunnerEnabled, taskRunnerOffReason } from '../tasks'
 import { createTaskTools } from '../tools/builtin/tasks'
@@ -49,6 +50,10 @@ export async function runAPI(config: RuntimeConfig, args: string[]): Promise<voi
     })
 
   const agents = new Map<string, AgentLoop>()
+
+  // No chat channels in api mode: peer supervisors fully work; a channel target degrades to
+  // an explanatory tool error at call time.
+  registerReportTool(config, toolExecutor, new Map())
 
   // Background tasks are optional but naturally pair with the API —
   // POST /tasks doesn't do much without a runner.

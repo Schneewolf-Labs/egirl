@@ -531,6 +531,13 @@ export function loadConfig(options: LoadConfigOptions = {}): RuntimeConfig {
     })
   }
 
+  if (toml.report?.to) {
+    config.report = {
+      to: toml.report.to,
+      askTimeoutMs: toml.report.ask_timeout_ms ?? 1_800_000,
+    }
+  }
+
   if (toml.peer_discovery?.enabled) {
     config.peerDiscovery = {
       enabled: true,

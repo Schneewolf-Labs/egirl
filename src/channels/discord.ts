@@ -13,6 +13,7 @@ import {
 } from 'discord.js'
 import type { AgentFactory, AgentLoop } from '../agent'
 import type { LLMProvider } from '../providers/types'
+import type { ReplyBroker } from '../report/broker'
 import { log } from '../util/logger'
 import {
   type BufferedMessage,
@@ -55,10 +56,17 @@ export class DiscordChannel implements Channel {
   private processing = false
   private batcher: MessageBatcher | null = null
   private localProvider: LLMProvider | null = null
+  private broker: ReplyBroker | undefined
 
-  constructor(agentFactory: AgentFactory, config: DiscordConfig, localProvider?: LLMProvider) {
+  constructor(
+    agentFactory: AgentFactory,
+    config: DiscordConfig,
+    localProvider?: LLMProvider,
+    broker?: ReplyBroker,
+  ) {
     this.agentFactory = agentFactory
     this.config = config
+    this.broker = broker
 
     if (config.passiveChannels.length > 0 && localProvider) {
       this.localProvider = localProvider
@@ -208,6 +216,10 @@ export class DiscordChannel implements Channel {
       log.debug('discord', `Ignoring message from non-allowed user: ${message.author.tag}`)
       return
     }
+
+    // A pending report ask on this channel consumes the message as its answer — no mention
+    // needed: the human is replying to the agent's question, not starting a new turn.
+    if (this.broker?.tryDeliver('discord', message.channel.id, message.content.trim())) return
 
     const isMentioned = this.isMentioned(message)
     const isPassive = this.isPassiveChannel(message)
@@ -473,6 +485,7 @@ export function createDiscordChannel(
   agentFactory: AgentFactory,
   config: DiscordConfig,
   localProvider?: LLMProvider,
+  broker?: ReplyBroker,
 ): DiscordChannel {
-  return new DiscordChannel(agentFactory, config, localProvider)
+  return new DiscordChannel(agentFactory, config, localProvider, broker)
 }

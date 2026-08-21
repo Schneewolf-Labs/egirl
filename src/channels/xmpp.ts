@@ -3,6 +3,7 @@ import type { Element } from '@xmpp/xml'
 import type { AgentLoop } from '../agent'
 import type { AgentEventHandler } from '../agent/events'
 import type { ToolCall } from '../providers/types'
+import type { ReplyBroker } from '../report/broker'
 import type { ToolResult } from '../tools/types'
 import { log } from '../util/logger'
 import type { Channel } from './types'
@@ -85,10 +86,12 @@ export class XMPPChannel implements Channel {
   private xmpp: XMPPClient
   private agent: AgentLoop
   private config: XMPPConfig
+  private broker: ReplyBroker | undefined
 
-  constructor(agent: AgentLoop, config: XMPPConfig) {
+  constructor(agent: AgentLoop, config: XMPPConfig, broker?: ReplyBroker) {
     this.agent = agent
     this.config = config
+    this.broker = broker
 
     this.xmpp = client({
       service: config.service,
@@ -162,6 +165,10 @@ export class XMPPChannel implements Channel {
 
     log.info('xmpp', `Message from ${bareJid(from)}: ${body.slice(0, 100)}...`)
 
+    // A pending report ask on this JID consumes the message as its answer — the human is
+    // replying to the agent's question, not starting a new conversation turn.
+    if (this.broker?.tryDeliver('xmpp', bareJid(from), body)) return
+
     try {
       const { handler, state } = createXMPPEventHandler()
       const response = await this.agent.run(body, { events: handler })
@@ -191,6 +198,10 @@ export class XMPPChannel implements Channel {
   }
 }
 
-export function createXMPPChannel(agent: AgentLoop, config: XMPPConfig): XMPPChannel {
-  return new XMPPChannel(agent, config)
+export function createXMPPChannel(
+  agent: AgentLoop,
+  config: XMPPConfig,
+  broker?: ReplyBroker,
+): XMPPChannel {
+  return new XMPPChannel(agent, config, broker)
 }

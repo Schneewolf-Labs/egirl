@@ -257,6 +257,17 @@ const baseProperties = {
     ),
   ),
 
+  // Who this agent reports to (docs/autonomy-loop.md, Phase 2): "peer:<name>" for an agent
+  // supervisor, or "<channel>:<target>" — e.g. "xmpp:you@example.com", "discord:<channelId>"
+  // — for a human. The report tool is only registered when this is set.
+  report: Type.Optional(
+    Type.Object({
+      to: Type.String(),
+      // Default wait on a blocking ask before the agent is told to park and move on.
+      ask_timeout_ms: Type.Number({ default: 1_800_000 }),
+    }),
+  ),
+
   // Resolve peers from a Wald agent registry rather than listing them here. Discovery
   // supplies addresses only -- tokens still come from EGIRL_PEER_<NAME>_TOKEN, because the
   // registry stores a reference to where a secret lives, never the secret.
@@ -565,6 +576,11 @@ export interface RuntimeConfig {
     token?: string
     timeoutMs: number
   }>
+  /** Supervisor target for the report tool ("peer:<name>" or "<channel>:<target>"). */
+  report?: {
+    to: string
+    askTimeoutMs: number
+  }
   peerDiscovery?: {
     enabled: boolean
     registry?: string

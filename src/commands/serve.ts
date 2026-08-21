@@ -3,6 +3,8 @@ import { SessionMutex } from '../agent/session-mutex'
 import { createAppServices } from '../bootstrap'
 import { createDiscordChannel, createXMPPChannel } from '../channels'
 import type { RuntimeConfig } from '../config'
+import { createReplyBroker } from '../report/broker'
+import { registerReportTool } from '../report/register'
 import { gatherStandup } from '../standup'
 import {
   createDiscovery,
@@ -45,6 +47,8 @@ export async function runServe(config: RuntimeConfig, args: string[]): Promise<v
   const active: string[] = []
   const shutdownFns: Array<() => Promise<void>> = []
   const outbound = new Map<string, { send(target: string, message: string): Promise<void> }>()
+  // Routes inbound chat messages to pending report asks (see src/report/broker.ts).
+  const replyBroker = createReplyBroker()
 
   const agentFactory: AgentFactory = (sessionId: string) =>
     createAgentLoop({
@@ -65,7 +69,7 @@ export async function runServe(config: RuntimeConfig, args: string[]): Promise<v
   let discord: ReturnType<typeof createDiscordChannel> | undefined
   let discordDefaultTarget = 'dm'
   if (discordConf) {
-    discord = createDiscordChannel(agentFactory, discordConf, providers.local)
+    discord = createDiscordChannel(agentFactory, discordConf, providers.local, replyBroker)
     discordDefaultTarget = discordConf.allowedChannels[0] ?? 'dm'
     outbound.set('discord', discord)
     shutdownFns.push(async () => discord?.stop())
@@ -77,13 +81,17 @@ export async function runServe(config: RuntimeConfig, args: string[]): Promise<v
   let xmpp: ReturnType<typeof createXMPPChannel> | undefined
   if (xmppConf) {
     const xmppAgent = agentFactory('xmpp:default')
-    xmpp = createXMPPChannel(xmppAgent, xmppConf)
+    xmpp = createXMPPChannel(xmppAgent, xmppConf, replyBroker)
     outbound.set('xmpp', {
       send: async (target, message) => xmpp?.sendTo(target, message),
     })
     shutdownFns.push(async () => xmpp?.stop())
     active.push('xmpp')
   }
+
+  // The agent's line to its supervisor — registered once channels exist so asks can block
+  // on a human reply through the broker.
+  registerReportTool(config, toolExecutor, outbound, replyBroker)
 
   // --- Background tasks (shared across channels) ---
   let taskRunner: ReturnType<typeof createTaskRunner> | undefined
