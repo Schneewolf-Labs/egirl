@@ -1,8 +1,30 @@
 import type { ConversationStore } from '../conversation'
 import type { ChatMessage } from '../providers/types'
+import { hasStrandedToolCall, stripStrandedToolCalls } from '../tools/format'
 import { log } from '../util/logger'
 import type { AgentContext } from './context'
 import { isRecallMessage } from './recall'
+
+/**
+ * Strip malformed tool-call markup from assistant content before it is stored.
+ *
+ * The zero-tool-call recovery path marks its mangled attempts `ephemeral`, so persistNew's
+ * filter already keeps those out of the store. But a response that carried a VALID tool call
+ * alongside leftover malformed `<tool_call>` markup takes the tool-executing path, which
+ * persists the raw content as a normal (non-ephemeral) assistant message — the markup rides
+ * along. On the next run that content reloads, and the model imitates its own broken syntax,
+ * mangling tool calls immediately (the cross-run poison that stalled Zero). Persistence is the
+ * boundary where the poisoning happens, so it is the boundary that cleans it. hasStrandedToolCall
+ * only fires on markup that does NOT parse, so valid tool syntax the model should keep learning
+ * from is left untouched; the operation is idempotent on already-clean content.
+ */
+function sanitizeForPersistence(messages: ChatMessage[]): ChatMessage[] {
+  return messages.map((m) =>
+    m.role === 'assistant' && typeof m.content === 'string' && hasStrandedToolCall(m.content)
+      ? { ...m, content: stripStrandedToolCalls(m.content) }
+      : m,
+  )
+}
 
 /**
  * Bookkeeping for the durable conversation history of one session.
@@ -52,9 +74,9 @@ export class ConversationHistory {
       // recalled context in reloaded history. Ephemeral messages are in-run recovery
       // scaffolding (a mangled tool call and its reissue nudge) — persisting those would
       // replay the model's own failure into every future session.
-      const newMessages = messages
-        .slice(this.persistedIndex)
-        .filter((m) => !isRecallMessage(m) && !m.ephemeral)
+      const newMessages = sanitizeForPersistence(
+        messages.slice(this.persistedIndex).filter((m) => !isRecallMessage(m) && !m.ephemeral),
+      )
       if (newMessages.length > 0) {
         this.store.appendMessages(this.sessionId, newMessages)
       }
@@ -123,7 +145,7 @@ export class ConversationHistory {
 
     try {
       this.store.deleteSession(this.sessionId)
-      const persistable = messages.filter((m) => !isRecallMessage(m))
+      const persistable = sanitizeForPersistence(messages.filter((m) => !isRecallMessage(m)))
       if (persistable.length > 0) {
         this.store.appendMessages(this.sessionId, persistable)
       }
