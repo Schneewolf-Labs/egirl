@@ -238,6 +238,11 @@ export class AgentLoop {
     // Input tokens of the last inference, for the context-pressure break trigger.
     let lastInputTokens = 0
     let lastContextBreakTurn = -Infinity
+    // Wall-clock wrap-up: warn once as the hard deadline (a task timeout) nears, so the agent
+    // winds down and checkpoints on its own instead of being killed mid-inference.
+    const deadline = options.deadline
+    const wrapupMarginMs = options.wrapupMarginMs ?? 7 * 60_000
+    let wrapupWarned = false
 
     // Persistence and transcript closure run in `finally` so a provider error
     // mid-run doesn't lose the user message and tool activity already in context.
@@ -287,6 +292,21 @@ export class AgentLoop {
               content: `[System: Checkpoint. ${urgency} to your durable notes, and save any artifacts to files. Assume this run could end at any moment: nothing important should live only in this conversation. Then continue where you left off.]`,
             })
           }
+        }
+
+        // Wall-clock wrap-up: as the run nears its hard deadline, tell the agent once to stop
+        // starting new work, write its notes, and conclude. This turns the task-timeout
+        // guillotine into a self-directed wind-down — the time-based sibling of the
+        // consolidation break, keeping the wall-clock limit consistent with the loop's
+        // "pause and capture" rhythm rather than killing a turn mid-thought. See
+        // docs/autonomy-loop.md.
+        if (deadline && !wrapupWarned && Date.now() >= deadline - wrapupMarginMs) {
+          wrapupWarned = true
+          const minsLeft = Math.max(1, Math.round((deadline - Date.now()) / 60_000))
+          addMessage(this.context, {
+            role: 'user',
+            content: `[System: You have been working for nearly this round's full time budget — about ${minsLeft} minute(s) remain before the run ends automatically. Stop starting new work now. Write everything you have learned to your durable notes, save any in-progress artifacts to files, and update your Status/NEXT so the next run resumes cleanly, then give a brief wrap-up. This is a scheduled break, not a failure — you will pick up where you left off in the next run.]`,
+          })
         }
 
         const tools = isPlanning ? [] : this.toolExecutor.getDefinitions()

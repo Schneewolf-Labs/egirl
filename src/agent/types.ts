@@ -35,6 +35,17 @@ export interface AgentLoopOptions {
    * For long autonomous tasks. See docs/autonomy-loop.md.
    */
   unbounded?: boolean
+  /**
+   * Wall-clock instant (ms epoch) at which this run will be hard-aborted by its caller (a task
+   * timeout). Used only to warn the agent to wrap up BEFORE that happens, turning a mid-thought
+   * guillotine into a self-directed wind-down. Undefined = no wall-clock limit.
+   */
+  deadline?: number
+  /**
+   * How long before `deadline` to inject the one-time wrap-up warning. The caller sets this to
+   * leave enough room for the agent to checkpoint and conclude at its own pace. Default 7 min.
+   */
+  wrapupMarginMs?: number
 }
 
 export interface AgentResponse {

@@ -210,6 +210,11 @@ export class TaskRunner {
     const run = this.deps.store.createRun(task.id)
     const timeoutMs = this.deps.tasksConfig.taskTimeoutMs
     const signal = abortController.signal
+    // The wall-clock instant this run will be hard-aborted, and how long before it the agent
+    // is warned to wrap up. The margin scales with the budget so a longer round gets a longer
+    // wind-down, capped so it never eats most of a short one.
+    const deadline = Date.now() + timeoutMs
+    const wrapupMarginMs = Math.min(Math.round(timeoutMs * 0.15), 10 * 60_000)
 
     const timeoutId = setTimeout(() => abortController.abort('timeout'), timeoutMs)
 
@@ -217,7 +222,7 @@ export class TaskRunner {
 
     try {
       const { content: result, awaitingInput } = await Promise.race([
-        this.doExecute(task, signal),
+        this.doExecute(task, signal, deadline, wrapupMarginMs),
         this.timeout(timeoutMs),
       ])
       const resultHash = await hashString(result)
@@ -261,6 +266,30 @@ export class TaskRunner {
       return { ...run, status: 'success', result, completedAt: Date.now() }
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err)
+
+      // An unbounded run reaching its wall-clock time budget is a scheduled checkpoint boundary,
+      // not a failure. It was warned to wrap up (the loop's deadline nudge), its work is already
+      // persisted (the agent persists in its finally), and it will continue next run. Counting it
+      // as a failure would march a healthy long-running task toward auto-pause. See
+      // docs/autonomy-loop.md. Bounded tasks keep the old behaviour — there, a timeout more likely
+      // means a genuine hang.
+      if (task.unbounded && /timed out after/.test(errorMsg)) {
+        log.info('tasks', `Task ${task.name}: reached its time budget — wrapped up (not a failure)`)
+        this.deps.store.update(task.id, {
+          lastRunAt: Date.now(),
+          runCount: task.runCount + 1,
+          consecutiveFailures: 0,
+          lastErrorKind: undefined,
+        })
+        if (task.kind === 'scheduled') {
+          this.deps.store.update(task.id, { nextRunAt: this.calculateTaskNextRun(task) })
+        }
+        const note = '[Reached the round time budget and wrapped up — continues next run.]'
+        this.deps.store.completeRun(run.id, { status: 'success', result: note })
+        await this.triggerDependents(task.id)
+        return { ...run, status: 'success', result: note, completedAt: Date.now() }
+      }
+
       log.warn('tasks', `Task ${task.name} failed: ${errorMsg}`)
 
       const errorKind = classifyError(errorMsg)
@@ -315,22 +344,26 @@ export class TaskRunner {
 
   private async doExecute(
     task: Task,
-    signal?: AbortSignal,
+    signal: AbortSignal | undefined,
+    deadline: number,
+    wrapupMarginMs: number,
   ): Promise<{ content: string; awaitingInput: boolean }> {
     if (task.name === HEARTBEAT_TASK_NAME) {
       const prompt = await heartbeatPreCheck(this.deps.config.workspace.path)
       if (!prompt) {
         return { content: 'No unchecked items in HEARTBEAT.md', awaitingInput: false }
       }
-      return this.executePrompt({ ...task, prompt }, signal)
+      return this.executePrompt({ ...task, prompt }, signal, deadline, wrapupMarginMs)
     }
 
-    return this.executePrompt(task, signal)
+    return this.executePrompt(task, signal, deadline, wrapupMarginMs)
   }
 
   private async executePrompt(
     task: Task,
     signal?: AbortSignal,
+    deadline?: number,
+    wrapupMarginMs?: number,
   ): Promise<{ content: string; awaitingInput: boolean }> {
     const cwd = this.deps.config.workspace.path
     const standup = await gatherStandup(cwd)
@@ -393,6 +426,11 @@ export class TaskRunner {
       unbounded: task.unbounded,
       // consolidationInterval falls through to the instance config default in the loop.
       signal,
+      // Deadline drives the loop's wrap-up warning so the agent winds down before the hard
+      // timeout aborts it. Wrap-up is offered on every task; the not-a-failure treatment of an
+      // over-run is unbounded-only (in executeTask's catch).
+      ...(deadline !== undefined && { deadline }),
+      ...(wrapupMarginMs !== undefined && { wrapupMarginMs }),
     })
 
     if (this.deps.memory) {

@@ -70,7 +70,18 @@ first — inject one system turn:
 > `[System: Checkpoint. Write everything learned since your last checkpoint into
 > NOTES.md, save any artifacts under work/, then continue.]`
 
-One mechanism, two triggers. It does three jobs at once:
+One mechanism, three triggers: every *N* turns, on context pressure, **and** as the
+run's wall-clock time budget nears (the task timeout). The time trigger injects a
+wrap-up-and-conclude nudge a margin before the hard deadline, turning what was a
+mid-inference guillotine into a self-directed wind-down. Crucially, an unbounded run
+that reaches its time budget is treated as a **checkpoint boundary, not a failure** — it
+does not count toward the auto-pause failure tally, because a healthy long-running task
+hitting the clock is expected, not a fault. (This gap — "unbounded" not exempting a run
+from the wall-clock timeout, and the timeout counting as a failure — was found in
+production when Zero's task auto-timed-out at 50 min and logged a failure; fixed by the
+time-trigger wrap-up plus the not-a-failure treatment.)
+
+It does three jobs at once:
 
 - **Note collection** — the durable record stays current instead of being written
   once at a run's end (which, under any interruption, never happens).
