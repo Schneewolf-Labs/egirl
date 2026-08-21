@@ -170,6 +170,107 @@ describe('API server', () => {
   })
 })
 
+describe('API session interrupt', () => {
+  const agents = new Map<string, AgentLoop>()
+  let server: ReturnType<typeof startAPIServer>
+  const port = 3996
+  const base = `http://127.0.0.1:${port}`
+
+  let interrupted: string[]
+  let injected: Array<{ session: string; message: string }>
+  let taskAborts: string[]
+  let taskInjects: Array<{ id: string; message: string }>
+
+  function interruptibleAgent(sessionId: string): AgentLoop {
+    const stub = stubAgent(sessionId)
+    return Object.assign(stub, {
+      interrupt: () => {
+        interrupted.push(sessionId)
+        return true
+      },
+      inject: (message: string) => {
+        injected.push({ session: sessionId, message })
+        return true
+      },
+    }) as AgentLoop
+  }
+
+  const taskRunner = {
+    abortTask: (id: string) => {
+      taskAborts.push(id)
+      return true
+    },
+    injectTask: (id: string, message: string) => {
+      taskInjects.push({ id, message })
+      return true
+    },
+  }
+
+  beforeEach(() => {
+    agents.clear()
+    interrupted = []
+    injected = []
+    taskAborts = []
+    taskInjects = []
+    server = startAPIServer(
+      { host: '127.0.0.1', port },
+      {
+        agentFactory: (id) => interruptibleAgent(id),
+        agents,
+        taskRunner: taskRunner as unknown as APIDeps['taskRunner'],
+      },
+    )
+  })
+
+  afterEach(() => {
+    server.stop(true)
+  })
+
+  async function interrupt(sessionId: string, body: Record<string, unknown>) {
+    return fetch(`${base}/sessions/${encodeURIComponent(sessionId)}/interrupt`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+  }
+
+  test('abort reaches the session agent', async () => {
+    agents.set('s1', interruptibleAgent('s1'))
+    const res = await interrupt('s1', { action: 'abort' })
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { delivered: boolean }
+    expect(body.delivered).toBe(true)
+    expect(interrupted).toContain('s1')
+  })
+
+  test('inject reaches the session agent with the message', async () => {
+    agents.set('s1', interruptibleAgent('s1'))
+    const res = await interrupt('s1', { action: 'inject', message: 'stop and report' })
+    expect(res.status).toBe(200)
+    expect(injected).toEqual([{ session: 's1', message: 'stop and report' }])
+  })
+
+  test('task sessions route to the task runner', async () => {
+    const abortRes = await interrupt('task:abc123', { action: 'abort' })
+    expect(((await abortRes.json()) as { delivered: boolean }).delivered).toBe(true)
+    expect(taskAborts).toContain('abc123')
+
+    await interrupt('task:abc123', { action: 'inject', message: 'note this' })
+    expect(taskInjects).toEqual([{ id: 'abc123', message: 'note this' }])
+  })
+
+  test('unknown session delivers false instead of erroring', async () => {
+    const res = await interrupt('ghost', { action: 'abort' })
+    expect(res.status).toBe(200)
+    expect(((await res.json()) as { delivered: boolean }).delivered).toBe(false)
+  })
+
+  test('validates action and inject message', async () => {
+    expect((await interrupt('s1', { action: 'explode' })).status).toBe(400)
+    expect((await interrupt('s1', { action: 'inject' })).status).toBe(400)
+  })
+})
+
 describe('API task lifecycle', () => {
   const agents = new Map<string, AgentLoop>()
   let server: ReturnType<typeof startAPIServer>

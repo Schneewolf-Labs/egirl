@@ -47,7 +47,7 @@ export class TaskRunner {
   private deps: TaskRunnerDeps
   private tickTimer: ReturnType<typeof setInterval> | undefined
   private runningCount = 0
-  private runningTasks: Map<string, AbortController> = new Map()
+  private runningTasks: Map<string, { controller: AbortController; agent?: AgentLoop }> = new Map()
   private lastInteractionAt: number = Date.now()
 
   constructor(deps: TaskRunnerDeps) {
@@ -64,8 +64,8 @@ export class TaskRunner {
     if (this.tickTimer) clearInterval(this.tickTimer)
     this.tickTimer = undefined
 
-    for (const [, controller] of this.runningTasks) {
-      controller.abort()
+    for (const [, entry] of this.runningTasks) {
+      entry.controller.abort()
     }
     this.runningTasks.clear()
 
@@ -105,10 +105,20 @@ export class TaskRunner {
    * started with — so cleanup and run bookkeeping are identical to every other abort.
    */
   abortTask(taskId: string): boolean {
-    const controller = this.runningTasks.get(taskId)
-    if (!controller) return false
-    controller.abort('user')
+    const entry = this.runningTasks.get(taskId)
+    if (!entry) return false
+    entry.controller.abort('user')
     return true
+  }
+
+  /**
+   * Queue an operator message into a task's in-flight run (see AgentLoop.inject for the
+   * delivery contract). Returns false if the task is not executing or has no agent yet.
+   */
+  injectTask(taskId: string, message: string): boolean {
+    const entry = this.runningTasks.get(taskId)
+    if (!entry?.agent) return false
+    return entry.agent.inject(message)
   }
 
   /** Activate a task — set next_run for scheduled/oneshot */
@@ -195,7 +205,7 @@ export class TaskRunner {
   private async executeTask(task: Task): Promise<TaskRun> {
     this.runningCount++
     const abortController = new AbortController()
-    this.runningTasks.set(task.id, abortController)
+    this.runningTasks.set(task.id, { controller: abortController })
 
     const run = this.deps.store.createRun(task.id)
     const timeoutMs = this.deps.tasksConfig.taskTimeoutMs
@@ -345,6 +355,9 @@ export class TaskRunner {
     }
 
     const agent = new AgentLoop(deps)
+    // Register the agent on the running entry so injectTask can reach the live run.
+    const running = this.runningTasks.get(task.id)
+    if (running) running.agent = agent
     const response = await agent.run(task.prompt, {
       maxTurns: task.maxTurns ?? 10,
       unbounded: task.unbounded,

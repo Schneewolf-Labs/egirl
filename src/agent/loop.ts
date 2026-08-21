@@ -81,6 +81,12 @@ export class AgentLoop {
   private mutex: SessionMutex | null
   private history: ConversationHistory
   private compactor = new CompactionScheduler()
+  /**
+   * The in-flight run, if any — the handle interrupt() and inject() act through. One run at
+   * a time per loop instance is already the contract everywhere (the API chains requests per
+   * session; the CLI and runner are single-run by construction), so a single slot suffices.
+   */
+  private activeRun: { controller: AbortController; pendingInjections: string[] } | null = null
 
   constructor(deps: AgentLoopDeps) {
     this.config = deps.config
@@ -122,10 +128,49 @@ export class AgentLoop {
     return this.mutex ? this.mutex.run(fn) : fn()
   }
 
+  /**
+   * Abort the in-flight run, if any. The run ends through the same signal path as every
+   * other abort (timeout, shutdown), including a stuck inference — the provider's fetch is
+   * cancelled. Returns false when nothing is running.
+   */
+  interrupt(): boolean {
+    if (!this.activeRun) return false
+    this.activeRun.controller.abort('interrupt')
+    return true
+  }
+
+  /**
+   * Queue a message into the in-flight run. It is delivered at the top of the next turn —
+   * never spliced into the middle of one, where a user message between an assistant tool
+   * call and its tool results would corrupt the transcript the model sees. Returns false
+   * when nothing is running (callers should send a normal chat message instead).
+   */
+  inject(message: string): boolean {
+    if (!this.activeRun) return false
+    this.activeRun.pendingInjections.push(message)
+    return true
+  }
+
+  isRunning(): boolean {
+    return this.activeRun !== null
+  }
+
   private async doRun(userMessage: string, options: AgentLoopOptions): Promise<AgentResponse> {
     await this.compactor.drain()
 
-    const { events, planningMode, signal } = options
+    const { events, planningMode } = options
+    // Every run gets its own controller so interrupt() can end it without the caller having
+    // passed a signal. An external signal (task timeout, shutdown) forwards into it, keeping
+    // one signal — `signal` below — as the single thing the loop body watches.
+    const runController = new AbortController()
+    const externalSignal = options.signal
+    const forwardAbort = () => runController.abort(externalSignal?.reason ?? 'external')
+    if (externalSignal) {
+      if (externalSignal.aborted) forwardAbort()
+      else externalSignal.addEventListener('abort', forwardAbort, { once: true })
+    }
+    const signal = runController.signal
+    this.activeRun = { controller: runController, pendingInjections: [] }
     // Unbounded runs replace the turn cap with a far-off safety ceiling: the run is meant to
     // end on a mechanical failure, a semantic report, or a human — not an artificial count.
     // The ceiling is a backstop only; hitting it means a detector that should have fired
@@ -203,6 +248,17 @@ export class AgentLoop {
         }
 
         turns++
+
+        // Operator interjections queued by inject() land here — at a turn boundary, after
+        // any tool results are already paired with their calls — as ordinary user messages.
+        if (this.activeRun && this.activeRun.pendingInjections.length > 0) {
+          for (const injected of this.activeRun.pendingInjections.splice(0)) {
+            addMessage(this.context, {
+              role: 'user',
+              content: `[System: The operator interjected mid-run with the following message. Address it before continuing — it may redirect or end the current work.]\n\n${injected}`,
+            })
+          }
+        }
 
         // Consolidation break: inject one checkpoint turn telling the agent to externalize
         // what it has learned before continuing. It keeps the durable record current (so an
@@ -529,6 +585,8 @@ export class AgentLoop {
         aborted: signal?.aborted ? true : undefined,
       }
     } finally {
+      this.activeRun = null
+      externalSignal?.removeEventListener('abort', forwardAbort)
       this.history.persistNew(this.context.messages)
       this.transcript?.turnEnd(this.context.sessionId, {
         content_length: finalContent.length,

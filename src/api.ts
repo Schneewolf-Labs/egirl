@@ -337,6 +337,42 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
           })
         }
 
+        // Reach into a running loop: abort it, or inject an operator message it will see at
+        // the next turn boundary. This is the background-run version of pressing esc in the
+        // TTY — the piece that makes "the human can always stop the loop" true for unattended
+        // runs. task:* sessions live inside the task runner, not this server's agents map.
+        {
+          const m = method === 'POST' && path.match(/^\/sessions\/(.+)\/interrupt$/)
+          if (m) {
+            const sessionId = decodeURIComponent(m[1] as string)
+            const body = await readJson(req)
+            const action = body.action
+            if (action !== 'abort' && action !== 'inject') {
+              return err("action must be 'abort' or 'inject'")
+            }
+            const message = body.message
+            if (action === 'inject' && (typeof message !== 'string' || !message.trim())) {
+              return err('message required for inject')
+            }
+            let delivered = false
+            if (sessionId.startsWith('task:') && deps.taskRunner) {
+              const taskId = sessionId.slice('task:'.length)
+              delivered =
+                action === 'abort'
+                  ? deps.taskRunner.abortTask(taskId)
+                  : deps.taskRunner.injectTask(taskId, message as string)
+            } else {
+              const agent = deps.agents.get(sessionId)
+              if (agent) {
+                delivered = action === 'abort' ? agent.interrupt() : agent.inject(message as string)
+              }
+            }
+            // delivered=false means nothing was running — for inject, the caller should send
+            // a normal chat message instead.
+            return json({ ok: true, delivered })
+          }
+        }
+
         if (method === 'DELETE' && path.startsWith('/sessions/')) {
           const sessionId = decodeURIComponent(path.slice('/sessions/'.length))
           const agent = deps.agents.get(sessionId)
