@@ -168,6 +168,34 @@ This is optional but helps. Tell the agent about yourself:
 
 If `USER.md` is left as the blank template, it's excluded from the system prompt entirely.
 
+## Example Personas
+
+Kira is the default, but she's one archetype: a **coding colleague** who drives a
+code agent and stays in the conversation with you. The repo ships a second,
+deliberately different example under `examples/personas/zero/` — **Zero**, the
+**autonomous-agent** archetype.
+
+Where Kira delegates and chats, Zero does the work herself: an autonomous
+reverse-engineer running unattended in a sandbox, grinding at a long goal for
+hours, capturing findings to a live NOTES.md and verifying every claim against
+ground truth. Her voice is a counterpoint to Kira's playful smugness — focused,
+precise, evidence-driven, terse. She's a worked example of writing a personality
+for the [autonomy loop](autonomy-loop.md): capture-first discipline, and reporting
+to a supervisor when blocked or done. Her `TOOLS.md` doubles as a real RE-toolbox
+manifest (installed by `scripts/setup-tools.sh re-toolbox`).
+
+The five files (`IDENTITY.md`, `SOUL.md`, `AGENTS.md`, `USER.md`, `TOOLS.md`) use
+the same format as the defaults in `src/workspace/templates/`. To point an
+instance at Zero, copy them into that instance's workspace:
+
+```bash
+cp examples/personas/zero/*.md ~/.egirl/personas/zero/
+```
+
+Or set the persona's `workspace` in `egirl.toml` to a directory holding them (see
+[Multi-Instance Config](configuration.md#multi-instance-config)). Edit `USER.md`
+to name the supervisor Zero reports to.
+
 ## Tips
 
 **Show, don't tell.** Sample responses in `SOUL.md` are the single most effective way to shape behavior. The LLM pattern-matches on examples better than it follows abstract descriptions.

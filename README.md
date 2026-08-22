@@ -218,6 +218,7 @@ No OpenAPI spec, no versioned paths, no plugin framework. If you want to build s
 | [Safety](docs/safety.md) | Guardrails and their limits |
 | [Tool Format](docs/tool-format.md) | Qwen3 native tool calling |
 | [Personality](docs/personality.md) | Customizing Kira |
+| [Deployment](docs/deployment.md) | Serving stack, context sizing, duplicating an instance to another box |
 | [Development](docs/development.md) | Setup, testing, style |
 
 ## Requirements
