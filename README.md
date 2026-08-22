@@ -48,7 +48,9 @@ bun install
 bun run start init --provider codex
 
 # Start llama.cpp (your local model)
-llama-server -m your-model.gguf -c 32768 --port 8080
+# --jinja applies the model's chat template — required for tool calling and for
+# reasoning models to stream their thinking out-of-band; -fa on enables flash attention.
+llama-server -m your-model.gguf -c 32768 -fa on --jinja --port 8080
 
 # Check setup
 bun run start doctor
