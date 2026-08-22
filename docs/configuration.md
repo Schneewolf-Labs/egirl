@@ -41,6 +41,7 @@ Settings for the local llama.cpp server. This is the only LLM provider.
 | `context_length` | number | `32768` | Maximum context window in tokens. Should match your llama.cpp server's `-c` flag |
 | `max_concurrent` | number | `2` | Maximum concurrent requests to the local server |
 | `stale_stream_timeout_ms` | number | `90000` | Kill a streaming request that has produced no new tokens for this long |
+| `api_key` | string | — | Bearer token for a llama-server started with `--api-key` (a shared/keyed operator endpoint). Prefer the `EGIRL_LOCAL_API_KEY` env var over putting the secret in the toml |
 
 ### `[local.embeddings]`
 
