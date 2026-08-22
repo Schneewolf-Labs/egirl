@@ -89,6 +89,9 @@ const baseProperties = {
      */
     stale_stream_timeout_ms: Type.Optional(Type.Number({ default: 300_000 })),
     temperature: Type.Optional(Type.Number({ minimum: 0, maximum: 2 })),
+    // Bearer token for a llama-server started with --api-key (a shared/keyed operator endpoint).
+    // Prefer the EGIRL_LOCAL_API_KEY env var over putting the secret in the toml.
+    api_key: Type.Optional(Type.String()),
     // A second, usually smaller model for side work: compaction summaries, memory extraction.
     // These run on every compaction and every few turns, and they do not need the operator
     // model's capability — but they do occupy its slot and its context while they run.
@@ -461,6 +464,8 @@ export interface RuntimeConfig {
     staleStreamTimeoutMs: number
     /** Sampling temperature. Undefined lets llama.cpp use its own default (0.8). */
     temperature?: number
+    /** Bearer token for a keyed llama-server (--api-key). Undefined for the usual open server. */
+    apiKey?: string
     /** Optional smaller model for summarisation and memory extraction. */
     auxiliary?: {
       endpoint: string

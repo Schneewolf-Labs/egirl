@@ -43,6 +43,7 @@ export function createProviderRegistry(config: RuntimeConfig): ProviderRegistry 
     config.local.staleStreamTimeoutMs,
     config.local.maxConcurrent,
     config.local.temperature,
+    config.local.apiKey,
   )
 
   const auxiliary = config.local.auxiliary

@@ -88,6 +88,9 @@ export class LlamaCppProvider implements LLMProvider {
   // cases, a 19% flip rate, which is larger than any model difference worth detecting. Setting
   // this to 0 makes runs comparable.
   private defaultTemperature: number | undefined
+  // Bearer token for a llama.cpp server started with --api-key. Empty for the usual open local
+  // server; set when the operator model is shared (e.g. a keyed endpoint also serving a peer).
+  private apiKey: string | undefined
 
   constructor(
     endpoint: string,
@@ -95,10 +98,12 @@ export class LlamaCppProvider implements LLMProvider {
     staleStreamTimeoutMs?: number,
     maxConcurrent?: number,
     defaultTemperature?: number,
+    apiKey?: string,
   ) {
     this.endpoint = endpoint.replace(/\/$/, '')
     this.name = `llamacpp/${model}`
     this.defaultTemperature = defaultTemperature
+    this.apiKey = apiKey
     // Floored per model family: a reasoning model's thinking phase outlasts the chat-model
     // default, and the timer also spans prefill, which emits nothing on a large cold context.
     this.staleStreamTimeoutMs = withReasoningFloor(
@@ -116,7 +121,9 @@ export class LlamaCppProvider implements LLMProvider {
     if (this.capabilities) return this.capabilities
 
     try {
-      const response = await fetch(`${this.endpoint}/v1/models`)
+      const response = await fetch(`${this.endpoint}/v1/models`, {
+        headers: this.apiKey ? { Authorization: `Bearer ${this.apiKey}` } : {},
+      })
       if (!response.ok) {
         return { multimodal: false, toolUse: false }
       }
@@ -174,7 +181,10 @@ export class LlamaCppProvider implements LLMProvider {
 
     const response = await fetch(`${this.endpoint}/v1/chat/completions`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(this.apiKey && { Authorization: `Bearer ${this.apiKey}` }),
+      },
       signal: req.signal,
       body: JSON.stringify({
         messages,
@@ -555,6 +565,7 @@ export function createLlamaCppProvider(
   staleStreamTimeoutMs?: number,
   maxConcurrent?: number,
   defaultTemperature?: number,
+  apiKey?: string,
 ): LLMProvider {
   return new LlamaCppProvider(
     endpoint,
@@ -562,5 +573,6 @@ export function createLlamaCppProvider(
     staleStreamTimeoutMs,
     maxConcurrent,
     defaultTemperature,
+    apiKey,
   )
 }

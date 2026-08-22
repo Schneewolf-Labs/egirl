@@ -297,6 +297,10 @@ export function loadConfig(options: LoadConfigOptions = {}): RuntimeConfig {
       cacheSlots: toml.local?.cache_slots ?? defaultToml.local.cache_slots ?? 1,
       toolFormat: toml.local?.tool_format ?? defaultToml.local.tool_format ?? 'auto',
       staleStreamTimeoutMs: toml.local?.stale_stream_timeout_ms ?? 300_000,
+      // Secret prefers .env; toml is a fallback for a fully-local setup.
+      ...((process.env.EGIRL_LOCAL_API_KEY ?? toml.local?.api_key) && {
+        apiKey: process.env.EGIRL_LOCAL_API_KEY ?? toml.local?.api_key,
+      }),
       // Undefined means "let the server decide", which is llama.cpp's 0.8. Set 0 to make runs
       // reproducible — see EGIRL_LOCAL_TEMPERATURE, which the bench uses.
       ...(process.env.EGIRL_LOCAL_TEMPERATURE !== undefined || toml.local?.temperature !== undefined
