@@ -355,7 +355,13 @@ let sid=localStorage.getItem('egirl-sid')||('web:'+Math.random().toString(36).sl
 localStorage.setItem('egirl-sid',sid);
 ${hasToken ? `let tok=localStorage.getItem('egirl-token');if(!tok){tok=prompt('API token');if(tok)localStorage.setItem('egirl-token',tok)}` : 'const tok=null;'}
 const H=()=>{const h={'Content-Type':'application/json'};if(tok)h['Authorization']='Bearer '+tok;return h};
-const esc=t=>String(t??'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+// Quotes are escaped as well as angle brackets, and that is not optional: escaped values get
+// interpolated into double-quoted attributes (href, data-*), so a surviving quote closes the
+// attribute early and the rest of the value is parsed as more attributes -- an event handler,
+// for instance. Browsers accept that with no whitespace at all. Everything rendered here can
+// carry text the agent did not write: a page it fetched, a peer's message, a tool result. With
+// the API token in localStorage and execute_command behind it, one injected handler is a shell.
+const esc=t=>String(t??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
 // Tabs are plain show/hide. Loaded lazily so opening the page does not fetch the system prompt
 // and the whole memory store before anything has been typed.
@@ -390,7 +396,10 @@ function mdInline(s){
     // italic runs after bold consumed its pairs; requiring a non-space, non-* char right after
     // the opening * keeps "a * b" math and "import *" from being swallowed.
     .replace(/\\*([^*\\s][^*]*?)\\*/g,'<em>$1</em>')
-    .replace(/\\[([^\\]]+)\\]\\((https?:\\/\\/[^)\\s]+)\\)/g,'<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+    // Second line of defence behind esc(): quotes and angle brackets are excluded from the URL
+    // charset outright, so a link can never contribute attribute syntax even if escaping
+    // regressed. http/https only -- javascript: and data: URLs are not links, they are payloads.
+    .replace(/\\[([^\\]]+)\\]\\((https?:\\/\\/[^)\\s"'<>]+)\\)/g,'<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
 }
 function mdBlocks(text){
   const lines=esc(text).split('\\n'); let html='',list=null;

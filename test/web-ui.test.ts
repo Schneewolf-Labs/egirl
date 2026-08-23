@@ -124,4 +124,45 @@ describe('console panels', () => {
     expect(html()).toContain('r.status===503')
     expect(html()).toContain('Memory is disabled')
   })
+
+  describe('client-side escaping', () => {
+    /**
+     * The page's own esc(), pulled out of the served script and made callable, so these test
+     * what the browser actually runs rather than asserting on source text.
+     */
+    function clientEsc(): (s: unknown) => string {
+      const m = /const esc=(t=>String\(t\?\?''\)\.replace\(.*?\));/.exec(html())
+      if (!m) throw new Error('could not find esc() in the served page')
+      return eval(`(${m[1]})`) as (s: unknown) => string
+    }
+
+    test('escapes quotes as well as angle brackets', () => {
+      // Escaped values are interpolated into double-quoted attributes (href, data-*). A quote
+      // that survives closes the attribute early and everything after it parses as further
+      // attributes -- including an event handler, with no whitespace required. This was a live
+      // hole: `[docs](https://evil/x"onmouseover="...)` in agent output rendered an anchor with
+      // a working handler, and the API token in localStorage sits in front of execute_command.
+      const esc = clientEsc()
+      expect(esc('"')).toBe('&quot;')
+      expect(esc("'")).toBe('&#39;')
+      expect(esc('<script>')).toBe('&lt;script&gt;')
+      expect(esc('a&b')).toBe('a&amp;b')
+      expect(esc('x"onmouseover="alert(1)')).not.toContain('"')
+    })
+
+    test('leaves ordinary text intact apart from the escapes', () => {
+      // Quotes and apostrophes are ordinary content in prose: they must become entities that
+      // render back to the original characters, not get stripped.
+      const esc = clientEsc()
+      expect(esc("it's carry-driven")).toBe('it&#39;s carry-driven')
+      expect(esc('plain text')).toBe('plain text')
+    })
+
+    test('markdown link URLs cannot carry attribute syntax', () => {
+      // Defence in depth behind esc(): the URL charset excludes quotes and angle brackets, so a
+      // link cannot contribute attribute syntax even if escaping regressed. http/https only --
+      // a javascript: or data: URL is a payload, not a link.
+      expect(html()).toContain(`"'<>]+`)
+    })
+  })
 })
