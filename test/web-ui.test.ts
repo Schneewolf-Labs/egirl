@@ -247,6 +247,63 @@ describe('console panels', () => {
     })
   })
 
+  describe('history rendering', () => {
+    /** Pull historyView() out of the served script; it depends on nothing else. */
+    function historyView(): (msgs: unknown[]) => Array<{ who: string; text: string; from?: string }> {
+      const src = html()
+      const start = src.indexOf('function historyView(')
+      if (start < 0) throw new Error('historyView() not found')
+      let depth = 0
+      let end = start
+      for (let i = src.indexOf('{', start); i < src.length; i++) {
+        if (src[i] === '{') depth++
+        else if (src[i] === '}') {
+          depth--
+          if (depth === 0) {
+            end = i + 1
+            break
+          }
+        }
+      }
+      return new Function(`${src.slice(start, end)}; return historyView;`)()
+    }
+
+    const peerTurn = (from: string, body: string) => ({
+      role: 'user',
+      content:
+        `[agent-to-agent] Message from peer "${from}", another egirl agent. Your reply text is ` +
+        `returned to it directly — do not call peer_message to answer this (only to involve a ` +
+        `different peer). Be direct and information-dense; skip pleasantries.\n\n${body}`,
+    })
+
+    test('shows what a peer actually said, not just the replies', () => {
+      // Peer messages arrive as user turns wrapped in protocol boilerplate, and the old filter
+      // dropped every bracketed user message -- so an entire agent-to-agent conversation
+      // rendered as a monologue: you saw the answers and never the questions.
+      const view = historyView()([
+        peerTurn('zero', 'Should I reverse the checksum or ship read-only?'),
+        { role: 'assistant', content: 'Read-only for now.' },
+      ])
+      expect(view.length).toBe(2)
+      expect(view[0]?.text).toBe('Should I reverse the checksum or ship read-only?')
+      expect(view[0]?.from).toBe('zero') // attributed, since in a peer session neither side is you
+      expect(view[1]?.who).toBe('her')
+    })
+
+    test('still hides the machine plumbing', () => {
+      // Everything else in brackets is context the agent was handed, not conversation, and a
+      // transcript full of it buries what was actually said.
+      const view = historyView()([
+        { role: 'user', content: '[System: Context window is 82% full]' },
+        { role: 'user', content: '[Recalled memories]\nfoo' },
+        { role: 'user', content: '[Conversation summary]\nbar' },
+        { role: 'user', content: '<tool_response>\nok\n</tool_response>' },
+        { role: 'user', content: 'a real thing someone typed' },
+      ])
+      expect(view.map((v) => v.text)).toEqual(['a real thing someone typed'])
+    })
+  })
+
   describe('client-side escaping', () => {
     /**
      * The page's own esc(), pulled out of the served script and made callable, so these test

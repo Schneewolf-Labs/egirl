@@ -140,6 +140,9 @@ td:first-child{color:var(--dim);white-space:nowrap;width:1%;padding-right:1.2rem
 .attachrow .thumb{position:relative}
 .msg img{max-width:14rem;border-radius:.45rem;display:block;margin-top:.3rem}
 .queued::before{content:'♡ queued · ';color:var(--s);font-style:italic;font-size:.78rem}
+/* In a peer session the right-hand side is another agent, not you. Say which. */
+.me[data-from]::before{content:'⇄ ' attr(data-from);display:block;color:var(--s);font-size:.72rem;
+  margin-bottom:.25rem;letter-spacing:.03em}
 /* ---- Tasks & inbox: the autonomy surface --------------------------------- */
 /* A task's stored status ('active') can't say whether it's idle or mid-run; the server's live
    running flag does, and drives the pulse + whether "stop" is offered. */
@@ -510,7 +513,18 @@ function historyView(msgs){
   const out=[];
   for(const msg of msgs||[]){
     if(msg.role==='user'){
-      if(msg.content.startsWith('[')||msg.content.includes('<tool_response>'))continue;
+      if(msg.content.includes('<tool_response>'))continue;
+      // A message from another agent arrives as a user turn wrapped in protocol boilerplate.
+      // It is the only bracketed user message that is actually conversation -- everything else
+      // ([System:], [Recalled...], [Conversation summary]) is machine plumbing. Hiding the lot
+      // by prefix made every peer exchange look one-sided: you saw the replies and never the
+      // questions. Strip the preamble and show what the peer actually said.
+      // Backslashes doubled: this whole page is a template literal, which eats one level. The
+      // single-escaped version compiles fine and ships a broken regex ([\\s\\S] arriving as
+      // [sS]), which throws at runtime and renders the transcript empty.
+      const peer=msg.content.match(/^\\[agent-to-agent\\] Message from peer "([^"]+)"[^\\n]*\\n+([\\s\\S]*)$/);
+      if(peer){ out.push({who:'me',text:peer[2].trim(),from:peer[1]}); continue }
+      if(msg.content.startsWith('['))continue;
       out.push({who:'me',text:msg.content});
     }else if(msg.role==='assistant'){
       const text=msg.content.replace(/<tool_call>[\\s\\S]*?(<\\/tool_call>|$)/g,'').trim();
@@ -529,7 +543,12 @@ async function loadHistory(){
       const d=await r.json();
       // The summary stands in for the OLDEST messages, so it sits above them, not below.
       if(d.has_summary)add('older messages are compacted into a summary','sys');
-      for(const msg of historyView(d.messages)) msg.who==='her'?addMd(msg.text):add(msg.text,msg.who);
+      for(const msg of historyView(d.messages)){
+        if(msg.who==='her'){ addMd(msg.text); continue }
+        const el=add(msg.text,msg.who);
+        // Say who it came from when it was not you -- in a peer session both sides are agents.
+        if(msg.from)el.dataset.from=msg.from;
+      }
     }
     if(!log.children.length)add('new conversation — say hi','sys');
   }catch(e){add('could not load history: '+(e.message||e),'sys')}
