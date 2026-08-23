@@ -5,6 +5,8 @@ import { startAPIServer } from '../api'
 import { createPushNotifier, generateVapidKeys, PushStore } from '../push'
 import { createAppServices } from '../bootstrap'
 import type { RuntimeConfig } from '../config'
+import { createReplyBroker } from '../report/broker'
+import { ConsoleInbox } from '../report/console-channel'
 import { registerReportTool } from '../report/register'
 import { gatherStandup } from '../standup'
 import { createTaskRunner, taskRunnerEnabled, taskRunnerOffReason } from '../tasks'
@@ -53,9 +55,17 @@ export async function runAPI(config: RuntimeConfig, args: string[]): Promise<voi
 
   const agents = new Map<string, AgentLoop>()
 
-  // No chat channels in api mode: peer supervisors fully work; a channel target degrades to
-  // an explanatory tool error at call time.
-  registerReportTool(config, toolExecutor, new Map())
+  // The console is a real report target. Without this, an instance whose only surface is the
+  // browser had nowhere to escalate to -- a peer supervisor worked, but "this one is the
+  // human's call" died in a tool error, and the agent went back to guessing.
+  const consoleInbox = new ConsoleInbox()
+  const replyBroker = createReplyBroker()
+  registerReportTool(
+    config,
+    toolExecutor,
+    new Map([['console', { send: consoleInbox.send }]]),
+    replyBroker,
+  )
 
   // Web Push. Keys and subscriptions live in the workspace beside the other state, so an
   // instance keeps its identity across restarts -- regenerating the VAPID pair would silently
@@ -118,6 +128,8 @@ export async function runAPI(config: RuntimeConfig, args: string[]): Promise<voi
   }
 
   const server = startAPIServer(config.channels.api, {
+    consoleInbox,
+    replyBroker,
     push,
     pushStore,
     agentFactory,

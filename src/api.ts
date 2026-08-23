@@ -11,6 +11,7 @@ import { formatInboundPeerMessage, PEER_PROTOCOL, peerSessionId } from './peers/
 import type { Task, TaskRunner, TaskStore } from './tasks'
 import { getTheme } from './ui/theme'
 import { log } from './util/logger'
+import type { ConsoleInbox } from './report/console-channel'
 import type { PushNotifier, PushStore } from './push'
 import { renderManifest, renderServiceWorker } from './push/assets'
 import { ansiToHex, renderChatPage } from './web-ui'
@@ -41,6 +42,10 @@ export interface APIDeps {
    * server has touched; the store knows every conversation from every channel, which is what
    * a session picker actually wants to show.
    */
+  /** Escalations addressed to `console:` — questions waiting for a human in the browser. */
+  consoleInbox?: ConsoleInbox
+  /** Delivers a console answer back to the run parked on it. */
+  replyBroker?: { tryDeliver(channel: string, target: string, message: string): boolean }
   /** Web Push, when configured: how an agent reaches a device that is not looking at the console. */
   push?: PushNotifier
   pushStore?: PushStore
@@ -241,6 +246,41 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
             )
           }
           return json({ service: 'egirl', version: '0.2.0' })
+        }
+
+        // --- Escalations waiting on a human ----------------------------------
+        // An agent that decides something is the human's call parks on one of these. It is the
+        // same blocking contract a Discord reply satisfies -- the console is just another
+        // channel the answer can arrive on.
+        if (method === 'GET' && path === '/asks') {
+          if (!deps.consoleInbox) return json({ asks: [] })
+          // Anything older than the longest an asker could still be waiting is abandoned.
+          deps.consoleInbox.prune(60 * 60 * 1000)
+          return json({
+            asks: deps.consoleInbox.list().map((a) => ({
+              id: a.id,
+              from: a.from,
+              question: a.question,
+              asked_at: a.askedAt,
+            })),
+          })
+        }
+
+        {
+          const m = method === 'POST' && path.match(/^\/asks\/([^/]+)\/reply$/)
+          if (m) {
+            if (!deps.consoleInbox || !deps.replyBroker) return err('no console inbox', 503)
+            const id = m[1] as string
+            const ask = deps.consoleInbox.get(id)
+            if (!ask) return err('ask not found (it may have timed out)', 404)
+            const reply = (await readJson(req)).reply
+            if (typeof reply !== 'string' || !reply.trim()) return err('reply required')
+            const delivered = deps.replyBroker.tryDeliver('console', ask.from, reply)
+            deps.consoleInbox.resolve(id)
+            // delivered=false means the asker gave up before the answer arrived; the question is
+            // still cleared, because leaving it would invite answering it a second time.
+            return json({ ok: true, delivered })
+          }
         }
 
         // --- Web Push --------------------------------------------------------

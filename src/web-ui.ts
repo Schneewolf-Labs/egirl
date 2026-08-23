@@ -1041,13 +1041,26 @@ $('peers').onclick=e=>{
 // the task active), so the inbox is a focused lens on the same plumbing chat already uses.
 async function loadInbox(){
   const box=$('inbox');
+  // Two kinds of thing wait on you: a task parked on an unanswered ask, and an agent that
+  // decided something is your call and is blocked on the answer. Same question from your side.
+  let asks=[];
+  try{ asks=(await (await fetch('asks',{headers:H()})).json()).asks||[] }catch(e){}
   let tasks;
   try{
     const r=await fetch('tasks?status=awaiting',{headers:H()});
     if(r.status===503){box.innerHTML='<div class="empty">Tasks are disabled on this instance.</div>';return}
     tasks=(await r.json()).tasks||[];
   }catch(e){box.innerHTML='<div class="empty">could not load: '+esc(e.message||e)+'</div>';throw e}
-  if(!tasks.length){box.innerHTML='<div class="empty">Nothing waiting on you. 🌙<br>When a task gets blocked and asks a question, it lands here.</div>';return}
+  const askCards=asks.map(a=>
+    '<div class="task await ask"><div class="top">'+
+    '<span class="badge awaiting"><span class="dot"></span>asking</span>'+
+    '<span class="nm">'+esc(a.from)+'</span></div>'+
+    '<div class="meta"><span>'+esc(ago(a.asked_at))+'</span><span>blocked until you answer</span></div>'+
+    '<div class="q">'+esc(String(a.question).slice(0,1200))+'</div>'+
+    '<div class="rep"><textarea rows="2" data-ask="'+esc(a.id)+'" placeholder="Your answer resumes them…"></textarea>'+
+    '<button class="go" data-askreply="'+esc(a.id)+'">Send</button></div></div>');
+  if(!tasks.length&&!askCards.length){box.innerHTML='<div class="empty">Nothing waiting on you. 🌙<br>Blocked tasks and questions an agent escalated to you land here.</div>';return}
+  if(!tasks.length){box.innerHTML=askCards.join('');return}
   const cards=await Promise.all(tasks.map(async t=>{
     let q='(open the conversation to see what she asked)';
     try{
@@ -1065,9 +1078,24 @@ async function loadInbox(){
       '<div class="rep"><textarea rows="2" data-id="'+esc(t.id)+'" placeholder="Reply to resume her…"></textarea>'+
       '<button class="go" data-reply="'+esc(t.id)+'">Send</button></div></div>';
   }));
-  box.innerHTML=cards.join('');
+  box.innerHTML=askCards.concat(cards).join('');
 }
 $('inbox').onclick=async e=>{
+  const ab=e.target.closest('button[data-askreply]');
+  if(ab){
+    const id=ab.dataset.askreply;
+    const ta=$('inbox').querySelector('textarea[data-ask="'+CSS.escape(id)+'"]');
+    const text=(ta?.value||'').trim(); if(!text)return;
+    ab.disabled=true; ab.textContent='sending…';
+    try{
+      const d=await (await fetch('asks/'+encodeURIComponent(id)+'/reply',{method:'POST',headers:H(),body:JSON.stringify({reply:text})})).json();
+      // delivered=false means they stopped waiting before the answer arrived — worth saying,
+      // because the agent will not act on it and you would otherwise assume it landed.
+      if(!d.delivered)say('Answer recorded, but they had already stopped waiting.',true);
+    }catch(err){ ab.disabled=false; ab.textContent='Send'; return }
+    loadInbox();
+    return;
+  }
   const btn=e.target.closest('button[data-reply]'); if(!btn)return;
   const id=btn.dataset.reply;
   const ta=$('inbox').querySelector('textarea[data-id="'+CSS.escape(id)+'"]');
