@@ -14,6 +14,9 @@ path = "~/.egirl/personas/emma"
 endpoint = "http://192.168.72.251:8899"
 model = "deepseek-v4-flash-0731"
 tool_format = "qwen3"
+# Off: `/think` is Qwen3's soft-switch, and prepending it to a DeepSeek prompt just makes her
+# read it as something you typed -- she reported being asked "/think hey this is nick".
+thinking_directive = false
 
 # The model serves 384k. This is set far below it deliberately: Emma answers discrete questions
 # and reads org state, she never holds a binary in her head. An oversized window is how an agent
@@ -27,9 +30,9 @@ context_length = 65536
 # `reasoning_content`); the provider accepts both, which is what keeps a long think from
 # looking like a hung stream.
 # Measured, not guessed: this model spends 1200-2000 characters of reasoning even on a question
-# as trivial as what to name a file, and a turn that runs out of budget mid-reasoning returns
-# empty content rather than a short answer. 8k leaves room for the long ones.
-max_tokens = 8192
+# as trivial as what to name a file. That needs a long fuse on the stale detector, or a normal
+# long think reads as a hung stream and gets aborted mid-thought. There is no max_tokens knob
+# here on purpose -- egirl leaves normal turns uncapped and only caps summaries.
 stale_stream_timeout_ms = 180000
 
 [thinking]

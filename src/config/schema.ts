@@ -81,6 +81,14 @@ const baseProperties = {
      * <arg_key>/<arg_value> regardless of what the prompt asks for.
      */
     tool_format: Type.String({ default: 'auto' }),
+    /**
+     * Prepend Qwen3's `/think` or `/no_think` soft-switch to the first user message. That
+     * convention is specific to the Qwen3 chat template: on any other model the token is read
+     * as text the user typed, and the model will react to it -- DeepSeek v4 reported being
+     * asked "/think hey this is nick". Defaults on, because it is load-bearing for the Qwen3
+     * models this was built against; turn it off for anything else.
+     */
+    thinking_directive: Type.Boolean({ default: true }),
     max_concurrent: Type.Number({ default: 2 }),
     /**
      * Abort a stream after this long with no new token. 90s aborted legitimate work on a
@@ -461,6 +469,8 @@ export interface RuntimeConfig {
     maxConcurrent: number
     cacheSlots: number
     toolFormat: string
+    /** Whether to prepend Qwen3's /think soft-switch. Off for non-Qwen models. */
+    thinkingDirective: boolean
     staleStreamTimeoutMs: number
     /** Sampling temperature. Undefined lets llama.cpp use its own default (0.8). */
     temperature?: number

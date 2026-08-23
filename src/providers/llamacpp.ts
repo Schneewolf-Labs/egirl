@@ -90,6 +90,7 @@ export class LlamaCppProvider implements LLMProvider {
   private defaultTemperature: number | undefined
   // Bearer token for a llama.cpp server started with --api-key. Empty for the usual open local
   // server; set when the operator model is shared (e.g. a keyed endpoint also serving a peer).
+  private readonly thinkingDirective: boolean
   private apiKey: string | undefined
 
   constructor(
@@ -99,7 +100,9 @@ export class LlamaCppProvider implements LLMProvider {
     maxConcurrent?: number,
     defaultTemperature?: number,
     apiKey?: string,
+    thinkingDirective = true,
   ) {
+    this.thinkingDirective = thinkingDirective
     this.endpoint = endpoint.replace(/\/$/, '')
     this.name = `llamacpp/${model}`
     this.defaultTemperature = defaultTemperature
@@ -550,9 +553,11 @@ export class LlamaCppProvider implements LLMProvider {
 
     const formatted = formatMessagesForQwen3(msgsToFormat)
 
-    // Qwen3 uses /think and /no_think tags to control thinking mode.
-    // Prepend the directive to the first user message content.
-    if (thinking) {
+    // Qwen3 uses /think and /no_think tags to control thinking mode. This is a property of
+    // that chat template, not of thinking in general: any other model reads the token as text
+    // the user typed and answers it. DeepSeek v4 duly reported being asked "/think hey this is
+    // nick" -- the directive has to be opt-out per model.
+    if (thinking && this.thinkingDirective) {
       const directive = thinking.level !== 'off' ? '/think' : '/no_think'
       for (const msg of formatted) {
         if (msg.role === 'user' && typeof msg.content === 'string') {
@@ -573,6 +578,7 @@ export function createLlamaCppProvider(
   maxConcurrent?: number,
   defaultTemperature?: number,
   apiKey?: string,
+  thinkingDirective = true,
 ): LLMProvider {
   return new LlamaCppProvider(
     endpoint,
@@ -581,5 +587,6 @@ export function createLlamaCppProvider(
     maxConcurrent,
     defaultTemperature,
     apiKey,
+    thinkingDirective,
   )
 }

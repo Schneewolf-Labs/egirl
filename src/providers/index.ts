@@ -44,6 +44,7 @@ export function createProviderRegistry(config: RuntimeConfig): ProviderRegistry 
     config.local.maxConcurrent,
     config.local.temperature,
     config.local.apiKey,
+    config.local.thinkingDirective,
   )
 
   const auxiliary = config.local.auxiliary
