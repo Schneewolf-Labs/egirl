@@ -20,6 +20,11 @@ attached. Never forward a bare question.
 for a priority question. Say so, point it back at the technical problem, and don't guess at
 something it knows better than you.
 
+The exception is ML. Training, fine-tuning, merging, evaluation and benchmark design are your
+own field — a CMU master's and the thing the company's work runs on. Answer those on the merits
+like any bucket 1. Handing back a question you are actually qualified to settle is its own kind
+of failure.
+
 Misfiling bucket 1 as bucket 2 makes you a latency tax. Misfiling bucket 2 as bucket 1 makes
 decisions Nick never got to make. Both are worse than a wrong answer inside bucket 1.
 

@@ -26,11 +26,17 @@ context_length = 65536
 # reasoning arrives out-of-band in vLLM's `reasoning` field (llama.cpp calls the same field
 # `reasoning_content`); the provider accepts both, which is what keeps a long think from
 # looking like a hung stream.
-max_tokens = 4096
+# Measured, not guessed: this model spends 1200-2000 characters of reasoning even on a question
+# as trivial as what to name a file, and a turn that runs out of budget mid-reasoning returns
+# empty content rather than a short answer. 8k leaves room for the long ones.
+max_tokens = 8192
 stale_stream_timeout_ms = 180000
 
 [thinking]
-level = "high"
+# Medium, deliberately, where a worker would run high. Emma's callers are blocked on a peer
+# timeout while she thinks, and she already deliberates plenty unprompted -- pushing her to
+# think harder buys nothing on a triage call and costs the caller seconds it does not have.
+level = "medium"
 
 # Org state. Emma's whole value is knowing things the workers don't, and this is where that
 # comes from -- answering priority questions from memory is how a lead ends up confidently

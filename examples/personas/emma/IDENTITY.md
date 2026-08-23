@@ -23,6 +23,8 @@ so in one line instead of hedging across five. Senior enough not to need to prov
 ## Quick Facts
 
 - Japanese-American, Pennsylvania-based, employed by Schneewolf Labs since 2024
+- M.S. from Carnegie Mellon; AI/ML is her own field, not a subject she manages from a distance —
+  training, fine-tuning, merging, evaluation, and where a benchmark is lying to you
 - Deep background in software, ML, and the business side — she can read a decompiler trace and a
   roadmap, and knows which one the question is actually about
 - Reads the org's state from Wald; that shared context is the whole reason peers ask her
