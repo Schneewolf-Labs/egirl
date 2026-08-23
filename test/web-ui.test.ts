@@ -125,6 +125,128 @@ describe('console panels', () => {
     expect(html()).toContain('Memory is disabled')
   })
 
+  describe('polling', () => {
+    /**
+     * Pull poller() out of the served script and run it against stubbed timers and a stubbed
+     * document, so the actual shipped implementation is what gets exercised. Brace-matching
+     * rather than a regex because the function body has nested blocks.
+     */
+    function harness() {
+      const src = html()
+      const start = src.indexOf('function poller(')
+      if (start < 0) throw new Error('poller() not found in the served page')
+      let depth = 0
+      let end = start
+      for (let i = src.indexOf('{', start); i < src.length; i++) {
+        if (src[i] === '{') depth++
+        else if (src[i] === '}') {
+          depth--
+          if (depth === 0) {
+            end = i + 1
+            break
+          }
+        }
+      }
+      const timers: Array<{ fn: () => void; delay: number }> = []
+      const doc = { hidden: false, addEventListener() {} }
+      const scope = {
+        document: doc,
+        setTimeout: (fn: () => void, delay: number) => timers.push({ fn, delay }) - 1,
+        clearTimeout: () => {},
+        setOnline: () => {},
+      }
+      const make = new Function(
+        'document',
+        'setTimeout',
+        'clearTimeout',
+        'setOnline',
+        `${src.slice(start, end)}; return poller;`,
+      )(scope.document, scope.setTimeout, scope.clearTimeout, scope.setOnline)
+      // Run whatever is scheduled and hand back the delay it was queued with.
+      const step = async () => {
+        const next = timers.pop()
+        if (!next) throw new Error('nothing scheduled')
+        next.fn()
+        await Promise.resolve()
+        await Promise.resolve()
+        await Promise.resolve()
+        return next.delay
+      }
+      return { make, doc, timers, step }
+    }
+
+    test('backs off exponentially while failing and resets on success', async () => {
+      // A dead instance used to be retried every 5s forever. Each failure doubles the wait, up
+      // to a cap, so a box that is down gets checked occasionally instead of hammered.
+      const { make, timers, step } = harness()
+      let fail = true
+      make(
+        async () => {
+          if (fail) throw new Error('down')
+        },
+        1000,
+        8000,
+      )
+      expect(timers[0]?.delay).toBe(1000) // first poll at the base delay
+      await step()
+      expect(timers[0]?.delay).toBe(2000) // failed: doubled
+      await step()
+      expect(timers[0]?.delay).toBe(4000)
+      await step()
+      expect(timers[0]?.delay).toBe(8000)
+      await step()
+      expect(timers[0]?.delay).toBe(8000) // capped, not unbounded
+      fail = false
+      await step()
+      expect(timers[0]?.delay).toBe(1000) // recovered: straight back to base
+    })
+
+    test('does not poll while the tab is hidden', async () => {
+      // The whole point: a phone with this open in a background tab must not sit on the radio
+      // all night refreshing a screen nobody can see.
+      const { make, doc, timers, step } = harness()
+      let calls = 0
+      doc.hidden = true
+      make(async () => {
+        calls++
+      }, 1000, 8000)
+      await step()
+      await step()
+      expect(calls).toBe(0) // skipped, but still rescheduled
+      expect(timers.length).toBe(1)
+      doc.hidden = false
+      await step()
+      expect(calls).toBe(1)
+    })
+  })
+
+  describe('the saved token', () => {
+    test('offers a way to forget it, and re-prompts after a rejection', () => {
+      // The token outlives the tab (localStorage, so a phone is not asked every visit), which
+      // means there has to be a way to hand the device back. And a mistyped or rotated token
+      // used to leave the console 401ing forever with no way to correct it short of devtools.
+      const h = renderChatPage({ name: 'z', theme: egirlish, hasToken: true })
+      expect(h).toContain('id="forgettok"')
+      expect(h).toContain("localStorage.removeItem('egirl-token')")
+      expect(h).toContain('res.status===401')
+    })
+
+    test('says nothing about tokens on an instance that has none', () => {
+      const h = renderChatPage({ name: 'z', theme: egirlish, hasToken: false })
+      // The button itself is absent; the script's guarded lookup for it may still be present.
+      expect(h).not.toContain('id="forgettok"')
+      expect(h).not.toContain('this browser')
+    })
+
+    test('never opens a blocking dialog to report an auth failure', () => {
+      // A modal freezes every other event on the page -- including the polling loop and any
+      // in-flight stream. The reason rides across the reload as status text instead.
+      const h = renderChatPage({ name: 'z', theme: egirlish, hasToken: true })
+      expect(h).not.toContain('alert(')
+      expect(h).toContain("sessionStorage.setItem('egirl-authmsg'")
+    })
+  })
+
   describe('client-side escaping', () => {
     /**
      * The page's own esc(), pulled out of the served script and made callable, so these test

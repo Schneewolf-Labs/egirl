@@ -16,8 +16,18 @@
 
 import type { Theme } from './ui/theme'
 
-export function renderChatPage(opts: { name: string; theme: Theme; hasToken: boolean }): string {
-  const { name, theme, hasToken } = opts
+export function renderChatPage(opts: {
+  name: string
+  theme: Theme
+  hasToken: boolean
+  /**
+   * Per-response CSP nonce. The page's own inline script carries it; markup injected into the
+   * DOM afterwards cannot, so the browser refuses to run it. This is the layer beneath escaping,
+   * and it covers inline event handlers -- exactly the shape the markdown XSS took.
+   */
+  nonce?: string
+}): string {
+  const { name, theme, hasToken, nonce } = opts
   const p = hex(theme.colors.primary)
   const s = hex(theme.colors.secondary)
   const a = hex(theme.colors.accent)
@@ -345,10 +355,21 @@ button.go.stopbtn{background:linear-gradient(135deg,#ff5f87,#c0395a)}
         <div class="dlabel">instance</div>
         <table id="infotbl"></table>
       </div>
+      ${
+        hasToken
+          ? `<div class="sect">
+        <div class="dlabel">this browser</div>
+        <div class="dim">The API token is stored in this browser so you are not asked on every
+          visit. Forget it when you are on a device that is not yours, or to re-enter one you
+          mistyped.</div>
+        <div class="frow"><button class="mini danger" id="forgettok">forget saved token</button></div>
+      </div>`
+          : ''
+      }
     </div>
   </section>
 </main>
-<script>
+<script${nonce ? ` nonce="${esc(nonce)}"` : ''}>
 const $=id=>document.getElementById(id);
 const log=$('log'),f=$('f'),m=$('m'),b=$('b'),status=$('status'),sessSel=$('sess');
 let sid=localStorage.getItem('egirl-sid')||('web:'+Math.random().toString(36).slice(2,10));
@@ -372,8 +393,8 @@ $('tabs').onclick=e=>{
   for(const s of document.querySelectorAll('.tab')) s.toggleAttribute('data-on', s.dataset.name===t);
   if(!loaded[t]){loaded[t]=1; if(t==='prompt')loadPrompt(); if(t==='info')loadInfo()}
   // Tasks/inbox are live views — refresh every time they're opened, not just once.
-  if(t==='tasks')refreshTasks(true);
-  if(t==='inbox')loadInbox();
+  if(t==='tasks')refreshTasks(true).catch(()=>{});
+  if(t==='inbox')loadInbox().catch(()=>{});
   if(t==='peers')loadPeers();
   // Context moves with every turn, so it is re-read each time settings is opened.
   if(t==='info')loadContext();
@@ -464,7 +485,12 @@ async function loadSessions(){
         (x.last_active_at?' · '+ago(x.last_active_at):'')+(x.busy?' · working…':'');
       return '<option value="'+esc(x.id)+'"'+(x.id===sid?' selected':'')+'>'+esc(label)+'</option>';
     }).join('');
-  }catch(e){/* the picker failing must not take the chat down with it */}
+  }catch(e){
+    // The picker failing must not take the chat down with it, but the poller does need to hear
+    // about it -- a swallowed error looks identical to a healthy server with nothing to report,
+    // and would keep the retry rate pinned at full speed against a box that is gone.
+    throw e;
+  }
 }
 
 // History as the conversation looked, not as the model sees it: tool plumbing and injected
@@ -631,6 +657,29 @@ async function loadPrompt(){
   }catch(e){ $('sysprompt').textContent='failed to load: '+e.message }
 }
 
+// ---- The saved token ------------------------------------------------------
+// Kept in localStorage so a phone does not ask on every visit -- which also means it outlives
+// the tab, so there has to be a way to hand the device back. And a mistyped token previously
+// left the console 401ing forever with no way to correct it short of devtools.
+function forgetToken(reason){
+  try{
+    localStorage.removeItem('egirl-token');
+    // Carried across the reload instead of shown in a modal: a blocking dialog freezes every
+    // other event on the page, and the reason is worth one line of status text, not a stop.
+    if(reason)sessionStorage.setItem('egirl-authmsg',reason);
+  }catch(e){}
+  location.reload();
+}
+// Any 401 means the stored token is wrong or has been rotated: drop it and ask again, once.
+let authPrompted=false;
+function checkAuth(res){
+  if(res&&res.status===401&&!authPrompted){
+    authPrompted=true;
+    forgetToken('token rejected — re-enter it');
+  }
+  return res;
+}
+
 // ---- Session settings -----------------------------------------------------
 // The knobs the CLI has always had (/context, /think, /compact, /wipe), for everyone else. All
 // scoped to the open conversation: turning thinking down to get a fast answer here should not
@@ -653,6 +702,13 @@ async function loadContext(){
     $('thinksel').value=d.thinking||'default';
   }catch(e){ $('ctxnums').textContent='context unavailable: '+(e.message||e) }
 }
+const _ft=$('forgettok');
+if(_ft)_ft.onclick=()=>{
+  // Two-click, like the other irreversible controls: losing the token means re-entering it.
+  if(!_ft.dataset.armed){_ft.dataset.armed='1';_ft.textContent='really forget?';
+    setTimeout(()=>{if(_ft.isConnected){delete _ft.dataset.armed;_ft.textContent='forget saved token'}},2600);return}
+  forgetToken();
+};
 $('thinksel').onchange=async()=>{
   const level=$('thinksel').value;
   try{
@@ -684,7 +740,8 @@ $('wipebtn').onclick=async()=>{
 
 async function loadInfo(){
   try{
-    const d=await (await fetch('info',{headers:H()})).json();
+    // First call the page makes, so a bad token surfaces here rather than on the first message.
+    const d=await (checkAuth(await fetch('info',{headers:H()}))).json();
     const rows=[
       ['name',d.name],['instance',d.instance],['persona',d.persona],['profile',d.profile],['theme',d.theme],
       ['model',d.model],['endpoint',d.endpoint],['context',d.contextLength?d.contextLength.toLocaleString()+' tokens':null],
@@ -781,7 +838,10 @@ async function refreshTasks(showLoading){
     if(r.status===503){tasksOff=true;renderTasks();return}
     lastTasks=(await r.json()).tasks||[]; tasksOff=false;
     updateInboxBadge(lastTasks); renderTasks();
-  }catch(e){ if(showLoading)$('tasks').innerHTML='<div class="empty">could not load tasks: '+esc(e.message||e)+'</div>' }
+  }catch(e){
+    if(showLoading)$('tasks').innerHTML='<div class="empty">could not load tasks: '+esc(e.message||e)+'</div>';
+    throw e;  // so the poller backs off instead of retrying a dead server every 5s
+  }
 }
 // Expand/collapse a task's detail (prompt + recent runs) on a header-row click.
 async function toggleDetail(card){
@@ -829,11 +889,11 @@ $('tasks').onclick=async e=>{
       // run-now blocks server-side for the whole run; fire it and let the poll show it go running
       // rather than freezing the button until it finishes.
       btn.textContent='starting…';
-      fetch('tasks/'+tid+'/run',{method:'POST',headers:H()}).catch(()=>{}).then(()=>refreshTasks());
-      setTimeout(()=>refreshTasks(),500); return;
+      fetch('tasks/'+tid+'/run',{method:'POST',headers:H()}).catch(()=>{}).then(()=>refreshTasks().catch(()=>{}));
+      setTimeout(()=>refreshTasks().catch(()=>{}),500); return;
     }
   }catch(e){/* the refresh below reflects real state */}
-  refreshTasks();
+  refreshTasks().catch(()=>{});
 };
 
 // ---- Create a task --------------------------------------------------------
@@ -850,7 +910,7 @@ $('tf_create').onclick=async()=>{
     const r=await fetch('tasks',{method:'POST',headers:H(),body:JSON.stringify(body)});
     if(!r.ok){const d=await r.json().catch(()=>({}));throw new Error(d.error||('HTTP '+r.status))}
     $('tf_name').value='';$('tf_prompt').value='';$('tf_unbounded').checked=false;$('taskform').hidden=true;
-    refreshTasks(true);
+    refreshTasks(true).catch(()=>{});
   }catch(e){errEl.textContent=String(e.message||e);errEl.hidden=false}
   finally{$('tf_create').disabled=false}
 };
@@ -908,7 +968,7 @@ async function loadInbox(){
     const r=await fetch('tasks?status=awaiting',{headers:H()});
     if(r.status===503){box.innerHTML='<div class="empty">Tasks are disabled on this instance.</div>';return}
     tasks=(await r.json()).tasks||[];
-  }catch(e){box.innerHTML='<div class="empty">could not load: '+esc(e.message||e)+'</div>';return}
+  }catch(e){box.innerHTML='<div class="empty">could not load: '+esc(e.message||e)+'</div>';throw e}
   if(!tasks.length){box.innerHTML='<div class="empty">Nothing waiting on you. 🌙<br>When a task gets blocked and asks a question, it lands here.</div>';return}
   const cards=await Promise.all(tasks.map(async t=>{
     let q='(open the conversation to see what she asked)';
@@ -937,27 +997,64 @@ $('inbox').onclick=async e=>{
   btn.disabled=true; btn.textContent='sending…';
   try{ await fetch('chat',{method:'POST',headers:H(),body:JSON.stringify({message:text,session_id:'task:'+id})}) }
   catch(e){ btn.disabled=false; btn.textContent='Send'; return }
-  loadInbox(); refreshTasks();
+  loadInbox().catch(()=>{}); refreshTasks().catch(()=>{});
 };
+
+// ---- Polling ---------------------------------------------------------------
+// setInterval is the wrong primitive for this. It fires whether or not the previous request came
+// back, whether or not the server is still up, and whether or not anyone is looking -- a phone
+// with this open in a background tab would poll all night on the mobile radio to update a screen
+// nobody can see. This loop instead:
+//   - skips while the tab is hidden, and refreshes immediately when you come back
+//   - never overlaps requests: the next delay starts when the last one settles
+//   - doubles the delay on failure up to a cap, resetting the moment a request succeeds
+// so an instance that goes down gets retried occasionally instead of hammered forever.
+function poller(fn,baseMs,maxMs){
+  let delay=baseMs,timer=null,inflight=false;
+  const schedule=()=>{clearTimeout(timer);timer=setTimeout(tick,delay)};
+  async function tick(){
+    if(document.hidden||inflight){schedule();return}
+    inflight=true;
+    try{ await fn(); delay=baseMs; setOnline(true) }
+    catch(e){ delay=Math.min(delay*2,maxMs); setOnline(false) }
+    finally{ inflight=false; schedule() }
+  }
+  document.addEventListener('visibilitychange',()=>{
+    // Returning to the tab should show current data, not whatever was true when you left.
+    if(!document.hidden){delay=baseMs;clearTimeout(timer);tick()}
+  });
+  schedule();
+}
+// A console quietly showing stale numbers is worse than one that admits it lost the server.
+let online=true;
+function setOnline(ok){
+  if(ok===online)return; online=ok;
+  if(!ok)status.textContent='disconnected — retrying';
+  else if(status.textContent==='disconnected — retrying')status.textContent='ready';
+}
 
 // Identity is fetched immediately even though its tab is lazy: the header should say what you
 // are talking to before you say anything to it.
+try{
+  const _am=sessionStorage.getItem('egirl-authmsg');
+  if(_am){sessionStorage.removeItem('egirl-authmsg');status.textContent=_am}
+}catch(e){}
 loadInfo(); loaded.info=1;
 // The conversation you were having is the first thing the page should show, not an empty box.
-loadSessions(); loadHistory();
+loadSessions().catch(()=>{}); loadHistory();
 // Prime the inbox badge on load so an unanswered ask is visible from the chat tab, before the
 // tasks/inbox tabs are ever opened.
-refreshTasks();
-// Sessions started elsewhere (the CLI, a peer) appear without a reload; 30s is fresh enough
-// for a picker and cheap enough to leave running in a background tab.
-setInterval(loadSessions,30000);
-// Live task/inbox refresh: 5s keeps a running badge honest without hammering the box. Only the
-// visible tab re-renders; the fetch also keeps the inbox count current from any tab.
-setInterval(()=>{
+refreshTasks().catch(()=>{});
+// Sessions started elsewhere (the CLI, a peer) appear without a reload. 30s is fresh enough for
+// a picker; backs off to 5min if the instance goes away.
+poller(loadSessions,30000,300000);
+// Tasks: 5s keeps a running badge honest. Only the visible tab re-renders, but the fetch also
+// keeps the inbox count current from any tab. Backs off to a minute when the server is down.
+poller(async()=>{
   const on=document.querySelector('.tab[data-on]')?.dataset.name;
-  refreshTasks();
-  if(on==='inbox')loadInbox();
-},5000);
+  await refreshTasks();
+  if(on==='inbox')await loadInbox();
+},5000,60000);
 </script></body></html>`
 }
 

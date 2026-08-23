@@ -185,13 +185,42 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
           // A browser gets the chat page; anything else keeps the JSON it was getting before,
           // so scripts and health checks are unaffected by this existing at all.
           if ((req.headers.get('accept') ?? '').includes('text/html')) {
+            // A fresh nonce per response. The page's own script carries it; anything injected
+            // into the DOM later cannot, so the browser refuses to run it -- including inline
+            // event handlers, which is the shape agent-authored text would take if escaping ever
+            // regressed. script-src is strict for that reason; style-src has to allow inline
+            // because the page uses style attributes, and a stylesheet cannot execute anyway.
+            // Everything else is denied by default: this page loads no third-party anything, and
+            // connect-src 'self' means a token lifted from localStorage has nowhere to be sent.
+            const nonce = crypto.randomUUID()
+            const csp = [
+              "default-src 'none'",
+              `script-src 'nonce-${nonce}'`,
+              "style-src 'unsafe-inline'",
+              // data: for attachment previews and pasted images; blob: because the downscaler
+              // loads the picked file through URL.createObjectURL, and blocking it would leave
+              // an image attach hanging forever on an onload that never fires.
+              "img-src 'self' data: blob:",
+              "connect-src 'self'",
+              "form-action 'none'",
+              "base-uri 'none'",
+              "frame-ancestors 'none'",
+            ].join('; ')
             return new Response(
               renderChatPage({
                 name: deps.selfName ?? 'egirl',
                 theme: getTheme(),
                 hasToken: Boolean(bearerToken),
+                nonce,
               }),
-              { headers: { 'content-type': 'text/html; charset=utf-8' } },
+              {
+                headers: {
+                  'content-type': 'text/html; charset=utf-8',
+                  'content-security-policy': csp,
+                  'referrer-policy': 'no-referrer',
+                  'x-content-type-options': 'nosniff',
+                },
+              },
             )
           }
           return json({ service: 'egirl', version: '0.2.0' })
