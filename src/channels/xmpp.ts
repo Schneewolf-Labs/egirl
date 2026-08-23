@@ -134,7 +134,17 @@ export class XMPPChannel implements Channel {
 
   async stop(): Promise<void> {
     log.info('xmpp', 'Stopping XMPP client...')
-    await this.xmpp.send(xml('presence', { type: 'unavailable' }))
+    // Only announce departure if we ever arrived. Sending presence on a client that never came
+    // online rejects, and that rejection used to skip the stop() below entirely -- leaving the
+    // client's reconnect loop running and logging a connection error every second forever, for
+    // a failure (a self-signed certificate, say) that will never resolve on its own.
+    try {
+      if (this.xmpp.status === 'online') {
+        await this.xmpp.send(xml('presence', { type: 'unavailable' }))
+      }
+    } catch {
+      // A best-effort goodbye is not worth failing a shutdown over.
+    }
     await this.xmpp.stop()
   }
 

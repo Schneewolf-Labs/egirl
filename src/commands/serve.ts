@@ -203,10 +203,55 @@ export async function runServe(config: RuntimeConfig, args: string[]): Promise<v
   process.on('SIGINT', shutdown)
   process.on('SIGTERM', shutdown)
 
-  if (discord) await discord.start()
-  if (xmpp) await xmpp.start()
+  // A chat channel that cannot connect leaves a degraded instance, not a dead one. Letting the
+  // failure propagate meant one optional transport with a bad certificate took down the task
+  // runner, peer discovery and every other channel with it -- an unattended agent should keep
+  // doing the work it still can, and say which parts are missing.
+  const started: string[] = []
+  const startChannel = async (
+    name: string,
+    start: () => Promise<unknown>,
+    stop: () => Promise<unknown>,
+  ) => {
+    try {
+      await start()
+      started.push(name)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      log.error('main', `Channel "${name}" failed to start: ${message}`)
+      // Shut the client down rather than leaving it to reconnect. Some failures never resolve
+      // on their own -- a self-signed certificate will be just as self-signed a second later --
+      // and the client's own retry loop will otherwise log an error every second forever,
+      // burying everything else the instance has to say.
+      try {
+        await stop()
+      } catch {}
+      log.warn('main', `Continuing without ${name}.`)
+    }
+  }
+
+  if (discord)
+    await startChannel(
+      'discord',
+      () => discord.start(),
+      async () => discord?.stop(),
+    )
+  if (xmpp)
+    await startChannel(
+      'xmpp',
+      () => xmpp.start(),
+      async () => xmpp?.stop(),
+    )
   taskRunner?.start()
   discovery?.start()
 
-  log.info('main', `Serving: ${active.join(' + ')}. Press Ctrl+C to stop.`)
+  const inert = active.filter((a) => a !== 'discord' && a !== 'xmpp')
+  const serving = [...started, ...inert]
+  if (!serving.length) {
+    log.warn('main', 'No channels started. Background tasks still run; chat is unavailable.')
+  }
+  log.info(
+    'main',
+    `Serving: ${serving.join(' + ') || 'background tasks only'}. Press Ctrl+C to stop.`,
+  )
 }
