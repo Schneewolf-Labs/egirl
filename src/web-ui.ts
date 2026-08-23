@@ -54,6 +54,41 @@ main{flex:1;overflow:hidden;display:flex;flex-direction:column}
 .sys{align-self:center;color:var(--dim);font-size:.78rem;font-style:italic}
 .pending{color:var(--dim);font-style:italic}
 .fail{border-left-color:#ff5f87;color:#ff9db4}
+/* Live turn: reasoning streams into .think (most of a local model's output is thinking), tool
+   activity into .toolline, the answer into .body. On completion .think collapses to a toggle. */
+.think{color:var(--dim);font-size:.83rem;border-left:2px solid var(--line);padding-left:.6rem;
+  margin-bottom:.45rem;white-space:pre-wrap;overflow-wrap:anywhere;max-height:9rem;overflow-y:auto}
+.think.done{max-height:none;overflow:visible;border-left-color:color-mix(in srgb,var(--a) 55%,var(--line))}
+.thead{cursor:pointer;user-select:none;color:var(--dim);font-size:.76rem}
+.thead:hover{color:var(--s)}
+.tbody{margin-top:.35rem;white-space:pre-wrap;overflow-wrap:anywhere}
+.toolline{color:var(--a);font-size:.77rem;font-style:italic;margin-bottom:.4rem}
+.body{white-space:pre-wrap;overflow-wrap:anywhere}
+.cursor::after{content:'▋';color:var(--p);animation:blink 1s step-start infinite;margin-left:1px}
+@keyframes blink{50%{opacity:0}}
+/* Rendered markdown: her replies are full of code and structure — render it, but only once the
+   turn is done (streaming stays raw text for speed). */
+.body.md{white-space:normal}
+.body.md .p{margin:.25rem 0}
+.body.md .p:first-child,.body.md h3:first-child,.body.md h4:first-child{margin-top:0}
+.body.md h3,.body.md h4,.body.md h5{margin:.6rem 0 .3rem;line-height:1.3;color:var(--s)}
+.body.md h3{font-size:1.06rem}.body.md h4{font-size:.98rem}.body.md h5{font-size:.9rem}
+.body.md ul,.body.md ol{margin:.3rem 0;padding-left:1.35rem}
+.body.md li{margin:.13rem 0}
+.body.md code{background:var(--user);border-radius:.3rem;padding:.05rem .32rem;
+  font:12.5px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace}
+.body.md pre{position:relative;margin:.5rem 0}
+.body.md pre code{background:none;padding:0}
+.body.md pre[data-lang]::before{content:attr(data-lang);position:absolute;top:.3rem;left:.6rem;
+  color:var(--dim);font-size:.66rem;text-transform:uppercase;letter-spacing:.05em}
+.body.md pre[data-lang]{padding-top:1.5rem}
+.body.md pre .copy{position:absolute;top:.35rem;right:.35rem;background:var(--user);border:1px solid var(--line);
+  color:var(--dim);border-radius:.3rem;font:inherit;font-size:.68rem;padding:.1rem .45rem;cursor:pointer;opacity:0;transition:opacity .12s}
+.body.md pre:hover .copy{opacity:1}
+.body.md pre .copy:hover{color:var(--s);border-color:var(--s)}
+.body.md blockquote{border-left:2px solid var(--line);margin:.4rem 0;padding-left:.7rem;color:var(--dim)}
+.body.md a{color:var(--a)}
+.body.md hr{border:0;border-top:1px solid var(--line);margin:.6rem 0}
 form{flex:none;display:flex;gap:.5rem;padding:.65rem;border-top:1px solid var(--line);
   padding-bottom:calc(.65rem + env(safe-area-inset-bottom))}
 textarea,input[type=search]{flex:1;background:var(--user);color:var(--fg);border:1px solid var(--line);
@@ -89,10 +124,80 @@ td:first-child{color:var(--dim);white-space:nowrap;width:1%;padding-right:1.2rem
 .attachrow .thumb{position:relative}
 .msg img{max-width:14rem;border-radius:.45rem;display:block;margin-top:.3rem}
 .queued::before{content:'♡ queued · ';color:var(--s);font-style:italic;font-size:.78rem}
+/* ---- Tasks & inbox: the autonomy surface --------------------------------- */
+/* A task's stored status ('active') can't say whether it's idle or mid-run; the server's live
+   running flag does, and drives the pulse + whether "stop" is offered. */
+.tasklist{padding:.7rem;overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:.5rem}
+.task{border:1px solid var(--line);border-left:2px solid var(--line);border-radius:.55rem;
+  background:var(--panel);padding:.6rem .7rem;transition:border-color .15s}
+.task.run{border-left-color:var(--p)}
+.task.await{border-left-color:var(--a)}
+.task.fail{border-left-color:#ff5f87}
+.task .top{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap}
+.task .nm{font-weight:600;overflow-wrap:anywhere}
+.task .meta{color:var(--dim);font-size:.73rem;margin-top:.35rem;display:flex;gap:.9rem;flex-wrap:wrap}
+.task .acts{display:flex;gap:.35rem;margin-top:.55rem;flex-wrap:wrap}
+.task .acts button{background:none;border:1px solid var(--line);border-radius:.4rem;color:var(--dim);
+  padding:.22rem .6rem;font:inherit;font-size:.76rem;cursor:pointer;transition:color .12s,border-color .12s}
+.task .acts button:hover{color:var(--s);border-color:var(--s)}
+.task .acts button.stop:hover{color:#ffcf7a;border-color:#ffb347}
+.task .acts button.danger:hover{color:#ff9db4;border-color:#ff5f87}
+.task .acts button:disabled{opacity:.4;cursor:default}
+.badge{display:inline-flex;align-items:center;gap:.32rem;padding:.12rem .5rem;border-radius:.35rem;
+  font-size:.68rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;background:var(--user);color:var(--dim)}
+.badge.active{color:var(--s)}
+.badge.running{color:var(--p)}
+.badge.awaiting{color:var(--a)}
+.badge.failed{color:#ff9db4}
+.badge .dot{width:.5rem;height:.5rem;border-radius:50%;background:currentColor;flex:none}
+.badge.running .dot{animation:pulse 1.1s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:.3}50%{opacity:1}}
+.warn{color:#ff9db4}
+.empty{color:var(--dim);text-align:center;padding:2.5rem 1rem;font-size:.86rem;line-height:1.7}
+.count{display:inline-block;min-width:1.05rem;text-align:center;background:var(--a);color:var(--bg);
+  border-radius:.7rem;font-size:.64rem;padding:.02rem .32rem;margin-left:.2rem;font-weight:700;vertical-align:.06rem}
+.ask .q{white-space:pre-wrap;overflow-wrap:anywhere;margin:.45rem 0 .6rem;color:var(--fg)}
+.ask .rep{display:flex;gap:.4rem}
+.ask textarea{min-height:2.5rem}
+/* ---- polish: themed scrollbars, honoured motion prefs -------------------- */
+*::-webkit-scrollbar{width:9px;height:9px}
+*::-webkit-scrollbar-thumb{background:var(--line);border-radius:5px}
+*::-webkit-scrollbar-thumb:hover{background:var(--dim)}
+.msg{transition:border-color .15s}
+/* ---- beauty pass: atmosphere + depth, all keyed off the instance's own theme colours -------- */
+/* Faint corner glows in the persona's primary/accent — vaporwave atmosphere without a fixed
+   palette. color-mix keeps it whatever hue this instance themes to; unsupported browsers just
+   see flat --bg. */
+body::before{content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;
+  background:radial-gradient(115% 75% at 100% 0%,color-mix(in srgb,var(--p) 10%,transparent),transparent 55%),
+    radial-gradient(90% 70% at 0% 100%,color-mix(in srgb,var(--a) 7%,transparent),transparent 52%)}
+header b{text-shadow:0 0 18px color-mix(in srgb,var(--s) 35%,transparent)}
+header .sp::before{content:'';display:inline-block;width:.42rem;height:.42rem;border-radius:50%;
+  background:var(--s);margin-right:.42rem;vertical-align:.06rem;box-shadow:0 0 7px var(--s)}
+nav button{transition:color .15s,border-color .15s}
+nav button:hover{color:var(--fg)}
+nav button[aria-selected=true]{text-shadow:0 0 12px color-mix(in srgb,var(--s) 45%,transparent)}
+textarea:focus,input:focus{box-shadow:0 0 0 3px color-mix(in srgb,var(--p) 20%,transparent)}
+button.go{background:linear-gradient(135deg,var(--p),color-mix(in srgb,var(--p) 55%,var(--a)));
+  transition:filter .12s,transform .06s}
+button.go:hover:not(:disabled){filter:brightness(1.09)}
+button.go:active:not(:disabled){transform:translateY(1px)}
+button.go.stopbtn{background:linear-gradient(135deg,#ff5f87,#c0395a)}
+.her,.task,.mem,.ask{box-shadow:0 1px 3px rgba(0,0,0,.14)}
+.task{transition:border-color .15s,transform .12s}
+.task:hover{border-color:color-mix(in srgb,var(--p) 32%,var(--line))}
+.badge.active{background:color-mix(in srgb,var(--s) 12%,var(--user))}
+.badge.running{background:color-mix(in srgb,var(--p) 15%,var(--user))}
+.badge.awaiting{background:color-mix(in srgb,var(--a) 15%,var(--user))}
+.badge.failed{background:color-mix(in srgb,#ff5f87 14%,var(--user))}
+.count{box-shadow:0 0 9px color-mix(in srgb,var(--a) 55%,transparent)}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style></head><body>
 <header><b>${esc(name)}</b><span class="meta" id="hmeta">connecting…</span><span class="sp" id="status">ready</span></header>
 <nav id="tabs">
   <button data-tab="chat" aria-selected="true">chat</button>
+  <button data-tab="tasks" aria-selected="false">tasks</button>
+  <button data-tab="inbox" aria-selected="false">inbox<span class="count" id="inboxn" hidden>0</span></button>
   <button data-tab="memory" aria-selected="false">memory</button>
   <button data-tab="prompt" aria-selected="false">prompt</button>
   <button data-tab="info" aria-selected="false">info</button>
@@ -103,6 +208,14 @@ td:first-child{color:var(--dim);white-space:nowrap;width:1%;padding-right:1.2rem
     <div id="log"></div>
     <div id="attach" class="attachrow" hidden></div>
     <form id="f"><button type="button" id="pick" class="clip" title="attach an image">+</button><input type="file" id="file" accept="image/*" multiple hidden><textarea id="m" rows="1" placeholder="Message ${esc(name)}…" autofocus></textarea><button class="go" id="b">Send</button></form>
+  </section>
+
+  <section class="tab" data-name="tasks">
+    <div class="tasklist" id="tasks"><div class="empty">loading tasks…</div></div>
+  </section>
+
+  <section class="tab" data-name="inbox">
+    <div class="tasklist" id="inbox"><div class="empty">loading…</div></div>
   </section>
 
   <section class="tab" data-name="memory">
@@ -135,10 +248,69 @@ $('tabs').onclick=e=>{
   for(const btn of $('tabs').children) btn.setAttribute('aria-selected', String(btn.dataset.tab===t));
   for(const s of document.querySelectorAll('.tab')) s.toggleAttribute('data-on', s.dataset.name===t);
   if(!loaded[t]){loaded[t]=1; if(t==='prompt')loadPrompt(); if(t==='info')loadInfo()}
+  // Tasks/inbox are live views — refresh every time they're opened, not just once.
+  if(t==='tasks')refreshTasks(true);
+  if(t==='inbox')loadInbox();
 };
 
 function add(text,cls){const d=document.createElement('div');d.className='msg '+cls;d.textContent=text;
   log.appendChild(d);log.scrollTop=log.scrollHeight;return d}
+
+// ---- Markdown -------------------------------------------------------------
+// A small renderer so her code blocks, lists and headers read as what they are. No library: the
+// whole console is one file, and full CommonMark is not worth the weight for a chat transcript.
+// Content is HTML-escaped before any tag is inserted, so agent output can't inject markup. The
+// backtick is built from a char code because a literal one would close this template string.
+const BT=String.fromCharCode(96), FENCE=BT+BT+BT;
+function mdInline(s){
+  const code=new RegExp(BT+'([^'+BT+']+)'+BT,'g');
+  return s
+    .replace(code,'<code>$1</code>')
+    .replace(/\\*\\*([^*]+)\\*\\*/g,'<strong>$1</strong>')
+    // italic runs after bold consumed its pairs; requiring a non-space, non-* char right after
+    // the opening * keeps "a * b" math and "import *" from being swallowed.
+    .replace(/\\*([^*\\s][^*]*?)\\*/g,'<em>$1</em>')
+    .replace(/\\[([^\\]]+)\\]\\((https?:\\/\\/[^)\\s]+)\\)/g,'<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+}
+function mdBlocks(text){
+  const lines=esc(text).split('\\n'); let html='',list=null;
+  const closeList=()=>{if(list){html+='</'+list+'>';list=null}};
+  for(const line of lines){
+    if(!line.trim()){closeList();continue}
+    const mh=line.match(/^(#{1,3})\\s+(.*)$/);
+    if(mh){closeList();const lv=mh[1].length+2;html+='<h'+lv+'>'+mdInline(mh[2])+'</h'+lv+'>';continue}
+    if(/^(-{3,}|_{3,})$/.test(line.trim())){closeList();html+='<hr>';continue}
+    const mq=line.match(/^&gt;\\s?(.*)$/);
+    if(mq){closeList();html+='<blockquote>'+mdInline(mq[1])+'</blockquote>';continue}
+    const mu=line.match(/^\\s*[-*]\\s+(.*)$/);
+    if(mu){if(list!=='ul'){closeList();html+='<ul>';list='ul'}html+='<li>'+mdInline(mu[1])+'</li>';continue}
+    const mo=line.match(/^\\s*\\d+\\.\\s+(.*)$/);
+    if(mo){if(list!=='ol'){closeList();html+='<ol>';list='ol'}html+='<li>'+mdInline(mo[1])+'</li>';continue}
+    closeList();html+='<div class="p">'+mdInline(line)+'</div>';
+  }
+  closeList(); return html;
+}
+function md(raw){
+  // Split on the triple-backtick fence: odd segments are code (escaped, never inline-processed),
+  // even segments are prose. An unclosed final fence still renders as a code block.
+  const parts=String(raw||'').split(FENCE); let out='';
+  for(let i=0;i<parts.length;i++){
+    if(i%2===1){
+      let seg=parts[i], lang='';
+      const nl=seg.indexOf('\\n');
+      if(nl>=0){const first=seg.slice(0,nl).trim(); if(/^[\\w+.-]*$/.test(first)){lang=first;seg=seg.slice(nl+1)}}
+      out+='<pre'+(lang?' data-lang="'+esc(lang)+'"':'')+'><button class="copy">copy</button><code>'+esc(seg.replace(/\\n$/,''))+'</code></pre>';
+    }else out+=mdBlocks(parts[i]);
+  }
+  return out;
+}
+function addMd(text){const d=add('','her');d.innerHTML='<div class="body md">'+md(text)+'</div>';return d}
+// Copy buttons on code blocks (event-delegated so it covers streamed and historical messages).
+log.addEventListener('click',e=>{
+  const btn=e.target.closest('.copy'); if(!btn)return;
+  const code=btn.parentElement.querySelector('code'); if(!code)return;
+  navigator.clipboard.writeText(code.textContent).then(()=>{btn.textContent='copied';setTimeout(()=>{btn.textContent='copy'},1200)}).catch(()=>{btn.textContent='!'});
+});
 
 // ---- Sessions -------------------------------------------------------------
 // The picker shows every conversation the store knows, from every channel -- the point is
@@ -185,7 +357,7 @@ async function loadHistory(){
       const d=await r.json();
       // The summary stands in for the OLDEST messages, so it sits above them, not below.
       if(d.has_summary)add('older messages are compacted into a summary','sys');
-      for(const msg of historyView(d.messages))add(msg.text,msg.who);
+      for(const msg of historyView(d.messages)) msg.who==='her'?addMd(msg.text):add(msg.text,msg.who);
     }
     if(!log.children.length)add('new conversation — say hi','sys');
   }catch(e){add('could not load history: '+(e.message||e),'sys')}
@@ -245,28 +417,74 @@ m.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefau
 // same contract as the CLI -- later messages wait their turn instead of interleaving. Each
 // send keeps its own placeholder, so replies land in the bubbles that asked for them.
 let inflight=0;
+// While she works the Send button becomes Stop: clicking it aborts the running turn via the
+// interrupt endpoint (the browser-side esc). Enter still queues a follow-up, same as the CLI.
+function setStreaming(on){ b.textContent=on?'Stop':'Send'; b.classList.toggle('stopbtn',on); b.dataset.stop=on?'1':'' }
+b.addEventListener('click',e=>{
+  if(b.dataset.stop!=='1') return;
+  e.preventDefault();
+  fetch('sessions/'+encodeURIComponent(sid)+'/interrupt',{method:'POST',headers:H(),body:JSON.stringify({action:'abort'})}).catch(()=>{});
+  status.textContent='stopping…';
+});
+// Once a turn finishes, fold its reasoning into a one-line toggle so the transcript stays about
+// what she said, not how she got there — but it's one click away.
+function collapseThink(el){
+  const txt=el.textContent; el.textContent=''; el.classList.add('done');
+  const head=document.createElement('div');head.className='thead';head.textContent='▸ thinking';
+  const bd=document.createElement('div');bd.className='tbody';bd.textContent=txt;bd.hidden=true;
+  head.onclick=()=>{bd.hidden=!bd.hidden;head.textContent=(bd.hidden?'▸':'▾')+' thinking'};
+  el.append(head,bd);
+}
 f.onsubmit=async e=>{
   e.preventDefault();
+  if(b.dataset.stop==='1') return; // the button is Stop right now — click handler owns it
   const text=m.value.trim(); if(!text&&pending_imgs.length===0) return;
   const imgs=pending_imgs; pending_imgs=[]; renderAttach();
   const mine=add(text||'(image)','me'); m.value=''; m.style.height='auto';
   for(const u of imgs){const im=document.createElement('img');im.src=u;mine.appendChild(im)}
   const wasBusy=inflight>0; inflight++;
   if(wasBusy)mine.classList.add('queued');
+  setStreaming(true);
   status.textContent=wasBusy?'queued ('+inflight+')':'thinking…';
-  const ph=add('…','her pending'); const t0=Date.now();
+  const ph=add('','her pending');
+  ph.innerHTML='<div class="think" hidden></div><div class="toolline" hidden></div><div class="body cursor">…</div>';
+  const think=ph.querySelector('.think'),toolline=ph.querySelector('.toolline'),bodyEl=ph.querySelector('.body');
+  const t0=Date.now(); let answer='',reasoning='',ntok=0,started=false;
+  const startAnswer=()=>{if(!started){started=true;bodyEl.textContent='';mine.classList.remove('queued')}};
   try{
-    const r=await fetch('chat',{method:'POST',headers:H(),body:JSON.stringify({message:text||'(see attached image)',session_id:sid,images:imgs.length?imgs:undefined})});
-    if(!r.ok) throw new Error('HTTP '+r.status+(r.status===401?' — bad or missing token':''));
-    const d=await r.json();
-    mine.classList.remove('queued');
-    ph.className='msg her'; ph.textContent=d.content||'(empty reply)';
-    status.textContent=Math.round((Date.now()-t0)/1000)+'s · '+(d.output_tokens??'?')+' tok · '+(d.turns??'?')+' turns';
+    const r=await fetch('chat',{method:'POST',headers:H(),body:JSON.stringify({message:text||'(see attached image)',session_id:sid,images:imgs.length?imgs:undefined,stream:true})});
+    if(!r.ok||!r.body) throw new Error('HTTP '+r.status+(r.status===401?' — bad or missing token':''));
+    const reader=r.body.getReader(),dec=new TextDecoder(); let buf='';
+    for(;;){
+      const {value,done}=await reader.read(); if(done)break;
+      buf+=dec.decode(value,{stream:true});
+      let i;
+      while((i=buf.indexOf('\\n\\n'))>=0){
+        const line=buf.slice(0,i).trim(); buf=buf.slice(i+2);
+        if(!line.startsWith('data:'))continue;
+        let ev; try{ev=JSON.parse(line.slice(5).trim())}catch(_){continue}
+        if(ev.t==='queued'){status.textContent='queued ('+(ev.position+1)+')';}
+        else if(ev.t==='reasoning'){reasoning+=ev.v;think.hidden=false;think.textContent=reasoning;think.scrollTop=think.scrollHeight;mine.classList.remove('queued');status.textContent='thinking… '+Math.round((Date.now()-t0)/1000)+'s';}
+        else if(ev.t==='token'){startAnswer();answer+=ev.v;bodyEl.textContent=answer;log.scrollTop=log.scrollHeight;status.textContent='writing… '+(++ntok)+' tok';}
+        else if(ev.t==='tool'){toolline.hidden=false;toolline.textContent='· '+(ev.v||[]).join(', ')+' …';status.textContent='running '+(ev.v||[]).join(', ');}
+        else if(ev.t==='tool_done'){toolline.textContent='· '+ev.v+' ✓';}
+        else if(ev.t==='error'){throw new Error(ev.message||'stream error');}
+        else if(ev.t==='done'){
+          answer=ev.content||answer||'(empty reply)';
+          ph.className='msg her'; bodyEl.className='body md'; bodyEl.innerHTML=md(answer);
+          if(reasoning)collapseThink(think); else think.hidden=true;
+          toolline.hidden=true;
+          status.textContent=Math.round((Date.now()-t0)/1000)+'s · '+(ev.output_tokens??ntok)+' tok · '+(ev.turns??'?')+' turns'+(ev.aborted?' · stopped':'')+(ev.awaiting?' · awaiting reply':'');
+        }
+      }
+    }
+    // Stream ended without a done frame (dropped connection): keep whatever streamed in.
+    if(ph.classList.contains('pending')){ph.className='msg her';bodyEl.className='body md';bodyEl.innerHTML=md(answer||'(no output)');if(reasoning)collapseThink(think);}
   }catch(err){
     // Rendered in place: a local model can take minutes, and a swallowed error is
     // indistinguishable from one that is merely slow.
-    ph.className='msg her fail'; ph.textContent=String(err.message||err); status.textContent='failed';
-  }finally{ inflight--; m.focus() }
+    ph.className='msg her fail'; ph.innerHTML=''; ph.textContent=String(err.message||err); status.textContent='failed';
+  }finally{ inflight--; if(inflight<=0)setStreaming(false); m.focus() }
 };
 
 async function loadPrompt(){
@@ -316,14 +534,152 @@ async function searchMem(){
 $('mgo').onclick=searchMem;
 $('mq').addEventListener('keydown',e=>{if(e.key==='Enter')searchMem()});
 
+// ---- Tasks: the mission-control view --------------------------------------
+// The list is the same /tasks the CLI reads, plus a live running flag the stored status can't
+// carry. Ordered by what wants attention: running and awaiting float up, done sinks. Polled so a
+// run that starts elsewhere lights up here without a reload.
+const RANK={running:0,awaiting:1,active:2,proposed:3,failed:4,paused:5,done:6};
+let lastTasks=null, tasksOff=false;
+function dur(ms){const s=Math.round(Math.abs(ms)/1000);
+  if(s<60)return s+'s';if(s<3600)return Math.round(s/60)+'m';
+  if(s<86400)return Math.round(s/3600)+'h';return Math.round(s/86400)+'d'}
+function sched(t){
+  if(t.running)return'running now';
+  if(t.status==='awaiting')return'waiting on your reply';
+  if(t.status==='paused')return'paused';
+  if(t.status==='done')return'finished';
+  if(t.next_run_at){const d=t.next_run_at-Date.now();return d>0?'next in '+dur(d):'due now'}
+  if(t.cron)return'cron · '+t.cron;
+  if(t.interval_ms)return'every '+dur(t.interval_ms);
+  return t.kind||'oneshot';
+}
+function taskCard(t){
+  const st=t.running?'running':t.status;
+  const cls=t.running?'run':t.status==='awaiting'?'await':t.status==='failed'?'fail':'';
+  const bits=[esc(sched(t)),(t.run_count||0)+(t.run_count===1?' run':' runs')];
+  if(t.last_run_at&&!t.running)bits.push('last '+ago(t.last_run_at));
+  if(t.consecutive_failures>0)bits.push('<span class="warn">'+t.consecutive_failures+'× failing</span>');
+  const a=[],id=esc(t.id);
+  if(t.running)a.push('<button class="stop" data-act="interrupt" data-id="'+id+'">◼ stop</button>');
+  if(t.status==='paused')a.push('<button data-act="resume" data-id="'+id+'">▶ resume</button>');
+  else if(t.status==='active'||t.status==='awaiting')a.push('<button data-act="pause" data-id="'+id+'">❚❚ pause</button>');
+  if(!t.running)a.push('<button data-act="run" data-id="'+id+'">↻ run now</button>');
+  a.push('<button class="danger" data-act="del" data-id="'+id+'">delete</button>');
+  return '<div class="task '+cls+'">'+
+    '<div class="top"><span class="badge '+st+'"><span class="dot"></span>'+st+'</span>'+
+    '<span class="nm">'+esc(t.name)+'</span></div>'+
+    '<div class="meta">'+bits.map(b=>'<span>'+b+'</span>').join('')+'</div>'+
+    '<div class="acts">'+a.join('')+'</div></div>';
+}
+function updateInboxBadge(tasks){
+  const n=tasks.filter(t=>t.status==='awaiting').length;
+  const el=$('inboxn'); el.hidden=n===0; el.textContent=n;
+}
+function renderTasks(){
+  if(document.querySelector('.tab[data-on]')?.dataset.name!=='tasks')return;
+  const box=$('tasks');
+  // Don't clobber a delete that's mid-confirm when the poll ticks under the user's cursor.
+  if(box.querySelector('[data-armed]'))return;
+  if(tasksOff){box.innerHTML='<div class="empty">Tasks are disabled on this instance.<br>Start the runner with <code>serve</code> to schedule work.</div>';return}
+  if(!lastTasks)return;
+  if(!lastTasks.length){box.innerHTML='<div class="empty">No tasks yet.<br>Background work scheduled here shows its status, and you can steer it live.</div>';return}
+  const sorted=lastTasks.slice().sort((a,b)=>
+    (RANK[a.running?'running':a.status]??8)-(RANK[b.running?'running':b.status]??8));
+  box.innerHTML=sorted.map(taskCard).join('');
+}
+async function refreshTasks(showLoading){
+  try{
+    const r=await fetch('tasks',{headers:H()});
+    if(r.status===503){tasksOff=true;renderTasks();return}
+    lastTasks=(await r.json()).tasks||[]; tasksOff=false;
+    updateInboxBadge(lastTasks); renderTasks();
+  }catch(e){ if(showLoading)$('tasks').innerHTML='<div class="empty">could not load tasks: '+esc(e.message||e)+'</div>' }
+}
+$('tasks').onclick=async e=>{
+  const btn=e.target.closest('button[data-act]'); if(!btn)return;
+  const act=btn.dataset.act, id=btn.dataset.id;
+  // Two-click delete: no native confirm() dialog, and irreversible needs a deliberate second tap.
+  if(act==='del'&&!btn.dataset.armed){btn.dataset.armed='1';btn.textContent='really delete?';
+    setTimeout(()=>{if(btn.isConnected){delete btn.dataset.armed;btn.textContent='delete'}},2600);return}
+  btn.disabled=true;
+  const tid=encodeURIComponent(id), sess=encodeURIComponent('task:'+id);
+  try{
+    if(act==='pause')await fetch('tasks/'+tid+'/pause',{method:'POST',headers:H()});
+    else if(act==='resume')await fetch('tasks/'+tid+'/resume',{method:'POST',headers:H()});
+    else if(act==='del')await fetch('tasks/'+tid,{method:'DELETE',headers:H()});
+    else if(act==='interrupt')await fetch('sessions/'+sess+'/interrupt',{method:'POST',headers:H(),body:JSON.stringify({action:'abort'})});
+    else if(act==='run'){
+      // run-now blocks server-side for the whole run; fire it and let the poll show it go running
+      // rather than freezing the button until it finishes.
+      btn.textContent='starting…';
+      fetch('tasks/'+tid+'/run',{method:'POST',headers:H()}).catch(()=>{}).then(()=>refreshTasks());
+      setTimeout(()=>refreshTasks(),500); return;
+    }
+  }catch(e){/* the refresh below reflects real state */}
+  refreshTasks();
+};
+
+// ---- Inbox: answer what she's blocked on ----------------------------------
+// An 'awaiting' task parked on an unanswered report(ask). The question is the last thing she
+// said on the task's own session; replying there is exactly what resumes her (POST /chat flips
+// the task active), so the inbox is a focused lens on the same plumbing chat already uses.
+async function loadInbox(){
+  const box=$('inbox');
+  let tasks;
+  try{
+    const r=await fetch('tasks?status=awaiting',{headers:H()});
+    if(r.status===503){box.innerHTML='<div class="empty">Tasks are disabled on this instance.</div>';return}
+    tasks=(await r.json()).tasks||[];
+  }catch(e){box.innerHTML='<div class="empty">could not load: '+esc(e.message||e)+'</div>';return}
+  if(!tasks.length){box.innerHTML='<div class="empty">Nothing waiting on you. 🌙<br>When a task gets blocked and asks a question, it lands here.</div>';return}
+  const cards=await Promise.all(tasks.map(async t=>{
+    let q='(open the conversation to see what she asked)';
+    try{
+      const s=await fetch('sessions/'+encodeURIComponent('task:'+t.id),{headers:H()});
+      if(s.ok){const d=await s.json();
+        const ask=[...(d.messages||[])].reverse().find(m=>
+          m.role==='assistant'&&m.content&&!m.content.includes('<tool_call>')&&m.content.trim());
+        if(ask)q=ask.content.replace(/<tool_call>[\\s\\S]*/,'').trim();
+      }
+    }catch(e){}
+    return '<div class="task await ask"><div class="top">'+
+      '<span class="badge awaiting"><span class="dot"></span>awaiting</span>'+
+      '<span class="nm">'+esc(t.name)+'</span></div>'+
+      '<div class="q">'+esc(q.slice(0,900))+'</div>'+
+      '<div class="rep"><textarea rows="2" data-id="'+esc(t.id)+'" placeholder="Reply to resume her…"></textarea>'+
+      '<button class="go" data-reply="'+esc(t.id)+'">Send</button></div></div>';
+  }));
+  box.innerHTML=cards.join('');
+}
+$('inbox').onclick=async e=>{
+  const btn=e.target.closest('button[data-reply]'); if(!btn)return;
+  const id=btn.dataset.reply;
+  const ta=$('inbox').querySelector('textarea[data-id="'+CSS.escape(id)+'"]');
+  const text=(ta?.value||'').trim(); if(!text)return;
+  btn.disabled=true; btn.textContent='sending…';
+  try{ await fetch('chat',{method:'POST',headers:H(),body:JSON.stringify({message:text,session_id:'task:'+id})}) }
+  catch(e){ btn.disabled=false; btn.textContent='Send'; return }
+  loadInbox(); refreshTasks();
+};
+
 // Identity is fetched immediately even though its tab is lazy: the header should say what you
 // are talking to before you say anything to it.
 loadInfo(); loaded.info=1;
 // The conversation you were having is the first thing the page should show, not an empty box.
 loadSessions(); loadHistory();
+// Prime the inbox badge on load so an unanswered ask is visible from the chat tab, before the
+// tasks/inbox tabs are ever opened.
+refreshTasks();
 // Sessions started elsewhere (the CLI, a peer) appear without a reload; 30s is fresh enough
 // for a picker and cheap enough to leave running in a background tab.
 setInterval(loadSessions,30000);
+// Live task/inbox refresh: 5s keeps a running badge honest without hammering the box. Only the
+// visible tab re-renders; the fetch also keeps the inbox count current from any tab.
+setInterval(()=>{
+  const on=document.querySelector('.tab[data-on]')?.dataset.name;
+  refreshTasks();
+  if(on==='inbox')loadInbox();
+},5000);
 </script></body></html>`
 }
 

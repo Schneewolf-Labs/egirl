@@ -89,6 +89,22 @@ function taskToJson(t: Task): JSONValue {
   }
 }
 
+// A message landing on a parked task's session is the resume signal: the exchange just persisted
+// into the task's conversation, so the next run starts from it. Shared by the streaming and
+// non-streaming /chat paths.
+function resumeParkedTask(sessionId: string, deps: APIDeps): void {
+  if (!sessionId.startsWith('task:') || !deps.taskStore) return
+  const taskId = sessionId.slice('task:'.length)
+  const parked = deps.taskStore.get(taskId)
+  if (parked?.status === 'awaiting') {
+    deps.taskStore.update(
+      taskId,
+      { status: 'active', nextRunAt: Date.now() },
+      'Reply received on the task session — resuming',
+    )
+  }
+}
+
 export function startAPIServer(config: APIConfig, deps: APIDeps) {
   const { host, port, bearerToken } = config
 
@@ -187,23 +203,66 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
                 .filter((u): u is string => typeof u === 'string' && u.startsWith('data:image/'))
                 .slice(0, 4)
             : undefined
+
+          // Streaming path: a local reasoning model spends most of a turn (measured ~96% on a
+          // Qwen3.8 turn) emitting thinking before any answer exists, so a blocking request looks
+          // hung for minutes. Server-Sent Events surface reasoning tokens, tool activity, and the
+          // answer as they happen — the same live view the CLI gets. The JSON path below is
+          // untouched for scripts and anything that doesn't ask to stream.
+          if (body.stream === true) {
+            const enc = new TextEncoder()
+            let sink: (o: JSONValue) => void = () => {}
+            const { done, position } = enqueueRun(sessionId, () =>
+              agent.run(toRun, {
+                ...(images?.length ? { images } : {}),
+                events: {
+                  onThinkingToken: (v) => sink({ t: 'reasoning', v }),
+                  onToken: (v) => sink({ t: 'token', v }),
+                  onToolCallStart: (calls) => sink({ t: 'tool', v: calls.map((c) => c.name) }),
+                  onToolCallComplete: (_id, name) => sink({ t: 'tool_done', v: name }),
+                },
+              }),
+            )
+            const stream = new ReadableStream<Uint8Array>({
+              async start(controller) {
+                // Guard every enqueue: if the client navigates away the controller closes, and a
+                // late token must not crash the run that's still finishing server-side.
+                sink = (o) => {
+                  try {
+                    controller.enqueue(enc.encode(`data: ${JSON.stringify(o)}\n\n`))
+                  } catch {}
+                }
+                if (position > 0) sink({ t: 'queued', position })
+                try {
+                  const response = await done
+                  resumeParkedTask(sessionId, deps)
+                  sink({
+                    t: 'done',
+                    content: response.content,
+                    output_tokens: response.usage.output_tokens,
+                    turns: response.turns,
+                    aborted: response.aborted ?? false,
+                    awaiting: response.awaitingInput ?? false,
+                  })
+                } catch (e) {
+                  sink({ t: 'error', message: e instanceof Error ? e.message : String(e) })
+                } finally {
+                  try {
+                    controller.close()
+                  } catch {}
+                }
+              },
+            })
+            return new Response(stream, {
+              headers: { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' },
+            })
+          }
+
           const { done, position } = enqueueRun(sessionId, () =>
             agent.run(toRun, images?.length ? { images } : {}),
           )
           const response = await done
-          // A message landing on a parked task's session is the resume signal: the exchange
-          // just persisted into the task's conversation, so the next run starts from it.
-          if (sessionId.startsWith('task:') && deps.taskStore) {
-            const taskId = sessionId.slice('task:'.length)
-            const parked = deps.taskStore.get(taskId)
-            if (parked?.status === 'awaiting') {
-              deps.taskStore.update(
-                taskId,
-                { status: 'active', nextRunAt: Date.now() },
-                'Reply received on the task session — resuming',
-              )
-            }
-          }
+          resumeParkedTask(sessionId, deps)
           return json({
             content: response.content,
             session_id: sessionId,
@@ -439,7 +498,16 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
           if (!deps.taskStore) return err('tasks disabled', 503)
           const status = url.searchParams.get('status') as Task['status'] | null
           const tasks = deps.taskStore.list(status ? { status } : undefined)
-          return json({ tasks: tasks.map(taskToJson) })
+          // `running` is the live executing-now signal the stored status can't carry: a task is
+          // 'active' whether it's idle-between-schedules or mid-run. The console needs the
+          // difference to show a pulse and offer "stop" only when there's something to stop.
+          const running = new Set(deps.taskRunner?.getRunningTaskIds() ?? [])
+          return json({
+            tasks: tasks.map((t) => ({
+              ...(taskToJson(t) as Record<string, JSONValue>),
+              running: running.has(t.id),
+            })),
+          })
         }
 
         if (method === 'POST' && path === '/tasks') {
