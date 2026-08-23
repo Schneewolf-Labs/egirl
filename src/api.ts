@@ -1,6 +1,10 @@
 import type { AgentFactory, AgentLoop } from './agent'
 import { buildLearnPrompt } from './agent/learn-prompt'
 import type { RuntimeConfig } from './config'
+import type { ThinkingLevel } from './config/schema'
+import type { ThinkingConfig } from './providers/types'
+
+const THINKING_LEVELS: readonly ThinkingLevel[] = ['off', 'low', 'medium', 'high'] as const
 import type { SessionInfo } from './conversation'
 import type { MemoryCategory, MemoryManager } from './memory'
 import { formatInboundPeerMessage, PEER_PROTOCOL, peerSessionId } from './peers/protocol'
@@ -116,6 +120,10 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
   // running, so the UI can say "queued" honestly instead of guessing.
   const chains = new Map<string, { tail: Promise<unknown>; pending: number }>()
 
+  // Per-session thinking overrides set via POST /sessions/:id/thinking, applied to that
+  // session's subsequent runs. The CLI holds the same thing per TTY session.
+  const sessionThinking = new Map<string, ThinkingConfig>()
+
   function enqueueRun<T>(
     sessionId: string,
     run: () => Promise<T>,
@@ -215,6 +223,9 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
             const { done, position } = enqueueRun(sessionId, () =>
               agent.run(toRun, {
                 ...(images?.length ? { images } : {}),
+                ...(sessionThinking.has(sessionId)
+                  ? { thinking: sessionThinking.get(sessionId) }
+                  : {}),
                 events: {
                   onThinkingToken: (v) => sink({ t: 'reasoning', v }),
                   onToken: (v) => sink({ t: 'token', v }),
@@ -259,7 +270,12 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
           }
 
           const { done, position } = enqueueRun(sessionId, () =>
-            agent.run(toRun, images?.length ? { images } : {}),
+            agent.run(toRun, {
+              ...(images?.length ? { images } : {}),
+              ...(sessionThinking.has(sessionId)
+                ? { thinking: sessionThinking.get(sessionId) }
+                : {}),
+            }),
           )
           const response = await done
           resumeParkedTask(sessionId, deps)
@@ -301,6 +317,9 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
             tools: cfg?.tools ?? null,
             codeAgent: cfg?.channels.codeAgent?.provider ?? null,
             thinking: cfg?.thinking.level ?? null,
+            // Who supervises this instance when it gets stuck — a peer or a human on a channel.
+            report: cfg?.report?.to ?? null,
+            peers: cfg?.peers?.length ?? 0,
             permissions: cfg
               ? {
                   mode: cfg.permissionSupervisor.mode,
@@ -490,6 +509,65 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
             // delivered=false means nothing was running — for inject, the caller should send
             // a normal chat message instead.
             return json({ ok: true, delivered })
+          }
+        }
+
+        // How full the window is, the same numbers /context prints in the CLI. For an agent that
+        // degrades well before it hits its limit, this is the number worth watching -- and it was
+        // previously only visible from a terminal attached to the process.
+        {
+          const m = method === 'GET' && path.match(/^\/sessions\/(.+)\/context$/)
+          if (m) {
+            const sessionId = decodeURIComponent(m[1] as string)
+            const agent = getOrCreateAgent(sessionId, deps)
+            const s = await agent.contextStatus()
+            return json({
+              session_id: s.sessionId,
+              utilization: s.utilization,
+              context_length: s.contextLength,
+              system_prompt_tokens: s.systemPromptTokens,
+              message_count: s.messageCount,
+              message_tokens: s.messageTokens,
+              has_summary: s.hasSummary,
+              summary_tokens: s.summaryTokens,
+              available: s.available,
+              thinking: sessionThinking.get(sessionId)?.level ?? null,
+            })
+          }
+        }
+
+        {
+          const m = method === 'POST' && path.match(/^\/sessions\/(.+)\/compact$/)
+          if (m) {
+            const sessionId = decodeURIComponent(m[1] as string)
+            const agent = getOrCreateAgent(sessionId, deps)
+            const r = await agent.compactNow()
+            return json({
+              ok: true,
+              messages_before: r.messagesBefore,
+              messages_after: r.messagesAfter,
+              dropped: r.messagesBefore - r.messagesAfter,
+            })
+          }
+        }
+
+        // Per-session thinking level, mirroring the CLI's /think. Deliberately scoped to the
+        // session rather than mutating the shared config: turning thinking down to get a quick
+        // answer in one conversation should not silently reconfigure every other channel.
+        {
+          const m = method === 'POST' && path.match(/^\/sessions\/(.+)\/thinking$/)
+          if (m) {
+            const sessionId = decodeURIComponent(m[1] as string)
+            const level = (await readJson(req)).level
+            if (level === 'default' || level === null) {
+              sessionThinking.delete(sessionId)
+              return json({ ok: true, level: null })
+            }
+            if (typeof level !== 'string' || !THINKING_LEVELS.includes(level as ThinkingLevel)) {
+              return err(`level must be one of ${THINKING_LEVELS.join(', ')}, or "default"`)
+            }
+            sessionThinking.set(sessionId, { level: level as ThinkingConfig['level'] })
+            return json({ ok: true, level })
           }
         }
 

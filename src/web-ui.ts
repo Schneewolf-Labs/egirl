@@ -186,6 +186,20 @@ button.mini:hover{color:var(--s);border-color:var(--s)}
 .taskform .frow{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap}
 .taskform .frow .go{margin-left:auto}
 .chk{display:flex;align-items:center;gap:.35rem;color:var(--dim);font-size:.8rem;cursor:pointer}
+/* Settings: live session controls above the read-only instance facts. */
+.sect{margin-bottom:1.4rem}
+.sect .frow{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin-top:.6rem}
+.sect select{background:var(--user);color:var(--fg);border:1px solid var(--line);
+  border-radius:.45rem;padding:.32rem .5rem;font:inherit;font-size:.82rem}
+.sect select:focus{outline:none;border-color:var(--p)}
+button.mini.danger:hover{color:#ff9db4;border-color:#ff5f87}
+/* Context meter: the number worth watching, since an agent degrades well before it fills. */
+.ctxwrap{margin-top:.15rem}
+.ctxbar{height:.55rem;background:var(--user);border-radius:.3rem;overflow:hidden;border:1px solid var(--line)}
+.ctxbar span{display:block;height:100%;width:0;background:var(--p);transition:width .3s,background .3s}
+.ctxbar span.warn2{background:#ffb347}
+.ctxbar span.crit{background:#ff5f87}
+.ctxnums{color:var(--dim);font-size:.76rem;margin-top:.35rem;font-variant-numeric:tabular-nums}
 /* ---- polish: themed scrollbars, honoured motion prefs -------------------- */
 *::-webkit-scrollbar{width:9px;height:9px}
 *::-webkit-scrollbar-thumb{background:var(--line);border-radius:5px}
@@ -264,7 +278,7 @@ button.go.stopbtn{background:linear-gradient(135deg,#ff5f87,#c0395a)}
   <button data-tab="peers" aria-selected="false">peers</button>
   <button data-tab="memory" aria-selected="false">memory</button>
   <button data-tab="prompt" aria-selected="false">prompt</button>
-  <button data-tab="info" aria-selected="false">info</button>
+  <button data-tab="info" aria-selected="false">settings</button>
 </nav>
 <main>
   <section class="tab" data-name="chat" data-on>
@@ -308,7 +322,30 @@ button.go.stopbtn{background:linear-gradient(135deg,#ff5f87,#c0395a)}
   </section>
 
   <section class="tab" data-name="info">
-    <div class="pad"><table id="infotbl"></table></div>
+    <div class="pad">
+      <div class="sect">
+        <div class="dlabel">this conversation</div>
+        <div class="ctxwrap">
+          <div class="ctxbar"><span id="ctxfill"></span></div>
+          <div class="ctxnums" id="ctxnums">context: loading…</div>
+        </div>
+        <div class="frow">
+          <label class="chk" for="thinksel">thinking</label>
+          <select id="thinksel">
+            <option value="default">config default</option>
+            <option value="off">off</option><option value="low">low</option>
+            <option value="medium">medium</option><option value="high">high</option>
+          </select>
+          <button class="mini" id="compactbtn">compact now</button>
+          <button class="mini danger" id="wipebtn">wipe session</button>
+        </div>
+        <div class="dim" id="sessmsg" hidden></div>
+      </div>
+      <div class="sect">
+        <div class="dlabel">instance</div>
+        <table id="infotbl"></table>
+      </div>
+    </div>
   </section>
 </main>
 <script>
@@ -332,6 +369,8 @@ $('tabs').onclick=e=>{
   if(t==='tasks')refreshTasks(true);
   if(t==='inbox')loadInbox();
   if(t==='peers')loadPeers();
+  // Context moves with every turn, so it is re-read each time settings is opened.
+  if(t==='info')loadContext();
 };
 
 function add(text,cls){const d=document.createElement('div');d.className='msg '+cls;d.textContent=text;
@@ -583,6 +622,57 @@ async function loadPrompt(){
   }catch(e){ $('sysprompt').textContent='failed to load: '+e.message }
 }
 
+// ---- Session settings -----------------------------------------------------
+// The knobs the CLI has always had (/context, /think, /compact, /wipe), for everyone else. All
+// scoped to the open conversation: turning thinking down to get a fast answer here should not
+// quietly reconfigure Discord, XMPP and every background task too.
+function say(msg,bad){const el=$('sessmsg');el.hidden=false;el.textContent=msg;
+  el.className=bad?'warn':'dim';setTimeout(()=>{el.hidden=true},4000)}
+async function loadContext(){
+  try{
+    const d=await (await fetch('sessions/'+encodeURIComponent(sid)+'/context',{headers:H()})).json();
+    const pct=Math.round((d.utilization||0)*100);
+    const fill=$('ctxfill');
+    fill.style.width=Math.min(pct,100)+'%';
+    fill.className=pct>80?'crit':pct>60?'warn2':'';
+    const parts=[pct+'% of '+(d.context_length||0).toLocaleString()+' tokens',
+      d.message_count+' messages (~'+(d.message_tokens||0).toLocaleString()+'t)',
+      'system ~'+(d.system_prompt_tokens||0).toLocaleString()+'t'];
+    if(d.has_summary)parts.push('summary ~'+(d.summary_tokens||0).toLocaleString()+'t');
+    parts.push('~'+(d.available||0).toLocaleString()+'t free');
+    $('ctxnums').textContent=parts.join('  ·  ');
+    $('thinksel').value=d.thinking||'default';
+  }catch(e){ $('ctxnums').textContent='context unavailable: '+(e.message||e) }
+}
+$('thinksel').onchange=async()=>{
+  const level=$('thinksel').value;
+  try{
+    const r=await fetch('sessions/'+encodeURIComponent(sid)+'/thinking',{method:'POST',headers:H(),body:JSON.stringify({level})});
+    if(!r.ok)throw new Error((await r.json().catch(()=>({}))).error||('HTTP '+r.status));
+    say(level==='default'?'thinking follows the config default':'thinking set to '+level);
+  }catch(e){ say(String(e.message||e),true) }
+};
+$('compactbtn').onclick=async()=>{
+  const b=$('compactbtn');b.disabled=true;b.textContent='compacting…';
+  try{
+    const d=await (await fetch('sessions/'+encodeURIComponent(sid)+'/compact',{method:'POST',headers:H()})).json();
+    say(d.dropped>0?d.dropped+' messages summarized, '+d.messages_after+' kept':'nothing to compact ('+d.messages_before+' messages)');
+    loadContext();
+  }catch(e){ say(String(e.message||e),true) }
+  finally{ b.disabled=false;b.textContent='compact now' }
+};
+// Two-click, like the task delete: wiping a conversation is not undoable.
+$('wipebtn').onclick=async()=>{
+  const b=$('wipebtn');
+  if(!b.dataset.armed){b.dataset.armed='1';b.textContent='really wipe?';
+    setTimeout(()=>{if(b.isConnected){delete b.dataset.armed;b.textContent='wipe session'}},2600);return}
+  delete b.dataset.armed;b.textContent='wipe session';
+  try{
+    await fetch('sessions/'+encodeURIComponent(sid),{method:'DELETE',headers:H()});
+    say('session wiped');loadHistory();loadContext();
+  }catch(e){ say(String(e.message||e),true) }
+};
+
 async function loadInfo(){
   try{
     const d=await (await fetch('info',{headers:H()})).json();
@@ -593,6 +683,7 @@ async function loadInfo(){
       ['embeddings',d.embeddings?d.embeddings.model+' ('+d.embeddings.dimensions+'d)':'none — memory disabled'],
       ['memory',d.memory?'enabled':'disabled'],
       ['code agent',d.codeAgent||'off'],['thinking',d.thinking],
+      ['reports to',d.report||null],
       ['permissions',d.permissions?d.permissions.mode+' · default '+d.permissions.defaultAction:null],
       ['workspace',d.workspace],
     ];
