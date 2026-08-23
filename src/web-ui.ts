@@ -283,7 +283,7 @@ button.go.stopbtn{background:linear-gradient(135deg,#ff5f87,#c0395a)}
   button.go{padding:0 .9rem}
 }
 </style></head><body>
-<header><b>${esc(name)}</b><span class="meta" id="hmeta">connecting…</span><span class="sp" id="status">ready</span></header>
+<header><b>egirl</b><span class="meta" id="hmeta">${esc(name)}</span><span class="sp" id="status">ready</span></header>
 <nav id="tabs">
   <button data-tab="chat" aria-selected="true">chat</button>
   <button data-tab="tasks" aria-selected="false">tasks</button>
@@ -832,7 +832,10 @@ async function loadInfo(){
       .map(r=>'<tr><td>'+esc(r[0])+'</td><td>'+esc(r[1])+'</td></tr>').join('');
     const tools=d.tools?Object.entries(d.tools).filter(([,v])=>v).map(([k])=>'<span class="chip">'+esc(k)+'</span>').join(''):'';
     if(tools) $('infotbl').insertAdjacentHTML('beforeend','<tr><td>tools</td><td>'+tools+'</td></tr>');
-    $('hmeta').textContent=[d.model,d.instance].filter(Boolean).join(' · ');
+    // Identity moved here when the corner became the product name: a console that cannot tell
+    // you which agent it is talking to is indistinguishable from any other instance's, and
+    // getting that wrong means talking to the wrong agent without noticing. Name leads.
+    $('hmeta').textContent=[d.name,d.model,d.instance!==d.name?d.instance:null].filter(Boolean).join(' · ');
   }catch(e){ $('infotbl').innerHTML='<tr><td>error</td><td>'+esc(e.message)+'</td></tr>' }
 }
 
