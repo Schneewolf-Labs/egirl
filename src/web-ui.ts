@@ -28,14 +28,17 @@ export function renderChatPage(opts: {
   nonce?: string
 }): string {
   const { name, theme, hasToken, nonce } = opts
-  const p = hex(theme.colors.primary)
-  const s = hex(theme.colors.secondary)
-  const a = hex(theme.colors.accent)
+  const p = ansiToHex(theme.colors.primary)
+  const s = ansiToHex(theme.colors.secondary)
+  const a = ansiToHex(theme.colors.accent)
 
   return `<!doctype html><html lang="en"><head><meta charset="utf-8">
 <title>${esc(name)}</title>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="color-scheme" content="dark light">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="${esc(name)}">
 <style>
 :root{--p:${p};--s:${s};--a:${a};
   --bg:#0b0a12;--panel:#12111c;--fg:#e8e6f2;--dim:#8c86a8;--line:#221f33;--user:#1a1828}
@@ -355,6 +358,12 @@ button.go.stopbtn{background:linear-gradient(135deg,#ff5f87,#c0395a)}
         <div class="dlabel">instance</div>
         <table id="infotbl"></table>
       </div>
+      <div class="sect">
+        <div class="dlabel">notifications</div>
+        <div class="dim" id="pushstate">checking…</div>
+        <div class="frow"><button class="mini" id="pushbtn" hidden>enable notifications</button>
+          <button class="mini" id="pushtest" hidden>send a test</button></div>
+      </div>
       ${
         hasToken
           ? `<div class="sect">
@@ -397,7 +406,7 @@ $('tabs').onclick=e=>{
   if(t==='inbox')loadInbox().catch(()=>{});
   if(t==='peers')loadPeers();
   // Context moves with every turn, so it is re-read each time settings is opened.
-  if(t==='info')loadContext();
+  if(t==='info'){loadContext();pushInit()}
 };
 
 function add(text,cls){const d=document.createElement('div');d.className='msg '+cls;d.textContent=text;
@@ -655,6 +664,72 @@ async function loadPrompt(){
     $('sysprompt').textContent=d.systemPrompt||'(empty)';
     $('sysprompt').insertAdjacentHTML('beforebegin','<p style="color:var(--dim);font-size:.8rem">'+d.length+' characters — IDENTITY, SOUL, AGENTS, USER and tool descriptions as the model receives them.</p>');
   }catch(e){ $('sysprompt').textContent='failed to load: '+e.message }
+}
+
+// ---- Notifications ---------------------------------------------------------
+// The console is a pull surface: it shows everything, but only once you open it. Push is the
+// half that reaches a phone that is not looking -- and notably it needs no inbound access to
+// this instance at all, because the *server* connects outward to the browser's push service.
+// The notification itself carries no content; tapping it opens the console, which fetches the
+// real thing over this instance's own connection.
+function b64urlToBytes(s){
+  const pad='='.repeat((4-s.length%4)%4);
+  const raw=atob((s+pad).replace(/-/g,'+').replace(/_/g,'/'));
+  return Uint8Array.from(raw,c=>c.charCodeAt(0));
+}
+async function pushInit(){
+  const state=$('pushstate'),btn=$('pushbtn'),test=$('pushtest');
+  // iOS only exposes push to a page that has been added to the home screen, and only over a
+  // secure context. Saying so plainly beats a button that silently does nothing.
+  if(!('serviceWorker' in navigator)||!('PushManager' in window)){
+    state.textContent=window.isSecureContext
+      ? 'This browser does not support push notifications.'
+      : 'Push needs a secure connection (https). Notifications are unavailable over plain http.';
+    return;
+  }
+  let reg;
+  try{ reg=await navigator.serviceWorker.register('sw.js',{scope:'./'}) }
+  catch(e){ state.textContent='Could not register the service worker: '+(e.message||e); return }
+  const existing=await reg.pushManager.getSubscription();
+  if(existing){
+    state.textContent='On — this device will be notified when something needs you.';
+    btn.hidden=false; btn.textContent='turn off'; test.hidden=false;
+    btn.onclick=async()=>{
+      btn.disabled=true;
+      try{
+        await fetch('push/subscribe',{method:'DELETE',headers:H(),body:JSON.stringify({endpoint:existing.endpoint})});
+        await existing.unsubscribe();
+      }catch(e){}
+      btn.disabled=false; pushInit();
+    };
+    test.onclick=async()=>{
+      test.disabled=true; test.textContent='sending…';
+      try{
+        const d=await (await fetch('push/test',{method:'POST',headers:H()})).json();
+        test.textContent=d.delivered?'sent to '+d.delivered+' device(s)':'no devices subscribed';
+      }catch(e){ test.textContent='failed' }
+      setTimeout(()=>{test.disabled=false;test.textContent='send a test'},2500);
+    };
+    return;
+  }
+  state.textContent='Off — nothing will reach you unless the console is open.';
+  btn.hidden=false; btn.textContent='enable notifications'; test.hidden=true;
+  btn.onclick=async()=>{
+    btn.disabled=true;
+    try{
+      const perm=await Notification.requestPermission();
+      if(perm!=='granted'){ state.textContent='Notifications were blocked in the browser.'; btn.disabled=false; return }
+      const {public_key}=await (await fetch('push/key',{headers:H()})).json();
+      const sub=await reg.pushManager.subscribe({
+        userVisibleOnly:true,                       // required; every push shows a notification
+        applicationServerKey:b64urlToBytes(public_key),
+      });
+      const j=sub.toJSON();
+      await fetch('push/subscribe',{method:'POST',headers:H(),body:JSON.stringify({endpoint:j.endpoint,keys:j.keys})});
+      pushInit();
+    }catch(e){ state.textContent='Could not enable: '+(e.message||e) }
+    finally{ btn.disabled=false }
+  };
 }
 
 // ---- The saved token ------------------------------------------------------
@@ -1069,7 +1144,7 @@ function esc(s: string): string {
  * The CLI palette is 256-colour ANSI; a browser needs hex. Mapped through the standard xterm cube
  * so an instance's colours are the ones its terminal shows rather than an approximation.
  */
-function hex(ansi: string): string {
+export function ansiToHex(ansi: string): string {
   const m = /38;5;(\d+)m/.exec(ansi)
   if (!m || !m[1]) return '#af5fd7'
   const n = Number(m[1])

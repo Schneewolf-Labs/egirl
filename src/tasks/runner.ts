@@ -41,6 +41,12 @@ export interface TaskRunnerDeps {
   conversationStore?: ConversationStore
   /** Shared mutex to serialize agent runs across entry points */
   sessionMutex?: SessionMutex
+  /**
+   * Called when a run parks waiting on a human. This is the one moment where the difference
+   * between a console and a notification matters: the agent has stopped, and nothing will move
+   * until somebody answers -- which they cannot do if they do not know.
+   */
+  onAwaitingInput?: (task: Task) => void
 }
 
 export class TaskRunner {
@@ -246,6 +252,11 @@ export class TaskRunner {
           { status: 'awaiting' },
           'Parked: report ask went unanswered — awaiting supervisor input',
         )
+        // Nothing will move until a human answers, so this is worth interrupting someone for.
+        // Deliberately fire-and-forget: a notification that fails must never fail the run.
+        try {
+          this.deps.onAwaitingInput?.(task)
+        } catch {}
       } else if (task.kind === 'scheduled') {
         const nextRunAt = this.calculateTaskNextRun(task)
         this.deps.store.update(task.id, { nextRunAt })

@@ -1,6 +1,8 @@
 import { type AgentFactory, type AgentLoop, createAgentLoop } from '../agent'
 import { SessionMutex } from '../agent/session-mutex'
+import { join } from 'node:path'
 import { startAPIServer } from '../api'
+import { createPushNotifier, generateVapidKeys, PushStore } from '../push'
 import { createAppServices } from '../bootstrap'
 import type { RuntimeConfig } from '../config'
 import { registerReportTool } from '../report/register'
@@ -55,6 +57,16 @@ export async function runAPI(config: RuntimeConfig, args: string[]): Promise<voi
   // an explanatory tool error at call time.
   registerReportTool(config, toolExecutor, new Map())
 
+  // Web Push. Keys and subscriptions live in the workspace beside the other state, so an
+  // instance keeps its identity across restarts -- regenerating the VAPID pair would silently
+  // invalidate every subscription a browser has already bound to the old key.
+  const pushStore = new PushStore(join(config.workspace.path, 'push.db'))
+  const push = createPushNotifier(
+    pushStore,
+    pushStore.keys(generateVapidKeys),
+    `mailto:egirl@${config.source.instance ?? 'localhost'}`,
+  )
+
   // Background tasks are optional but naturally pair with the API —
   // POST /tasks doesn't do much without a runner.
   let taskRunner: ReturnType<typeof createTaskRunner> | undefined
@@ -63,6 +75,11 @@ export async function runAPI(config: RuntimeConfig, args: string[]): Promise<voi
       config,
       tasksConfig: config.tasks,
       store: taskStore,
+      // A parked task is the one thing worth interrupting someone for: the agent has stopped
+      // and nothing moves until a human answers.
+      onAwaitingInput: (task) => {
+        void push.notify(`task "${task.name}" is awaiting input`)
+      },
       toolExecutor,
       localProvider: providers.local,
       auxProvider: providers.auxiliary,
@@ -101,6 +118,8 @@ export async function runAPI(config: RuntimeConfig, args: string[]): Promise<voi
   }
 
   const server = startAPIServer(config.channels.api, {
+    push,
+    pushStore,
     agentFactory,
     agents,
     memory,

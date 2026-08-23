@@ -11,7 +11,9 @@ import { formatInboundPeerMessage, PEER_PROTOCOL, peerSessionId } from './peers/
 import type { Task, TaskRunner, TaskStore } from './tasks'
 import { getTheme } from './ui/theme'
 import { log } from './util/logger'
-import { renderChatPage } from './web-ui'
+import type { PushNotifier, PushStore } from './push'
+import { renderManifest, renderServiceWorker } from './push/assets'
+import { ansiToHex, renderChatPage } from './web-ui'
 
 export interface APIConfig {
   host: string
@@ -39,6 +41,9 @@ export interface APIDeps {
    * server has touched; the store knows every conversation from every channel, which is what
    * a session picker actually wants to show.
    */
+  /** Web Push, when configured: how an agent reaches a device that is not looking at the console. */
+  push?: PushNotifier
+  pushStore?: PushStore
   conversationStore?: {
     listSessions(): SessionInfo[]
     /**
@@ -169,10 +174,17 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
         req.method === 'GET' &&
         url.pathname === '/' &&
         (req.headers.get('accept') ?? '').includes('text/html')
+      // The browser fetches the manifest and the service worker itself, with no opportunity to
+      // attach a bearer token -- requiring one would make the console permanently uninstallable
+      // on any instance that has a token set. Neither file carries data: the manifest is icons
+      // and a colour, and the worker's only content is the instance name already on the page.
+      const isPwaAsset =
+        req.method === 'GET' &&
+        (url.pathname === '/manifest.webmanifest' || url.pathname === '/sw.js')
 
       // The page itself is served unauthenticated so the browser has somewhere to type the token;
       // every endpoint behind it still requires one. The page contains no data on its own.
-      if (bearerToken && !wantsPage) {
+      if (bearerToken && !wantsPage && !isPwaAsset) {
         const auth = req.headers.get('authorization') ?? ''
         if (auth !== `Bearer ${bearerToken}`) return err('unauthorized', 401)
       }
@@ -202,6 +214,11 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
               // an image attach hanging forever on an onload that never fires.
               "img-src 'self' data: blob:",
               "connect-src 'self'",
+              // The console registers its own service worker and manifest; default-src 'none'
+              // denies both, which silently breaks installability and push rather than erroring
+              // anywhere obvious. Both are same-origin only.
+              "worker-src 'self'",
+              "manifest-src 'self'",
               "form-action 'none'",
               "base-uri 'none'",
               "frame-ancestors 'none'",
@@ -224,6 +241,62 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
             )
           }
           return json({ service: 'egirl', version: '0.2.0' })
+        }
+
+        // --- Web Push --------------------------------------------------------
+        // The manifest and service worker are what make the console installable and able to
+        // receive notifications. Both are served unauthenticated for the same reason the page
+        // is: a browser fetches them before any token exists, and neither contains data — the
+        // worker's only secret is the instance's own name, which is already on the page.
+        if (method === 'GET' && path === '/manifest.webmanifest') {
+          return new Response(
+            renderManifest({ name: deps.selfName ?? 'egirl', primary: ansiToHex(getTheme().colors.primary) }),
+            { headers: { 'content-type': 'application/manifest+json' } },
+          )
+        }
+        if (method === 'GET' && path === '/sw.js') {
+          return new Response(renderServiceWorker({ name: deps.selfName ?? 'egirl' }), {
+            headers: {
+              'content-type': 'text/javascript',
+              // The worker controls the whole origin, so it must not be served from a cache
+              // that outlives a deploy.
+              'cache-control': 'no-cache',
+              'service-worker-allowed': '/',
+            },
+          })
+        }
+
+        if (method === 'GET' && path === '/push/key') {
+          if (!deps.push) return err('push not configured', 503)
+          return json({ public_key: deps.push.publicKey() })
+        }
+
+        if (method === 'POST' && path === '/push/subscribe') {
+          if (!deps.push || !deps.pushStore) return err('push not configured', 503)
+          const body = await readJson(req)
+          const endpoint = body.endpoint
+          if (typeof endpoint !== 'string' || !/^https:\/\//.test(endpoint)) {
+            return err('endpoint required (https)')
+          }
+          const keys = (body.keys ?? {}) as Record<string, string>
+          deps.pushStore.subscribe({ endpoint, p256dh: keys.p256dh, auth: keys.auth })
+          return json({ ok: true })
+        }
+
+        if (method === 'DELETE' && path === '/push/subscribe') {
+          if (!deps.pushStore) return err('push not configured', 503)
+          const endpoint = (await readJson(req)).endpoint
+          if (typeof endpoint !== 'string') return err('endpoint required')
+          deps.pushStore.unsubscribe(endpoint)
+          return json({ ok: true })
+        }
+
+        // Send a notification to this instance's own devices — how you find out whether the
+        // whole chain works without waiting for an agent to genuinely need something.
+        if (method === 'POST' && path === '/push/test') {
+          if (!deps.push) return err('push not configured', 503)
+          const delivered = await deps.push.notify('test from the console')
+          return json({ ok: true, delivered })
         }
 
         // --- Chat ---
