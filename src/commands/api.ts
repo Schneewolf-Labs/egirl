@@ -58,7 +58,7 @@ export async function runAPI(config: RuntimeConfig, args: string[]): Promise<voi
   // The console is a real report target. Without this, an instance whose only surface is the
   // browser had nowhere to escalate to -- a peer supervisor worked, but "this one is the
   // human's call" died in a tool error, and the agent went back to guessing.
-  const consoleInbox = new ConsoleInbox()
+  const consoleInbox = new ConsoleInbox(config.source.instance ?? 'egirl')
   const replyBroker = createReplyBroker()
   registerReportTool(
     config,

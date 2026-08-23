@@ -275,7 +275,7 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
             if (!ask) return err('ask not found (it may have timed out)', 404)
             const reply = (await readJson(req)).reply
             if (typeof reply !== 'string' || !reply.trim()) return err('reply required')
-            const delivered = deps.replyBroker.tryDeliver('console', ask.from, reply)
+            const delivered = deps.replyBroker.tryDeliver('console', ask.target, reply)
             deps.consoleInbox.resolve(id)
             // delivered=false means the asker gave up before the answer arrived; the question is
             // still cleared, because leaving it would invite answering it a second time.

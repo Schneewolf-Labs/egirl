@@ -17,8 +17,10 @@
 
 export interface ConsoleAsk {
   id: string
-  /** Who is asking — the instance's own name, or a task's. */
+  /** Who is asking: the instance that raised the escalation. */
   from: string
+  /** Report target the answer must be delivered back through. */
+  target: string
   question: string
   askedAt: number
 }
@@ -27,13 +29,22 @@ export class ConsoleInbox {
   private asks = new Map<string, ConsoleAsk>()
   private seq = 0
 
+  /**
+   * @param selfName the instance doing the asking. Every ask in this inbox comes from it, and
+   *   labelling a card with the *target* instead would caption it with the name of the person
+   *   reading it — "nick is asking you" — which is nonsense.
+   */
+  constructor(private readonly selfName: string) {}
+
   /** The outbound half: called by the report tool when the target channel is `console`. */
   send = async (target: string, message: string): Promise<void> => {
     this.seq++
     const id = `ask${this.seq}`
     this.asks.set(id, {
       id,
-      from: target || 'agent',
+      from: this.selfName,
+      // The channel target is who the answer routes back through, not who is asking.
+      target,
       question: message,
       askedAt: Date.now(),
     })
