@@ -251,14 +251,16 @@ export class LlamaCppProvider implements LLMProvider {
     } else {
       const data = (await response.json()) as {
         choices: Array<{
-          message: { content: string; reasoning_content?: string }
+          message: { content: string; reasoning_content?: string; reasoning?: string }
           finish_reason?: string
         }>
         usage: { prompt_tokens: number; completion_tokens: number }
         model: string
       }
       content = data.choices[0]?.message?.content ?? ''
-      reasoning = data.choices[0]?.message?.reasoning_content ?? ''
+      // llama.cpp calls this reasoning_content; vLLM calls the identical field reasoning.
+      reasoning =
+        data.choices[0]?.message?.reasoning_content ?? data.choices[0]?.message?.reasoning ?? ''
       usage = data.usage ?? usage
       model = data.model ?? this.name
       finish_reason = data.choices[0]?.finish_reason ?? undefined
@@ -388,7 +390,7 @@ export class LlamaCppProvider implements LLMProvider {
           try {
             const parsed = JSON.parse(data) as {
               choices?: Array<{
-                delta?: { content?: string; reasoning_content?: string }
+                delta?: { content?: string; reasoning_content?: string; reasoning?: string }
                 finish_reason?: string | null
               }>
               usage?: { prompt_tokens: number; completion_tokens: number }
@@ -405,7 +407,12 @@ export class LlamaCppProvider implements LLMProvider {
             // to reset the stale timer: a reasoning model can deliberate for minutes before it
             // emits a single content token, and treating that silence as a hang aborts the
             // generation just as it was about to answer.
-            const reasoningToken = parsed.choices?.[0]?.delta?.reasoning_content
+            // vLLM names this delta `reasoning`; llama.cpp names it `reasoning_content`.
+            // Missing the alias is not cosmetic: these deltas are what reset the stale
+            // timer, and a model that reasons for hundreds of tokens before its first
+            // content token would look like a hung stream and be aborted mid-thought.
+            const reasoningToken =
+              parsed.choices?.[0]?.delta?.reasoning_content ?? parsed.choices?.[0]?.delta?.reasoning
             if (reasoningToken) {
               fullReasoning += reasoningToken
               onThinkingToken(reasoningToken)

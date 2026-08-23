@@ -201,6 +201,23 @@ describe('live reasoning-spiral guard', () => {
     expect(isRepetitionDominated(response.thinking ?? '')).toBe(true) // loop will abort the run
   })
 
+  test("accepts vLLM's `reasoning` delta as well as llama.cpp's `reasoning_content`", async () => {
+    // The same field under two names: llama.cpp streams reasoning_content, vLLM streams
+    // reasoning. Missing the alias is not cosmetic -- these deltas are what reset the stale
+    // timer, so a model that thinks for hundreds of tokens before its first content token
+    // (DeepSeek v4 on vLLM does exactly this) looks like a hung stream and gets aborted
+    // mid-thought, which is the failure this whole file exists to prevent.
+    const vllmReasoning = (text: string) => ({ choices: [{ delta: { reasoning: text } }] })
+    const chunks: object[] = Array.from({ length: 40 }, (_, i) =>
+      vllmReasoning(`weighing option ${i} against constraint ${i * 3}. `),
+    )
+    chunks.push(content('Do (a).'))
+    const { response, thinkingTokens } = await chatAgainst(sseStream(chunks, 1), 10_000)
+    expect(response.content).toBe('Do (a).') // survived: the stale timer kept being reset
+    expect(thinkingTokens.length).toBe(40) // and the thinking was surfaced, not dropped
+    expect(response.thinking ?? '').toContain('weighing option 0')
+  })
+
   test('normal (non-looping) reasoning is never mistaken for a spiral', async () => {
     // Varied, progressing reasoning must stream through untouched, however long.
     const chunks: object[] = Array.from({ length: 80 }, (_, i) =>

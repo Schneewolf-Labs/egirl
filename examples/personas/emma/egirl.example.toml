@@ -1,0 +1,82 @@
+# Emma — supervisor peer, served by DeepSeek v4 on vLLM.
+#
+# Copy to ~/.egirl/instances/emma.toml (or wherever your instance configs live) and run:
+#   bun run src/index.ts --instance emma serve
+
+[workspace]
+path = "~/.egirl/personas/emma"
+
+[local]
+# vLLM's OpenAI-compatible endpoint. egirl never sends the OpenAI `tools` parameter -- tool
+# definitions go in the system prompt and calls are parsed out of raw assistant text -- so the
+# server's own tool parser stays out of the way and we get the text our parser needs.
+# Verified: DeepSeek v4 emits Qwen3-dialect <tool_call> blocks correctly under this scheme.
+endpoint = "http://192.168.72.251:8899"
+model = "deepseek-v4-flash-0731"
+tool_format = "qwen3"
+
+# The model serves 384k. This is set far below it deliberately: Emma answers discrete questions
+# and reads org state, she never holds a binary in her head. An oversized window is how an agent
+# stops engaging and starts summarizing, and a lead that does that still returns an answer --
+# it's just vibes by then. See docs/deployment.md on context sizing.
+context_length = 65536
+
+# This model reasons heavily -- hundreds of tokens before its first content token is normal.
+# Two consequences: give it room to finish, and give the stale detector room to wait. Its
+# reasoning arrives out-of-band in vLLM's `reasoning` field (llama.cpp calls the same field
+# `reasoning_content`); the provider accepts both, which is what keeps a long think from
+# looking like a hung stream.
+max_tokens = 4096
+stale_stream_timeout_ms = 180000
+
+[thinking]
+level = "high"
+
+# Org state. Emma's whole value is knowing things the workers don't, and this is where that
+# comes from -- answering priority questions from memory is how a lead ends up confidently
+# quoting a priority that changed last week.
+[[mcp.servers]]
+name = "wald"
+url = "http://wald.internal:8091/mcp"
+headers = { Authorization = "Bearer $WALD_TOKEN" }
+
+# The workers she supervises. She reaches them for check-ins; they reach her via [report].
+[[peers]]
+name = "zero"
+url = "http://192.168.122.123:3000"
+
+# Emma escalates to a human. The buckets she can't decide -- money, commitments, anything
+# irreversible -- go here, with her recommendation attached.
+[report]
+to = "xmpp:nbeerbower@schneewolflabs.com"
+
+[channels.api]
+enabled = true
+host = "0.0.0.0"   # workers must be able to reach her; keep EGIRL_API_TOKEN set if non-local
+
+[tools]
+# A supervisor advises, she does not do the work. No code_agent, and nothing that would let her
+# reach into a worker's running job -- see the boundaries in AGENTS.md.
+code_agent = false
+peers = true
+memory_search = true
+web_search = true
+
+# Scheduled check-ins: a tech lead does not only answer, she notices. Looks at what each worker
+# is on and how long it has been there, and asks rather than redirects.
+[[tasks]]
+name = "fleet-checkin"
+description = "Look at what each agent is working on; ask about anything that looks stalled"
+kind = "scheduled"
+cron = "0 9,17 * * *"
+prompt = """
+Check in on the fleet. For each peer you supervise, look at what it is working on and how long
+it has been on that objective.
+
+Ask -- do not redirect. A worker three days into a grind understands its problem better than you
+do; your job is to notice the difference between a grind and a stall, which is hard to see from
+inside one.
+
+If an objective has been overtaken by events, say so plainly: the work is done, stop.
+Surface anything that looks like a genuine stall to Nick, with your read attached.
+"""
