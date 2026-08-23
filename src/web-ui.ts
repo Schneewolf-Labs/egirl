@@ -31,6 +31,9 @@ export function renderChatPage(opts: { name: string; theme: Theme; hasToken: boo
   --bg:#0b0a12;--panel:#12111c;--fg:#e8e6f2;--dim:#8c86a8;--line:#221f33;--user:#1a1828}
 @media(prefers-color-scheme:light){:root{--bg:#faf9fd;--panel:#f2f0f8;--fg:#1c1a26;--dim:#6a6580;--line:#e2dff0;--user:#eceaf6}}
 *{box-sizing:border-box}
+/* the hidden attribute must beat class-level display:flex/grid — else toggled-off panels (the
+   task form, the attach row, the inbox badge) stay visible. */
+[hidden]{display:none!important}
 body{margin:0;background:var(--bg);color:var(--fg);height:100dvh;display:flex;flex-direction:column;
   font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
 a{color:var(--a)}
@@ -159,6 +162,30 @@ td:first-child{color:var(--dim);white-space:nowrap;width:1%;padding-right:1.2rem
 .ask .q{white-space:pre-wrap;overflow-wrap:anywhere;margin:.45rem 0 .6rem;color:var(--fg)}
 .ask .rep{display:flex;gap:.4rem}
 .ask textarea{min-height:2.5rem}
+/* Click a task's header row to expand its prompt + recent runs. */
+.task .top{cursor:pointer}
+.task.open{border-color:color-mix(in srgb,var(--p) 40%,var(--line))}
+.detail{margin-top:.6rem;border-top:1px solid var(--line);padding-top:.55rem;display:flex;flex-direction:column;gap:.55rem}
+.dlabel{color:var(--dim);font-size:.67rem;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.2rem}
+.detail .pbody{max-height:9rem;overflow:auto;font-size:11.5px}
+.detail .run{border-left:2px solid var(--line);padding-left:.6rem}
+.detail .runhd{color:var(--dim);font-size:.73rem;display:flex;gap:.5rem;align-items:center;margin-bottom:.2rem;flex-wrap:wrap}
+.detail .runbody{font-size:.8rem;white-space:pre-wrap;overflow-wrap:anywhere;max-height:7rem;overflow:auto}
+.dim{color:var(--dim)}
+/* Create-task form (POST /tasks). */
+.tbar{display:flex;justify-content:flex-end;padding:.5rem .7rem 0;flex:none}
+button.mini{background:none;border:1px solid var(--line);border-radius:.45rem;color:var(--dim);
+  padding:.3rem .7rem;font:inherit;font-size:.8rem;cursor:pointer;transition:color .12s,border-color .12s}
+button.mini:hover{color:var(--s);border-color:var(--s)}
+.taskform{display:flex;flex-direction:column;gap:.45rem;padding:.6rem .7rem;margin:.5rem .7rem 0;flex:none;
+  border:1px solid var(--line);border-radius:.55rem;background:var(--panel)}
+.taskform input,.taskform textarea,.taskform select{background:var(--user);color:var(--fg);
+  border:1px solid var(--line);border-radius:.45rem;padding:.42rem .55rem;font:inherit;font-size:.85rem}
+.taskform input:focus,.taskform textarea:focus,.taskform select:focus{outline:none;border-color:var(--p)}
+.taskform textarea{resize:vertical;min-height:3.5rem}
+.taskform .frow{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap}
+.taskform .frow .go{margin-left:auto}
+.chk{display:flex;align-items:center;gap:.35rem;color:var(--dim);font-size:.8rem;cursor:pointer}
 /* ---- polish: themed scrollbars, honoured motion prefs -------------------- */
 *::-webkit-scrollbar{width:9px;height:9px}
 *::-webkit-scrollbar-thumb{background:var(--line);border-radius:5px}
@@ -211,6 +238,18 @@ button.go.stopbtn{background:linear-gradient(135deg,#ff5f87,#c0395a)}
   </section>
 
   <section class="tab" data-name="tasks">
+    <div class="tbar"><button class="mini" id="newtask">+ new task</button></div>
+    <div class="taskform" id="taskform" hidden>
+      <input id="tf_name" placeholder="task name">
+      <textarea id="tf_prompt" placeholder="what should she do each run? (the prompt)"></textarea>
+      <div class="frow">
+        <select id="tf_kind"><option value="oneshot">one-shot</option><option value="scheduled">scheduled</option></select>
+        <input id="tf_interval" type="number" min="1" placeholder="every N min" hidden style="width:8rem">
+        <label class="chk"><input type="checkbox" id="tf_unbounded"> unbounded</label>
+        <button class="go" id="tf_create">Create</button>
+      </div>
+      <div class="dim" id="tf_err" hidden></div>
+    </div>
     <div class="tasklist" id="tasks"><div class="empty">loading tasks…</div></div>
   </section>
 
@@ -565,7 +604,7 @@ function taskCard(t){
   else if(t.status==='active'||t.status==='awaiting')a.push('<button data-act="pause" data-id="'+id+'">❚❚ pause</button>');
   if(!t.running)a.push('<button data-act="run" data-id="'+id+'">↻ run now</button>');
   a.push('<button class="danger" data-act="del" data-id="'+id+'">delete</button>');
-  return '<div class="task '+cls+'">'+
+  return '<div class="task '+cls+'" data-id="'+id+'">'+
     '<div class="top"><span class="badge '+st+'"><span class="dot"></span>'+st+'</span>'+
     '<span class="nm">'+esc(t.name)+'</span></div>'+
     '<div class="meta">'+bits.map(b=>'<span>'+b+'</span>').join('')+'</div>'+
@@ -578,8 +617,9 @@ function updateInboxBadge(tasks){
 function renderTasks(){
   if(document.querySelector('.tab[data-on]')?.dataset.name!=='tasks')return;
   const box=$('tasks');
-  // Don't clobber a delete that's mid-confirm when the poll ticks under the user's cursor.
-  if(box.querySelector('[data-armed]'))return;
+  // Don't let the poll clobber a delete that's mid-confirm, or a task detail panel that's open
+  // and being read, when it ticks under the user's cursor.
+  if(box.querySelector('[data-armed],.task.open'))return;
   if(tasksOff){box.innerHTML='<div class="empty">Tasks are disabled on this instance.<br>Start the runner with <code>serve</code> to schedule work.</div>';return}
   if(!lastTasks)return;
   if(!lastTasks.length){box.innerHTML='<div class="empty">No tasks yet.<br>Background work scheduled here shows its status, and you can steer it live.</div>';return}
@@ -595,8 +635,37 @@ async function refreshTasks(showLoading){
     updateInboxBadge(lastTasks); renderTasks();
   }catch(e){ if(showLoading)$('tasks').innerHTML='<div class="empty">could not load tasks: '+esc(e.message||e)+'</div>' }
 }
+// Expand/collapse a task's detail (prompt + recent runs) on a header-row click.
+async function toggleDetail(card){
+  if(!card)return;
+  const id=card.dataset.id, open=card.querySelector('.detail');
+  if(open){open.remove();card.classList.remove('open');return}
+  card.classList.add('open');
+  const det=document.createElement('div');det.className='detail';det.innerHTML='<div class="dim">loading…</div>';
+  card.appendChild(det);
+  try{
+    const d=await (await fetch('tasks/'+encodeURIComponent(id)+'/history',{headers:H()})).json();
+    det.innerHTML=renderDetail(d);
+  }catch(e){det.innerHTML='<div class="dim">could not load: '+esc(e.message||e)+'</div>'}
+}
+function renderDetail(d){
+  const t=d.task||{};
+  const runs=(d.runs||[]).map(r=>{
+    const when=r.started_at?ago(r.started_at):'';
+    const dr=(r.completed_at&&r.started_at)?' · '+dur(r.completed_at-r.started_at):'';
+    const tok=r.tokens_used?' · '+r.tokens_used+' tok':'';
+    const raw=r.error?((r.error_kind?'['+r.error_kind+'] ':'')+r.error):(r.result||'(no output)');
+    const body=(r.error?'<span class="warn">':'<span>')+esc(raw.slice(0,700))+(raw.length>700?'…':'')+'</span>';
+    return '<div class="run"><div class="runhd"><span class="badge '+(r.status==='success'?'active':'failed')+'">'+
+      '<span class="dot"></span>'+esc(r.status)+'</span>'+esc(when+dr+tok)+'</div>'+
+      '<div class="runbody">'+body+'</div></div>';
+  }).join('')||'<div class="dim">no runs recorded yet</div>';
+  return '<div><div class="dlabel">prompt</div><pre class="pbody">'+esc(t.prompt||'(none)')+'</pre></div>'+
+    '<div><div class="dlabel">recent runs</div>'+runs+'</div>';
+}
 $('tasks').onclick=async e=>{
-  const btn=e.target.closest('button[data-act]'); if(!btn)return;
+  const btn=e.target.closest('button[data-act]');
+  if(!btn){ const top=e.target.closest('.task .top'); if(top)toggleDetail(top.closest('.task')); return }
   const act=btn.dataset.act, id=btn.dataset.id;
   // Two-click delete: no native confirm() dialog, and irreversible needs a deliberate second tap.
   if(act==='del'&&!btn.dataset.armed){btn.dataset.armed='1';btn.textContent='really delete?';
@@ -617,6 +686,25 @@ $('tasks').onclick=async e=>{
     }
   }catch(e){/* the refresh below reflects real state */}
   refreshTasks();
+};
+
+// ---- Create a task --------------------------------------------------------
+$('newtask').onclick=()=>{const f=$('taskform');f.hidden=!f.hidden;if(!f.hidden)$('tf_name').focus()};
+$('tf_kind').onchange=()=>{$('tf_interval').hidden=$('tf_kind').value!=='scheduled'};
+$('tf_create').onclick=async()=>{
+  const name=$('tf_name').value.trim(),prompt=$('tf_prompt').value.trim(),errEl=$('tf_err');
+  errEl.hidden=true;
+  if(!name||!prompt){errEl.textContent='name and prompt are required';errEl.hidden=false;return}
+  const kind=$('tf_kind').value, body={name,prompt,kind,unbounded:$('tf_unbounded').checked};
+  if(kind==='scheduled'){const mins=Number($('tf_interval').value);if(mins>0)body.interval_ms=mins*60000}
+  $('tf_create').disabled=true;
+  try{
+    const r=await fetch('tasks',{method:'POST',headers:H(),body:JSON.stringify(body)});
+    if(!r.ok){const d=await r.json().catch(()=>({}));throw new Error(d.error||('HTTP '+r.status))}
+    $('tf_name').value='';$('tf_prompt').value='';$('tf_unbounded').checked=false;$('taskform').hidden=true;
+    refreshTasks(true);
+  }catch(e){errEl.textContent=String(e.message||e);errEl.hidden=false}
+  finally{$('tf_create').disabled=false}
 };
 
 // ---- Inbox: answer what she's blocked on ----------------------------------

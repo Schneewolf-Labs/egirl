@@ -510,6 +510,33 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
           })
         }
 
+        // A task's full detail plus its recent runs — what the console expands to when you click a
+        // task. Reading run history used to mean opening tasks.db; this is the same data the
+        // task_history tool gives the agent.
+        if (method === 'GET' && path.match(/^\/tasks\/[^/]+\/history$/)) {
+          if (!deps.taskStore) return err('tasks disabled', 503)
+          const id = path.split('/')[2] as string
+          const task = deps.taskStore.get(id)
+          if (!task) return err('task not found', 404)
+          const running = new Set(deps.taskRunner?.getRunningTaskIds() ?? [])
+          return json({
+            task: {
+              ...(taskToJson(task) as Record<string, JSONValue>),
+              running: running.has(task.id),
+            },
+            runs: deps.taskStore.getRecentRuns(id, 8).map((r) => ({
+              id: r.id,
+              status: r.status,
+              started_at: r.startedAt,
+              completed_at: r.completedAt ?? null,
+              result: r.result ?? null,
+              error: r.error ?? null,
+              error_kind: r.errorKind ?? null,
+              tokens_used: r.tokensUsed,
+            })),
+          })
+        }
+
         if (method === 'POST' && path === '/tasks') {
           if (!deps.taskStore || !deps.taskRunner) {
             return err(`tasks disabled: ${deps.taskOffReason ?? 'no task runner'}`, 503)
