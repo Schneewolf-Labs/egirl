@@ -219,6 +219,42 @@ button.go.stopbtn{background:linear-gradient(135deg,#ff5f87,#c0395a)}
 .badge.failed{background:color-mix(in srgb,#ff5f87 14%,var(--user))}
 .count{box-shadow:0 0 9px color-mix(in srgb,var(--a) 55%,transparent)}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+/* ---- phone ---------------------------------------------------------------- */
+/* Reaching an instance from a phone is why this page exists, so the small screen is a first
+   class layout, not a fallback. Two rules matter most and are easy to get wrong:
+   (a) any input under 16px makes iOS Safari zoom the whole page on focus, and
+   (b) a 27px button is not tappable -- touch guidance is ~44px. */
+/* Driven by BOTH touch-capability and width: pointer:coarse catches a tablet at desktop width,
+   and the width query still saves a phone whose pointer type reports wrong. */
+@media(pointer:coarse),(max-width:560px){
+  /* input[type=search] is listed explicitly: the base rule targets it by attribute and would
+     otherwise out-specify this one, leaving the memory box at a zoom-triggering 15px. */
+  textarea,input,select,input[type=search],.taskform input,.taskform textarea,.taskform select{font-size:16px}
+  .task .acts button,button.mini,.sessrow button{min-height:2.6rem;padding-inline:.85rem}
+  nav button{padding:.7rem .85rem}
+  .thead{padding:.25rem 0}
+  .body.md pre .copy{opacity:1}       /* no hover on touch — always show copy */
+}
+@media(max-width:560px){
+  header{padding:.5rem .7rem;gap:.45rem}
+  header .meta{font-size:.68rem;max-width:38vw}
+  nav{padding:0 .25rem;scrollbar-width:none}
+  nav::-webkit-scrollbar{display:none}
+  /* Keep the tall touch target but tighten the sides so all six tabs fit a 390px screen
+     instead of pushing the last one off into a scroll nobody discovers. */
+  nav button{padding:.7rem .55rem}
+  #log{padding:.7rem;gap:.6rem}
+  .msg{max-width:100%}
+  .tasklist{padding:.5rem;gap:.45rem}
+  .task .meta{gap:.5rem;font-size:.71rem}
+  .task .acts{gap:.4rem}
+  .taskform{margin:.4rem .5rem 0}
+  .row,.sessrow{padding:.5rem}
+  .pad{padding:.7rem}
+  /* The composer is the one thing that must never be pushed off-screen by the keyboard. */
+  form{padding:.5rem;gap:.4rem}
+  button.go{padding:0 .9rem}
+}
 </style></head><body>
 <header><b>${esc(name)}</b><span class="meta" id="hmeta">connecting…</span><span class="sp" id="status">ready</span></header>
 <nav id="tabs">
