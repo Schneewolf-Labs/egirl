@@ -214,3 +214,47 @@ describe('fitToContextWindow', () => {
     expect(result.length).toBeGreaterThanOrEqual(1)
   })
 })
+
+describe('a user turn always survives trimming', () => {
+  /**
+   * Qwen3's chat template raises `No user query found in messages` when handed a conversation
+   * with no user turn, and llama.cpp answers 400 — the whole request fails.
+   *
+   * A long unbounded run reaches exactly that shape. It has ONE user message (the task prompt)
+   * followed by dozens of assistant/tool turns, so once the head group is dropped for exceeding
+   * 30% of the budget, every surviving message is an assistant or a tool result. Observed in
+   * production: a reverse-engineering task failed three runs in a row on that 400 and
+   * auto-paused, hours after its conversation outgrew the head.
+   */
+  function unboundedRun(turns: number): ChatMessage[] {
+    // A big task prompt, then nothing but assistant/tool traffic — the real shape.
+    const msgs: ChatMessage[] = [{ role: 'user', content: `TASK. ${'context '.repeat(400)}` }]
+    for (let i = 0; i < turns; i++) {
+      msgs.push({ role: 'assistant', content: `step ${i}: ${'analysis '.repeat(60)}` })
+      msgs.push({ role: 'tool', content: `result ${i}: ${'output '.repeat(60)}` })
+    }
+    return msgs
+  }
+
+  test('keeps a user message even when the head group is dropped', async () => {
+    const messages = unboundedRun(40)
+    const result = await fitToContextWindow('You are an agent.', messages, [], {
+      contextLength: 4000,
+      reserveForOutput: 500,
+    })
+    expect(result.wasTrimmed).toBe(true)
+    // The actual invariant: whatever else got dropped, the template must find a user turn.
+    expect(result.messages.some((m) => m.role === 'user')).toBe(true)
+  })
+
+  test('holds across a range of budgets, since the failure depends on where the trim lands', async () => {
+    // The bug was intermittent in production precisely because it depended on the boundary.
+    for (const contextLength of [1500, 3000, 6000, 12000]) {
+      const result = await fitToContextWindow('You are an agent.', unboundedRun(40), [], {
+        contextLength,
+        reserveForOutput: 400,
+      })
+      expect(result.messages.some((m) => m.role === 'user')).toBe(true)
+    }
+  })
+})

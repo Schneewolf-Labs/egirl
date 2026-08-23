@@ -228,6 +228,25 @@ export class LlamaCppProvider implements LLMProvider {
         }
       }
 
+      // A 400 from the chat template is about the *shape* of the conversation, and the shape is
+      // gone by the time the error is read. Log enough to reconstruct it: which roles, in what
+      // order, and whether a user turn the template would accept was actually present. Without
+      // this a template rejection is unreproducible after the fact -- the conversation has moved
+      // on, and replaying the stored one succeeds.
+      if (response.status === 400 && /template|user query/i.test(errorText)) {
+        const roles = messages.map((m) => m.role)
+        const genuineUser = messages.filter((m) => {
+          if (m.role !== 'user' || typeof m.content !== 'string') return false
+          const c = m.content.trim()
+          return !(c.startsWith('<tool_response>') && c.endsWith('</tool_response>'))
+        }).length
+        log.error(
+          'llamacpp',
+          `Template rejected a ${messages.length}-message conversation ` +
+            `(${genuineUser} user turn(s) it would accept). Roles: ${roles.join(',')}`,
+        )
+      }
+
       throw new Error(`llama.cpp error: ${response.status} - ${errorText}`)
     }
 

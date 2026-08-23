@@ -420,6 +420,20 @@ export async function fitToContextWindow(
     }
   }
 
+  // Qwen3's chat template raises `No user query found in messages` when handed a conversation
+  // containing no user turn, and llama.cpp answers 400 — the entire request fails, not just the
+  // trimming. A long unbounded run reaches exactly that shape: one user message (the task
+  // prompt) followed by dozens of assistant/tool turns, so once the head group is dropped for
+  // exceeding 30% of the budget, every surviving message is an assistant or a tool result.
+  //
+  // Observed in production: a reverse-engineering task failed three runs in a row on that 400
+  // and auto-paused, hours after its conversation grew past the point where the head still fit.
+  // The guard above only catches an empty result, which this never is.
+  if (!result.some((m) => m.role === 'user')) {
+    const anchor = [...processed].reverse().find((m: ChatMessage) => m.role === 'user')
+    if (anchor) result.unshift(anchor)
+  }
+
   // Collect dropped messages from the middle (groups not in head or tail)
   const dropped: ChatMessage[] = []
   for (let g = 0; g < groups.length; g++) {

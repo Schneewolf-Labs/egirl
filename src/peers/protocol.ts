@@ -84,3 +84,23 @@ export function formatInboundPeerMessage(from: string, message: string): string 
     message,
   ].join('\n')
 }
+
+/**
+ * Frame a message a *human* typed into a session that is not theirs — a peer conversation, or a
+ * background task's own thread.
+ *
+ * Without this, a human speaking into `peer:zero` arrives as a bare user turn in a session where
+ * every other user turn came from Zero, and the model draws the obvious conclusion. Asked who had
+ * just messaged it, one instance answered "Zero — that's the peer label on the [agent-to-agent]
+ * header", of a message that had no such header. Attribution the reader can see (the console
+ * labels these) is not attribution the model can see.
+ */
+export function formatOperatorMessage(name: string | undefined, message: string): string {
+  const who = name ? `your operator, ${name}` : 'your operator'
+  return [
+    `[operator] Message from ${who} — a human, not the peer whose thread this is. ` +
+      'Answer them directly.',
+    '',
+    message,
+  ].join('\n')
+}

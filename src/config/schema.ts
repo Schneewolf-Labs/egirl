@@ -63,6 +63,11 @@ const baseProperties = {
     path: Type.String({ default: '~/.egirl/workspace' }),
   }),
 
+  // Who the human operating this instance is. Used to attribute a message they type into a
+  // session that belongs to someone else -- a peer's thread, or a task's -- so the agent knows
+  // a person is speaking and not the peer whose conversation it is.
+  user: Type.Optional(Type.Object({ name: Type.Optional(Type.String()) })),
+
   local: Type.Object({
     endpoint: Type.String({ default: 'http://localhost:8080' }),
     model: Type.String({ default: 'qwen2.5-32b-instruct' }),
@@ -585,6 +590,8 @@ export interface RuntimeConfig {
     url: string
     apiKey?: string
   }
+  /** The human operating this instance, when named in config. */
+  user?: { name?: string }
   peers?: Array<{
     name: string
     url: string

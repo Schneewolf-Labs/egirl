@@ -7,7 +7,12 @@ import type { ChatMessage, ThinkingConfig } from './providers/types'
 const THINKING_LEVELS: readonly ThinkingLevel[] = ['off', 'low', 'medium', 'high'] as const
 import type { SessionInfo } from './conversation'
 import type { MemoryCategory, MemoryManager } from './memory'
-import { formatInboundPeerMessage, PEER_PROTOCOL, peerSessionId } from './peers/protocol'
+import {
+  formatInboundPeerMessage,
+  formatOperatorMessage,
+  PEER_PROTOCOL,
+  peerSessionId,
+} from './peers/protocol'
 import type { Task, TaskRunner, TaskStore } from './tasks'
 import { getTheme } from './ui/theme'
 import { log } from './util/logger'
@@ -351,10 +356,16 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
           // /learn works from every surface the same way: rewrite the input, run a normal
           // turn. The agent distills and saves the skill with its own tools.
           const skillsDir = deps.config?.skills.dirs[0]
-          const toRun =
+          let toRun =
             skillsDir && (message === '/learn' || message.startsWith('/learn '))
               ? buildLearnPrompt(message.slice('/learn'.length), skillsDir)
               : message
+          // Speaking into a thread that belongs to someone else — a peer conversation, or a
+          // task's own session — has to say so, or the model attributes it to whoever normally
+          // talks there. A human's own sessions (web:, cli:, api:) need no such framing.
+          if (sessionId.startsWith('peer:') || sessionId.startsWith('task:')) {
+            toRun = formatOperatorMessage(deps.config?.user?.name, toRun)
+          }
           // Attached images: data: URLs only, capped at 4. A remote URL here would have the
           // agent's server fetching arbitrary addresses on behalf of whoever holds the token.
           const images = Array.isArray(body.images)

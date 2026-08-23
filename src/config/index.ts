@@ -285,6 +285,7 @@ export function loadConfig(options: LoadConfigOptions = {}): RuntimeConfig {
     workspace: {
       path: workspacePath,
     },
+    ...(toml.user?.name ? { user: { name: toml.user.name } } : {}),
     local: {
       // EGIRL_LOCAL_ENDPOINT / EGIRL_LOCAL_MODEL point a single run at a different llama-server
       // without touching egirl.toml. That is what makes it possible to bench the same cases
