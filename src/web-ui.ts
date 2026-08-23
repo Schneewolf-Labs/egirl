@@ -261,6 +261,7 @@ button.go.stopbtn{background:linear-gradient(135deg,#ff5f87,#c0395a)}
   <button data-tab="chat" aria-selected="true">chat</button>
   <button data-tab="tasks" aria-selected="false">tasks</button>
   <button data-tab="inbox" aria-selected="false">inbox<span class="count" id="inboxn" hidden>0</span></button>
+  <button data-tab="peers" aria-selected="false">peers</button>
   <button data-tab="memory" aria-selected="false">memory</button>
   <button data-tab="prompt" aria-selected="false">prompt</button>
   <button data-tab="info" aria-selected="false">info</button>
@@ -291,6 +292,10 @@ button.go.stopbtn{background:linear-gradient(135deg,#ff5f87,#c0395a)}
 
   <section class="tab" data-name="inbox">
     <div class="tasklist" id="inbox"><div class="empty">loading…</div></div>
+  </section>
+
+  <section class="tab" data-name="peers">
+    <div class="tasklist" id="peers"><div class="empty">loading…</div></div>
   </section>
 
   <section class="tab" data-name="memory">
@@ -326,6 +331,7 @@ $('tabs').onclick=e=>{
   // Tasks/inbox are live views — refresh every time they're opened, not just once.
   if(t==='tasks')refreshTasks(true);
   if(t==='inbox')loadInbox();
+  if(t==='peers')loadPeers();
 };
 
 function add(text,cls){const d=document.createElement('div');d.className='msg '+cls;d.textContent=text;
@@ -400,8 +406,14 @@ async function loadSessions(){
     const d=await (await fetch('sessions',{headers:H()})).json();
     const list=d.sessions||[];
     if(!list.some(x=>x.id===sid)) list.unshift({id:sid,channel:'web',message_count:0});
+    // Where a conversation came from matters as much as its id: the same agent is reachable
+    // from a phone over XMPP, a Discord DM, a peer agent and its own background tasks, and a
+    // bare "task:b80effeb" in a dropdown says none of that.
+    const MARK={web:'◇ web',cli:'▸ cli',xmpp:'✉ xmpp',discord:'✦ discord',task:'⚙ task',peer:'⇄ peer',api:'· api'};
     sessSel.innerHTML=list.map(x=>{
-      const label=x.id+' · '+(x.message_count||0)+' msg'+(x.last_active_at?' · '+ago(x.last_active_at):'')+(x.busy?' · working…':'');
+      const kind=String(x.id).split(':')[0];
+      const label=(MARK[kind]||kind)+' · '+x.id+' · '+(x.message_count||0)+' msg'+
+        (x.last_active_at?' · '+ago(x.last_active_at):'')+(x.busy?' · working…':'');
       return '<option value="'+esc(x.id)+'"'+(x.id===sid?' selected':'')+'>'+esc(label)+'</option>';
     }).join('');
   }catch(e){/* the picker failing must not take the chat down with it */}
@@ -741,6 +753,48 @@ $('tf_create').onclick=async()=>{
     refreshTasks(true);
   }catch(e){errEl.textContent=String(e.message||e);errEl.hidden=false}
   finally{$('tf_create').disabled=false}
+};
+
+// ---- Peers: the other agents this one can reach ---------------------------
+// Agent-to-agent traffic runs with no human in it, so without a view like this the only record
+// that another agent exists is a config file. Shows where each peer came from (pinned by hand
+// vs supplied by the Wald registry), whether it is answering right now, and what it calls
+// itself — a name that disagrees with ours means the address points somewhere unexpected.
+// Opening a peer's conversation jumps to the chat tab: their exchanges are ordinary sessions.
+async function loadPeers(){
+  const box=$('peers');
+  let d;
+  try{ d=await (await fetch('peers',{headers:H()})).json() }
+  catch(e){ box.innerHTML='<div class="empty">could not load peers: '+esc(e.message||e)+'</div>'; return }
+  const peers=d.peers||[];
+  if(!peers.length){
+    box.innerHTML='<div class="empty">No peers configured.<br>Add <code>[[peers]]</code> entries, or point this instance at a Wald registry to have them appear on their own.</div>';
+    return;
+  }
+  box.innerHTML=peers.map(p=>{
+    const up=p.reachable;
+    const bits=[esc(p.url)];
+    bits.push(p.discovered?'via registry':'pinned in config');
+    if(!p.has_token)bits.push('<span class="warn">no token</span>');
+    if(p.remote_name&&p.remote_name.toLowerCase()!==p.name.toLowerCase())
+      bits.push('<span class="warn">answers to "'+esc(p.remote_name)+'"</span>');
+    if(!up&&p.error)bits.push('<span class="warn">'+esc(String(p.error).slice(0,80))+'</span>');
+    return '<div class="task '+(up?'':'fail')+'">'+
+      '<div class="top"><span class="badge '+(up?'active':'failed')+'"><span class="dot"></span>'+
+      (up?'up':'unreachable')+'</span><span class="nm">'+esc(p.name)+'</span></div>'+
+      '<div class="meta">'+bits.map(b=>'<span>'+b+'</span>').join('')+'</div>'+
+      '<div class="acts"><button data-peer="'+esc(p.name)+'">open conversation</button></div></div>';
+  }).join('');
+}
+// A peer conversation is just a session named peer:<name> — open it in the chat tab.
+$('peers').onclick=e=>{
+  const btn=e.target.closest('button[data-peer]'); if(!btn)return;
+  const id='peer:'+btn.dataset.peer.toLowerCase().replace(/[^a-z0-9_-]/g,'_');
+  if(![...sessSel.options].some(o=>o.value===id)){
+    const o=document.createElement('option');o.value=id;o.textContent=id;sessSel.prepend(o);
+  }
+  sessSel.value=id; switchSession(id);
+  document.querySelector('[data-tab="chat"]').click();
 };
 
 // ---- Inbox: answer what she's blocked on ----------------------------------

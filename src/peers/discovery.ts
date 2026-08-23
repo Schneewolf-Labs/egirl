@@ -141,7 +141,11 @@ export async function discoverPeers(opts: DiscoveryOptions): Promise<PeerEntry[]
 export function mergePeers(configured: PeerEntry[], discovered: PeerEntry[]): PeerEntry[] {
   const byName = new Map(configured.map((p) => [p.name.toLowerCase(), p]))
   for (const peer of discovered) {
-    if (!byName.has(peer.name.toLowerCase())) byName.set(peer.name.toLowerCase(), peer)
+    // Tagged as it goes in, so a human reading the peer list can tell which addresses were
+    // pinned by hand and which the registry supplied.
+    if (!byName.has(peer.name.toLowerCase())) {
+      byName.set(peer.name.toLowerCase(), { ...peer, discovered: true })
+    }
   }
   return [...byName.values()]
 }

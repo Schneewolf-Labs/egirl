@@ -580,6 +580,8 @@ export interface RuntimeConfig {
     url: string
     token?: string
     timeoutMs: number
+    /** Came from a registry rather than [[peers]] — see PeerEntry in src/peers/protocol.ts. */
+    discovered?: boolean
   }>
   /** Supervisor target for the report tool ("peer:<name>" or "<channel>:<target>"). */
   report?: {

@@ -44,6 +44,12 @@ export interface PeerEntry {
   url: string
   token?: string
   timeoutMs: number
+  /**
+   * True when this peer came from a registry rather than [[peers]] in the config. Kept because
+   * a pinned address and one that appeared on its own fail in different ways, and "where did
+   * this come from" is the first question asked when a peer stops answering.
+   */
+  discovered?: boolean
 }
 
 /** .env variable holding the bearer token for a named peer (its EGIRL_API_TOKEN). */

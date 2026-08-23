@@ -332,6 +332,54 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
           })
         }
 
+        // Who this instance can talk to, and whether they are actually answering. The peer list
+        // is otherwise invisible from outside the config file: agent-to-agent traffic happens
+        // without a human in it, so "who is out there and are they up" needs somewhere to be
+        // looked at. Each peer is pinged on /peer/identity in parallel, with a short timeout —
+        // this is a status view, not a reason to make the page hang on a dead host.
+        if (method === 'GET' && path === '/peers') {
+          const peers = deps.config?.peers ?? []
+          const probed = await Promise.all(
+            peers.map(async (p) => {
+              const controller = new AbortController()
+              const timer = setTimeout(() => controller.abort(), 2500)
+              try {
+                const res = await fetch(`${p.url}/peer/identity`, {
+                  signal: controller.signal,
+                  headers: p.token ? { authorization: `Bearer ${p.token}` } : {},
+                })
+                const body = res.ok ? ((await res.json()) as Record<string, unknown>) : null
+                return {
+                  name: p.name,
+                  url: p.url,
+                  discovered: p.discovered ?? false,
+                  has_token: Boolean(p.token),
+                  reachable: res.ok,
+                  // What it calls itself, which is not necessarily what we call it — a mismatch
+                  // means the address is pointing somewhere unexpected.
+                  remote_name: (body?.name as string) ?? null,
+                  protocol: (body?.protocol as string) ?? null,
+                  error: res.ok ? null : `HTTP ${res.status}`,
+                }
+              } catch (e) {
+                return {
+                  name: p.name,
+                  url: p.url,
+                  discovered: p.discovered ?? false,
+                  has_token: Boolean(p.token),
+                  reachable: false,
+                  remote_name: null,
+                  protocol: null,
+                  error: e instanceof Error ? e.message : String(e),
+                }
+              } finally {
+                clearTimeout(timer)
+              }
+            }),
+          )
+          return json({ self: deps.selfName ?? 'egirl', peers: probed })
+        }
+
         if (method === 'POST' && path === '/peer/message') {
           const body = await readJson(req)
           const from = body.from
