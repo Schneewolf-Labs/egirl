@@ -267,9 +267,11 @@ button.go.stopbtn{background:linear-gradient(135deg,#ff5f87,#c0395a)}
   header .meta{font-size:.68rem;max-width:38vw}
   nav{padding:0 .25rem;scrollbar-width:none}
   nav::-webkit-scrollbar{display:none}
-  /* Keep the tall touch target but tighten the sides so all six tabs fit a 390px screen
-     instead of pushing the last one off into a scroll nobody discovers. */
-  nav button{padding:.7rem .55rem}
+  /* Keep the tall touch target but tighten the sides so every tab fits a 390px screen instead
+     of pushing the last one into a scroll nobody discovers. Measured, not guessed: at .55rem
+     the seven tabs needed 404px and "settings" fell off the edge of a real phone. Vertical
+     padding is untouched, so the ~44px touch height stands. */
+  nav button{padding:.7rem .42rem;font-size:.8rem}
   #log{padding:.7rem;gap:.6rem}
   .msg{max-width:100%}
   .tasklist{padding:.5rem;gap:.45rem}
