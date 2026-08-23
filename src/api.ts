@@ -2,7 +2,7 @@ import type { AgentFactory, AgentLoop } from './agent'
 import { buildLearnPrompt } from './agent/learn-prompt'
 import type { RuntimeConfig } from './config'
 import type { ThinkingLevel } from './config/schema'
-import type { ThinkingConfig } from './providers/types'
+import type { ChatMessage, ThinkingConfig } from './providers/types'
 
 const THINKING_LEVELS: readonly ThinkingLevel[] = ['off', 'low', 'medium', 'high'] as const
 import type { SessionInfo } from './conversation'
@@ -39,7 +39,16 @@ export interface APIDeps {
    * server has touched; the store knows every conversation from every channel, which is what
    * a session picker actually wants to show.
    */
-  conversationStore?: { listSessions(): SessionInfo[] }
+  conversationStore?: {
+    listSessions(): SessionInfo[]
+    /**
+     * Read a session straight from disk. Needed because the agents map only reflects runs made
+     * through *this* process's agent instances: a background task builds its own agent, so its
+     * conversation grows somewhere the API's cached agent never sees.
+     */
+    loadMessages(sessionId: string): ChatMessage[]
+    loadSummary(sessionId: string): string | undefined
+  }
 }
 
 type JSONValue = string | number | boolean | null | JSONValue[] | { [k: string]: JSONValue }
@@ -457,11 +466,27 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
           // the browser must load its history, not 404 because this server never touched it.
           // Unknown ids still 404: a GET that conjures sessions out of typos would make the
           // list fill with ghosts.
-          let agent = deps.agents.get(sessionId)
-          if (!agent) {
-            const known = deps.conversationStore?.listSessions().some((s) => s.id === sessionId)
-            if (known) agent = getOrCreateAgent(sessionId, deps)
+          // Disk first, cache second. An agent held in `agents` only advances on runs made
+          // through that instance, so a task writing to the same session id through its own
+          // agent leaves the cached copy frozen at whatever it held when it was hydrated --
+          // which is how a live 1000-message task run can read as a stale 743 here. The store
+          // sees every write regardless of who made it, so it is the honest answer for a read.
+          const stored = deps.conversationStore?.listSessions().some((s) => s.id === sessionId)
+          if (stored && deps.conversationStore) {
+            const messages = deps.conversationStore.loadMessages(sessionId)
+            return json({
+              session_id: sessionId,
+              message_count: messages.length,
+              has_summary: !!deps.conversationStore.loadSummary(sessionId),
+              busy: chains.has(sessionId),
+              messages: messages.map((m) => ({
+                role: m.role,
+                content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
+              })),
+            })
           }
+          // Not on disk: an in-memory-only session (persistence off, or nothing said yet).
+          const agent = deps.agents.get(sessionId)
           if (!agent) return err('session not found', 404)
           const ctx = agent.getContext()
           return json({

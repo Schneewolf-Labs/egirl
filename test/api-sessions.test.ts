@@ -50,6 +50,14 @@ describe('sessions over the API', () => {
     listSessions: () => [
       { id: 'cli:default', channel: 'cli', messageCount: 92, createdAt: 1, lastActiveAt: 2 },
     ],
+    loadMessages: (id: string) =>
+      id === 'cli:default'
+        ? [
+            { role: 'user' as const, content: 'from the train' },
+            { role: 'assistant' as const, content: 'picked it up' },
+          ]
+        : [],
+    loadSummary: () => undefined,
   }
 
   const deps: APIDeps = {
@@ -88,11 +96,40 @@ describe('sessions over the API', () => {
     expect(body.sessions.map((s) => s.id)).toContain('web:fresh')
   })
 
-  test('opening a persisted session hydrates instead of 404ing', async () => {
+  test('opening a persisted session reads it from the store, not a cached agent', async () => {
     const res = await fetch(`${base}/sessions/cli:default`)
     expect(res.status).toBe(200)
-    // Hydration goes through the factory, which is what loads history in production.
-    expect(agents.has('cli:default')).toBe(true)
+    const body = (await res.json()) as { messages: Array<{ content: string }> }
+    expect(body.messages.map((m) => m.content)).toEqual(['from the train', 'picked it up'])
+    // Deliberately NOT hydrated into `agents`. A cached agent only advances on runs made
+    // through that instance, so a background task writing the same session id through its own
+    // agent would leave this copy frozen -- reading a live task as hundreds of messages stale.
+    // Going to disk also means a read no longer has to construct an agent at all.
+    expect(agents.has('cli:default')).toBe(false)
+  })
+
+  test('a stale cached agent does not shadow the stored conversation', async () => {
+    // Found in production: a task had run its conversation to ~1000 messages through the task
+    // runner's own agent while this server's cached agent still held the 743 it was hydrated
+    // with. The console read the cache and reported a live run as hours stale -- and the report
+    // inbox, which pulls a parked task's question from this endpoint, would have shown an old
+    // question. Whoever else wrote to the session, a read must reflect it.
+    const stale = gatedAgent('cli:default', order)
+    stale.getContext = () => ({
+      sessionId: 'cli:default',
+      systemPrompt: 'test',
+      messages: [{ role: 'assistant' as const, content: 'STALE' }],
+      conversationSummary: undefined,
+    })
+    agents.set('cli:default', stale)
+    try {
+      const body = (await (await fetch(`${base}/sessions/cli:default`)).json()) as {
+        messages: Array<{ content: string }>
+      }
+      expect(body.messages.map((m) => m.content)).toEqual(['from the train', 'picked it up'])
+    } finally {
+      agents.delete('cli:default')
+    }
   })
 
   test('a session nobody has heard of is still a 404', async () => {
