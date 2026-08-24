@@ -178,6 +178,12 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
   const server = Bun.serve({
     hostname: host,
     port,
+    // Bun.serve idles a connection out after 10s of no bytes by default. A local model can take
+    // minutes to produce its first token — a large context prefills before anything streams —
+    // so the browser saw the request killed mid-wait and reported a network error on every chat
+    // with a slow model. 255s (Bun's max) is the ceiling; the SSE keepalive below is what
+    // actually carries a prefill longer than that, by sending a byte before the timer expires.
+    idleTimeout: 255,
     async fetch(req) {
       // Auth (optional — skip when no token is configured)
       const url = new URL(req.url)
@@ -409,6 +415,25 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
                     controller.enqueue(enc.encode(`data: ${JSON.stringify(o)}\n\n`))
                   } catch {}
                 }
+                // Keepalive: no token flows during a big prefill (minutes before the first
+                // token) or while a long tool runs mid-turn, and with no byte on the wire the
+                // connection idles out — Bun's own timeout, and any proxy in between. An SSE
+                // comment is ignored by the client's parser but resets every idle timer, so the
+                // stream survives an arbitrarily long gap anywhere in the turn. Sent only when
+                // the wire has actually been quiet, so real output is never delayed by it.
+                let lastByteAt = Date.now()
+                const realSink = sink
+                sink = (o) => {
+                  lastByteAt = Date.now()
+                  realSink(o)
+                }
+                const keepalive = setInterval(() => {
+                  if (Date.now() - lastByteAt < 4000) return
+                  try {
+                    controller.enqueue(enc.encode(': keepalive\n\n'))
+                    lastByteAt = Date.now()
+                  } catch {}
+                }, 4000)
                 if (position > 0) sink({ t: 'queued', position })
                 try {
                   const response = await done
@@ -424,6 +449,7 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
                 } catch (e) {
                   sink({ t: 'error', message: e instanceof Error ? e.message : String(e) })
                 } finally {
+                  clearInterval(keepalive)
                   try {
                     controller.close()
                   } catch {}
