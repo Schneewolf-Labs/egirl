@@ -235,15 +235,21 @@ export class LlamaCppProvider implements LLMProvider {
       // on, and replaying the stored one succeeds.
       if (response.status === 400 && /template|user query/i.test(errorText)) {
         const roles = messages.map((m) => m.role)
-        const genuineUser = messages.filter((m) => {
-          if (m.role !== 'user' || typeof m.content !== 'string') return false
-          const c = m.content.trim()
-          return !(c.startsWith('<tool_response>') && c.endsWith('</tool_response>'))
-        }).length
+        // Describe every user turn precisely. "0 acceptable" has at least three causes that
+        // look identical in a count -- a tool_response wrapper, content that is not a string,
+        // and no user turn at all -- and guessing between them from the outside does not work.
+        const userTurns = messages
+          .filter((m) => m.role === 'user')
+          .map((m) => {
+            if (typeof m.content !== 'string') return `non-string(${typeof m.content})`
+            const c = m.content.trim()
+            const wrapped = c.startsWith('<tool_response>') && c.endsWith('</tool_response>')
+            return `${wrapped ? 'tool_response' : 'query'}:${JSON.stringify(c.slice(0, 60))}`
+          })
         log.error(
           'llamacpp',
-          `Template rejected a ${messages.length}-message conversation ` +
-            `(${genuineUser} user turn(s) it would accept). Roles: ${roles.join(',')}`,
+          `Template rejected a ${messages.length}-message conversation. ` +
+            `Roles: ${roles.join(',')}. User turns: ${userTurns.join(' | ') || '(none)'}`,
         )
       }
 
