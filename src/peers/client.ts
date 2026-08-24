@@ -8,6 +8,10 @@ import {
 /** Outcome of one POST /peer/message exchange, error text pre-formatted for tool output. */
 export type PeerSendResult =
   | { ok: true; from: string; content: string }
+  // `busy` is a *successful* fast reply, not a failure: the peer is mid-task and said so at once
+  // rather than making us wait out a turn. Distinct from ok:true so the caller can choose to
+  // retry later rather than treat "busy" as the peer's actual answer.
+  | { ok: true; busy: true; from: string; content: string }
   | { ok: false; error: string; timedOut?: boolean }
 
 async function fetchWithTimeout(
@@ -64,7 +68,10 @@ export async function postPeerMessage(
       }
     }
 
-    const data = (await res.json()) as PeerMessageResponse
+    const data = (await res.json()) as PeerMessageResponse & { busy?: boolean }
+    if (data.busy) {
+      return { ok: true, busy: true, from: data.from ?? peer.name, content: data.content ?? '' }
+    }
     return { ok: true, from: data.from ?? peer.name, content: data.content ?? '' }
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error)

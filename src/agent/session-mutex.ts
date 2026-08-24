@@ -37,6 +37,15 @@ export class SessionMutex {
     this.acquireTimeoutMs = acquireTimeoutMs
   }
 
+  /**
+   * True when a run currently holds the lock — i.e. a new run would have to queue behind it.
+   * The peer protocol reads this to answer a message with "busy, try later" instead of making
+   * the caller wait out a turn that can take minutes.
+   */
+  isBusy(): boolean {
+    return this.locked
+  }
+
   async acquire(): Promise<void> {
     if (!this.locked) {
       this.locked = true

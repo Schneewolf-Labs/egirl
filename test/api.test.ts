@@ -124,6 +124,44 @@ describe('API server', () => {
     expect(body.content).toContain('status?')
   })
 
+  test('POST /peer/message answers busy immediately when a run is in flight', async () => {
+    // A worker deep in a long unbounded run cannot answer a peer message without queuing behind
+    // its current turn, which can take minutes -- so the supervisor's timeout fires and it gets
+    // nothing. Instead the receiver checks the shared busy flag and replies at once, without
+    // touching the running work.
+    let busy = true
+    const busyServer = startAPIServer(
+      { host: '127.0.0.1', port: 3924 },
+      { ...deps, isBusy: () => busy, selfName: 'zero' },
+    )
+    try {
+      const res = await fetch('http://127.0.0.1:3924/peer/message', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ from: 'emma', message: 'status?' }),
+      })
+      expect(res.status).toBe(200)
+      const body = (await res.json()) as { busy?: boolean; content: string; from: string }
+      expect(body.busy).toBe(true)
+      expect(body.from).toBe('zero')
+      // It did NOT run the agent, so the message was never wrapped or processed.
+      expect(body.content).not.toContain('[agent-to-agent]')
+
+      // And once free, the same message runs the agent normally.
+      busy = false
+      const res2 = await fetch('http://127.0.0.1:3924/peer/message', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ from: 'emma', message: 'status?' }),
+      })
+      const body2 = (await res2.json()) as { busy?: boolean; content: string }
+      expect(body2.busy).toBeUndefined()
+      expect(body2.content).toContain('[agent-to-agent]')
+    } finally {
+      busyServer.stop(true)
+    }
+  })
+
   test('POST /peer/message persists the peer conversation session', async () => {
     await fetch(`${base}/peer/message`, {
       method: 'POST',

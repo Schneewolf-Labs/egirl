@@ -118,6 +118,16 @@ export function createReportTool(deps: ReportToolDeps): Tool {
             ...(result.timedOut && { awaitingInput: true }),
           }
         }
+        // Supervisor is mid-task and answered "busy" at once rather than after a timeout. For an
+        // ask that is not a decision — park and let the reply seed the next run, same as a
+        // timeout, but without having burned the wait window first.
+        if ('busy' in result && result.busy) {
+          return {
+            success: true,
+            output: `${result.from} is busy: ${result.content}\nSave your state and end the run — it will be parked as awaiting input, and ${result.from}'s answer will seed the next run.`,
+            awaitingInput: true,
+          }
+        }
         return { success: true, output: `${result.from} replied:\n\n${result.content}` }
       }
 

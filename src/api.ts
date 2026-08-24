@@ -48,6 +48,8 @@ export interface APIDeps {
    * server has touched; the store knows every conversation from every channel, which is what
    * a session picker actually wants to show.
    */
+  /** True while a run holds the shared mutex — a peer message answers "busy" instead of queuing. */
+  isBusy?: () => boolean
   /** Escalations addressed to `console:` — questions waiting for a human in the browser. */
   consoleInbox?: ConsoleInbox
   /** Delivers a console answer back to the run parked on it. */
@@ -600,6 +602,21 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
           const protocol = body.protocol
           if (typeof protocol === 'string' && !protocol.startsWith('egirl-peer/')) {
             return err(`unsupported protocol "${protocol}" (this instance speaks ${PEER_PROTOCOL})`)
+          }
+          // Fast path: if a run is already in flight, answering this message means running the
+          // agent, which serializes behind that run — a turn that can take minutes on a large
+          // model. The caller's peer timeout fires long before, so it waits out a whole turn
+          // only to give up. Instead, reply immediately that we are busy. The caller gets a
+          // definite answer at once, and the current work is not interrupted. The exchange is
+          // NOT persisted (nothing was said), so a later retry starts clean.
+          if (deps.isBusy?.()) {
+            return json({
+              protocol: PEER_PROTOCOL,
+              from: deps.selfName ?? 'egirl',
+              busy: true,
+              content: `${deps.selfName ?? 'this agent'} is mid-task and can't respond right now — retry shortly.`,
+              session_id: peerSessionId(from),
+            })
           }
           const sessionId = peerSessionId(from)
           const agent = getOrCreateAgent(sessionId, deps)

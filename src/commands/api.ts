@@ -128,6 +128,7 @@ export async function runAPI(config: RuntimeConfig, args: string[]): Promise<voi
   }
 
   const server = startAPIServer(config.channels.api, {
+    isBusy: () => sessionMutex.isBusy(),
     consoleInbox,
     replyBroker,
     push,

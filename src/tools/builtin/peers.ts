@@ -84,6 +84,14 @@ export function createPeerTools(config: PeerToolsConfig): {
 
       const result = await postPeerMessage(peer, config.selfName, message, timeoutMs)
       if (!result.ok) return { success: false, output: result.error }
+      // A busy reply is not the peer's answer — it is "ask me later". Say so plainly so the
+      // model retries or moves on instead of acting on the busy notice as if it were content.
+      if ('busy' in result && result.busy) {
+        return {
+          success: true,
+          output: `${result.from} is busy and did not answer: ${result.content}`,
+        }
+      }
       let content = result.content
       if (content.length > MAX_REPLY_LENGTH) {
         content = `${content.slice(0, MAX_REPLY_LENGTH)}\n\n[Truncated — reply exceeded ${MAX_REPLY_LENGTH} characters]`
