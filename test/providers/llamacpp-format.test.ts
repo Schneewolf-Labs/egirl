@@ -71,11 +71,12 @@ describe('formatMessagesForQwen3', () => {
 
     const formatted = formatMessagesForQwen3(messages)
 
-    // Should have 2 messages: assistant + grouped user
-    expect(formatted).toHaveLength(2)
-
+    // assistant + one grouped user turn holding both tool results. (A continuation turn is
+    // appended after them, because this conversation has no plain user query — see the
+    // template-safety tests below — so assert the grouping directly, not by total length.)
+    expect(formatted[0]?.role).toBe('assistant')
     const userMsg = formatted[1]
-    if (!userMsg) throw new Error('Expected user message')
+    if (!userMsg) throw new Error('Expected grouped user message')
     expect(userMsg.role).toBe('user')
     const content = userMsg.content as string
     expect(content).toContain('<tool_response>')
@@ -245,4 +246,46 @@ describe('formatMessagesForQwen3 multiturn', () => {
     // Final assistant response is plain
     expect(formatted[5]?.content).toBe('Found a.txt with "aaa" and b.txt with "bbb".')
   })
+
+  describe('always leaves a user query for the template', () => {
+    // Qwen3's chat template raises `No user query found in messages` — a hard 400 from
+    // llama.cpp that fails the whole request — when every user turn is a <tool_response>
+    // wrapper. A long run reaches that shape after trimming drops the task prompt, leaving
+    // only assistant tool-calls and their results. This is what auto-paused a real task
+    // repeatedly, so the formatter must never produce it.
+    const isQuery = (m: { role: string; content: unknown }) =>
+      m.role === 'user' &&
+      typeof m.content === 'string' &&
+      !/^<tool_response>[\s\S]*<\/tool_response>$/.test(m.content.trim())
+
+    test('appends a continuation when only tool results remain on the user side', () => {
+      const formatted = formatMessagesForQwen3([
+        { role: 'assistant', content: '', tool_calls: [{ id: '1', name: 'read_file', arguments: { path: '/x' } }] },
+        { role: 'tool', content: 'file contents' },
+      ])
+      expect(formatted.some(isQuery)).toBe(true)
+      // The appended turn is at the end, so the tool results still precede it.
+      expect(formatted[formatted.length - 1]?.role).toBe('user')
+    })
+
+    test('does not add anything when a real query is already present', () => {
+      const formatted = formatMessagesForQwen3([
+        { role: 'user', content: 'Read the file.' },
+        { role: 'assistant', content: '', tool_calls: [{ id: '1', name: 'read_file', arguments: {} }] },
+        { role: 'tool', content: 'contents' },
+      ])
+      // Exactly the three turns it started with — no synthetic continuation.
+      expect(formatted.filter((m) => m.role === 'user').length).toBe(2) // the query + the tool_response
+      expect(formatted.some((m) => m.content === 'Continue based on the tool results above.')).toBe(false)
+    })
+
+    test('handles a conversation with no user turn at all', () => {
+      const formatted = formatMessagesForQwen3([
+        { role: 'assistant', content: '', tool_calls: [{ id: '1', name: 'x', arguments: {} }] },
+        { role: 'tool', content: 'r' },
+      ])
+      expect(formatted.some(isQuery)).toBe(true)
+    })
+  })
+
 })

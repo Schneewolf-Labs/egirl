@@ -84,5 +84,35 @@ export function formatMessagesForQwen3(messages: ChatMessage[]): FormattedMessag
     }
   }
 
-  return formatted
+  return ensureUserQuery(formatted)
+}
+
+/**
+ * A tool result becomes a user turn wrapped in `<tool_response>…</tool_response>`. Qwen3's chat
+ * template walks the user turns and raises `No user query found in messages` unless at least one
+ * of them is NOT such a wrapper — it refuses to render a conversation whose entire user side is
+ * tool output with no actual question. llama.cpp surfaces that as a 400, which fails the whole
+ * request rather than degrading.
+ *
+ * A long agentic run reaches that shape legitimately: once context trimming drops the original
+ * task prompt, what remains can be assistant tool-calls and their `<tool_response>` results with
+ * no plain user turn left. Observed in production — a reverse-engineering task failed this way
+ * repeatedly and auto-paused. Rather than trust every caller to preserve a query, the formatter
+ * guarantees one: if none survives, append a minimal continuation turn. The model is mid-task
+ * and the tool results are right there, so "continue" is exactly the instruction implied.
+ */
+function ensureUserQuery(formatted: FormattedMessage[]): FormattedMessage[] {
+  const hasQuery = formatted.some((m) => m.role === 'user' && !isToolResponseOnly(m.content))
+  if (hasQuery || formatted.length === 0) return formatted
+  return [...formatted, { role: 'user', content: 'Continue based on the tool results above.' }]
+}
+
+/** True when the turn is nothing but a tool_response wrapper — what the template will not count. */
+function isToolResponseOnly(content: FormattedContent): boolean {
+  if (typeof content !== 'string') return false
+  const trimmed = content.trim()
+  if (!trimmed) return true // an empty user turn is no query either
+  // Wrapper-agnostic on purpose: dialects differ on the exact tag, so key on the shape they
+  // share — the whole turn being one response block — not one dialect's literal string.
+  return /^<tool_response>[\s\S]*<\/tool_response>$/.test(trimmed)
 }
