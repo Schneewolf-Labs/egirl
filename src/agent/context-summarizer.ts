@@ -129,6 +129,12 @@ export async function summarizeMessages(
       ],
       max_tokens: MAX_SUMMARY_TOKENS,
       temperature: 0.1,
+      // Summarising is not a reasoning task, and the compactor is often a reasoning model. Left
+      // to think, it spends the whole token budget on reasoning_content and returns empty
+      // content — every summary comes back blank, the fallback fires each time, and (before it
+      // was capped) grew without bound. Ask it to answer directly. Measured on a Qwen3.5-4B
+      // compactor: thinking on → 0 content chars at 500 tokens; thinking off → a real summary.
+      thinking: { level: 'off' },
     })
 
     const summary = response.content.trim()
