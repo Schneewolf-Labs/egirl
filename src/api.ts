@@ -5,6 +5,7 @@ import type { ThinkingLevel } from './config/schema'
 import type { ChatMessage, ThinkingConfig } from './providers/types'
 
 const THINKING_LEVELS: readonly ThinkingLevel[] = ['off', 'low', 'medium', 'high'] as const
+
 import type { SessionInfo } from './conversation'
 import type { MemoryCategory, MemoryManager } from './memory'
 import {
@@ -13,12 +14,12 @@ import {
   PEER_PROTOCOL,
   peerSessionId,
 } from './peers/protocol'
+import type { PushNotifier, PushStore } from './push'
+import { renderManifest, renderServiceWorker } from './push/assets'
+import type { ConsoleInbox } from './report/console-channel'
 import type { Task, TaskRunner, TaskStore } from './tasks'
 import { getTheme } from './ui/theme'
 import { log } from './util/logger'
-import type { ConsoleInbox } from './report/console-channel'
-import type { PushNotifier, PushStore } from './push'
-import { renderManifest, renderServiceWorker } from './push/assets'
 import { ansiToHex, renderChatPage } from './web-ui'
 
 export interface APIConfig {
@@ -295,7 +296,10 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
         // worker's only secret is the instance's own name, which is already on the page.
         if (method === 'GET' && path === '/manifest.webmanifest') {
           return new Response(
-            renderManifest({ name: deps.selfName ?? 'egirl', primary: ansiToHex(getTheme().colors.primary) }),
+            renderManifest({
+              name: deps.selfName ?? 'egirl',
+              primary: ansiToHex(getTheme().colors.primary),
+            }),
             { headers: { 'content-type': 'application/manifest+json' } },
           )
         }

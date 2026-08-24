@@ -9,8 +9,8 @@
  * that a ping happened and never what it said.
  */
 
-import { createPublicKey, createVerify } from 'node:crypto'
 import { describe, expect, test } from 'bun:test'
+import { createPublicKey, createVerify } from 'node:crypto'
 import { createPushNotifier, generateVapidKeys, PushStore } from '../../src/push'
 import { vapidAuthHeader } from '../../src/push/vapid'
 
@@ -60,7 +60,10 @@ describe('VAPID', () => {
     const keys = generateVapidKeys()
     const header = vapidAuthHeader(keys, 'https://web.push.apple.com', 'mailto:a@b.c')
     const claims = JSON.parse(
-      Buffer.from((/vapid t=[^.]+\.([^.]+)\./.exec(header) as RegExpExecArray)[1] as string, 'base64url').toString(),
+      Buffer.from(
+        (/vapid t=[^.]+\.([^.]+)\./.exec(header) as RegExpExecArray)[1] as string,
+        'base64url',
+      ).toString(),
     )
     expect(claims.aud).toBe('https://web.push.apple.com')
     expect(claims.exp).toBeGreaterThan(Math.floor(Date.now() / 1000))

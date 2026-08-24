@@ -7,10 +7,12 @@
  * icons, and a notification saying "something needs you" is useless when you run four of them.
  */
 
-
 /** Escapes a string for embedding inside a single-quoted JS literal. */
 function js(s: string): string {
-  return s.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/[\r\n]/g, ' ')
+  return s
+    .replace(/\\/g, '\\\\')
+    .replace(/'/g, "\\'")
+    .replace(/[\r\n]/g, ' ')
 }
 
 export function renderManifest(opts: { name: string; primary: string }): string {

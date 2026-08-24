@@ -207,9 +207,13 @@ describe('console panels', () => {
       const { make, doc, timers, step } = harness()
       let calls = 0
       doc.hidden = true
-      make(async () => {
-        calls++
-      }, 1000, 8000)
+      make(
+        async () => {
+          calls++
+        },
+        1000,
+        8000,
+      )
       await step()
       await step()
       expect(calls).toBe(0) // skipped, but still rescheduled
@@ -249,7 +253,9 @@ describe('console panels', () => {
 
   describe('history rendering', () => {
     /** Pull historyView() out of the served script; it depends on nothing else. */
-    function historyView(): (msgs: unknown[]) => Array<{ who: string; text: string; from?: string }> {
+    function historyView(): (
+      msgs: unknown[],
+    ) => Array<{ who: string; text: string; from?: string }> {
       const src = html()
       const start = src.indexOf('function historyView(')
       if (start < 0) throw new Error('historyView() not found')
@@ -312,7 +318,9 @@ describe('console panels', () => {
     function clientEsc(): (s: unknown) => string {
       const m = /const esc=(t=>String\(t\?\?''\)\.replace\(.*?\));/.exec(html())
       if (!m) throw new Error('could not find esc() in the served page')
-      return eval(`(${m[1]})`) as (s: unknown) => string
+      // new Function rather than eval: same job, but it evaluates in global scope with no
+      // access to this file's locals, and it is what the other extractors here already use.
+      return new Function(`return (${m[1]})`)() as (s: unknown) => string
     }
 
     test('escapes quotes as well as angle brackets', () => {

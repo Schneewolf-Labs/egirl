@@ -129,10 +129,7 @@ export function createPushNotifier(
               store.unsubscribe(sub.endpoint)
               log.info('push', `Subscription ${subscriptionId(sub.endpoint)} expired — removed`)
             } else {
-              log.warn(
-                'push',
-                `Push to ${subscriptionId(sub.endpoint)} failed: HTTP ${res.status}`,
-              )
+              log.warn('push', `Push to ${subscriptionId(sub.endpoint)} failed: HTTP ${res.status}`)
             }
           } catch (e) {
             const msg = e instanceof Error ? e.message : String(e)
