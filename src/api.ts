@@ -48,7 +48,11 @@ export interface APIDeps {
    * server has touched; the store knows every conversation from every channel, which is what
    * a session picker actually wants to show.
    */
-  /** True while a run holds the shared mutex — a peer message answers "busy" instead of queuing. */
+  /**
+   * External busy sources the server cannot see on its own — chiefly a background task grinding,
+   * whose runs do not pass through the server's own run queue. Combined with the server's
+   * in-flight count so a peer message can answer "busy" instead of queuing behind a long turn.
+   */
   isBusy?: () => boolean
   /** Escalations addressed to `console:` — questions waiting for a human in the browser. */
   consoleInbox?: ConsoleInbox
@@ -151,6 +155,15 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
   // session's subsequent runs. The CLI holds the same thing per TTY session.
   const sessionThinking = new Map<string, ThinkingConfig>()
 
+  // Runs in flight through this server (chat, peer). The model has one generation slot, so a run
+  // generating here means another would queue behind it -- which is what "busy" reports. The
+  // session mutex is the wrong signal for this: it guards only tool execution, so it reads free
+  // during the long generation phase that is exactly when the instance is busiest.
+  let runsInFlight = 0
+  // Busy if a run is generating here OR a background task is grinding (deps.isBusy carries the
+  // task runner, whose runs do not pass through enqueueRun).
+  const instanceBusy = () => runsInFlight > 0 || (deps.isBusy?.() ?? false)
+
   function enqueueRun<T>(
     sessionId: string,
     run: () => Promise<T>,
@@ -158,6 +171,7 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
     const chain = chains.get(sessionId) ?? { tail: Promise.resolve(), pending: 0 }
     const position = chain.pending
     chain.pending++
+    runsInFlight++
     // The tail never rejects (see below), so chaining directly off it is safe.
     const done = chain.tail.then(run)
     // Settle before bookkeeping: swallowing the rejection HERE is what keeps one failed turn
@@ -171,6 +185,7 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
       )
       .then(() => {
         chain.pending--
+        runsInFlight--
         if (chain.pending <= 0) chains.delete(sessionId)
       })
     chains.set(sessionId, chain)
@@ -609,7 +624,7 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
           // only to give up. Instead, reply immediately that we are busy. The caller gets a
           // definite answer at once, and the current work is not interrupted. The exchange is
           // NOT persisted (nothing was said), so a later retry starts clean.
-          if (deps.isBusy?.()) {
+          if (instanceBusy()) {
             return json({
               protocol: PEER_PROTOCOL,
               from: deps.selfName ?? 'egirl',
