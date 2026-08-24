@@ -260,7 +260,11 @@ describe('formatMessagesForQwen3 multiturn', () => {
 
     test('appends a continuation when only tool results remain on the user side', () => {
       const formatted = formatMessagesForQwen3([
-        { role: 'assistant', content: '', tool_calls: [{ id: '1', name: 'read_file', arguments: { path: '/x' } }] },
+        {
+          role: 'assistant',
+          content: '',
+          tool_calls: [{ id: '1', name: 'read_file', arguments: { path: '/x' } }],
+        },
         { role: 'tool', content: 'file contents' },
       ])
       expect(formatted.some(isQuery)).toBe(true)
@@ -271,12 +275,18 @@ describe('formatMessagesForQwen3 multiturn', () => {
     test('does not add anything when a real query is already present', () => {
       const formatted = formatMessagesForQwen3([
         { role: 'user', content: 'Read the file.' },
-        { role: 'assistant', content: '', tool_calls: [{ id: '1', name: 'read_file', arguments: {} }] },
+        {
+          role: 'assistant',
+          content: '',
+          tool_calls: [{ id: '1', name: 'read_file', arguments: {} }],
+        },
         { role: 'tool', content: 'contents' },
       ])
       // Exactly the three turns it started with — no synthetic continuation.
       expect(formatted.filter((m) => m.role === 'user').length).toBe(2) // the query + the tool_response
-      expect(formatted.some((m) => m.content === 'Continue based on the tool results above.')).toBe(false)
+      expect(formatted.some((m) => m.content === 'Continue based on the tool results above.')).toBe(
+        false,
+      )
     })
 
     test('handles a conversation with no user turn at all', () => {
@@ -287,5 +297,4 @@ describe('formatMessagesForQwen3 multiturn', () => {
       expect(formatted.some(isQuery)).toBe(true)
     })
   })
-
 })

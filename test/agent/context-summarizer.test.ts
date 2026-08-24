@@ -157,3 +157,25 @@ describe('formatSummaryMessage', () => {
     expect(typeof msg.content === 'string' && msg.content).toContain('User asked about X')
   })
 })
+
+describe('summary size is bounded', () => {
+  // A summary exists to shrink context. The fallback path used to concatenate the existing
+  // summary with new content and feed its own output back in every compaction, so on a task that
+  // ran for a day through repeated summariser failures it reached 712k chars (~178k tokens) --
+  // nearly 3x its context window. The system prompt could then no longer fit at all, and every
+  // request failed. It must stay bounded no matter how many times it is re-summarised.
+  test('the fallback never returns an unbounded summary', async () => {
+    // A provider that always fails, forcing the fallback on every call.
+    const failing = { chat: async () => { throw new Error('down') } } as unknown as Parameters<typeof summarizeMessages>[1]
+    let summary = ''
+    for (let i = 0; i < 60; i++) {
+      summary = await summarizeMessages(
+        [{ role: 'user', content: `turn ${i}: ${'x'.repeat(1000)}` }],
+        failing,
+        summary,
+      )
+      // The invariant: it never runs away, however many merges happen.
+      expect(summary.length).toBeLessThanOrEqual(8_200)
+    }
+  })
+})

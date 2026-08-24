@@ -21,6 +21,20 @@ Rules:
 
 const MAX_SUMMARY_TOKENS = 500
 const MAX_INPUT_CHARS = 50_000
+// A summary exists to SHRINK context, so it must never grow past a small fraction of the window.
+// The LLM path is bounded by MAX_SUMMARY_TOKENS, but the fallback concatenated existing + new
+// with no cap, and every compaction re-fed its own output back in. On one task that ran for a day
+// through repeated summariser failures, the summary reached 712k chars (~178k tokens) -- almost
+// three times its 64k context -- so its system prompt could no longer fit at all, which then
+// broke every request. Cap it, keeping the most recent portion: the durable record lives in
+// NOTES.md, and recent context is the part a summary is actually standing in for.
+const MAX_SUMMARY_CHARS = 8_000
+
+/** Keep a summary bounded, preserving the tail — the oldest lines are the most disposable. */
+function capSummary(summary: string): string {
+  if (summary.length <= MAX_SUMMARY_CHARS) return summary
+  return `[...older summary truncated]\n${summary.slice(summary.length - MAX_SUMMARY_CHARS)}`
+}
 
 /**
  * Format a batch of messages into a readable conversation transcript
@@ -70,6 +84,32 @@ function formatMessagesForSummary(messages: ChatMessage[]): string {
  * Uses the provided LLM provider (typically local) to generate a summary.
  * Falls back to a simple extraction if the LLM call fails.
  */
+/**
+ * Build the exact prompt pair the summariser sends.
+ *
+ * Exported so a training-data builder can render inputs with the serving path's own code. A
+ * reimplementation drifts, and the drift is silent and total: train on one distribution, serve
+ * another, and nothing reports it.
+ */
+export function buildSummarizationPrompt(
+  messages: ChatMessage[],
+  existingSummary?: string,
+): { system: string; user: string } | undefined {
+  const transcript = formatMessagesForSummary(messages)
+  if (!transcript.trim()) return undefined
+
+  const truncatedTranscript =
+    transcript.length > MAX_INPUT_CHARS
+      ? `${transcript.slice(0, MAX_INPUT_CHARS)}\n\n[...transcript truncated for summarization]`
+      : transcript
+
+  const user = existingSummary
+    ? `Here is the existing conversation summary:\n\n${capSummary(existingSummary)}\n\n---\n\nHere are new messages being compacted:\n\n${truncatedTranscript}\n\n---\n\nProduce an updated summary that merges the existing summary with the new information. Keep it concise.`
+    : `Summarize the following conversation segment:\n\n${truncatedTranscript}`
+
+  return { system: SUMMARIZE_SYSTEM_PROMPT, user }
+}
+
 export async function summarizeMessages(
   messages: ChatMessage[],
   provider: LLMProvider,
@@ -77,23 +117,14 @@ export async function summarizeMessages(
 ): Promise<string> {
   if (messages.length === 0) return existingSummary ?? ''
 
-  const transcript = formatMessagesForSummary(messages)
-  if (!transcript.trim()) return existingSummary ?? ''
-
-  // Truncate if the transcript is too long — we need it to fit in context
-  const truncatedTranscript =
-    transcript.length > MAX_INPUT_CHARS
-      ? `${transcript.slice(0, MAX_INPUT_CHARS)}\n\n[...transcript truncated for summarization]`
-      : transcript
-
-  const userPrompt = existingSummary
-    ? `Here is the existing conversation summary:\n\n${existingSummary}\n\n---\n\nHere are new messages being compacted:\n\n${truncatedTranscript}\n\n---\n\nProduce an updated summary that merges the existing summary with the new information. Keep it concise.`
-    : `Summarize the following conversation segment:\n\n${truncatedTranscript}`
+  const built = buildSummarizationPrompt(messages, existingSummary)
+  if (!built) return existingSummary ?? ''
+  const userPrompt = built.user
 
   try {
     const response = await provider.chat({
       messages: [
-        { role: 'system', content: SUMMARIZE_SYSTEM_PROMPT },
+        { role: 'system', content: built.system },
         { role: 'user', content: userPrompt },
       ],
       max_tokens: MAX_SUMMARY_TOKENS,
@@ -110,7 +141,7 @@ export async function summarizeMessages(
       'context-summarizer',
       `Generated summary (${summary.length} chars) from ${messages.length} messages`,
     )
-    return summary
+    return capSummary(summary)
   } catch (error) {
     log.warn('context-summarizer', 'Summary generation failed, using fallback:', error)
     return fallbackSummary(messages, existingSummary)
@@ -153,7 +184,7 @@ function fallbackSummary(messages: ChatMessage[], existingSummary?: string): str
     parts.push(`Tools used: ${unique.join(', ')}`)
   }
 
-  return parts.join('\n')
+  return capSummary(parts.join('\n'))
 }
 
 /**
