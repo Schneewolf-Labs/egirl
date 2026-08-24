@@ -81,9 +81,10 @@ const baseProperties = {
     cache_slots: Type.Number({ default: 1 }),
     /**
      * Tool-calling dialect the local model speaks: "auto" asks in Qwen3 form and accepts
-     * either on the way back, "qwen3"/"laguna" pin the model's native syntax for both
-     * directions. Pinning matters when a model has a strong trained prior — Laguna emits
-     * <arg_key>/<arg_value> regardless of what the prompt asks for.
+     * either on the way back, "qwen3"/"qwen35"/"laguna"/"deepseek" pin the model's native
+     * syntax for both directions. Pinning matters when a model has a strong trained prior —
+     * Laguna emits <arg_key>/<arg_value> regardless of what the prompt asks for, and DeepSeek
+     * v4 falls back to its full-width <｜DSML｜tool_call> token under load.
      */
     tool_format: Type.String({ default: 'auto' }),
     /**

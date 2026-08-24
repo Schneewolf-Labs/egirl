@@ -422,6 +422,47 @@ export const qwen35Dialect: ToolDialect = {
   },
 }
 
+/**
+ * DeepSeek v4 ("DSML" — DeepSeek Markup Language) emits its own tool-call opener,
+ * `<｜DSML｜tool_call>`, with full-width vertical bars (U+FF5C), instead of the ASCII
+ * `<tool_call>` it is ASKED for. On a clean turn it complies with the ASCII form; under load
+ * (long context, heavy reasoning) it falls back to this native token, and often DOUBLES the
+ * opener — `<｜DSML｜tool_call>\n<｜DSML｜tool_call>\n{json}` — for a single call.
+ *
+ * So we ask in Qwen3 form (which it understands) and, on the way back, rewrite the native
+ * opener to ASCII and collapse a doubled opener before the shared JSON parser runs. That
+ * parser already tolerates the flattened args and dropped closer DeepSeek also produces, so
+ * no new extraction logic is needed — only token normalization.
+ */
+const DSML_OPEN_RE = /<｜DSML｜tool_call>/g
+// Two (or more) openers separated by nothing but whitespace are the doubled-opener quirk for
+// ONE call; real back-to-back calls always have a JSON body (and usually a closer) between
+// their openers, so this never merges two genuine calls.
+const DOUBLED_OPEN_RE = /(?:<tool_call>\s*){2,}/g
+
+function normalizeDsmlToolCalls(content: string): string {
+  return content.replace(DSML_OPEN_RE, '<tool_call>').replace(DOUBLED_OPEN_RE, '<tool_call>')
+}
+
+/**
+ * DeepSeek v4. Ask in Qwen3 form; on the way back normalize the native DSML opener to ASCII,
+ * then run the same fallback chain as `auto` — DeepSeek emits clean `<tool_call>` JSON when it
+ * complies, and its native token once normalized is just more of the same.
+ */
+export const deepseekDialect: ToolDialect = {
+  name: 'deepseek',
+  buildToolsSection: qwen3Dialect.buildToolsSection,
+  parseToolCalls(content) {
+    const normalized = normalizeDsmlToolCalls(content)
+    const json = parseJsonToolCalls(normalized)
+    if (json.toolCalls.length > 0) return withIds(json)
+    const kv = parseKeyValueToolCalls(normalized)
+    if (kv.toolCalls.length > 0) return withIds(kv)
+    return withIds(parseFunctionParamToolCalls(normalized))
+  },
+  formatToolResponse: qwen3Dialect.formatToolResponse,
+}
+
 /** Ask in Qwen3 form (widely understood), accept either on the way back. */
 export const autoDialect: ToolDialect = {
   name: 'auto',
@@ -441,6 +482,7 @@ const DIALECTS: Record<string, ToolDialect> = {
   qwen3: qwen3Dialect,
   qwen35: qwen35Dialect,
   laguna: lagunaDialect,
+  deepseek: deepseekDialect,
 }
 
 export function dialectNames(): string[] {

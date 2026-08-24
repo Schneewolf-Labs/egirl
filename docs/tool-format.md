@@ -10,6 +10,7 @@ itself would return structured `tool_calls` and hide the content our parser need
 | `qwen3` | JSON inside `<tool_call>` | the Qwen3 chat template; the default shape |
 | `qwen35` | `<function=NAME>` / `<parameter=KEY>` inside `<tool_call>` | Qwen3.5-MoE's own syntax |
 | `laguna` | `<tool_call>name<arg_key>k</arg_key><arg_value>v</arg_value>` | Laguna's template |
+| `deepseek` | JSON inside `<tool_call>` (Qwen3 form) | DeepSeek v4; parses its native `<｜DSML｜tool_call>` back |
 | `auto` | asks in Qwen3 form, accepts **any** of the above back | use when unsure |
 
 Ask in the model's own dialect when you know it. A model told to use a foreign syntax tends to

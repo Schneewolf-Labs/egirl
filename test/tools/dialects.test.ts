@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { dialectNames, qwen35Dialect, setToolDialect, toolDialect } from '../../src/tools/dialects'
+import {
+  deepseekDialect,
+  dialectNames,
+  qwen35Dialect,
+  setToolDialect,
+  toolDialect,
+} from '../../src/tools/dialects'
 
 const TOOLS = [
   {
@@ -98,6 +104,56 @@ line four
 
   test('tool results are wrapped in tool_response', () => {
     expect(qwen35Dialect.formatToolResponse('ok')).toBe('<tool_response>\nok\n</tool_response>')
+  })
+})
+
+describe('deepseek dialect', () => {
+  test('is registered and selectable', () => {
+    expect(dialectNames()).toContain('deepseek')
+    expect(setToolDialect('deepseek').name).toBe('deepseek')
+    expect(toolDialect().name).toBe('deepseek')
+  })
+
+  test('parses the native DSML opener with a full-width bar', () => {
+    // captured from a real DeepSeek v4 turn: native token instead of the ASCII <tool_call>.
+    const r = deepseekDialect.parseToolCalls(
+      '<｜DSML｜tool_call>\n{"name": "read_file", "arguments": {"path": "/etc/hosts"}}',
+    )
+    expect(r.toolCalls).toHaveLength(1)
+    expect(r.toolCalls[0]!.name).toBe('read_file')
+    expect(r.toolCalls[0]!.arguments).toEqual({ path: '/etc/hosts' })
+    expect(r.content).not.toContain('DSML')
+    expect(r.content).not.toContain('tool_call')
+  })
+
+  test('collapses the doubled-opener quirk to one call', () => {
+    // DeepSeek under load doubles the opener for a single call, and the argument value can be
+    // a multiline heredoc — exactly the shape captured from Zero's session.
+    const raw =
+      '<｜DSML｜tool_call>\n<｜DSML｜tool_call>\n' +
+      '{"name":"execute_command","arguments":{"command":"cat >> NOTES.md << \'EOF\'\\n## CHECKPOINT\\nline two\\nEOF"}}'
+    const r = deepseekDialect.parseToolCalls(raw)
+    expect(r.toolCalls).toHaveLength(1)
+    expect(r.toolCalls[0]!.name).toBe('execute_command')
+    expect(r.toolCalls[0]!.arguments.command).toContain('## CHECKPOINT')
+    expect(r.content).not.toContain('tool_call')
+  })
+
+  test('still accepts the compliant ASCII form on a clean turn', () => {
+    const r = deepseekDialect.parseToolCalls(
+      'Reading it now.\n<tool_call>\n{"name": "read_file", "arguments": {"path": "/tmp/a"}}\n</tool_call>',
+    )
+    expect(r.toolCalls).toHaveLength(1)
+    expect(r.toolCalls[0]!.arguments).toEqual({ path: '/tmp/a' })
+  })
+
+  test('two genuine back-to-back calls are not merged', () => {
+    const raw =
+      '<｜DSML｜tool_call>\n{"name":"read_file","arguments":{"path":"/a"}}\n</tool_call>\n' +
+      '<｜DSML｜tool_call>\n{"name":"read_file","arguments":{"path":"/b"}}\n</tool_call>'
+    const r = deepseekDialect.parseToolCalls(raw)
+    expect(r.toolCalls).toHaveLength(2)
+    expect(r.toolCalls.map((c) => c.arguments.path)).toEqual(['/a', '/b'])
   })
 })
 
