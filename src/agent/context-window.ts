@@ -206,6 +206,85 @@ async function truncateToolResult(
 }
 
 // ---------------------------------------------------------------------------
+// Stale tool-output clearing
+// ---------------------------------------------------------------------------
+
+/**
+ * Tool outputs in the most recent tail this many tokens deep stay verbatim; older ones are
+ * clearable. Recent outputs are what the model is actively working from — older ones have
+ * usually already been digested into the assistant's own turns.
+ */
+const CLEAR_PROTECT_TAIL_TOKENS = 8000
+
+/** Don't bother clearing results at or under this size — the marker costs tokens too. */
+const CLEAR_MIN_TOKENS = 200
+
+const CLEARED_MARKER_PREFIX = '[Stale tool result cleared'
+
+/**
+ * Cheap context reclamation, tried before the expensive drop-and-summarize compaction: blank
+ * the *content* of old tool results in place, keeping the message (and the assistant's call
+ * beside it) so the transcript shape stays valid. A long tool-heavy run accumulates huge,
+ * mostly-stale payloads — hexdumps, debugger logs, page fetches — whose useful part the model
+ * has already restated in its own turns. Clearing them costs nothing the summarizer would have
+ * kept anyway, and often makes the conversation fit without dropping a single turn.
+ *
+ * Only messages outside the protected recent tail are touched, and only when their content is
+ * big enough to be worth it. Data-URL images clear too — an old screenshot is IMAGE_TOKENS of
+ * pixels the model already looked at. Idempotent: already-cleared markers are skipped.
+ */
+export function clearStaleToolOutputs(
+  messages: ChatMessage[],
+  tokenCounts: number[],
+  protectTailTokens: number = CLEAR_PROTECT_TAIL_TOKENS,
+): { messages: ChatMessage[]; clearedCount: number } {
+  // Everything from protectStart onward is the protected recent tail. The message that
+  // crosses the threshold is clearable — it is precisely the big stale payload this pass
+  // exists to reclaim; protecting it would exempt exactly the wrong messages.
+  let acc = 0
+  let protectStart = messages.length
+  for (let i = messages.length - 1; i >= 0; i--) {
+    acc += tokenCounts[i] ?? 0
+    if (acc >= protectTailTokens) break
+    protectStart = i
+  }
+
+  // The in-flight trailing group — tool results the model has not yet responded to — must
+  // survive whole regardless of size: clearing them blanks the very observation the next
+  // turn exists to act on. Only applies when the conversation *ends* in tool results.
+  let inFlightStart = messages.length
+  {
+    let i = messages.length - 1
+    while (i >= 0 && messages[i]?.role === 'tool') i--
+    const anchor = messages[i]
+    if (
+      i < messages.length - 1 &&
+      anchor?.role === 'assistant' &&
+      anchor.tool_calls &&
+      anchor.tool_calls.length > 0
+    ) {
+      inFlightStart = i
+    }
+  }
+
+  let clearedCount = 0
+  const out = messages.map((msg, i) => {
+    if (i >= protectStart || i >= inFlightStart) return msg
+    if (msg.role !== 'tool' || typeof msg.content !== 'string') return msg
+    if (msg.content.startsWith(CLEARED_MARKER_PREFIX)) return msg
+    if ((tokenCounts[i] ?? 0) <= CLEAR_MIN_TOKENS) return msg
+    clearedCount++
+    const what = isDataUrl(msg.content) ? 'screenshot' : `~${tokenCounts[i]} tokens`
+    return {
+      ...msg,
+      content: `${CLEARED_MARKER_PREFIX} (${what}) to make room — re-run the tool if you need it again.]`,
+    }
+  })
+
+  return { messages: out, clearedCount }
+}
+
+// ---------------------------------------------------------------------------
 // Message grouping
 // ---------------------------------------------------------------------------
 
@@ -303,12 +382,34 @@ export async function fitToContextWindow(
   )
 
   // Count tokens for all messages (in parallel)
-  const tokenCounts = await Promise.all(processed.map((msg) => countMessageTokens(msg, tokenizer)))
-  const totalTokens = tokenCounts.reduce((sum, t) => sum + t, 0)
+  let tokenCounts = await Promise.all(processed.map((msg) => countMessageTokens(msg, tokenizer)))
+  let totalTokens = tokenCounts.reduce((sum, t) => sum + t, 0)
 
   // Everything fits — no trimming needed
   if (totalTokens <= budget) {
     return { messages: processed, droppedMessages: [], wasTrimmed: false }
+  }
+
+  // Over budget: before dropping anything, try the cheap reclamation — clear stale tool
+  // outputs in place. Turns survive verbatim (only old payloads blank), so nothing needs
+  // summarizing; if the conversation now fits, the expensive compaction never runs.
+  // The protected tail scales down with small contexts — a fixed 8k window inside a 8k
+  // budget would protect everything and the pass would never reclaim a byte.
+  const protectTail = Math.min(CLEAR_PROTECT_TAIL_TOKENS, Math.floor(budget * 0.25))
+  const cleared = clearStaleToolOutputs(processed, tokenCounts, protectTail)
+  let fitted = processed
+  if (cleared.clearedCount > 0) {
+    fitted = cleared.messages
+    tokenCounts = await Promise.all(fitted.map((msg) => countMessageTokens(msg, tokenizer)))
+    const before = totalTokens
+    totalTokens = tokenCounts.reduce((sum, t) => sum + t, 0)
+    log.info(
+      'context-window',
+      `Cleared ${cleared.clearedCount} stale tool outputs: ~${before}t -> ~${totalTokens}t`,
+    )
+    if (totalTokens <= budget) {
+      return { messages: fitted, droppedMessages: [], wasTrimmed: false }
+    }
   }
 
   log.info(
@@ -319,7 +420,7 @@ export async function fitToContextWindow(
   const truncationNoticeTokens = 30
   const availableTokens = budget - truncationNoticeTokens
 
-  const groups = buildMessageGroups(processed, tokenCounts)
+  const groups = buildMessageGroups(fitted, tokenCounts)
 
   // Interior compaction strategy:
   // 1. Always protect the first group (first user message / task context)
@@ -385,7 +486,7 @@ export async function fitToContextWindow(
     if (!group) continue
     keptGroupIndices.add(g)
     for (let j = group.startIdx; j <= group.endIdx; j++) {
-      const msg = processed[j]
+      const msg = fitted[j]
       if (msg) result.push(msg)
     }
   }
@@ -402,7 +503,7 @@ export async function fitToContextWindow(
         ? Math.max(64, Math.floor(tailBudget / Math.max(1, group.endIdx - group.startIdx + 1)))
         : 0
     for (let j = group.startIdx; j <= group.endIdx; j++) {
-      const msg = processed[j]
+      const msg = fitted[j]
       if (!msg) continue
       if (perMessage > 0 && typeof msg.content === 'string') {
         result.push({ ...msg, content: truncateToolResultSync(msg.content, perMessage) })
@@ -414,7 +515,7 @@ export async function fitToContextWindow(
 
   // If we somehow fit nothing, include at least the last user message
   if (result.length === 0) {
-    const lastUser = [...processed].reverse().find((m: ChatMessage) => m.role === 'user')
+    const lastUser = [...fitted].reverse().find((m: ChatMessage) => m.role === 'user')
     if (lastUser) {
       result.push(lastUser)
     }
@@ -430,7 +531,7 @@ export async function fitToContextWindow(
   // and auto-paused, hours after its conversation grew past the point where the head still fit.
   // The guard above only catches an empty result, which this never is.
   if (!result.some((m) => m.role === 'user')) {
-    const anchor = [...processed].reverse().find((m: ChatMessage) => m.role === 'user')
+    const anchor = [...fitted].reverse().find((m: ChatMessage) => m.role === 'user')
     if (anchor) result.unshift(anchor)
   }
 
