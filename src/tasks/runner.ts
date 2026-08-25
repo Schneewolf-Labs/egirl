@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { isAbsolute, resolve } from 'node:path'
 import { AgentLoop } from '../agent/loop'
 import type { SessionMutex } from '../agent/session-mutex'
 import type { AgentLoopDeps } from '../agent/types'
@@ -22,6 +24,33 @@ const TASK_SYSTEM_PROMPT = `You are executing a background task. Be concise and 
 Use memory tools to store any findings worth remembering across runs.
 Use memory_recall for temporal context (e.g. "what happened last run").
 If you need context from previous runs, use memory_search.`
+
+/** Upper bound on the pinned state brief (~4k tokens). The DONE ledger belongs here; deep
+ * history stays in the agent's own notes, read on demand. Truncated head keeps the ledger,
+ * which by convention sits at the top of the file. */
+const MAX_STATE_BRIEF_CHARS = 16000
+
+/**
+ * Frame a state-file's content as a pinned, settled-ground-truth block for the system prompt.
+ * Empty content yields undefined (nothing to pin). Over-long content is truncated head-first so
+ * the DONE ledger — by convention at the top of the file — is what survives. Pure for testing.
+ */
+export function formatStateBrief(content: string, sourcePath: string): string | undefined {
+  const trimmed = content.trim()
+  if (!trimmed) return undefined
+  const body =
+    trimmed.length > MAX_STATE_BRIEF_CHARS
+      ? `${trimmed.slice(0, MAX_STATE_BRIEF_CHARS)}\n\n[state brief truncated — full file at ${sourcePath}]`
+      : trimmed
+  return [
+    '[Pinned task state — settled ground truth, reloaded every run so it survives context',
+    'compaction. Treat everything below as already PROVEN unless you find direct evidence',
+    'otherwise; do NOT re-derive or re-verify work recorded here as done. Build forward from',
+    'it. Deep history lives in your notes, not here.]',
+    '',
+    body,
+  ].join('\n')
+}
 
 export interface OutboundChannel {
   send(target: string, message: string): Promise<void>
@@ -370,6 +399,24 @@ export class TaskRunner {
     return this.executePrompt(task, signal, deadline, wrapupMarginMs)
   }
 
+  /**
+   * Read the task's pinned state brief, framed as settled ground truth. Resolved relative to
+   * the workspace unless absolute. Missing/unreadable is not an error — the run just proceeds
+   * without a pin (logged once). The framing tells the model not to re-derive proven work.
+   */
+  private loadStateBrief(task: Task, cwd: string): string | undefined {
+    if (!task.stateFile) return undefined
+    const path = isAbsolute(task.stateFile) ? task.stateFile : resolve(cwd, task.stateFile)
+    let content: string
+    try {
+      content = readFileSync(path, 'utf8').trim()
+    } catch (err) {
+      log.warn('tasks', `state_file ${task.stateFile} not readable, running without pin: ${err}`)
+      return undefined
+    }
+    return formatStateBrief(content, task.stateFile)
+  }
+
   private async executePrompt(
     task: Task,
     signal?: AbortSignal,
@@ -381,6 +428,12 @@ export class TaskRunner {
 
     const contextParts: string[] = []
     if (standup.context) contextParts.push(standup.context)
+
+    // Pinned task state. Lives in the system prompt (via additionalContext), so it is present
+    // every turn and survives compaction — unlike notes the agent reads with a tool call, whose
+    // result gets summarized away mid-run, after which it re-derives already-proven work.
+    const pinnedState = this.loadStateBrief(task, cwd)
+    if (pinnedState) contextParts.push(pinnedState)
 
     // The two semantic stops for an unbounded run (docs/autonomy-loop.md): blocked → ask,
     // goal exhausted → report before ending. Only stated when the tool actually exists.

@@ -34,6 +34,7 @@ function rowToTask(row: Record<string, unknown>): Task {
     persistConversation: (row.persist_conversation as number) === 1,
     maxTurns: (row.max_turns as number) ?? undefined,
     unbounded: (row.unbounded as number) === 1,
+    stateFile: (row.state_file as string) ?? undefined,
     nextRunAt: (row.next_run_at as number) ?? undefined,
     lastRunAt: (row.last_run_at as number) ?? undefined,
     runCount: (row.run_count as number) ?? 0,
@@ -193,6 +194,7 @@ export class TaskStore {
       ],
       ['max_turns', 'ALTER TABLE tasks ADD COLUMN max_turns INTEGER'],
       ['unbounded', 'ALTER TABLE tasks ADD COLUMN unbounded INTEGER DEFAULT 0'],
+      ['state_file', 'ALTER TABLE tasks ADD COLUMN state_file TEXT'],
     ]
 
     for (const [col, sql] of migrations) {
@@ -237,10 +239,10 @@ export class TaskStore {
         id, name, description, kind, status, prompt,
         memory_context, memory_category, interval_ms,
         cron_expression, business_hours, depends_on,
-        persist_conversation, max_turns, unbounded,
+        persist_conversation, max_turns, unbounded, state_file,
         next_run_at, max_runs, notify, channel, channel_target,
         created_by, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
       [
         id,
@@ -258,6 +260,7 @@ export class TaskStore {
         input.persistConversation ? 1 : 0,
         input.maxTurns ?? null,
         input.unbounded ? 1 : 0,
+        input.stateFile ?? null,
         nextRunAt ?? null,
         input.maxRuns ?? null,
         input.notify ?? 'on_change',
@@ -316,6 +319,7 @@ export class TaskStore {
       notify: 'notify',
       lastResultHash: 'last_result_hash',
       memoryCategory: 'memory_category',
+      stateFile: 'state_file',
     }
 
     for (const [key, col] of Object.entries(fieldMap)) {

@@ -25,6 +25,13 @@ export interface Task {
   maxTurns: number | undefined
   /** Run unbounded (caps become a safety net; stops on failure/report/conclusion). */
   unbounded: boolean
+  /**
+   * Path to a curated state brief (relative to the workspace, or absolute). Its content is
+   * pinned into the system prompt every run as settled ground truth — it survives compaction,
+   * unlike notes the agent must re-read each run. For long autonomous tasks where re-deriving
+   * proven work after a compaction is the failure mode.
+   */
+  stateFile: string | undefined
   nextRunAt: number | undefined
   lastRunAt: number | undefined
   runCount: number
@@ -54,6 +61,7 @@ export interface NewTask {
   persistConversation?: boolean
   maxTurns?: number
   unbounded?: boolean
+  stateFile?: string
   maxRuns?: number
   notify?: TaskNotify
   channel: string

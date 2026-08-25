@@ -69,6 +69,19 @@ describe('TaskStore', () => {
     expect(fetched?.businessHours).toBe('9-17 Mon-Fri')
   })
 
+  test('stores and updates stateFile', () => {
+    const task = store.create(makeTask({ stateFile: 'lego_loco/STATE.md' }))
+    expect(store.get(task.id)?.stateFile).toBe('lego_loco/STATE.md')
+
+    store.update(task.id, { stateFile: '/abs/OTHER.md' })
+    expect(store.get(task.id)?.stateFile).toBe('/abs/OTHER.md')
+  })
+
+  test('stateFile defaults to undefined', () => {
+    const task = store.create(makeTask())
+    expect(store.get(task.id)?.stateFile).toBeUndefined()
+  })
+
   test('stores task dependency', () => {
     const parent = store.create(makeTask({ name: 'parent' }))
     const child = store.create(makeTask({ name: 'child', dependsOn: parent.id }))
