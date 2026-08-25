@@ -127,6 +127,36 @@ export class ToolExecutor {
       }
     }
 
+    // Required-parameter check, after remapping so synonyms have already been resolved.
+    // A call missing its required arguments used to reach the tool and die on whatever the
+    // implementation threw — execute_command spawned undefined and returned a TypeError about
+    // a "file" argument, which taught the model nothing. Observed from a q8 27B under long
+    // context: most such calls arrive with an entirely empty arguments object, get the opaque
+    // error back, and are re-issued malformed again. Name what is missing and show the shape.
+    {
+      const params = tool.definition.parameters as {
+        required?: string[]
+        properties?: Record<string, unknown>
+      }
+      const required = Array.isArray(params?.required) ? params.required : []
+      const missing = required.filter(
+        (key) => call.arguments[key] === undefined || call.arguments[key] === null,
+      )
+      if (missing.length > 0) {
+        const example = JSON.stringify(Object.fromEntries(required.map((key) => [key, `<${key}>`])))
+        this.audit(call.name, call.arguments, {
+          success: false,
+          reason: `missing required: ${missing.join(', ')}`,
+        })
+        return {
+          success: false,
+          output:
+            `Missing required parameter${missing.length > 1 ? 's' : ''} for ${call.name}: ${missing.join(', ')}. ` +
+            `Re-issue the call with arguments filled in, e.g. {"name": "${call.name}", "arguments": ${example}}`,
+        }
+      }
+    }
+
     // Safety checks
     if (this.safety?.enabled) {
       const check = checkToolCall(call.name, call.arguments, cwd, this.safety)

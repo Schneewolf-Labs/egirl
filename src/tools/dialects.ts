@@ -210,9 +210,23 @@ export function parseJsonToolCalls(content: string): {
         .replace(BARE_NAME_RE, '{"name":"$1",')
       if (repaired !== chunk) candidates = jsonObjects(repaired)
     }
+    const chunkCalls: Omit<ToolCall, 'id'>[] = []
+    const orphanObjects: Record<string, unknown>[] = []
     for (const objText of candidates) {
       const parsed = parseCallObject(objText)
-      if (!parsed) continue
+      if (!parsed) {
+        // Not a call — but a model under context pressure sometimes emits the name and the
+        // arguments as SEPARATE objects: `{"name":"execute_command"}\n{"command":"ls"}`.
+        // Remember plain nameless objects so they can be married to an argless call below;
+        // dropping them silently produced empty-args calls with the arguments in plain sight.
+        try {
+          const o = JSON.parse(objText) as Record<string, unknown>
+          if (o && typeof o === 'object' && !Array.isArray(o) && !('name' in o)) {
+            orphanObjects.push(o)
+          }
+        } catch {}
+        continue
+      }
       const name = parsed.name
       if (typeof name !== 'string') continue
       let args: Record<string, unknown>
@@ -223,9 +237,19 @@ export function parseJsonToolCalls(content: string): {
         const { name: _n, arguments: _a, ...rest } = parsed
         args = rest
       }
-      toolCalls.push({ name, arguments: args })
+      chunkCalls.push({ name, arguments: args })
       matched = true
     }
+    // Conservative marry: exactly one argless call and exactly one orphan object in the same
+    // chunk. Anything more ambiguous stays as-is rather than guessing pairings.
+    if (chunkCalls.length === 1 && orphanObjects.length === 1) {
+      const only = chunkCalls[0]
+      const orphan = orphanObjects[0]
+      if (only && orphan && Object.keys(only.arguments).length === 0) {
+        only.arguments = orphan
+      }
+    }
+    toolCalls.push(...chunkCalls)
     if (matched) cleanContent = cleanContent.replace(raw, '')
   }
 

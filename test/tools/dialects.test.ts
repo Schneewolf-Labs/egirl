@@ -167,3 +167,34 @@ describe('auto dialect', () => {
     expect(r.toolCalls[0]!.arguments).toEqual({ path: '/tmp/a' })
   })
 })
+
+describe('split name/arguments emission', () => {
+  test('marries an orphan arguments object to its argless call in the same chunk', () => {
+    // Observed from a q8 27B under long context: the name and the arguments arrive as two
+    // separate JSON objects inside one <tool_call> block. The arguments were being dropped.
+    const d = setToolDialect('auto')
+    const r = d.parseToolCalls(
+      '<tool_call>\n{"name": "execute_command"}\n{"command": "ls /tmp"}\n</tool_call>',
+    )
+    expect(r.toolCalls).toHaveLength(1)
+    expect(r.toolCalls[0]?.arguments).toEqual({ command: 'ls /tmp' })
+  })
+
+  test('does not marry when the pairing is ambiguous', () => {
+    const d = setToolDialect('auto')
+    const r = d.parseToolCalls(
+      '<tool_call>\n{"name": "execute_command"}\n{"command": "a"}\n{"command": "b"}\n</tool_call>',
+    )
+    expect(r.toolCalls).toHaveLength(1)
+    expect(r.toolCalls[0]?.arguments).toEqual({})
+  })
+
+  test('a call that already has arguments is left alone', () => {
+    const d = setToolDialect('auto')
+    const r = d.parseToolCalls(
+      '<tool_call>\n{"name": "execute_command", "arguments": {"command": "pwd"}}\n{"stray": true}\n</tool_call>',
+    )
+    expect(r.toolCalls).toHaveLength(1)
+    expect(r.toolCalls[0]?.arguments).toEqual({ command: 'pwd' })
+  })
+})
