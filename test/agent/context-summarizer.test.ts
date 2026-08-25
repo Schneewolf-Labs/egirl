@@ -166,7 +166,11 @@ describe('summary size is bounded', () => {
   // request failed. It must stay bounded no matter how many times it is re-summarised.
   test('the fallback never returns an unbounded summary', async () => {
     // A provider that always fails, forcing the fallback on every call.
-    const failing = { chat: async () => { throw new Error('down') } } as unknown as Parameters<typeof summarizeMessages>[1]
+    const failing = {
+      chat: async () => {
+        throw new Error('down')
+      },
+    } as unknown as Parameters<typeof summarizeMessages>[1]
     let summary = ''
     for (let i = 0; i < 60; i++) {
       summary = await summarizeMessages(
