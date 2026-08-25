@@ -90,6 +90,23 @@ export class TaskRunner {
   }
 
   start(): void {
+    // Re-arm active scheduled tasks left with no nextRunAt. A process restart that killed a
+    // run mid-flight skipped the completion path that reschedules, leaving the task active
+    // but permanently unscheduled — it then sat parked until someone triggered it by hand.
+    for (const task of this.deps.store.list({ status: 'active' })) {
+      if (
+        task.kind === 'scheduled' &&
+        !task.nextRunAt &&
+        (task.intervalMs || task.cronExpression)
+      ) {
+        this.deps.store.update(
+          task.id,
+          { nextRunAt: Date.now() },
+          'Re-armed on startup: active with no scheduled run',
+        )
+        log.info('tasks', `Re-armed ${task.name} (${task.id}): active with no nextRunAt`)
+      }
+    }
     const { tickIntervalMs } = this.deps.tasksConfig
     this.tickTimer = setInterval(() => this.tick(), tickIntervalMs)
     log.info('tasks', `Task runner started (tick=${tickIntervalMs}ms)`)

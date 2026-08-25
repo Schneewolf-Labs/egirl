@@ -11,6 +11,7 @@ import { ContextSizeError } from '../providers/types'
 import { log } from '../util/logger'
 import { formatSummaryMessage } from './context-summarizer'
 import { fitToContextWindow } from './context-window'
+import { pruneMalformedCallPairs, toolsWithRequiredParams } from './history-hygiene'
 
 /**
  * Call provider.chat with classified retry logic.
@@ -116,9 +117,14 @@ export async function chatWithContextWindow(args: {
     ? `${systemPrompt}\n\n${String(formatSummaryMessage(conversationSummary).content)}`
     : systemPrompt
 
+  // History hygiene before fitting: old empty-args call/response pairs are in-context
+  // demonstrations of the malformed shape and actively teach the model to repeat it. Applied
+  // per-request; the conversation store keeps the full record.
+  const hygienic = pruneMalformedCallPairs(messages, toolsWithRequiredParams(tools))
+
   const fitResult = await fitToContextWindow(
     effectiveSystemPrompt,
-    messages,
+    hygienic,
     tools,
     { contextLength },
     tokenizer,
@@ -171,7 +177,7 @@ export async function chatWithContextWindow(args: {
 
     const refitResult = await fitToContextWindow(
       effectiveSystemPrompt,
-      messages,
+      hygienic,
       tools,
       { contextLength: error.contextSize },
       tokenizer,
