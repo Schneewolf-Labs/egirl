@@ -274,6 +274,24 @@ const baseProperties = {
     ),
   ),
 
+  // Consultant models for the consult tool: bigger-context OpenAI-compatible endpoints the
+  // operator can ask for a read-only second opinion (no tool calling involved, which is
+  // exactly why a model that is bad at our tool dialects can still be a great consultant).
+  // API keys come from .env: EGIRL_CONSULTANT_<NAME>_KEY.
+  consultants: Type.Optional(
+    Type.Array(
+      Type.Object({
+        name: Type.String(),
+        endpoint: Type.String(),
+        model: Type.String(),
+        context_length: Type.Optional(Type.Number({ default: 131072 })),
+        max_tokens: Type.Optional(Type.Number({ default: 8192 })),
+        timeout_ms: Type.Optional(Type.Number({ default: 600_000 })),
+        temperature: Type.Optional(Type.Number()),
+      }),
+    ),
+  ),
+
   // Who this agent reports to (docs/autonomy-loop.md, Phase 2): "peer:<name>" for an agent
   // supervisor, or "<channel>:<target>" — e.g. "xmpp:you@example.com", "discord:<channelId>"
   // — for a human. The report tool is only registered when this is set.
@@ -403,6 +421,7 @@ const baseProperties = {
       tasks: Type.Boolean({ default: false }),
       code_agent: Type.Boolean({ default: false }),
       peers: Type.Boolean({ default: true }),
+      consult: Type.Boolean({ default: true }),
       web_research: Type.Boolean({ default: true }),
       web_search: Type.Boolean({ default: true }),
       screenshot: Type.Boolean({ default: true }),
@@ -601,6 +620,17 @@ export interface RuntimeConfig {
     /** Came from a registry rather than [[peers]] — see PeerEntry in src/peers/protocol.ts. */
     discovered?: boolean
   }>
+  /** Read-only second-opinion models for the consult tool. */
+  consultants?: Array<{
+    name: string
+    endpoint: string
+    model: string
+    contextLength: number
+    maxTokens: number
+    timeoutMs: number
+    temperature?: number
+    apiKey?: string
+  }>
   /** Supervisor target for the report tool ("peer:<name>" or "<channel>:<target>"). */
   report?: {
     to: string
@@ -673,6 +703,7 @@ export interface RuntimeConfig {
     tasks: boolean
     codeAgent: boolean
     peers: boolean
+    consult: boolean
     webResearch: boolean
     webSearch: boolean
     screenshot: boolean

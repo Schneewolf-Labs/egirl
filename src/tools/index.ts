@@ -59,6 +59,7 @@ import {
   type CodeAgentConfig,
   createBrowserTools,
   createCodeAgentTool,
+  createConsultTool,
   createGitHubTools,
   createMemoryTools,
   createPeerTools,
@@ -182,6 +183,12 @@ export function createDefaultToolExecutor(
   // Web research
   if (t.webResearch) {
     executor.register(webResearchTool)
+  }
+
+  // Consultant models (read-only second opinions from bigger-context endpoints).
+  // Like peers: no warning when unconfigured — having no consultants is the normal state.
+  if (t.consult && config.consultants && config.consultants.length > 0) {
+    executor.register(createConsultTool(config.consultants, config.workspace.path))
   }
 
   // Peer agents (agent-to-agent messaging over the egirl-peer HTTP protocol).

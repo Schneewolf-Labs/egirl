@@ -440,6 +440,7 @@ export function loadConfig(options: LoadConfigOptions = {}): RuntimeConfig {
       tasks: toml.tools?.tasks ?? false,
       codeAgent: toml.tools?.code_agent ?? false,
       peers: toml.tools?.peers ?? true,
+      consult: toml.tools?.consult ?? true,
       webResearch: toml.tools?.web_research ?? true,
       webSearch: toml.tools?.web_search ?? true,
       screenshot: toml.tools?.screenshot ?? true,
@@ -535,6 +536,22 @@ export function loadConfig(options: LoadConfigOptions = {}): RuntimeConfig {
         url: p.url.replace(/\/+$/, ''),
         ...(token && { token }),
         timeoutMs: p.timeout_ms ?? 120_000,
+      }
+    })
+  }
+
+  if (toml.consultants && toml.consultants.length > 0) {
+    config.consultants = toml.consultants.map((c) => {
+      const apiKey = process.env[`EGIRL_CONSULTANT_${c.name.toUpperCase()}_KEY`]
+      return {
+        name: c.name,
+        endpoint: c.endpoint.replace(/\/+$/, ''),
+        model: c.model,
+        contextLength: c.context_length ?? 131072,
+        maxTokens: c.max_tokens ?? 8192,
+        timeoutMs: c.timeout_ms ?? 600_000,
+        ...(c.temperature !== undefined && { temperature: c.temperature }),
+        ...(apiKey && { apiKey }),
       }
     })
   }

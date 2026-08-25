@@ -1,5 +1,6 @@
 export { createBrowserTools } from './browser'
 export { type CodeAgentConfig, type CodeAgentProvider, createCodeAgentTool } from './code-agent'
+export { type ConsultantEntry, createConsultTool } from './consult'
 export { editTool } from './edit'
 export { execTool } from './exec'
 export { gitCommitTool, gitDiffTool, gitLogTool, gitShowTool, gitStatusTool } from './git'
