@@ -91,7 +91,10 @@ export class BrowserManager {
           'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
       })
       this.page = await this.context.newPage()
-      this.page.setDefaultTimeout(this.config.defaultTimeout ?? 30000)
+      // 10s, not Playwright's 30s: a mistyped selector used to hang the agent for half a
+      // minute mid-task (and pushed the missing-element test past its own deadline). Slow
+      // pages can raise defaultTimeout in config; browser_wait_for takes its own timeout.
+      this.page.setDefaultTimeout(this.config.defaultTimeout ?? 10000)
       log.info('browser', 'Launched browser')
     }
 

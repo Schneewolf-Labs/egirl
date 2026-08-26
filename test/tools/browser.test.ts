@@ -136,10 +136,10 @@ describe('browser tools', () => {
       }
     }, 40000)
 
-    // 40s because manager.click() calls locator.click() with no timeout, so where a browser IS
-    // available Playwright waits its 30s default for a selector that will never appear. Worth
-    // raising separately: that same default means a mistyped selector hangs the agent for half a
-    // minute mid-task.
+    // Generous deadline: the action itself is bounded by the manager's 10s default timeout
+    // (lowered from Playwright's 30s, which hung the agent for half a minute on any mistyped
+    // selector), but this test launches a FRESH chromium, and under full-suite parallelism
+    // that launch alone has been observed to eat a 40s deadline.
     test('click handles a missing element gracefully', async () => {
       const freshManager = new BrowserManager()
       const freshTools = createBrowserTools(freshManager)
@@ -155,7 +155,7 @@ describe('browser tools', () => {
       } finally {
         await freshManager.close()
       }
-    }, 40000)
+    }, 120000)
 
     test('close always succeeds even without open browser', async () => {
       const freshManager = new BrowserManager()

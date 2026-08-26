@@ -23,6 +23,8 @@ export interface ConsoleAsk {
   target: string
   question: string
   askedAt: number
+  /** 'ask' blocks an agent on your answer; 'notice' is one-way and just wants dismissing. */
+  kind: 'ask' | 'notice'
 }
 
 export class ConsoleInbox {
@@ -47,6 +49,25 @@ export class ConsoleInbox {
       target,
       question: message,
       askedAt: Date.now(),
+      kind: 'ask',
+    })
+  }
+
+  /**
+   * A one-way notification card: task run results, milestones. Nothing awaits an answer —
+   * the console shows it until dismissed. Without this, a task whose channel has no outbound
+   * sender logs a warning and its reports are never seen at all.
+   */
+  notice = async (target: string, message: string): Promise<void> => {
+    this.seq++
+    const id = `ask${this.seq}`
+    this.asks.set(id, {
+      id,
+      from: this.selfName,
+      target,
+      question: message,
+      askedAt: Date.now(),
+      kind: 'notice',
     })
   }
 
@@ -71,7 +92,10 @@ export class ConsoleInbox {
   prune(maxAgeMs: number, now = Date.now()): number {
     let dropped = 0
     for (const [id, ask] of this.asks) {
-      if (now - ask.askedAt > maxAgeMs) {
+      // A notice has no waiting asker to outlive — keep it a full day so an overnight run's
+      // report is still there in the morning.
+      const limit = ask.kind === 'notice' ? Math.max(maxAgeMs, 24 * 60 * 60 * 1000) : maxAgeMs
+      if (now - ask.askedAt > limit) {
         this.asks.delete(id)
         dropped++
       }

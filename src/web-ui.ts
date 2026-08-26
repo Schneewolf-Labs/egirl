@@ -1110,14 +1110,24 @@ async function loadInbox(){
     if(r.status===503){box.innerHTML='<div class="empty">Tasks are disabled on this instance.</div>';return}
     tasks=(await r.json()).tasks||[];
   }catch(e){box.innerHTML='<div class="empty">could not load: '+esc(e.message||e)+'</div>';throw e}
-  const askCards=asks.map(a=>
-    '<div class="task await ask"><div class="top">'+
+  const askCards=asks.map(a=>{
+    // A notice is a one-way report (task run results) — nothing awaits an answer.
+    if(a.kind==='notice'){
+      return '<div class="task await"><div class="top">'+
+      '<span class="badge active"><span class="dot"></span>report</span>'+
+      '<span class="nm">'+esc(a.from)+'</span></div>'+
+      '<div class="meta"><span>'+esc(ago(a.asked_at))+'</span><span>one-way report</span></div>'+
+      '<div class="q">'+esc(String(a.question).slice(0,1600))+'</div>'+
+      '<div class="acts"><button data-dismiss="'+esc(a.id)+'">dismiss</button></div></div>';
+    }
+    return '<div class="task await ask"><div class="top">'+
     '<span class="badge awaiting"><span class="dot"></span>asking</span>'+
     '<span class="nm">'+esc(a.from)+'</span></div>'+
     '<div class="meta"><span>'+esc(ago(a.asked_at))+'</span><span>blocked until you answer</span></div>'+
     '<div class="q">'+esc(String(a.question).slice(0,1200))+'</div>'+
     '<div class="rep"><textarea rows="2" data-ask="'+esc(a.id)+'" placeholder="Your answer resumes them…"></textarea>'+
-    '<button class="go" data-askreply="'+esc(a.id)+'">Send</button></div></div>');
+    '<button class="go" data-askreply="'+esc(a.id)+'">Send</button></div></div>';
+  });
   if(!tasks.length&&!askCards.length){box.innerHTML='<div class="empty">Nothing waiting on you. 🌙<br>Blocked tasks and questions an agent escalated to you land here.</div>';return}
   if(!tasks.length){box.innerHTML=askCards.join('');return}
   const cards=await Promise.all(tasks.map(async t=>{
@@ -1140,6 +1150,13 @@ async function loadInbox(){
   box.innerHTML=askCards.concat(cards).join('');
 }
 $('inbox').onclick=async e=>{
+  const db=e.target.closest('button[data-dismiss]');
+  if(db){
+    db.disabled=true;
+    try{ await fetch('asks/'+encodeURIComponent(db.dataset.dismiss)+'/dismiss',{method:'POST',headers:H()}) }catch(err){}
+    loadInbox();
+    return;
+  }
   const ab=e.target.closest('button[data-askreply]');
   if(ab){
     const id=ab.dataset.askreply;

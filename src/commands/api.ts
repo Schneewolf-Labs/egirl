@@ -95,7 +95,9 @@ export async function runAPI(config: RuntimeConfig, args: string[]): Promise<voi
       auxProvider: providers.auxiliary,
       memory,
       transcript,
-      outbound: new Map(),
+      // Task notifications for api-channel tasks land in the console inbox as dismissable
+      // notices — without a sender here they were warn-logged and never seen.
+      outbound: new Map([['api', { send: consoleInbox.notice }]]),
       conversationStore: conversations,
       sessionMutex,
     })

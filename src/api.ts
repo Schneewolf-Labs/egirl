@@ -297,8 +297,18 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
               from: a.from,
               question: a.question,
               asked_at: a.askedAt,
+              kind: a.kind,
             })),
           })
+        }
+
+        {
+          const m = method === 'POST' && path.match(/^\/asks\/([^/]+)\/dismiss$/)
+          if (m) {
+            if (!deps.consoleInbox) return err('no console inbox', 503)
+            const removed = deps.consoleInbox.resolve(m[1] as string)
+            return json({ ok: removed })
+          }
         }
 
         {
