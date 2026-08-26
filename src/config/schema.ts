@@ -356,6 +356,9 @@ const baseProperties = {
       max_active_tasks: Type.Number({ default: 20 }),
       max_concurrent_tasks: Type.Number({ default: 1 }),
       task_timeout_ms: Type.Number({ default: 300000 }),
+      // Post-run self-review for unbounded tasks: a restricted fork (skill/memory tools only)
+      // reviews the run digest and patches skills / stores lessons autonomously.
+      self_review: Type.Boolean({ default: true }),
       discovery_enabled: Type.Boolean({ default: true }),
       discovery_interval_ms: Type.Number({ default: 1800000 }),
       idle_threshold_ms: Type.Number({ default: 600000 }),
@@ -665,6 +668,8 @@ export interface RuntimeConfig {
     maxActiveTasks: number
     maxConcurrentTasks: number
     taskTimeoutMs: number
+    /** Post-run self-review pass for unbounded tasks. */
+    selfReview: boolean
     discoveryEnabled: boolean
     discoveryIntervalMs: number
     idleThresholdMs: number

@@ -400,6 +400,7 @@ export function loadConfig(options: LoadConfigOptions = {}): RuntimeConfig {
       maxActiveTasks: toml.tasks?.max_active_tasks ?? 20,
       maxConcurrentTasks: toml.tasks?.max_concurrent_tasks ?? 1,
       taskTimeoutMs: toml.tasks?.task_timeout_ms ?? 300000,
+      selfReview: toml.tasks?.self_review ?? true,
       discoveryEnabled: toml.tasks?.discovery_enabled ?? true,
       discoveryIntervalMs: toml.tasks?.discovery_interval_ms ?? 1800000,
       idleThresholdMs: toml.tasks?.idle_threshold_ms ?? 600000,

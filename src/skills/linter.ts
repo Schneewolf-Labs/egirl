@@ -21,7 +21,9 @@ const DESCRIPTION_SIGNAL_CHARS = 200
 const MARKETING_WORDS =
   /\b(powerful|seamless|cutting-edge|revolutionary|best-in-class|state-of-the-art|effortless|supercharge|blazing)\b/i
 
-const NAME_RE = /^[a-z0-9][a-z0-9-]*$/
+// egirl skill names are their H1 titles ("Wine Probe Capture"), so words and spaces are the
+// convention; only genuinely weird characters are an error.
+const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9 _-]*$/
 
 export function lintSkill(skill: Skill): LintFinding[] {
   const findings: LintFinding[] = []
@@ -29,7 +31,7 @@ export function lintSkill(skill: Skill): LintFinding[] {
   if (!NAME_RE.test(skill.name)) {
     findings.push({
       level: 'error',
-      message: `name "${skill.name}" should be lowercase kebab-case (a-z, 0-9, hyphens)`,
+      message: `name "${skill.name}" contains unusual characters — words, digits, spaces, and hyphens only`,
     })
   }
 
@@ -62,7 +64,7 @@ export function lintSkill(skill: Skill): LintFinding[] {
   }
 
   // Session-artifact names: a skill must be class-level, not named after today's task.
-  if (/\b(today|now|current|latest|temp|tmp|v2|new|fix)\b/.test(skill.name)) {
+  if (/\b(today|now|current|latest|temp|tmp|v2|new|fix)\b/i.test(skill.name)) {
     findings.push({
       level: 'warning',
       message: `name "${skill.name}" looks like a session artifact — name skills after the CLASS of task ("wine-probe-capture"), never the instance ("fix-ddraw-today")`,

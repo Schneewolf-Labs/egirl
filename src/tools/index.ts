@@ -85,6 +85,7 @@ import {
 } from './builtin'
 import { createSessionSearchTool } from './builtin/session-search'
 import { createSkillReadTool as buildSkillReadTool } from './builtin/skill'
+import { createSkillManageTool } from './builtin/skill-manage'
 import { createToolExecutor } from './executor'
 import type { ProcessRegistry } from './process-registry'
 import type { Tool, ToolResult } from './types'
@@ -266,6 +267,14 @@ export function createDefaultToolExecutor(
   // behind it.
   if (skills && skills.length > 0) {
     executor.register(buildSkillReadTool(skills))
+  }
+
+  // Structured skill mutations (create/patch/archive with lint + ledger + provenance guards).
+  // Registered whenever a skills directory exists — authoring the FIRST skill needs it too.
+  if ((config.skills?.dirs?.length ?? 0) > 0 && config.workspace?.path) {
+    executor.register(
+      createSkillManageTool(config.skills.dirs, join(config.workspace.path, '.skill-ledger')),
+    )
   }
 
   // Code agent tool (available if claude code config provided)

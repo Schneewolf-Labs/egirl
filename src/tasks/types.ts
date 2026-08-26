@@ -124,4 +124,6 @@ export interface TasksConfig {
   discoveryEnabled: boolean
   discoveryIntervalMs: number
   idleThresholdMs: number
+  /** Post-run self-review pass for unbounded tasks (skill/memory updates via a restricted fork). */
+  selfReview: boolean
 }

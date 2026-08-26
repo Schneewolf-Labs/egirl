@@ -17,6 +17,7 @@ import { parseScheduleExpression } from './cron'
 import { classifyError, getRetryPolicy } from './error-classify'
 import { HEARTBEAT_TASK_NAME, heartbeatPreCheck } from './heartbeat'
 import { calculateNextRun, isWithinBusinessHours, parseBusinessHours } from './schedule'
+import { runSelfReview } from './self-review'
 import type { TaskStore } from './store'
 import type { Task, TaskRun, TasksConfig } from './types'
 
@@ -558,6 +559,17 @@ export class TaskRunner {
           }
         })
         .catch((err) => log.warn('tasks', `Lesson extraction failed for task ${taskId}: ${err}`))
+    }
+
+    // Post-run self-review: a restricted fork of the agent (skill/memory tools only) reviews
+    // the run digest and updates skills/memory. Unbounded tasks only — a bounded check-in
+    // task rarely develops procedures — and fire-and-forget: reviews never block the runner.
+    if (task.unbounded && this.deps.tasksConfig.selfReview) {
+      runSelfReview(task.id, task.name, agent.getContext().messages, {
+        config: this.deps.config,
+        provider: this.deps.localProvider,
+        memory: this.deps.memory,
+      }).catch((err) => log.warn('tasks', `Self-review failed for ${task.name}: ${err}`))
     }
 
     return { content: response.content, awaitingInput: response.awaitingInput === true }

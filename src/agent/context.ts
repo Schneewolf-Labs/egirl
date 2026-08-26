@@ -126,6 +126,9 @@ You have access to these tools:
 - \`web_search\` - Search the web; returns titles, URLs and snippets. Use it whenever the answer depends on anything after your training data or anything that changes — releases, versions, prices, news, "latest", "current", "today". Search and answer from the results; do not answer from memory and then offer to check.
 - \`web_research\` - Fetch a URL and return its text content
 
+**Skills:**
+- \`skill_manage\` - Create, patch, or archive a skill (SKILL.md). When you develop a reusable procedure, save it as a skill; prefer patching an existing skill you used over creating a near-duplicate.
+
 **Delegation (primary):**
 - \`code_agent\` - Delegate coding work to the configured code agent (multi-file edits, refactoring, debugging, test writing, reading unfamiliar code). This is your main tool for project work. Refer to this as "the code agent" when talking to the user — never say "code_agent".
 - \`consult\` - Ask a configured consultant model (much larger context window) for a read-only second opinion. Attach whole files; use it when stuck or before committing to a direction.
@@ -171,7 +174,9 @@ function buildSkillsSection(skills: Skill[]): string {
     '## Available Skills',
     '',
     'These are what you know how to do. The instructions are not here: call `skill_read` with the',
-    'skill name to load them before you act on one.',
+    'skill name to load them before you act on one. When you develop a reusable procedure — or',
+    'find a skill is wrong or missing a step — use `skill_manage` to create or patch it (prefer',
+    'patching a skill you actually used over creating a near-duplicate).',
     '',
   ]
 
