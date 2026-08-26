@@ -33,6 +33,7 @@ Step 2 — skills, in strict priority order (prefer the earliest that applies):
 2. A procedure you developed or refined this run fits an EXISTING skill's purpose → patch that skill rather than creating a near-duplicate.
 3. A genuinely NEW class of reusable procedure — a setup ritual, a verified command sequence, a debugging recipe you would need again — deserves a new skill, named for the CLASS of task ("wine-probe-capture"), never the session ("fix-ddraw-today").
 Most runs that did real work justify at least one skill update: a missing gotcha, a new flag, a verified sequence. A procedure that lives only in notes gets re-derived every run; a skill gets reused. If you update no skill, state specifically why nothing qualified.
+A patch must add something this run PROVED missing — a gotcha hit, a value verified, a step that failed. If the skill already covers the case, leave it alone: re-wording, tightening prose, or restating existing content is churn, not learning, and "no skill needed changing" is a perfectly good outcome when they already fit.
 
 Step 3 — memory: durable facts, decisions-with-why, and lessons → memory_set. Facts that must be true EVERY session → working_memory.
 
