@@ -74,6 +74,21 @@ export function createCLIEventHandler(
 } {
   const state: CLIEventState = { streamed: false, showThinking, streamedThinking: false }
 
+  // Per-turn tallies for the summary line (hermes-agent's turn_summary): what she actually
+  // did, in one dim line, gathered purely from the tool events — no loop coupling.
+  const runStart = Date.now()
+  const startedAt = new Map<string, number>()
+  const tallies = new Map<string, number>()
+  let failures = 0
+  const tallyVerb = (name: string): string => {
+    if (name === 'execute_command') return 'ran'
+    if (name === 'write_file' || name === 'edit_file') return 'edited'
+    if (name === 'read_file' || name === 'glob_files') return 'read'
+    if (name.startsWith('memory_') || name === 'working_memory') return 'memory'
+    if (name.startsWith('git_')) return 'git'
+    return 'other'
+  }
+
   const handler: AgentEventHandler = {
     // Reasoning as it happens. On a reasoning model this is most of the turn, so printing it
     // live is the difference between watching the model work and staring at a blank terminal
@@ -112,6 +127,7 @@ export function createCLIEventHandler(
       status?.clear()
       const c = colors()
       for (const call of calls) {
+        startedAt.set(call.id ?? call.name, Date.now())
         const args = formatArgs(call.arguments)
         // Bullet in the accent, name carrying its own weight, args dimmed: at a glance the
         // scrollback reads as a list of what she did, not a wall of grey.
@@ -129,13 +145,21 @@ export function createCLIEventHandler(
       status?.set('tool', calls.map((call) => call.name).join(', '))
     },
 
-    onToolCallComplete(_callId: string, name: string, result: ToolResult) {
+    onToolCallComplete(callId: string, name: string, result: ToolResult) {
       status?.clear()
       const c = colors()
       const { lines, hidden } = previewLines(result.output)
+      // Tally for the turn summary; time the call for the elbow line.
+      const verb = tallyVerb(name)
+      tallies.set(verb, (tallies.get(verb) ?? 0) + 1)
+      if (!result.success) failures++
+      const started = startedAt.get(callId) ?? startedAt.get(name)
+      const elapsed = started ? Date.now() - started : 0
+      // Sub-second calls stay quiet; a slow tool earns its duration in the scrollback.
+      const took = elapsed >= 1000 ? ` ${DIM}${(elapsed / 1000).toFixed(1)}s${RESET}` : ''
       // Output hangs off the call it belongs to. Success needs no announcement -- the output
       // is the announcement -- but a failure gets named in the error color.
-      const head = result.success ? '' : ` ${c.error}${name} failed${RESET}`
+      const head = (result.success ? '' : ` ${c.error}${name} failed${RESET}`) + took
       if (lines.length === 0) {
         process.stdout.write(
           `  ${c.muted}${ELBOW}${RESET}${head}${head ? '' : ` ${DIM}(no output)${RESET}`}\n`,
@@ -169,6 +193,29 @@ export function createCLIEventHandler(
     onResponseComplete() {
       if (state.streamed) {
         process.stdout.write('\n\n')
+      }
+      // One dim line of what the turn actually did (hermes-agent's turn summary). Suppressed
+      // for tool-less turns — a plain answer needs no ledger.
+      if (tallies.size > 0) {
+        const c = colors()
+        const noun: Record<string, [string, string]> = {
+          ran: ['command', 'commands'],
+          edited: ['file', 'files'],
+          read: ['file', 'files'],
+          memory: ['update', 'updates'],
+          git: ['op', 'ops'],
+          other: ['tool', 'tools'],
+        }
+        const parts: string[] = []
+        for (const [verb, count] of tallies) {
+          const n = noun[verb] ?? ['tool', 'tools']
+          parts.push(`${verb === 'memory' ? 'memory' : verb} ${count} ${count === 1 ? n[0] : n[1]}`)
+        }
+        const secs = ((Date.now() - runStart) / 1000).toFixed(1)
+        const fail = failures > 0 ? ` · ${c.error}${failures} failed${RESET}${DIM}` : ''
+        process.stdout.write(`${DIM}⋯ ${secs}s · ${parts.join(' · ')}${fail}${RESET}\n\n`)
+        tallies.clear()
+        failures = 0
       }
     },
   }

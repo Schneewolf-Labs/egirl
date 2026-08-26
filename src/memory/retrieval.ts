@@ -15,6 +15,18 @@ const DEFAULT_CONFIG: RetrievalConfig = {
 }
 
 /**
+ * Acknowledgements, greetings, and continuations with nothing to search on. Whole-message
+ * match only — any trailing content beyond punctuation/emphasis makes the turn non-trivial.
+ */
+const TRIVIAL_RE =
+  /^(?:yes|no|ok|okay|k|kk|sure|thanks|thank you|thx|ty|hi|hello|hey|yo|continue|go|go on|go ahead|proceed|lgtm|sounds good|nice|cool|great|good|yep|yeah|nah|nope|done|next|\+1)[.!?…\s]*$/i
+
+/** True when a message carries no semantic signal worth a recall round-trip. */
+export function isTrivialPrompt(text: string): boolean {
+  return TRIVIAL_RE.test(text.trim())
+}
+
+/**
  * Proactively retrieve memories relevant to a user message.
  *
  * Runs hybrid search against the memory store and returns a formatted
@@ -37,6 +49,11 @@ export async function retrieveForContext(
 
   // Skip very short queries that won't produce meaningful results
   if (query.trim().length < 3) return undefined
+
+  // A turn with no semantic signal gets no recall: the search round-trip is wasted, and
+  // injecting stale context under a one-word reply can derail it (hermes-agent's
+  // trivial-prompt gate). Anchored so "ok, but what about the header?" still retrieves.
+  if (isTrivialPrompt(query)) return undefined
 
   let results: SearchResult[]
   try {

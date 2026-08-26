@@ -45,6 +45,12 @@ Rules:
 - Do NOT extract information the agent already stored via memory_set tool calls
 - Output ONLY the JSON array, no other text
 
+Never capture (these harden into false constraints the agent cites against itself for months):
+- Environment-dependent failures ("command not found", missing packages, permission errors) — if the session found the FIX, capture the fix; never capture "tool X doesn't work"
+- Negative claims about tool availability or capability based on a single failed attempt
+- An unresolved failure session written up as if it were a reliable workflow
+- Transient machine state (running processes, open ports, temp paths) that will be stale tomorrow
+
 Conversation:
 `
 
@@ -109,6 +115,11 @@ Rules:
 - If the task completed routinely with nothing notable, return: []
 - Output ONLY the JSON array, no other text
 
+Never capture:
+- Environment-dependent failures as lessons ("command not found", missing binary) unless the lesson IS the fix that made it work
+- "Tool X doesn't work" from a single failed attempt — a stale negative claim gets cited against future runs for months
+- An unresolved failure written as if it were a working procedure
+
 Task execution:
 `
 
@@ -166,6 +177,13 @@ function condenseForExtraction(messages: ChatMessage[]): string {
 
     // Skip system messages (memory injections, etc.)
     if (msg.role === 'system') continue
+
+    // Machine-generated scaffolding framed as user turns — checkpoint nudges, operator
+    // injections, peer/report framing, pinned state. Feeding these to extraction turns
+    // harness plumbing into "facts about the user" (hermes-agent filters the same class).
+    if (msg.role === 'user' && /^\s*\[(System:|report[: ]|Memory:|Pinned task state)/.test(text)) {
+      continue
+    }
 
     // For assistant messages with tool calls, note the tools used but skip details
     if (msg.role === 'assistant' && msg.tool_calls && msg.tool_calls.length > 0) {

@@ -114,6 +114,7 @@ You have access to these tools:
 - \`git_show\` - Show a specific commit's contents and diff
 
 **Memory:**
+- \`working_memory\` - Curate MEMORY.md, your always-loaded working memory (add/replace/remove/list under a hard character budget — when full, consolidate before adding)
 - \`memory_search\` - Search memories (hybrid keyword + semantic, with category and time filters)
 - \`memory_get\` - Retrieve a specific memory by key
 - \`memory_set\` - Store a memory with optional category (fact, preference, decision, project, entity)

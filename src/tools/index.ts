@@ -9,6 +9,7 @@ export {
   createSkillReadTool,
   createTaskTools,
   createWebSearchTool,
+  createWorkingMemoryTool,
   editTool,
   execTool,
   type GitHubConfig,
@@ -49,10 +50,12 @@ export {
 } from './process-registry'
 export type { Tool, ToolDefinition, ToolResult } from './types'
 
+import { join } from 'node:path'
 import type { BrowserManager } from '../browser'
 import type { RuntimeConfig } from '../config'
 import type { ConversationStore } from '../conversation'
 import type { MemoryManager } from '../memory'
+import { withSkillLedger } from '../skills/ledger'
 import type { Skill } from '../skills/types'
 import { log } from '../util/logger'
 import {
@@ -65,6 +68,7 @@ import {
   createPeerTools,
   createProcessTools,
   createWebSearchTool,
+  createWorkingMemoryTool,
   editTool,
   execTool,
   type GitHubConfig,
@@ -141,9 +145,23 @@ export function createDefaultToolExecutor(
     )
   }
 
-  // File tools (read, write, edit, glob)
+  // File tools (read, write, edit, glob). Writes into a skills directory are recorded in the
+  // skill mutation ledger (content-addressed before/after), making every skill edit — /learn,
+  // manual, or a future autonomous pass — individually rollbackable. Telemetry, not a gate.
   if (t.files) {
-    executor.registerAll([readTool, writeTool, editTool, globTool])
+    // Optional chain: tests construct minimal configs without a skills section.
+    const skillsDirs = config.skills?.dirs ?? []
+    if (skillsDirs.length > 0) {
+      const ledgerDir = join(config.workspace.path, '.skill-ledger')
+      executor.registerAll([
+        readTool,
+        withSkillLedger(writeTool, skillsDirs, ledgerDir),
+        withSkillLedger(editTool, skillsDirs, ledgerDir),
+        globTool,
+      ])
+    } else {
+      executor.registerAll([readTool, writeTool, editTool, globTool])
+    }
   }
 
   // Shell execution
@@ -210,6 +228,13 @@ export function createDefaultToolExecutor(
       }),
     )
   } else if (t.webSearch) missingDep('web_search', 'no [searxng] url is configured')
+
+  // Working memory (MEMORY.md curation under a char budget). Needs only the workspace —
+  // it works even when the embedding-backed memory system is not configured. (Optional
+  // chain: tests construct minimal configs without a workspace section.)
+  if (t.memory && config.workspace?.path) {
+    executor.register(createWorkingMemoryTool(config.workspace.path))
+  }
 
   // Memory tools (functional if MemoryManager provided)
   if (t.memory) {

@@ -1,6 +1,7 @@
 import { readdir, readFile, stat } from 'fs/promises'
 import { join } from 'path'
 import { log } from '../util/logger'
+import { formatLintFindings, lintSkill } from './linter'
 import { extractSkillDescription, extractSkillName, parseSkillMarkdown } from './parser'
 import type { Skill } from './types'
 
@@ -35,6 +36,10 @@ export async function loadSkillsFromDirectory(directory: string): Promise<Skill[
 
         skills.push(skill)
         log.debug('skills', `Loaded skill: ${skill.name} from ${skillPath}`)
+
+        // Advisory only: a badly-described skill loads fine, it just never gets routed to.
+        const lint = formatLintFindings(skill.name, lintSkill(skill))
+        if (lint) log.warn('skills', lint)
       } catch {
         // No SKILL.md or couldn't read it, skip
       }

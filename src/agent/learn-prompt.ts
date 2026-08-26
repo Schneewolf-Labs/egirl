@@ -54,6 +54,11 @@ export function buildLearnPrompt(userRequest: string, skillsDir: string): string
     `   - "## Instructions" — the distilled procedure\n` +
     `4. If a skill with substantially this purpose already exists in ${skillsDir}, improve that ` +
     `file instead of creating a near-duplicate.\n` +
+    `   Quality checks (lint warns on violations at load): name the CLASS of task, never the ` +
+    `instance ("wine-probe-capture", not "fix-ddraw-today"); keep the description under ~200 ` +
+    `chars with the trigger condition in it (listings truncate — front-load when to use it); ` +
+    `no marketing language; any relative link in the body must point at a file you actually ` +
+    `create next to the SKILL.md.\n` +
     `5. Finish by telling the user the skill's name, where you wrote it, and a one-line summary ` +
     `of what it covers. Note that it loads on the next restart.\n\n` +
     `Honor every requirement in the request while doing the above.`
