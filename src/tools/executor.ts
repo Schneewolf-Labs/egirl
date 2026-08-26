@@ -25,6 +25,23 @@ const SCANNABLE_TOOLS = new Set([
   'code_agent',
 ])
 
+/**
+ * Tools that mutate shared state and therefore must not race each other within one turn.
+ * A model that emits two execute_command calls in one reply means them in order — `cd`
+ * effects, file writes, and probe scripts all assume it. Reads and lookups stay concurrent.
+ * (Hermes runs its interactive tools sequentially for the same reason.)
+ */
+const SEQUENTIAL_TOOLS = new Set([
+  'execute_command',
+  'write_file',
+  'edit_file',
+  'git_commit',
+  'code_agent',
+  'process_start',
+  'process_send_input',
+  'process_stop',
+])
+
 export class ToolExecutor {
   private tools: Map<string, Tool> = new Map()
   private safety?: SafetyConfig
@@ -276,14 +293,24 @@ export class ToolExecutor {
       }
     }
 
-    const executions = calls.map(async (call) => {
-      const result = await this.execute(call, cwd)
-      return { id: call.id, result }
-    })
+    // Mutating tools run strictly in emission order; everything else runs concurrently
+    // alongside them. Two execute_command calls in one turn racing each other corrupts the
+    // very state (cwd, files, probe output) the second call assumes the first prepared.
+    const sequential = calls.filter((c) => SEQUENTIAL_TOOLS.has(this.resolveName(c.name) ?? c.name))
+    const parallel = calls.filter((c) => !SEQUENTIAL_TOOLS.has(this.resolveName(c.name) ?? c.name))
 
-    const resolved = await Promise.all(executions)
+    const parallelDone = Promise.all(
+      parallel.map(async (call) => {
+        const result = await this.execute(call, cwd)
+        return { id: call.id, result }
+      }),
+    )
 
-    for (const { id, result } of resolved) {
+    for (const call of sequential) {
+      results.set(call.id, await this.execute(call, cwd))
+    }
+
+    for (const { id, result } of await parallelDone) {
       results.set(id, result)
     }
 

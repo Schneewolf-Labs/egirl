@@ -54,3 +54,61 @@ describe('executor required-parameter validation', () => {
     expect(r.success).toBe(true)
   })
 })
+
+describe('executeAll ordering', () => {
+  test('mutating tools run sequentially in emission order; reads stay concurrent', async () => {
+    const ex = createToolExecutor()
+    const order: string[] = []
+    let execActive = 0
+    let execOverlap = false
+    ex.register({
+      definition: {
+        name: 'execute_command',
+        description: 'run',
+        parameters: {
+          type: 'object',
+          properties: { command: { type: 'string' } },
+          required: ['command'],
+        },
+      },
+      async execute(params): Promise<ToolResult> {
+        execActive++
+        if (execActive > 1) execOverlap = true
+        await new Promise((r) => setTimeout(r, 20))
+        order.push(`exec:${params.command}`)
+        execActive--
+        return { success: true, output: 'ok' }
+      },
+    })
+    ex.register({
+      definition: {
+        name: 'read_file',
+        description: 'read',
+        parameters: {
+          type: 'object',
+          properties: { path: { type: 'string' } },
+          required: ['path'],
+        },
+      },
+      async execute(params): Promise<ToolResult> {
+        order.push(`read:${params.path}`)
+        return { success: true, output: 'data' }
+      },
+    })
+
+    const results = await ex.executeAll(
+      [
+        { id: 'a', name: 'execute_command', arguments: { command: 'first' } },
+        { id: 'b', name: 'read_file', arguments: { path: '/x' } },
+        { id: 'c', name: 'execute_command', arguments: { command: 'second' } },
+      ],
+      '/tmp',
+    )
+
+    expect(execOverlap).toBe(false)
+    expect(order.filter((o) => o.startsWith('exec'))).toEqual(['exec:first', 'exec:second'])
+    expect(results.get('a')?.success).toBe(true)
+    expect(results.get('b')?.success).toBe(true)
+    expect(results.get('c')?.success).toBe(true)
+  })
+})

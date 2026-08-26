@@ -305,7 +305,7 @@ export class AgentLoop {
           const minsLeft = Math.max(1, Math.round((deadline - Date.now()) / 60_000))
           addMessage(this.context, {
             role: 'user',
-            content: `[System: You have been working for nearly this round's full time budget — about ${minsLeft} minute(s) remain before the run ends automatically. Stop starting new work now. Write everything you have learned to your durable notes, save any in-progress artifacts to files, and update your Status/NEXT so the next run resumes cleanly, then give a brief wrap-up. This is a scheduled break, not a failure — you will pick up where you left off in the next run.]`,
+            content: `[System: You have been working for nearly this round's full time budget — about ${minsLeft} minute(s) remain before the run ends automatically. Stop starting new work now. Write everything you have learned to your durable notes, save any in-progress artifacts to files, and update your Status/NEXT so the next run resumes cleanly, then give a brief wrap-up. If this run developed a reusable procedure worth keeping — a setup ritual, a debugging recipe, a verified command sequence — and it is not yet a skill, spend one minute writing it as a SKILL.md in your skills directory so future runs start with it. This is a scheduled break, not a failure — you will pick up where you left off in the next run.]`,
           })
         }
 
