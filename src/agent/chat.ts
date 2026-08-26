@@ -13,6 +13,41 @@ import { formatSummaryMessage } from './context-summarizer'
 import { fitToContextWindow } from './context-window'
 import { pruneMalformedCallPairs, toolsWithRequiredParams } from './history-hygiene'
 
+const IMAGE_STRIPPED_MARKER =
+  '[image omitted: this endpoint has no image support (no mmproj). Capture to a file and inspect it with shell tools instead.]'
+
+/** Replace image content (data-URL strings and image_url parts) with a text marker. */
+export function stripImageContent(messages: ChatMessage[]): {
+  messages: ChatMessage[]
+  changed: boolean
+  count: number
+} {
+  let count = 0
+  const out = messages.map((m) => {
+    if (typeof m.content === 'string') {
+      if (m.content.startsWith('data:') && m.content.includes(';base64,')) {
+        count++
+        return { ...m, content: IMAGE_STRIPPED_MARKER }
+      }
+      return m
+    }
+    if (Array.isArray(m.content)) {
+      let touched = false
+      const parts = m.content.map((p) => {
+        if (p.type === 'image_url') {
+          touched = true
+          count++
+          return { type: 'text' as const, text: IMAGE_STRIPPED_MARKER }
+        }
+        return p
+      })
+      if (touched) return { ...m, content: parts }
+    }
+    return m
+  })
+  return { messages: out, changed: count > 0, count }
+}
+
 /**
  * Call provider.chat with classified retry logic.
  * Retries on transient/rate-limit errors with appropriate backoff.
@@ -42,11 +77,12 @@ export async function chatWithRetry(args: {
     maxRetries = 2,
   } = args
   let lastError: unknown
+  let sendMessages = messages
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       return await provider.chat({
-        messages,
+        messages: sendMessages,
         tools,
         onToken,
         onThinkingToken,
@@ -60,6 +96,25 @@ export async function chatWithRetry(args: {
       if (signal?.aborted) throw error
 
       const errorMsg = error instanceof Error ? error.message : String(error)
+
+      // A text-only endpoint rejects the whole request when any message carries an image
+      // ("image input is not supported ... you may need to provide the mmproj"). Retrying the
+      // identical request can never succeed, and one stray screenshot in a persisted session
+      // fails EVERY subsequent run of that session — observed as five straight instant
+      // failures auto-pausing a healthy task. Strip the images to text markers and retry:
+      // losing a picture is survivable, losing the whole conversation is not.
+      if (/image input is not supported/i.test(errorMsg)) {
+        const stripped = stripImageContent(sendMessages)
+        if (stripped.changed) {
+          log.warn(
+            'agent',
+            `Provider rejects image input — stripped ${stripped.count} image(s) to text markers and retrying`,
+          )
+          sendMessages = stripped.messages
+          continue
+        }
+      }
+
       const errorKind = classifyProviderError(errorMsg)
 
       if (!isRetryable(errorKind) || attempt >= maxRetries) {
