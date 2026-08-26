@@ -3,7 +3,7 @@ import { AgentLoop } from '../agent/loop'
 import type { RuntimeConfig } from '../config'
 import type { MemoryManager } from '../memory'
 import type { ChatMessage, LLMProvider } from '../providers/types'
-import { createMemoryTools, createWorkingMemoryTool, readTool } from '../tools/builtin'
+import { createMemoryTools, createWorkingMemoryTool, globTool, readTool } from '../tools/builtin'
 import { createSkillManageTool } from '../tools/builtin/skill-manage'
 import { createToolExecutor } from '../tools/executor'
 import { log } from '../util/logger'
@@ -25,15 +25,17 @@ const REVIEW_MAX_TURNS = 8
 
 const REVIEW_PROMPT = `[Post-run self-review. You are reviewing the run you just completed — digest below. You have ONLY skill and memory tools this pass; your job is to make future runs better, then stop.
 
-Priority order (strict — prefer the earliest that applies):
+Step 1 — ALWAYS first: list the existing skills with glob_files (pattern "*/SKILL.md" in the skills directory) so you know what can be patched.
+
+Step 2 — skills, in strict priority order (prefer the earliest that applies):
 1. A skill you USED this run was wrong, incomplete, or missing a gotcha you hit → patch THAT skill (skill_manage action "patch"; read it first with read_file).
 2. A procedure you developed or refined this run fits an EXISTING skill's purpose → patch that skill rather than creating a near-duplicate.
-3. Only a genuinely NEW class of reusable procedure justifies a new skill — name it for the CLASS of task ("wine-probe-capture"), never the session ("fix-ddraw-today").
-4. Durable facts, decisions-with-why, and lessons → memory_set. Facts that must be true EVERY session → working_memory.
+3. A genuinely NEW class of reusable procedure — a setup ritual, a verified command sequence, a debugging recipe you would need again — deserves a new skill, named for the CLASS of task ("wine-probe-capture"), never the session ("fix-ddraw-today").
+Most runs that did real work justify at least one skill update: a missing gotcha, a new flag, a verified sequence. A procedure that lives only in notes gets re-derived every run; a skill gets reused. If you update no skill, state specifically why nothing qualified.
 
-Never capture: environment-dependent failures (if you found the fix, capture the FIX); "tool X doesn't work" from one failed attempt; an unresolved failure written up as a working procedure. Corrections from the user about style or approach ARE first-class skill/memory material.
+Step 3 — memory: durable facts, decisions-with-why, and lessons → memory_set. Facts that must be true EVERY session → working_memory.
 
-If the run genuinely produced nothing reusable, say "nothing to capture" and stop — do not invent updates to look busy.]
+Never capture: environment-dependent failures (if you found the fix, capture the FIX); "tool X doesn't work" from one failed attempt; an unresolved failure written up as a working procedure. Corrections from the user about style or approach ARE first-class skill/memory material. Do not invent updates to look busy — but do not file real procedures under memory when they belong in a skill.]
 
 Run digest:
 `
@@ -93,6 +95,7 @@ export async function runSelfReview(
     const executor = createToolExecutor()
     const ledgerDir = join(deps.config.workspace.path, '.skill-ledger')
     executor.register(readTool)
+    executor.register(globTool)
     executor.register(createSkillManageTool(skillsDirs, ledgerDir, { actor: 'background' }))
     executor.register(createWorkingMemoryTool(deps.config.workspace.path))
     if (deps.memory) {
