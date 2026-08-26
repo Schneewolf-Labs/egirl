@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { mkdirSync, mkdtempSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { ChatMessage, ChatResponse, LLMProvider } from '../../src/providers/types'
@@ -93,5 +93,31 @@ describe('runSelfReview', () => {
     const second = await runSelfReview('t3', 'test-task', messagesFixture(), deps)
     expect(second).toBe(false)
     expect(await first).toBe(true)
+  })
+})
+
+describe('skill inventory injection', () => {
+  test('the review prompt carries the actual skill inventory', async () => {
+    const ws = mkdtempSync(join(tmpdir(), 'egirl-sr4-'))
+    const skillsDir = join(ws, 'skills')
+    mkdirSync(join(skillsDir, 'wine-probe-capture'), { recursive: true })
+    writeFileSync(join(skillsDir, 'wine-probe-capture/SKILL.md'), '# Wine Probe Capture\n\nx')
+    const config = { ...makeConfig(ws), skills: { dirs: [skillsDir] } }
+    let seenPrompt = ''
+    const provider: LLMProvider = {
+      name: 'stub',
+      async chat({ messages }): Promise<ChatResponse> {
+        seenPrompt = String(messages.find((m) => m.role === 'user')?.content ?? '')
+        return {
+          content: 'nothing to capture',
+          provider: 'stub',
+          usage: { input_tokens: 1, output_tokens: 1 },
+          model: 'stub',
+        } as ChatResponse
+      },
+    }
+    await runSelfReview('t9', 'test-task', messagesFixture(), { config, provider })
+    expect(seenPrompt).toContain('Existing skills (prefer patching these')
+    expect(seenPrompt).toContain('wine-probe-capture')
   })
 })

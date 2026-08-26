@@ -1,3 +1,4 @@
+import { existsSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { AgentLoop } from '../agent/loop'
 import type { RuntimeConfig } from '../config'
@@ -25,7 +26,7 @@ const REVIEW_MAX_TURNS = 8
 
 const REVIEW_PROMPT = `[Post-run self-review. You are reviewing the run you just completed — digest below. You have ONLY skill and memory tools this pass; your job is to make future runs better, then stop.
 
-Step 1 — ALWAYS first: list the existing skills with glob_files (pattern "*/SKILL.md" in the skills directory) so you know what can be patched.
+Step 1 — the existing skills are inventoried for you at the end of this message. Read any candidate with read_file before patching it.
 
 Step 2 — skills, in strict priority order (prefer the earliest that applies):
 1. A skill you USED this run was wrong, incomplete, or missing a gotcha you hit → patch THAT skill (skill_manage action "patch"; read it first with read_file).
@@ -88,6 +89,23 @@ export async function runSelfReview(
   const digest = digestRun(messages)
   if (digest.length < 200) return false // nothing happened worth reviewing
 
+  // Deterministic skill inventory. The fork was told to glob for skills and globbed the
+  // wrong root — concluding "no skills exist" with one sitting in the global dir, which
+  // silently defeats the patch-first ladder. We know the dirs; list them ourselves.
+  const inventory: string[] = []
+  for (const dir of skillsDirs) {
+    if (!existsSync(dir)) continue
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (!entry.isDirectory() || entry.name.startsWith('.')) continue
+      const skillFile = join(dir, entry.name, 'SKILL.md')
+      if (existsSync(skillFile)) inventory.push(`- ${entry.name} (${skillFile})`)
+    }
+  }
+  const inventoryBlock =
+    inventory.length > 0
+      ? `\n\nExisting skills (prefer patching these — read with read_file first):\n${inventory.join('\n')}\n`
+      : '\n\nExisting skills: none yet.\n'
+
   inFlight.add(taskId)
   try {
     // Restricted toolset: reading plus skill/memory mutation, nothing else. The background
@@ -112,7 +130,9 @@ export async function runSelfReview(
         'You are in a restricted post-run review pass: skill and memory tools only. Be brief and concrete.',
     })
 
-    const response = await agent.run(REVIEW_PROMPT + digest, { maxTurns: REVIEW_MAX_TURNS })
+    const response = await agent.run(REVIEW_PROMPT + digest + inventoryBlock, {
+      maxTurns: REVIEW_MAX_TURNS,
+    })
     log.info(
       'self-review',
       `Review for ${taskName} finished: ${response.content.slice(0, 160).replace(/\n/g, ' ')}`,
