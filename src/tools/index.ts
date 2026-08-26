@@ -124,6 +124,7 @@ export function createDefaultToolExecutor(
   processRegistry?: ProcessRegistry,
   skills?: Skill[],
   conversationStore?: ConversationStore,
+  visionSupported?: boolean,
 ) {
   const executor = createToolExecutor()
   const t = config.tools
@@ -194,8 +195,11 @@ export function createDefaultToolExecutor(
     executor.registerAll([gitStatusTool, gitDiffTool, gitLogTool, gitCommitTool, gitShowTool])
   }
 
-  // Screenshot
-  if (t.screenshot) {
+  // Screenshot. Explicit true/false in the toml always wins; unset means auto — register
+  // only when the endpoint actually accepts images (probed via /props modalities.vision).
+  // Offering the tool to a text-only endpoint invites a screenshot into the session that
+  // then 500s every request wholesale.
+  if (t.screenshot === true || (t.screenshot === 'auto' && visionSupported === true)) {
     executor.register(screenshotTool)
   }
 

@@ -711,7 +711,8 @@ export interface RuntimeConfig {
     consult: boolean
     webResearch: boolean
     webSearch: boolean
-    screenshot: boolean
+    /** true/false = explicit; 'auto' (unset in toml) = only when the endpoint reports vision. */
+    screenshot: boolean | 'auto'
   }
   skills: {
     dirs: string[]

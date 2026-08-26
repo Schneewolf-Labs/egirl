@@ -15,6 +15,7 @@ import {
 import { discoverPeers, mergePeers, registerSelf } from './peers/discovery'
 import { createPermissionSupervisor } from './permissions/supervisor'
 import { createProviderRegistry, type ProviderRegistry } from './providers'
+import { probeVisionSupport } from './providers/vision-probe'
 import { buildSafetyConfig } from './safety/config-bridge'
 import { loadSkillsFromDirectories } from './skills'
 import type { Skill } from './skills/types'
@@ -251,6 +252,17 @@ export async function createAppServices(config: RuntimeConfig): Promise<AppServi
     localProvider: providers.local,
     memory,
   })
+  // Screenshot gating: unset in config means auto-detect from the endpoint's modalities.
+  const visionSupported =
+    config.tools.screenshot === 'auto'
+      ? await probeVisionSupport(config.local.endpoint, config.local.apiKey)
+      : undefined
+  if (config.tools.screenshot === 'auto') {
+    log.info(
+      'bootstrap',
+      `Endpoint vision support: ${visionSupported} — screenshot tool ${visionSupported ? 'enabled' : 'disabled'}`,
+    )
+  }
   const toolExecutor = createDefaultToolExecutor(
     config,
     memory,
@@ -262,6 +274,7 @@ export async function createAppServices(config: RuntimeConfig): Promise<AppServi
     processRegistry,
     skills,
     conversations,
+    visionSupported,
   )
   // MCP tools join the same executor as the builtins, so safety, energy and permissions apply to
   // them identically. A server that is down costs its own tools and nothing else.

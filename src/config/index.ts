@@ -444,7 +444,7 @@ export function loadConfig(options: LoadConfigOptions = {}): RuntimeConfig {
       consult: toml.tools?.consult ?? true,
       webResearch: toml.tools?.web_research ?? true,
       webSearch: toml.tools?.web_search ?? true,
-      screenshot: toml.tools?.screenshot ?? true,
+      screenshot: toml.tools?.screenshot ?? 'auto',
     },
     skills: {
       dirs: (toml.skills?.dirs ?? defaultToml.skills.dirs).map((d) => expandPath(d, workspacePath)),
