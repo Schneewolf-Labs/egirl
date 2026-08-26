@@ -289,7 +289,7 @@ export class AgentLoop {
               : 'Pause new work and consolidate — write everything you have learned since your last checkpoint'
             addMessage(this.context, {
               role: 'user',
-              content: `[System: Checkpoint. ${urgency} to your durable notes, and save any artifacts to files. Assume this run could end at any moment: nothing important should live only in this conversation. Then continue where you left off.]`,
+              content: `[System: Checkpoint. ${urgency} to your durable notes, and save any artifacts to files. Also store anything worth remembering across sessions — a proven fact, a decision and its why, a lesson — with memory_set now, while the context is still in front of you. Assume this run could end at any moment: nothing important should live only in this conversation. Then continue where you left off.]`,
             })
           }
         }
