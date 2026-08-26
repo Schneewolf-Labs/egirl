@@ -175,7 +175,7 @@ export function createSkillManageTool(
         // instead we require frontmatter-less content and stamp our own.
         const body = content.startsWith('---')
           ? content
-          : `---\nmetadata:\n  egirl:\n    origin: agent\n---\n\n${content.trim()}\n`
+          : `---\negirl:\n  origin: agent\n---\n\n${content.trim()}\n`
 
         const lint = lintContent(name, join(authoringDir, name), body)
         if (lint.errors) {

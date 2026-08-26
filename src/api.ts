@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import type { AgentFactory, AgentLoop } from './agent'
 import { buildLearnPrompt } from './agent/learn-prompt'
 import type { RuntimeConfig } from './config'
@@ -17,7 +19,11 @@ import {
 import type { PushNotifier, PushStore } from './push'
 import { renderManifest, renderServiceWorker } from './push/assets'
 import type { ConsoleInbox } from './report/console-channel'
+import { readLedger } from './skills/ledger'
+import { lintSkill } from './skills/linter'
+import { loadSkillsFromDirectories } from './skills/loader'
 import type { Task, TaskRunner, TaskStore } from './tasks'
+import { WORKING_MEMORY_MAX_CHARS } from './tools/builtin/working-memory'
 import { getTheme } from './ui/theme'
 import { log } from './util/logger'
 import { ansiToHex, renderChatPage } from './web-ui'
@@ -565,6 +571,48 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
         // without a human in it, so "who is out there and are they up" needs somewhere to be
         // looked at. Each peer is pinged on /peer/identity in parallel, with a short timeout —
         // this is a status view, not a reason to make the page hang on a dead host.
+        // Read-only view of the self-improvement surface: skills with provenance and lint
+        // state, the mutation ledger, and working-memory budget. Exists to watch the
+        // autonomous learn loop from the console without touching it.
+        if (method === 'GET' && path === '/growth') {
+          const cfg = deps.config
+          if (!cfg) return err('config unavailable', 500)
+          const dirs = cfg.skills?.dirs ?? []
+          const loaded = await loadSkillsFromDirectories(dirs)
+          const skills = loaded.map((s) => {
+            const findings = lintSkill(s)
+            const meta = s.metadata as { egirl?: { origin?: string } }
+            return {
+              name: s.name,
+              description: s.description,
+              origin: meta.egirl?.origin ?? 'user',
+              lint_warnings: findings.filter((f) => f.level === 'warning').length,
+              lint_errors: findings.filter((f) => f.level === 'error').length,
+            }
+          })
+          const ledger = readLedger(join(cfg.workspace.path, '.skill-ledger'))
+            .slice(-30)
+            .reverse()
+            .map((e) => ({
+              ts: e.ts,
+              actor: e.actor,
+              tool: e.tool,
+              path: e.path,
+              kind: e.before === null ? 'created' : e.after === null ? 'archived' : 'modified',
+            }))
+          let workingMemory = { chars: 0, budget: WORKING_MEMORY_MAX_CHARS, entries: 0 }
+          try {
+            const raw = readFileSync(join(cfg.workspace.path, 'MEMORY.md'), 'utf8')
+            const entries = raw.split('\n').filter((l) => l.trim().length > 0)
+            workingMemory = {
+              chars: entries.join('\n').length,
+              budget: WORKING_MEMORY_MAX_CHARS,
+              entries: entries.length,
+            }
+          } catch {}
+          return json({ skills, ledger, working_memory: workingMemory })
+        }
+
         if (method === 'GET' && path === '/peers') {
           const peers = deps.config?.peers ?? []
           const probed = await Promise.all(

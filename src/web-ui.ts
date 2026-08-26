@@ -294,6 +294,7 @@ button.go.stopbtn{background:linear-gradient(135deg,#ff5f87,#c0395a)}
   <button data-tab="tasks" aria-selected="false">tasks</button>
   <button data-tab="inbox" aria-selected="false">inbox<span class="count" id="inboxn" hidden>0</span></button>
   <button data-tab="peers" aria-selected="false">peers</button>
+  <button data-tab="growth" aria-selected="false">growth</button>
   <button data-tab="memory" aria-selected="false">memory</button>
   <button data-tab="prompt" aria-selected="false">prompt</button>
   <button data-tab="info" aria-selected="false">settings</button>
@@ -328,6 +329,10 @@ button.go.stopbtn{background:linear-gradient(135deg,#ff5f87,#c0395a)}
 
   <section class="tab" data-name="peers">
     <div class="tasklist" id="peers"><div class="empty">loading…</div></div>
+  </section>
+
+  <section class="tab" data-name="growth">
+    <div class="tasklist" id="growth"><div class="empty">loading…</div></div>
   </section>
 
   <section class="tab" data-name="memory">
@@ -410,6 +415,7 @@ $('tabs').onclick=e=>{
   if(t==='tasks')refreshTasks(true).catch(()=>{});
   if(t==='inbox')loadInbox().catch(()=>{});
   if(t==='peers')loadPeers();
+  if(t==='growth')loadGrowth();
   // Context moves with every turn, so it is re-read each time settings is opened.
   if(t==='info'){loadContext();pushInit()}
 };
@@ -1045,6 +1051,38 @@ async function loadPeers(){
       '<div class="acts"><button data-peer="'+esc(p.name)+'">open conversation</button></div></div>';
   }).join('');
 }
+// ---- Growth (the self-improvement surface: skills, ledger, working memory) ----
+async function loadGrowth(){
+  const box=$('growth');
+  let d;
+  try{ d=await (await fetch('growth',{headers:H()})).json() }
+  catch(e){ box.innerHTML='<div class="empty">could not load: '+esc(e.message||e)+'</div>'; return }
+  const skills=d.skills||[], ledger=d.ledger||[], wm=d.working_memory||{};
+  const pct=wm.budget?Math.round(100*wm.chars/wm.budget):0;
+  let html='<div class="task"><div class="top"><span class="nm">working memory</span></div>'+
+    '<div class="meta"><span>'+(wm.entries||0)+' entries</span><span>'+(wm.chars||0)+'/'+(wm.budget||0)+' chars ('+pct+'%)</span></div></div>';
+  if(!skills.length){
+    html+='<div class="empty">No skills yet. When the agent distills a procedure (or you run /learn), it appears here.</div>';
+  }else{
+    html+=skills.map(sk=>{
+      const bits=[esc(sk.description||'(no description)')];
+      if(sk.lint_errors)bits.push('<span class="warn">'+sk.lint_errors+' lint error(s)</span>');
+      else if(sk.lint_warnings)bits.push('<span class="warn">'+sk.lint_warnings+' lint warning(s)</span>');
+      return '<div class="task"><div class="top"><span class="badge '+(sk.origin==='agent'?'active':'')+'">'+
+        esc(sk.origin)+'</span><span class="nm">'+esc(sk.name)+'</span></div>'+
+        '<div class="meta">'+bits.map(b=>'<span>'+b+'</span>').join('')+'</div></div>';
+    }).join('');
+  }
+  if(ledger.length){
+    html+='<div class="task"><div class="top"><span class="nm">recent skill mutations</span></div><div class="meta">'+
+      ledger.slice(0,12).map(en=>{
+        const file=esc(String(en.path).split('/').slice(-2).join('/'));
+        return '<span>'+esc(en.ts.slice(0,16).replace('T',' '))+' · '+esc(en.actor)+' '+esc(en.kind)+' '+file+'</span>';
+      }).join('')+'</div></div>';
+  }
+  box.innerHTML=html;
+}
+
 // A peer conversation is just a session named peer:<name> — open it in the chat tab.
 $('peers').onclick=e=>{
   const btn=e.target.closest('button[data-peer]'); if(!btn)return;

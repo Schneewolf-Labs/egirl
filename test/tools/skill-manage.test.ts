@@ -135,3 +135,27 @@ describe('skill_manage', () => {
     expect(existsSync(join(skillsDir, '.archive/wine-probe-capture/SKILL.md'))).toBe(true)
   })
 })
+
+describe('background actor on agent-owned skills', () => {
+  test('background CAN patch a skill created by skill_manage (provenance round-trip)', async () => {
+    // Regression: provenance was stamped under a nested metadata: key the parser does not
+    // read, so isAgentOwned was false even for the tool's own creations and the review fork
+    // could never evolve anything.
+    const creator = createSkillManageTool([skillsDir], ledgerDir)
+    await creator.execute(
+      { action: 'create', name: 'wine-probe-capture', content: GOOD_BODY },
+      skillsDir,
+    )
+    const background = createSkillManageTool([skillsDir], ledgerDir, { actor: 'background' })
+    const r = await background.execute(
+      {
+        action: 'patch',
+        name: 'wine-probe-capture',
+        old_text: 'Run the probe script.',
+        new_text: 'Run the probe script under WINEDEBUG.',
+      },
+      skillsDir,
+    )
+    expect(r.success).toBe(true)
+  })
+})
