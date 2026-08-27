@@ -161,7 +161,12 @@ export function createConsultTool(consultants: ConsultantEntry[], workspaceDir: 
       const controller = new AbortController()
       const timer = setTimeout(() => controller.abort(), consultant.timeoutMs)
       try {
+        // Bun's fetch carries its own default 300s timeout that fires BEFORE our
+        // AbortController budget — three real consults died at ~5min while the model was
+        // still legitimately thinking. timeout:false leaves cancellation to our controller.
         const res = await fetch(`${consultant.endpoint}/chat/completions`, {
+          // @ts-expect-error Bun extension: disable fetch's built-in timeout
+          timeout: false,
           method: 'POST',
           headers: {
             'content-type': 'application/json',
