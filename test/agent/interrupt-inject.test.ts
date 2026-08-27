@@ -119,4 +119,38 @@ describe('inject', () => {
     // And it stays in context for every later request.
     expect(hasNote(seen[seen.length - 1] ?? [])).toBe(true)
   })
+
+  test('multiple injections arrive in order at one turn boundary', async () => {
+    let agent: AgentLoop | undefined
+    let lastRequest: Array<{ role: string; content: unknown }> = []
+    let n = 0
+    const provider: LLMProvider = {
+      name: 'stub',
+      async chat(req: ChatRequest): Promise<ChatResponse> {
+        lastRequest = req.messages.map((m) => ({ role: m.role, content: m.content }))
+        n++
+        if (n === 2) {
+          agent?.inject('first note')
+          agent?.inject('second note')
+        }
+        if (n >= 4) return stubResponse({ content: 'done' })
+        return stubResponse({
+          tool_calls: [{ id: `c${n}`, name: 'noop', arguments: { n } }],
+          finish_reason: 'tool_calls',
+        })
+      },
+    }
+    agent = makeAgent(provider, 'test:inject-fifo')
+    await agent.run('go', { maxTurns: 8 })
+
+    const indexOf = (needle: string) =>
+      lastRequest.findIndex((m) => typeof m.content === 'string' && m.content.includes(needle))
+    const first = indexOf('first note')
+    const second = indexOf('second note')
+    // Both were delivered, as separate user messages, in the order they were queued.
+    expect(first).toBeGreaterThan(-1)
+    expect(second).toBeGreaterThan(first)
+    expect(lastRequest[first]?.role).toBe('user')
+    expect(lastRequest[second]?.role).toBe('user')
+  })
 })
