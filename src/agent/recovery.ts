@@ -17,22 +17,33 @@ import { CONTINUATION_NUDGE, PROCESS_TOOL_RESULTS_NUDGE, REISSUE_TOOL_CALL_NUDGE
 import { isRepetitionDominated } from './repetition-guard'
 import type { RunState } from './run-state'
 
-/** Maximum number of continuation retries when response is truncated (finish_reason: length) */
-const MAX_CONTINUATION_RETRIES = 3
+/** Retry budgets for the recovery rules, overridable via `[recovery]` in egirl.toml. */
+export interface RecoveryCaps {
+  /** Continuations for a truncated (finish_reason: length) response. */
+  continuationRetries: number
+  /** Cap on each recovery nudge (stranded tool call, empty-after-tools). */
+  nudgeRetries: number
+  /** Silent retries for a with-no-tools empty response. */
+  emptyRetries: number
+}
 
 /**
- * Cap on each recovery nudge (stranded tool call, empty-after-tools). Hermes uses 3; one was
- * measurably not enough -- a 27B that mangles a call under context pressure often needs a
- * second clean look at the instruction.
+ * The defaults are incident-derived, not arbitrary. Nudges: Hermes uses 3; one was measurably
+ * not enough -- a 27B that mangles a call under context pressure often needs a second clean
+ * look at the instruction. Empty retries are a smaller budget because they add no message --
+ * the request is identical, so the KV-cached prefill makes each one cheap -- and the
+ * deterministic-empty rule usually cuts them off before the cap anyway.
  */
-const MAX_RECOVERY_NUDGES = 3
+export const DEFAULT_RECOVERY_CAPS: RecoveryCaps = {
+  continuationRetries: 3,
+  nudgeRetries: 3,
+  emptyRetries: 2,
+}
 
-/**
- * Retries for a with-no-tools empty response. Distinct from MAX_RECOVERY_NUDGES because these
- * retries add no message -- the request is identical, so the KV-cached prefill makes each one
- * cheap -- and the deterministic-empty rule usually cuts them off before the cap anyway.
- */
-const MAX_EMPTY_RETRIES = 2
+/** Fill any caps the config does not set with the defaults above. */
+export function resolveRecoveryCaps(overrides?: Partial<RecoveryCaps>): RecoveryCaps {
+  return { ...DEFAULT_RECOVERY_CAPS, ...overrides }
+}
 
 export type RecoveryOutcome =
   /** A nudge or silent retry was queued — run another turn. */
@@ -44,8 +55,8 @@ export type RecoveryOutcome =
 
 interface RecoveryRule {
   name: string
-  /** Retry budget for this rule per run. */
-  cap: number
+  /** Retry budget for this rule per run, read from the resolved caps. */
+  cap(caps: RecoveryCaps): number
   /** Does this rule apply to the response at all? */
   when(response: ChatResponse, state: RunState): boolean
   /** Retries already spent, read from the run state. */
@@ -55,7 +66,7 @@ interface RecoveryRule {
   /** Extra retry gate beyond the cap (e.g. the deterministic-empty rule). */
   canRetry?(response: ChatResponse, state: RunState): boolean
   /** Queue one retry: bump the counter and append any nudge messages. */
-  fire(response: ChatResponse, state: RunState, context: AgentContext): void
+  fire(response: ChatResponse, state: RunState, context: AgentContext, cap: number): void
   /** Retries exhausted: return content to abort the run with, or undefined to fall through. */
   onExhausted?(response: ChatResponse, state: RunState): string | undefined
 }
@@ -66,7 +77,7 @@ const rules: RecoveryRule[] = [
   // unlike the rules below, a truncated response is real work in progress, not a failure.
   {
     name: 'continuation',
-    cap: MAX_CONTINUATION_RETRIES,
+    cap: (caps) => caps.continuationRetries,
     when: (response) => response.finish_reason === 'length' && response.content.length > 0,
     spent: (state) => state.continuationRetries,
     // A repetition loop also finishes with finish_reason=length -- the model spent its
@@ -81,12 +92,12 @@ const rules: RecoveryRule[] = [
       )
       return `${state.accumulatedContent + response.content}\n\n[Response aborted: the model entered a repetition loop.]`
     },
-    fire: (response, state, context) => {
+    fire: (response, state, context, cap) => {
       state.continuationRetries++
       state.accumulatedContent += response.content
       log.info(
         'agent',
-        `Response truncated (finish_reason: length), continuation retry ${state.continuationRetries}/${MAX_CONTINUATION_RETRIES}`,
+        `Response truncated (finish_reason: length), continuation retry ${state.continuationRetries}/${cap}`,
       )
       addMessage(context, { role: 'assistant', content: response.content })
       addMessage(context, { role: 'user', content: CONTINUATION_NUDGE })
@@ -102,14 +113,14 @@ const rules: RecoveryRule[] = [
   // When retries run out, acceptance strips the dead markup rather than printing it.
   {
     name: 'stranded-tool-call',
-    cap: MAX_RECOVERY_NUDGES,
+    cap: (caps) => caps.nudgeRetries,
     when: (response) => hasStrandedToolCall(response.content),
     spent: (state) => state.strandedToolRetries,
-    fire: (response, state, context) => {
+    fire: (response, state, context, cap) => {
       state.strandedToolRetries++
       log.info(
         'agent',
-        `Tool call could not be parsed; asking for a reissue (${state.strandedToolRetries}/${MAX_RECOVERY_NUDGES})`,
+        `Tool call could not be parsed; asking for a reissue (${state.strandedToolRetries}/${cap})`,
       )
       addMessage(context, { role: 'assistant', content: response.content, ephemeral: true })
       addMessage(context, { role: 'user', content: REISSUE_TOOL_CALL_NUDGE, ephemeral: true })
@@ -123,14 +134,14 @@ const rules: RecoveryRule[] = [
   // back at the tool results it ignored. Same ephemeral contract as above.
   {
     name: 'empty-after-tools',
-    cap: MAX_RECOVERY_NUDGES,
+    cap: (caps) => caps.nudgeRetries,
     when: (response, state) => !response.content.trim() && state.toolsRan,
     spent: (state) => state.emptyAfterToolsRetries,
-    fire: (_response, state, context) => {
+    fire: (_response, state, context, cap) => {
       state.emptyAfterToolsRetries++
       log.info(
         'agent',
-        `Empty response after tool execution; re-prompting (${state.emptyAfterToolsRetries}/${MAX_RECOVERY_NUDGES})`,
+        `Empty response after tool execution; re-prompting (${state.emptyAfterToolsRetries}/${cap})`,
       )
       addMessage(context, { role: 'user', content: PROCESS_TOOL_RESULTS_NUDGE, ephemeral: true })
     },
@@ -145,17 +156,17 @@ const rules: RecoveryRule[] = [
   // can land differently next time.
   {
     name: 'empty-response',
-    cap: MAX_EMPTY_RETRIES,
+    cap: (caps) => caps.emptyRetries,
     when: (response, state) => !response.content.trim() && !state.toolsRan,
     spent: (state) => state.emptyRetries,
     canRetry: (response, state) =>
       !(response.usage.output_tokens === 0 && state.prevEmptyWasZeroOutput),
-    fire: (response, state) => {
+    fire: (response, state, _context, cap) => {
       state.emptyRetries++
       state.prevEmptyWasZeroOutput = response.usage.output_tokens === 0
       log.warn(
         'agent',
-        `Empty response (output_tokens=${response.usage.output_tokens}), retrying (${state.emptyRetries}/${MAX_EMPTY_RETRIES})`,
+        `Empty response (output_tokens=${response.usage.output_tokens}), retrying (${state.emptyRetries}/${cap})`,
       )
     },
     onExhausted: (response, state) => {
@@ -178,13 +189,15 @@ export function attemptRecovery(
   response: ChatResponse,
   state: RunState,
   context: AgentContext,
+  caps: RecoveryCaps,
 ): RecoveryOutcome {
   for (const rule of rules) {
     if (!rule.when(response, state)) continue
-    if (rule.spent(state) < rule.cap && (rule.canRetry?.(response, state) ?? true)) {
+    const cap = rule.cap(caps)
+    if (rule.spent(state) < cap && (rule.canRetry?.(response, state) ?? true)) {
       const abortContent = rule.abortReason?.(response, state)
       if (abortContent !== undefined) return { action: 'abort', finalContent: abortContent }
-      rule.fire(response, state, context)
+      rule.fire(response, state, context, cap)
       return { action: 'retry' }
     }
     const exhausted = rule.onExhausted?.(response, state)

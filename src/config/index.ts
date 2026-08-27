@@ -346,6 +346,11 @@ export function loadConfig(options: LoadConfigOptions = {}): RuntimeConfig {
       contextCompaction: toml.conversation?.context_compaction ?? true,
       consolidationInterval: toml.conversation?.consolidation_interval ?? 0,
     },
+    recovery: {
+      continuationRetries: toml.recovery?.continuation_retries ?? 3,
+      nudgeRetries: toml.recovery?.nudge_retries ?? 3,
+      emptyRetries: toml.recovery?.empty_retries ?? 2,
+    },
     channels: {},
     safety: {
       enabled: toml.safety?.enabled ?? true,

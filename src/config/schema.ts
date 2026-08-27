@@ -190,6 +190,14 @@ const baseProperties = {
     }),
   ),
 
+  recovery: Type.Optional(
+    Type.Object({
+      continuation_retries: Type.Number({ default: 3 }),
+      nudge_retries: Type.Number({ default: 3 }),
+      empty_retries: Type.Number({ default: 2 }),
+    }),
+  ),
+
   memory: Type.Optional(
     Type.Object({
       proactive_retrieval: Type.Boolean({ default: true }),
@@ -565,6 +573,15 @@ export interface RuntimeConfig {
     contextCompaction: boolean
     /** Turns between consolidation-break nudges (0 = off). See docs/autonomy-loop.md. */
     consolidationInterval: number
+  }
+  /** Retry budgets for the agent loop's recovery rules. See src/agent/recovery.ts. */
+  recovery?: {
+    /** Continuations for a truncated (finish_reason: length) response. */
+    continuationRetries: number
+    /** Cap on each recovery nudge (stranded tool call, empty-after-tools). */
+    nudgeRetries: number
+    /** Silent retries for a with-no-tools empty response. */
+    emptyRetries: number
   }
   memory: {
     proactiveRetrieval: boolean

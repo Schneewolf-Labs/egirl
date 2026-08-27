@@ -35,7 +35,7 @@ import {
   wrapupNudge,
 } from './nudges'
 import { injectRecalledMemory } from './recall'
-import { attemptRecovery } from './recovery'
+import { attemptRecovery, resolveRecoveryCaps } from './recovery'
 import { createRunState } from './run-state'
 import type { SessionMutex } from './session-mutex'
 import { isReasoningLooping, SpiralDetector, turnSignature } from './spiral-guard'
@@ -205,6 +205,7 @@ export class AgentLoop {
 
     // Every counter and flag scoped to this run — the loop's state machine, made explicit.
     const state = createRunState()
+    const recoveryCaps = resolveRecoveryCaps(this.config.recovery)
     const totalUsage = { input_tokens: 0, output_tokens: 0 }
     let finalContent = ''
     const provider = this.localProvider
@@ -400,7 +401,7 @@ export class AgentLoop {
         // No tool calls — walk the recovery rules (truncation continuation, stranded tool
         // call, the two empty-response shapes). The rules and their rationale live in
         // ./recovery.ts; at most one fires per turn.
-        const recovery = attemptRecovery(response, state, this.context)
+        const recovery = attemptRecovery(response, state, this.context, recoveryCaps)
         if (recovery.action === 'retry') continue
         if (recovery.action === 'abort') {
           finalContent = recovery.finalContent
