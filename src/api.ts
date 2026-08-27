@@ -24,6 +24,7 @@ import { lintSkill } from './skills/linter'
 import { loadSkillsFromDirectories } from './skills/loader'
 import type { Task, TaskRunner, TaskStore } from './tasks'
 import { WORKING_MEMORY_MAX_CHARS } from './tools/builtin/working-memory'
+import { traceStore } from './tracking/traces'
 import { getTheme } from './ui/theme'
 import { log } from './util/logger'
 import { ansiToHex, renderChatPage } from './web-ui'
@@ -584,6 +585,33 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
         // Read-only view of the self-improvement surface: skills with provenance and lint
         // state, the mutation ledger, and working-memory budget. Exists to watch the
         // autonomous learn loop from the console without touching it.
+        // Query the trace store: full turns (with thinking), tool payloads, aux work.
+        // GET /traces?session=&kind=&q=&limit=
+        if (method === 'GET' && path === '/traces') {
+          const store = traceStore()
+          if (!store) return json({ traces: [], tracing: 'off' })
+          const rows = store.query({
+            session: url.searchParams.get('session') ?? undefined,
+            kind: url.searchParams.get('kind') ?? undefined,
+            q: url.searchParams.get('q') ?? undefined,
+            limit: Number(url.searchParams.get('limit') ?? 50),
+          })
+          return json({
+            traces: rows.map((r) => ({
+              id: r.id,
+              ts: r.ts,
+              session: r.session,
+              kind: r.kind,
+              name: r.name,
+              success: r.success === null ? null : r.success === 1,
+              tokens_in: r.tokens_in,
+              tokens_out: r.tokens_out,
+              duration_ms: r.duration_ms,
+              payload: r.payload ? JSON.parse(r.payload) : null,
+            })),
+          })
+        }
+
         if (method === 'GET' && path === '/growth') {
           const cfg = deps.config
           if (!cfg) return err('config unavailable', 500)

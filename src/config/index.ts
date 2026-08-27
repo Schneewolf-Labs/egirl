@@ -451,6 +451,10 @@ export function loadConfig(options: LoadConfigOptions = {}): RuntimeConfig {
       webSearch: toml.tools?.web_search ?? true,
       screenshot: toml.tools?.screenshot ?? 'auto',
     },
+    tracing: {
+      verbosity: toml.tracing?.verbosity ?? 'verbose',
+      retentionDays: toml.tracing?.retention_days ?? 14,
+    },
     skills: {
       dirs: (toml.skills?.dirs ?? defaultToml.skills.dirs).map((d) => expandPath(d, workspacePath)),
     },

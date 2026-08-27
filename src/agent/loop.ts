@@ -11,6 +11,7 @@ import type {
 } from '../providers/types'
 import type { ToolExecutor } from '../tools'
 import { hasStrandedToolCall, stripStrandedToolCalls } from '../tools/format'
+import { trace } from '../tracking/traces'
 import type { TranscriptLogger } from '../tracking/transcript'
 import { log } from '../util/logger'
 import { runAutoExtraction } from './background'
@@ -324,6 +325,22 @@ export class AgentLoop {
           output_tokens: response.usage.output_tokens,
           duration_ms: inferenceDuration,
           has_tool_calls: (response.tool_calls?.length ?? 0) > 0,
+        })
+
+        // Full-fidelity turn trace: thinking is otherwise streamed and dropped, and it is
+        // the single most useful artifact when reconstructing why a run went sideways.
+        trace({
+          session: this.context.sessionId,
+          kind: 'turn',
+          name: response.model ?? provider.name,
+          tokensIn: response.usage.input_tokens,
+          tokensOut: response.usage.output_tokens,
+          durationMs: inferenceDuration,
+          payload: {
+            content: response.content ?? '',
+            thinking: response.thinking ?? '',
+            tool_calls: (response.tool_calls ?? []).map((c) => c.name).join(','),
+          },
         })
 
         reportTokenBudget({

@@ -30,6 +30,7 @@ import {
 } from './tools'
 import { setToolDialect } from './tools/dialects'
 import { createStatsTracker, type StatsTracker } from './tracking'
+import { initTraces } from './tracking/traces'
 import { createTranscriptLogger, type TranscriptLogger } from './tracking/transcript'
 import { log } from './util/logger'
 
@@ -252,6 +253,13 @@ export async function createAppServices(config: RuntimeConfig): Promise<AppServi
     localProvider: providers.local,
     memory,
   })
+  // Trace store first, so everything below is recorded from the start.
+  initTraces(
+    join(config.workspace.path, 'traces.db'),
+    config.tracing.verbosity,
+    config.tracing.retentionDays,
+  )
+
   // Screenshot gating: unset in config means auto-detect from the endpoint's modalities.
   const visionSupported =
     config.tools.screenshot === 'auto'

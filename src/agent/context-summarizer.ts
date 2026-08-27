@@ -1,5 +1,6 @@
 import type { ChatMessage, LLMProvider } from '../providers/types'
 import { getTextContent } from '../providers/types'
+import { trace } from '../tracking/traces'
 import { log } from '../util/logger'
 
 const SUMMARIZE_SYSTEM_PROMPT = `You are a context compaction assistant. Your job is to read a conversation segment and produce a concise summary that preserves all information needed to continue the conversation.
@@ -147,6 +148,14 @@ export async function summarizeMessages(
       'context-summarizer',
       `Generated summary (${summary.length} chars) from ${messages.length} messages`,
     )
+    // Aux trace: compaction rewrites the agent's memory of its own past — when a summary
+    // goes wrong (the 396-char wipe), this row is the only record of what it replaced.
+    trace({
+      kind: 'aux',
+      name: 'compaction',
+      success: true,
+      payload: { summary, source_messages: messages.length },
+    })
     return capSummary(summary)
   } catch (error) {
     log.warn('context-summarizer', 'Summary generation failed, using fallback:', error)

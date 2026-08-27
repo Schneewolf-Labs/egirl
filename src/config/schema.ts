@@ -387,6 +387,19 @@ const baseProperties = {
     }),
   ),
 
+  // Unified trace store: every turn (including thinking), full tool payloads, aux-model
+  // work — SQLite in the workspace, FTS-searchable. Verbose by default: single-user disk
+  // is cheap and post-mortems are not.
+  tracing: Type.Optional(
+    Type.Object({
+      verbosity: Type.Union(
+        [Type.Literal('off'), Type.Literal('metadata'), Type.Literal('verbose')],
+        { default: 'verbose' },
+      ),
+      retention_days: Type.Number({ default: 14 }),
+    }),
+  ),
+
   permission_supervisor: Type.Optional(
     Type.Object({
       mode: Type.Optional(
@@ -699,6 +712,10 @@ export interface RuntimeConfig {
   transcript: {
     enabled: boolean
     path: string
+  }
+  tracing: {
+    verbosity: 'off' | 'metadata' | 'verbose'
+    retentionDays: number
   }
   permissionSupervisor: {
     mode: 'bypass' | 'supervised' | 'rules_only' | 'ask_user'

@@ -1,5 +1,6 @@
 import type { ChatMessage, LLMProvider } from '../providers/types'
 import { getTextContent } from '../providers/types'
+import { trace } from '../tracking/traces'
 import { log } from '../util/logger'
 import type { MemoryCategory } from './indexer'
 
@@ -89,7 +90,16 @@ export async function extractMemories(
       max_tokens: 1024,
     })
 
-    return parseExtractions(response.content, maxExtractions)
+    const extracted = parseExtractions(response.content, maxExtractions)
+    if (extracted.length > 0) {
+      trace({
+        kind: 'aux',
+        name: 'extraction',
+        success: true,
+        payload: { keys: extracted.map((e) => `${e.category}/${e.key}`).join(', ') },
+      })
+    }
+    return extracted
   } catch (error) {
     log.warn('extractor', 'Memory extraction failed:', error)
     return []

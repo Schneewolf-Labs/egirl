@@ -1,5 +1,6 @@
 import type { ChatResponse, ToolCall } from '../providers/types'
 import type { ToolExecutor, ToolResult } from '../tools'
+import { trace } from '../tracking/traces'
 import type { TranscriptLogger } from '../tracking/transcript'
 import { log } from '../util/logger'
 import { type AgentContext, addMessage } from './context'
@@ -62,6 +63,19 @@ export async function runToolCalls(args: {
 
     const call = calls.find((c) => c.id === callId)
     events?.onToolCallComplete?.(callId, call?.name ?? 'unknown', result)
+
+    // Full-payload tool trace: the transcript logger keeps arg KEYS only; post-mortems need
+    // the actual command and the actual output.
+    trace({
+      session: context.sessionId,
+      kind: 'tool',
+      name: call?.name ?? 'unknown',
+      success: result.success,
+      payload: {
+        args: JSON.stringify(call?.arguments ?? {}),
+        output: result.output,
+      },
+    })
 
     // Truncate oversized tool results at ingestion to prevent context bloat.
     const truncatedOutput = truncateToolResultSync(result.output, MAX_TOOL_RESULT_TOKENS)
