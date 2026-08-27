@@ -25,17 +25,24 @@ import {
 } from './context'
 import type { AgentEventHandler } from './events'
 import { ConversationHistory } from './history'
+import {
+  checkpointNudge,
+  DEFAULT_VALIDATION_FEEDBACK,
+  interjectionNudge,
+  MAX_TURNS_SUMMARY_NUDGE,
+  planningModePrompt,
+  validationFailedNudge,
+  wrapupNudge,
+} from './nudges'
 import { injectRecalledMemory } from './recall'
-import { isRepetitionDominated } from './repetition-guard'
+import { attemptRecovery } from './recovery'
+import { createRunState } from './run-state'
 import type { SessionMutex } from './session-mutex'
 import { isReasoningLooping, SpiralDetector, turnSignature } from './spiral-guard'
 import { type ContextStatus, computeContextStatus } from './status'
 import { reportTokenBudget, TokenBudgetTracker } from './token-budget'
 import { runToolCalls } from './tool-runner'
 import type { AgentLoopDeps, AgentLoopOptions, AgentResponse } from './types'
-
-/** Maximum number of continuation retries when response is truncated (finish_reason: length) */
-const MAX_CONTINUATION_RETRIES = 3
 
 /**
  * Hard turn ceiling for an unbounded run. Not a normal stop — the failure detectors and the
@@ -50,20 +57,6 @@ const UNBOUNDED_SAFETY_CEILING = 10_000
  * /context "getting tight" threshold so the two agree.
  */
 const CONTEXT_BREAK_THRESHOLD = 0.8
-
-/**
- * Cap on each recovery nudge (stranded tool call, empty-after-tools). Hermes uses 3; one was
- * measurably not enough -- a 27B that mangles a call under context pressure often needs a
- * second clean look at the instruction.
- */
-const MAX_RECOVERY_NUDGES = 3
-
-/**
- * Retries for a with-no-tools empty response. Distinct from MAX_RECOVERY_NUDGES because these
- * retries add no message -- the request is identical, so the KV-cached prefill makes each one
- * cheap -- and the deterministic-empty rule usually cuts them off before the cap anyway.
- */
-const MAX_EMPTY_RETRIES = 2
 
 export type AgentFactory = (sessionId: string) => AgentLoop
 
@@ -184,9 +177,7 @@ export class AgentLoop {
         ? { level: this.config.thinking.level, budgetTokens: this.config.thinking.budgetTokens }
         : undefined)
 
-    const userContent = planningMode
-      ? `[PLANNING MODE] Create a detailed step-by-step plan for the following request. Do NOT execute any tools yet — only output a numbered plan with clear steps. After the plan is approved, you will execute it.\n\n${userMessage}`
-      : userMessage
+    const userContent = planningMode ? planningModePrompt(userMessage) : userMessage
 
     this.transcript?.turnStart(this.context.sessionId, userMessage)
     // Attached images ride the same message as the text, in the content-part shape the
@@ -212,7 +203,8 @@ export class AgentLoop {
       transcript: this.transcript,
     })
 
-    let turns = 0
+    // Every counter and flag scoped to this run — the loop's state machine, made explicit.
+    const state = createRunState()
     const totalUsage = { input_tokens: 0, output_tokens: 0 }
     let finalContent = ''
     const provider = this.localProvider
@@ -223,46 +215,30 @@ export class AgentLoop {
     let isPlanning = !!planningMode
     const seenToolCalls = new Set<string>()
     const spiral = new SpiralDetector()
-    let continuationRetries = 0
-    let accumulatedContent = ''
-    let validationRetried = false
-    let strandedToolRetries = 0
-    let emptyAfterToolsRetries = 0
-    let toolsRan = false
-    let awaitingInput = false
-    let emptyRetries = 0
-    let prevEmptyWasZeroOutput = false
     // Turns between consolidation breaks (0 = off). Per-run option wins over config default.
     const consolidationInterval =
       options.consolidationInterval ?? this.config.conversation.consolidationInterval ?? 0
-    // Input tokens of the last inference, for the context-pressure break trigger.
-    let lastInputTokens = 0
-    let lastContextBreakTurn = -Infinity
     // Wall-clock wrap-up: warn once as the hard deadline (a task timeout) nears, so the agent
     // winds down and checkpoints on its own instead of being killed mid-inference.
     const deadline = options.deadline
     const wrapupMarginMs = options.wrapupMarginMs ?? 7 * 60_000
-    let wrapupWarned = false
 
     // Persistence and transcript closure run in `finally` so a provider error
     // mid-run doesn't lose the user message and tool activity already in context.
     try {
-      while (turns < maxTurns) {
+      while (state.turns < maxTurns) {
         if (signal?.aborted) {
           log.info('agent', 'Agent run aborted by signal')
           break
         }
 
-        turns++
+        state.turns++
 
         // Operator interjections queued by inject() land here — at a turn boundary, after
         // any tool results are already paired with their calls — as ordinary user messages.
         if (this.activeRun && this.activeRun.pendingInjections.length > 0) {
           for (const injected of this.activeRun.pendingInjections.splice(0)) {
-            addMessage(this.context, {
-              role: 'user',
-              content: `[System: The operator interjected mid-run with the following message. Address it before continuing — it may redirect or end the current work.]\n\n${injected}`,
-            })
+            addMessage(this.context, { role: 'user', content: interjectionNudge(injected) })
           }
         }
 
@@ -277,20 +253,14 @@ export class AgentLoop {
         // the moment durable capture matters most. The context trigger is rate-limited to one
         // per interval window so a sustained-high context does not nag every turn.
         if (consolidationInterval > 0) {
-          const onInterval = turns > 1 && (turns - 1) % consolidationInterval === 0
-          const utilization = lastInputTokens / Math.max(1, this.config.local.contextLength)
+          const onInterval = state.turns > 1 && (state.turns - 1) % consolidationInterval === 0
+          const utilization = state.lastInputTokens / Math.max(1, this.config.local.contextLength)
           const contextPressed =
             utilization >= CONTEXT_BREAK_THRESHOLD &&
-            turns - lastContextBreakTurn >= consolidationInterval
+            state.turns - state.lastContextBreakTurn >= consolidationInterval
           if (onInterval || contextPressed) {
-            if (contextPressed) lastContextBreakTurn = turns
-            const urgency = contextPressed
-              ? 'Context is nearly full and the conversation is about to be compacted. Write everything durable NOW'
-              : 'Pause new work and consolidate — write everything you have learned since your last checkpoint'
-            addMessage(this.context, {
-              role: 'user',
-              content: `[System: Checkpoint. ${urgency} to your durable notes, and save any artifacts to files. Also store anything worth remembering across sessions — a proven fact, a decision and its why, a lesson — with memory_set now, while the context is still in front of you. Assume this run could end at any moment: nothing important should live only in this conversation. Then continue where you left off.]`,
-            })
+            if (contextPressed) state.lastContextBreakTurn = state.turns
+            addMessage(this.context, { role: 'user', content: checkpointNudge(contextPressed) })
           }
         }
 
@@ -300,13 +270,10 @@ export class AgentLoop {
         // consolidation break, keeping the wall-clock limit consistent with the loop's
         // "pause and capture" rhythm rather than killing a turn mid-thought. See
         // docs/autonomy-loop.md.
-        if (deadline && !wrapupWarned && Date.now() >= deadline - wrapupMarginMs) {
-          wrapupWarned = true
+        if (deadline && !state.wrapupWarned && Date.now() >= deadline - wrapupMarginMs) {
+          state.wrapupWarned = true
           const minsLeft = Math.max(1, Math.round((deadline - Date.now()) / 60_000))
-          addMessage(this.context, {
-            role: 'user',
-            content: `[System: You have been working for nearly this round's full time budget — about ${minsLeft} minute(s) remain before the run ends automatically. Stop starting new work now. Write everything you have learned to your durable notes, save any in-progress artifacts to files, and update your Status/NEXT so the next run resumes cleanly, then give a brief wrap-up. If this run developed a reusable procedure worth keeping — a setup ritual, a debugging recipe, a verified command sequence — and it is not yet a skill, spend one minute writing it as a SKILL.md in your skills directory so future runs start with it. This is a scheduled break, not a failure — you will pick up where you left off in the next run.]`,
-          })
+          addMessage(this.context, { role: 'user', content: wrapupNudge(minsLeft) })
         }
 
         const tools = isPlanning ? [] : this.toolExecutor.getDefinitions()
@@ -346,7 +313,7 @@ export class AgentLoop {
 
         // Input tokens are the whole prompt this turn — the running measure of context fill,
         // used by the context-pressure consolidation trigger next iteration.
-        lastInputTokens = response.usage.input_tokens
+        state.lastInputTokens = response.usage.input_tokens
         totalUsage.input_tokens += response.usage.input_tokens
         totalUsage.output_tokens += response.usage.output_tokens
 
@@ -376,9 +343,12 @@ export class AgentLoop {
         // same fragment instead of converging. This never escapes one turn to be counted
         // across turns, so the cross-turn detector below cannot see it.
         if (isReasoningLooping(response.thinking)) {
-          log.warn('agent', `Reasoning is looping within a turn (turn ${turns}) — aborting run`)
+          log.warn(
+            'agent',
+            `Reasoning is looping within a turn (turn ${state.turns}) — aborting run`,
+          )
           finalContent =
-            `${accumulatedContent + response.content}\n\n` +
+            `${state.accumulatedContent + response.content}\n\n` +
             `[Run aborted: the agent's reasoning entered a repetition loop.]`
           addMessage(this.context, { role: 'assistant', content: response.content })
           break
@@ -396,10 +366,10 @@ export class AgentLoop {
           ) {
             log.warn(
               'agent',
-              `Agent is repeating the same action across turns (turn ${turns}) — aborting run`,
+              `Agent is repeating the same action across turns (turn ${state.turns}) — aborting run`,
             )
             finalContent =
-              `${accumulatedContent + response.content}\n\n` +
+              `${state.accumulatedContent + response.content}\n\n` +
               `[Run aborted: the agent began repeating the same action without progress.]`
             addMessage(this.context, { role: 'assistant', content: response.content })
             break
@@ -416,9 +386,9 @@ export class AgentLoop {
               signal,
             }),
           )
-          if (toolOutcome.awaitingInput) awaitingInput = true
+          if (toolOutcome.awaitingInput) state.awaitingInput = true
 
-          toolsRan = true
+          state.toolsRan = true
 
           if (signal?.aborted) {
             log.info('agent', 'Agent run aborted after tool execution')
@@ -427,114 +397,13 @@ export class AgentLoop {
           continue
         }
 
-        // No tool calls — check if response was truncated and needs continuation
-        if (
-          response.finish_reason === 'length' &&
-          continuationRetries < MAX_CONTINUATION_RETRIES &&
-          response.content.length > 0
-        ) {
-          // A repetition loop also finishes with finish_reason=length -- the model spent its
-          // whole budget echoing one fragment. Continuing would stitch MORE of the echo onto
-          // the answer (hermes's incident: one turn, 60k chars, 31 Discord messages). Abort
-          // the turn with what we have instead of asking for another round of it.
-          if (isRepetitionDominated(response.content)) {
-            log.warn(
-              'agent',
-              `Truncated response is repetition-dominated (${response.content.length} chars) — aborting continuation`,
-            )
-            finalContent =
-              `${accumulatedContent + response.content}\n\n` +
-              `[Response aborted: the model entered a repetition loop.]`
-            addMessage(this.context, { role: 'assistant', content: finalContent })
-            break
-          }
-          continuationRetries++
-          accumulatedContent += response.content
-          log.info(
-            'agent',
-            `Response truncated (finish_reason: length), continuation retry ${continuationRetries}/${MAX_CONTINUATION_RETRIES}`,
-          )
-
-          addMessage(this.context, { role: 'assistant', content: response.content })
-          addMessage(this.context, {
-            role: 'user',
-            content:
-              '[System: Your previous response was cut off. Continue exactly where you left off.]',
-          })
-          continue
-        }
-
-        // The model tried to act, but its call did not parse -- the markup is still sitting
-        // in the content. Accepting it as an answer would end the turn and print raw XML at
-        // the user, discarding the action silently. Hand it back and let it retry: a model
-        // that mangled its JSON usually gets it right on a clean re-issue. Both halves of
-        // the pair are ephemeral -- the mangled markup and the nudge exist only to drive
-        // this retry, and persisting them would replay the failure into future context.
-        if (strandedToolRetries < MAX_RECOVERY_NUDGES && hasStrandedToolCall(response.content)) {
-          strandedToolRetries++
-          log.info(
-            'agent',
-            `Tool call could not be parsed; asking for a reissue (${strandedToolRetries}/${MAX_RECOVERY_NUDGES})`,
-          )
-          addMessage(this.context, {
-            role: 'assistant',
-            content: response.content,
-            ephemeral: true,
-          })
-          addMessage(this.context, {
-            role: 'user',
-            content:
-              '[System: Your last tool call could not be parsed and was not executed. Reissue it as a single <tool_call> block containing valid JSON: {"name": "<tool>", "arguments": {...}}. Do not repeat this notice.]',
-            ephemeral: true,
-          })
-          accumulatedContent = ''
-          continuationRetries = 0
-          continue
-        }
-
-        // Tools just ran and the model came back with nothing -- no text, no further calls.
-        // Ending the turn here surfaces an empty reply with work visibly half-done. Point it
-        // back at the tool results it ignored. Same ephemeral contract as above.
-        if (!response.content.trim() && toolsRan && emptyAfterToolsRetries < MAX_RECOVERY_NUDGES) {
-          emptyAfterToolsRetries++
-          log.info(
-            'agent',
-            `Empty response after tool execution; re-prompting (${emptyAfterToolsRetries}/${MAX_RECOVERY_NUDGES})`,
-          )
-          addMessage(this.context, {
-            role: 'user',
-            content:
-              '[System: You executed tool calls but returned an empty response. Process the tool results above and continue with the task.]',
-            ephemeral: true,
-          })
-          continue
-        }
-
-        // An empty response with no tools in play at all. Previously this surfaced as a blank
-        // reply; now it retries, bounded by hermes's deterministic-empty rule: two consecutive
-        // attempts with output_tokens === 0 mean the same prompt will keep producing the same
-        // empty, so further retries are burned prefill for nothing. An attempt that generated
-        // SOMETHING (output_tokens > 0 with empty content -- reasoning ate the budget, or
-        // think-stripping ate the text) is not deterministic and keeps its budget: sampling
-        // can land differently next time.
-        if (!response.content.trim() && !toolsRan) {
-          const zeroOutput = response.usage.output_tokens === 0
-          if (emptyRetries < MAX_EMPTY_RETRIES && !(zeroOutput && prevEmptyWasZeroOutput)) {
-            emptyRetries++
-            prevEmptyWasZeroOutput = zeroOutput
-            log.warn(
-              'agent',
-              `Empty response (output_tokens=${response.usage.output_tokens}), retrying (${emptyRetries}/${MAX_EMPTY_RETRIES})`,
-            )
-            continue
-          }
-          log.warn(
-            'agent',
-            zeroOutput && prevEmptyWasZeroOutput
-              ? 'Empty response is deterministic (two zero-output attempts) — giving up'
-              : `Empty response after ${emptyRetries} retries — giving up`,
-          )
-          finalContent = '[The model returned an empty response.]'
+        // No tool calls — walk the recovery rules (truncation continuation, stranded tool
+        // call, the two empty-response shapes). The rules and their rationale live in
+        // ./recovery.ts; at most one fires per turn.
+        const recovery = attemptRecovery(response, state, this.context)
+        if (recovery.action === 'retry') continue
+        if (recovery.action === 'abort') {
+          finalContent = recovery.finalContent
           addMessage(this.context, { role: 'assistant', content: finalContent })
           break
         }
@@ -545,20 +414,18 @@ export class AgentLoop {
           ? stripStrandedToolCalls(response.content)
           : response.content
 
-        finalContent = accumulatedContent + finalPiece
+        finalContent = state.accumulatedContent + finalPiece
         addMessage(this.context, { role: 'assistant', content: finalPiece })
 
-        if (events?.onPostResponseValidation && !validationRetried) {
+        if (events?.onPostResponseValidation && !state.validationRetried) {
           const validation = await events.onPostResponseValidation(finalContent)
           if (!validation.valid) {
-            validationRetried = true
-            const feedback =
-              validation.feedback ??
-              'Your previous response did not pass validation. Please try again.'
+            state.validationRetried = true
+            const feedback = validation.feedback ?? DEFAULT_VALIDATION_FEEDBACK
             log.info('agent', `Post-response validation failed: ${feedback.slice(0, 100)}`)
-            addMessage(this.context, { role: 'user', content: `[Validation failed]: ${feedback}` })
-            accumulatedContent = ''
-            continuationRetries = 0
+            addMessage(this.context, { role: 'user', content: validationFailedNudge(feedback) })
+            state.accumulatedContent = ''
+            state.continuationRetries = 0
             continue
           }
         }
@@ -571,7 +438,7 @@ export class AgentLoop {
             content: finalContent,
             provider: provider.name,
             usage: totalUsage,
-            turns,
+            turns: state.turns,
             isPlan: true,
             thinking: lastThinking,
           }
@@ -580,7 +447,7 @@ export class AgentLoop {
         break
       }
 
-      if (turns >= maxTurns && !finalContent && !signal?.aborted) {
+      if (state.turns >= maxTurns && !finalContent && !signal?.aborted) {
         if (options.unbounded) {
           // The safety ceiling is not a normal exit: a healthy unbounded run ends on a
           // failure detector or its own conclusion. Reaching it means one didn't fire.
@@ -601,11 +468,11 @@ export class AgentLoop {
         content: finalContent,
         provider: provider.name,
         usage: totalUsage,
-        turns,
+        turns: state.turns,
         thinking: lastThinking,
-        continuationRetries: continuationRetries > 0 ? continuationRetries : undefined,
+        continuationRetries: state.continuationRetries > 0 ? state.continuationRetries : undefined,
         aborted: signal?.aborted ? true : undefined,
-        awaitingInput: awaitingInput ? true : undefined,
+        awaitingInput: state.awaitingInput ? true : undefined,
       }
     } finally {
       this.activeRun = null
@@ -616,7 +483,7 @@ export class AgentLoop {
         provider: provider.name,
         input_tokens: totalUsage.input_tokens,
         output_tokens: totalUsage.output_tokens,
-        turns,
+        turns: state.turns,
         duration_ms: Date.now() - turnStartedAt,
       })
     }
@@ -633,11 +500,7 @@ export class AgentLoop {
     events?: AgentEventHandler,
     signal?: AbortSignal,
   ): Promise<string> {
-    addMessage(this.context, {
-      role: 'user',
-      content:
-        '[System: Maximum turns reached. Do not call any tools. Summarize what you accomplished, what remains unfinished, and your best answer so far.]',
-    })
+    addMessage(this.context, { role: 'user', content: MAX_TURNS_SUMMARY_NUDGE })
 
     try {
       const result = await chatWithContextWindow({
