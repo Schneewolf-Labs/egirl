@@ -5,6 +5,7 @@ import { log } from '../util/logger'
 import { type AgentContext, addMessage } from './context'
 import { truncateToolResultSync } from './context-window'
 import type { AgentEventHandler } from './events'
+import { duplicateToolWarning } from './nudges'
 
 /** Default max tokens per tool result — matches context-window.ts default */
 const MAX_TOOL_RESULT_TOKENS = 8000
@@ -75,10 +76,7 @@ export async function runToolCalls(args: {
   if (duplicateNames.length > 0) {
     const names = [...new Set(duplicateNames)].join(', ')
     log.warn('agent', `Tool loop detected: repeated call(s) to ${names}`)
-    addMessage(context, {
-      role: 'user',
-      content: `[Warning: You called ${names} with the same arguments as a previous turn. This may indicate a loop. Try a different approach or respond with your current findings.]`,
-    })
+    addMessage(context, { role: 'user', content: duplicateToolWarning(names) })
   }
 
   return { awaitingInput }
