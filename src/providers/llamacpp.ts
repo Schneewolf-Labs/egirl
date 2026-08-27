@@ -182,7 +182,14 @@ export class LlamaCppProvider implements LLMProvider {
     const shouldStream = true
     const isThinkingEnabled = req.thinking && req.thinking.level !== 'off'
 
+    // Bun's fetch has a built-in 300s timeout that fires before our own stale-stream and
+    // abort machinery. On a single-slot server (-np 1), a request queued behind another
+    // consumer's long generation legitimately waits longer than that for its first byte —
+    // observed as periodic "The operation timed out" transient retries once the review fork
+    // began sharing the operator endpoint. Our own timeouts govern; Bun's must not.
     const response = await fetch(`${this.endpoint}/v1/chat/completions`, {
+      // @ts-expect-error Bun extension: disable fetch's built-in timeout
+      timeout: false,
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
