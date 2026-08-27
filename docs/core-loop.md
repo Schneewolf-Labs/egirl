@@ -31,8 +31,9 @@ context, compaction chain) does.
 3. **Turn cap.** `maxTurns` (default 10), unless the run is unbounded — then the
    cap is replaced by the safety ceiling (see §4).
 4. **Append the user message.** In planning mode the message is wrapped in the
-   planning-mode prompt; attached images ride the same message as `image_url`
-   content parts.
+   planning-mode prompt **and tool definitions are withheld from every turn** —
+   a plan is produced from reasoning alone, never from tool use. Attached images
+   ride the same message as `image_url` content parts.
 5. **Memory recall.** Relevant memories are injected as a marked recall message.
    Recall messages are regenerated per run and never persisted.
 6. **Run state.** A fresh `RunState`; recovery caps resolved from `[recovery]`
@@ -43,9 +44,9 @@ context, compaction chain) does.
 Each iteration runs these stages in order:
 
 1. **Abort check.** A set signal ends the run before any work.
-2. **Deliver injections.** Operator messages queued by `inject()` land here — at
-   the turn boundary, wrapped in the interjection nudge, as ordinary user
-   messages. Never mid-turn, where a user message between an assistant tool call
+2. **Deliver injections.** All operator messages queued by `inject()` since the
+   last boundary land here — the queue drains in order, each wrapped in the
+   interjection nudge as an ordinary user message. Never mid-turn, where a user message between an assistant tool call
    and its results would corrupt the transcript the model sees.
 3. **Consolidation break** (only when `consolidationInterval > 0`). One
    checkpoint nudge telling the agent to externalize what it has learned. Two
@@ -66,11 +67,12 @@ Each iteration runs these stages in order:
       model should see that its last attempt failed, but older ones are
       in-context demonstrations of the malformed shape it will imitate.
    3. **Fit to the window.** Budget = context length − output reserve (2048) −
-      system prompt − tool definitions. Then, escalating only as needed:
-      individual tool results are truncated to 8000 tokens (data-URL images are
-      exempt from truncation and counted at a flat 1000 tokens — half a base64
-      image is a corrupt image, not a shorter one); if still over, **stale tool
-      outputs are cleared in place** — content blanked to a marker, message kept
+      system prompt − tool definitions. Individual tool results are truncated to
+      8000 tokens **unconditionally, before the budget is measured** (data-URL
+      images are exempt from truncation and counted at a flat 1000 tokens — half
+      a base64 image is a corrupt image, not a shorter one). Then, escalating
+      only as needed: if over budget, **stale tool outputs are cleared in
+      place** — content blanked to a marker, message kept
       so the transcript shape stays valid — outside a protected recent tail
       (min(8000 tokens, 25% of budget)) and never in the in-flight trailing
       group; if still over, messages are **grouped** (an assistant message with
@@ -311,7 +313,11 @@ same three points works), streaming callbacks (the `events` handler), timers
 and backoff (`setTimeout`), the tokenizer (an HTTP client for llama.cpp's
 `/tokenize`, with the char-ratio estimate as fallback), the conversation store
 (SQLite), background scheduling (promise chains for compaction/extraction), and
-`Date.now()` for the deadline logic.
+`Date.now()` for the deadline logic. One economic dependency deserves care:
+per-session KV cache-slot pinning (`cache-slots.ts`) is what makes an identical
+retry nearly free — the empty-retry budget (§3 rule 4) assumes it. A port to a
+server without per-slot prefix caching should reconsider `empty_retries` rather
+than inherit the value.
 
 Two JS-specific behaviors that are contracts, not accidents: tool results are
 appended deterministically regardless of concurrent completion (the mutating
