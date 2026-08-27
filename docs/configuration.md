@@ -255,6 +255,16 @@ Optional. Controls conversation persistence and compaction.
 | `compact_on_startup` | bool | `true` | Run compaction when egirl starts |
 | `context_compaction` | bool | `true` | Summarize interior messages when context fills instead of dropping |
 
+### `[recovery]`
+
+Optional. Retry budgets for the agent loop's recovery rules (see `src/agent/recovery.ts`).
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `continuation_retries` | number | `3` | Continuations requested for a truncated (`finish_reason: length`) response |
+| `nudge_retries` | number | `3` | Cap on each recovery nudge (stranded tool call, empty response after tools) |
+| `empty_retries` | number | `2` | Silent retries for an empty response with no tools in play |
+
 ### `[memory]`
 
 Optional. Tunes the memory system. The memory system itself is enabled by `[local.embeddings]`.
