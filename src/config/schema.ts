@@ -433,6 +433,16 @@ const baseProperties = {
     }),
   ),
 
+  browser: Type.Optional(
+    Type.Object({
+      // Consent toggle: browse as the user, with their real logins, by driving
+      // a managed snapshot of their default Chromium browser's active profile.
+      use_real_profile: Type.Boolean({ default: false }),
+      // Override for the real browser binary (default: detected install).
+      executable_path: Type.Optional(Type.String()),
+    }),
+  ),
+
   tools: Type.Optional(
     Type.Object({
       files: Type.Boolean({ default: true }),
@@ -730,6 +740,12 @@ export interface RuntimeConfig {
       deny: string[]
       askUser: string[]
     }
+  }
+  browser: {
+    /** Consent toggle: drive a snapshot of the user's real Chrome profile with their real binary. */
+    useRealProfile: boolean
+    /** Override for the real browser binary (default: detected install). */
+    executablePath?: string
   }
   tools: {
     files: boolean

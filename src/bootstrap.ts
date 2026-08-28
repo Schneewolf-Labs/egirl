@@ -243,7 +243,11 @@ export async function createAppServices(config: RuntimeConfig): Promise<AppServi
   const conversations = createConversations(config)
   const taskStore = createTasks(config)
   const skills = await loadSkills(config)
-  const browser = new BrowserManager()
+  const browser = new BrowserManager({
+    useRealProfile: config.browser.useRealProfile,
+    profileStoreDir: join(config.workspace.path, 'browser-profile'),
+    ...(config.browser.executablePath ? { executablePath: config.browser.executablePath } : {}),
+  })
   const processRegistry = createProcessRegistry()
   const codeAgentConfig = getCodeAgentConfig(config)
   const permissionSupervisor = createPermissionSupervisor({

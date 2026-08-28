@@ -1,5 +1,6 @@
 import { type Browser, type BrowserContext, chromium, type Page } from 'playwright'
 import { log } from '../util/logger'
+import { cleanupRealProfileStore, prepareRealProfile } from './real-profile'
 import { resolveTarget } from './targeting'
 
 /**
@@ -45,6 +46,17 @@ function validateBrowserExpression(expression: string): string | undefined {
 export interface BrowserConfig {
   headless?: boolean
   defaultTimeout?: number
+  /**
+   * Consent toggle: browse as the user, with their real logins, by driving a
+   * managed snapshot of their default Chromium browser's active profile with
+   * their real browser binary. See src/browser/real-profile.ts.
+   */
+  useRealProfile?: boolean
+  /** Where real-profile snapshots live. Required for useRealProfile; when the
+   *  toggle is off, an existing store here is deleted (consent revocation). */
+  profileStoreDir?: string
+  /** Override for the real browser binary (defaults to the detected install). */
+  executablePath?: string
 }
 
 export interface PageSnapshot {
@@ -74,28 +86,66 @@ export class BrowserManager {
 
   constructor(config: BrowserConfig = {}) {
     this.config = {
+      ...config,
       headless: config.headless ?? true,
       defaultTimeout: config.defaultTimeout ?? 30000,
     }
   }
 
   get isOpen(): boolean {
-    return this.browser?.isConnected() ?? false
+    // A real-profile session has no Browser handle (launchPersistentContext
+    // returns only a context); its liveness is tracked via the close event.
+    if (this.browser) return this.browser.isConnected()
+    return this.context !== undefined
+  }
+
+  private async launchRealProfile(): Promise<BrowserContext> {
+    if (!this.config.profileStoreDir) {
+      throw new Error('Real-profile browsing requires a profile store directory')
+    }
+    const result = prepareRealProfile(this.config.profileStoreDir, this.config.executablePath)
+    if (!result.ok) {
+      throw new Error(`Real-profile browsing unavailable: ${result.reason}`)
+    }
+    // The user's real binary on the snapshot dir: cookies encrypted with the
+    // OS keyring decrypt exactly like they do in the user's own browser (a
+    // differently-branded Chromium would look up a different Safe Storage key).
+    const context = await chromium.launchPersistentContext(result.userDataDir, {
+      headless: this.config.headless,
+      executablePath: result.executablePath,
+    })
+    log.info('browser', `Launched real-profile browser (${result.executablePath})`)
+    return context
   }
 
   private async ensurePage(): Promise<Page> {
-    if (!this.browser || !this.browser.isConnected()) {
-      this.browser = await chromium.launch({ headless: this.config.headless })
-      this.context = await this.browser.newContext({
-        userAgent:
-          'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-      })
-      this.page = await this.context.newPage()
+    if (!this.isOpen) {
+      if (this.config.useRealProfile) {
+        this.context = await this.launchRealProfile()
+        this.context.on('close', () => {
+          this.context = undefined
+          this.page = undefined
+        })
+        this.page = this.context.pages()[0] ?? (await this.context.newPage())
+      } else {
+        // Consent is off: a snapshot store from a previous consented run holds
+        // copies of the user's cookies/logins — delete it so revoking the
+        // toggle actually removes them. Cheap (one existsSync) and idempotent.
+        if (this.config.profileStoreDir) {
+          cleanupRealProfileStore(this.config.profileStoreDir)
+        }
+        this.browser = await chromium.launch({ headless: this.config.headless })
+        this.context = await this.browser.newContext({
+          userAgent:
+            'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+        })
+        this.page = await this.context.newPage()
+        log.info('browser', 'Launched browser')
+      }
       // 10s, not Playwright's 30s: a mistyped selector used to hang the agent for half a
       // minute mid-task (and pushed the missing-element test past its own deadline). Slow
       // pages can raise defaultTimeout in config; browser_wait_for takes its own timeout.
       this.page.setDefaultTimeout(this.config.defaultTimeout ?? 10000)
-      log.info('browser', 'Launched browser')
     }
 
     if (!this.page || this.page.isClosed()) {
@@ -267,10 +317,15 @@ export class BrowserManager {
   async close(): Promise<void> {
     if (this.browser) {
       await this.browser.close()
-      this.browser = undefined
-      this.context = undefined
-      this.page = undefined
-      log.info('browser', 'Closed browser')
+    } else if (this.context) {
+      // Real-profile session: only a persistent context, no Browser handle.
+      await this.context.close()
+    } else {
+      return
     }
+    this.browser = undefined
+    this.context = undefined
+    this.page = undefined
+    log.info('browser', 'Closed browser')
   }
 }
