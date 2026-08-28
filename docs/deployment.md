@@ -141,8 +141,23 @@ its context. Exact launch:
 llama-server -m ReAligned-Qwen3.5-4B-Q8_0.gguf \
   --lora-scaled compactor-lora-f16.gguf:1.0 \
   -c 65536 -np 2 --jinja -ngl 0 \
+  --chat-template-kwargs '{"enable_thinking":false}' \
   --host 0.0.0.0 --port 8215
 ```
+
+#### If the auxiliary model is a thinking model, disable thinking at the server
+
+A thinking-mode base (Qwen3/3.5 class) under `--jinja` gets its chain-of-thought
+parsed into `reasoning_content` — and on a capped summarization call it will spend
+the **entire** output budget thinking and return an empty `content`. egirl sees
+that as `LLM returned empty summary, falling back to extraction` on every
+compaction: the endpoint is healthy, the summaries are silently degraded.
+
+`--chat-template-kwargs '{"enable_thinking":false}'` is the fix that actually
+works — it makes the template skip the thinking block entirely.
+`--reasoning-budget 0` does **not** disable thinking for this template (verified
+against ReAligned-Qwen3.5-4B): the model still emits reasoning and the content
+comes back empty.
 
 Config — point `[local.auxiliary]` at it:
 
@@ -215,3 +230,30 @@ dynamic state, swap the config, start the instance.
 Run `--instance <name> doctor` on the new box before enabling anything — it checks
 the whole dependency graph (operator endpoint and what it's actually serving,
 auxiliary model, embeddings, MCP servers, API port) in one shot.
+
+## Recovering After a Host Reboot
+
+Nothing in this stack survives a reboot on its own — the model servers are
+foreground `llama-server` processes and the VM has autostart disabled — so
+recovery is a fixed sequence. Order matters: endpoints first, instance last.
+
+1. **Serving stack** — bring up operator, embeddings, and compactor (commands
+   above) and wait for `/health` on each. The operator's model load is the slow
+   step; a 27B Q8 takes minutes.
+2. **VM, if the instance runs in one** — `virsh -c qemu:///system start <domain>`.
+   **Start, never `snapshot-revert`**: the provisioning snapshot predates all of
+   the instance's work, and reverting discards everything on the live disk. The
+   snapshot is for burning a hostile target, not for booting.
+3. **The instance** — start egirl inside the guest (or on the host) once its
+   endpoints answer.
+4. **Kick unbounded tasks.** A scheduled task mid-run when the process died does
+   not resume on its own — the run died with the process, and an unbounded run
+   has no completion to schedule the next interval from. After a restart, check
+   `GET /tasks` for the task's `running` flag and kick it explicitly:
+
+   ```bash
+   curl -X POST localhost:3000/tasks/<id>/run
+   ```
+
+   Skipping this is the classic post-reboot failure: every endpoint healthy,
+   egirl up, and the instance silently idle until someone notices.
