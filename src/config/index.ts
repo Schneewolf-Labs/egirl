@@ -435,6 +435,12 @@ export function loadConfig(options: LoadConfigOptions = {}): RuntimeConfig {
         askUser: toml.permission_supervisor?.policy?.ask_user ?? [],
       },
     },
+    browser: {
+      useRealProfile: toml.browser?.use_real_profile ?? false,
+      ...(toml.browser?.executable_path
+        ? { executablePath: expandPath(toml.browser.executable_path, workspacePath) }
+        : {}),
+    },
     tools: {
       files: toml.tools?.files ?? true,
       exec: toml.tools?.exec ?? true,

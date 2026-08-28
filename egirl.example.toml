@@ -101,6 +101,18 @@ github = false
 tasks = false
 browser = false
 
+# Real-profile browsing: browse as YOU, with your existing logins and cookies.
+# When on, egirl snapshots your default Chromium browser's active profile
+# (cookies, logins, preferences — never caches/extensions/history) into
+# {workspace}/browser-profile/ and drives that snapshot with your real browser
+# binary. Your live profile is never opened directly. Auth files re-sync from
+# your real profile on every fresh launch; turning the toggle off deletes the
+# snapshot store on next browser use. This is a consent-gated convenience, not
+# an isolation boundary — pages the agent visits run with your real logins.
+[browser]
+use_real_profile = false
+# executable_path = "/usr/bin/google-chrome"  # override the detected binary
+
 [permission_supervisor]
 mode = "supervised"                # bypass, supervised, rules_only, ask_user
 default_action = "allow"           # allow, deny, ask_user
