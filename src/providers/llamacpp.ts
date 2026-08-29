@@ -221,13 +221,22 @@ export class LlamaCppProvider implements LLMProvider {
       if (response.status === 400) {
         try {
           const errorJson = JSON.parse(errorText) as {
-            error?: { type?: string; n_prompt_tokens?: number; n_ctx?: number }
+            error?: { type?: string; message?: string; n_prompt_tokens?: number; n_ctx?: number }
           }
           if (errorJson.error?.type === 'exceed_context_size_error') {
             throw new ContextSizeError(
               errorJson.error.n_prompt_tokens ?? 0,
               errorJson.error.n_ctx ?? 0,
             )
+          }
+          // Newer llama.cpp builds report the same overflow as message text with a generic
+          // type. Missing it here classified the error as unknown and skipped the retrim
+          // path entirely — the task failed instead of refitting to the server's real n_ctx.
+          const m = errorJson.error?.message?.match(
+            /Prompt \((\d+) tokens\) exceeds context size \((\d+) tokens\)/,
+          )
+          if (m?.[1] && m[2]) {
+            throw new ContextSizeError(Number(m[1]), Number(m[2]))
           }
         } catch (e) {
           if (e instanceof ContextSizeError) throw e

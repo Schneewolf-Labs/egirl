@@ -15,6 +15,7 @@ import {
 import { discoverPeers, mergePeers, registerSelf } from './peers/discovery'
 import { createPermissionSupervisor } from './permissions/supervisor'
 import { createProviderRegistry, type ProviderRegistry } from './providers'
+import { probeServerContextLength } from './providers/context-probe'
 import { probeVisionSupport } from './providers/vision-probe'
 import { buildSafetyConfig } from './safety/config-bridge'
 import { loadSkillsFromDirectories } from './skills'
@@ -195,6 +196,19 @@ function createTasks(config: RuntimeConfig): TaskStore | undefined {
  * Bootstrap all shared services from config.
  */
 export async function createAppServices(config: RuntimeConfig): Promise<AppServices> {
+  // The server's n_ctx is a hard limit — a prompt one token over is rejected wholesale, and
+  // token estimates run enough below real counts that a config within a few percent of the
+  // server window overflows it in practice. Clamp before anything downstream captures the
+  // value (providers, budget tracker, fitting all read config.local.contextLength).
+  const serverCtx = await probeServerContextLength(config.local.endpoint, config.local.apiKey)
+  if (serverCtx !== undefined && config.local.contextLength > serverCtx) {
+    log.warn(
+      'bootstrap',
+      `Configured context_length (${config.local.contextLength}) exceeds server n_ctx (${serverCtx}) — clamping`,
+    )
+    config.local.contextLength = serverCtx
+  }
+
   // Pick the tool-calling dialect before anything renders a system prompt: the syntax we
   // ask for has to be the syntax we parse (see src/tools/dialects.ts).
   const dialect = setToolDialect(config.local.toolFormat)

@@ -13,10 +13,27 @@ const MAX_CACHE_ENTRIES = 2048
  */
 export class LlamaCppTokenizer implements Tokenizer {
   private endpoint: string
+  private apiKey: string | undefined
   private cache = new Map<string, number>()
+  private warnedFallback = false
 
-  constructor(endpoint: string) {
+  constructor(endpoint: string, apiKey?: string) {
     this.endpoint = endpoint.replace(/\/$/, '')
+    this.apiKey = apiKey
+  }
+
+  /**
+   * Estimation is ~7% *below* real llama.cpp counts on agentic transcripts — enough that a
+   * budget trimmed against estimates overflows a server limit sized near the config value.
+   * Silent per-call debug logging hid exactly that (a keyed server 401'd /tokenize and every
+   * count quietly degraded), so the first fallback warns loudly.
+   */
+  private fallback(reason: string, text: string): number {
+    if (!this.warnedFallback) {
+      this.warnedFallback = true
+      log.warn('tokenizer', `${reason} — token counts degraded to char-ratio estimates`)
+    }
+    return Math.ceil(text.length / 3.5)
   }
 
   async countTokens(text: string): Promise<number> {
@@ -26,17 +43,16 @@ export class LlamaCppTokenizer implements Tokenizer {
     try {
       const response = await fetch(`${this.endpoint}/tokenize`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(this.apiKey && { Authorization: `Bearer ${this.apiKey}` }),
+        },
         body: JSON.stringify({ content: text, add_special: false }),
         signal: AbortSignal.timeout(TOKENIZE_TIMEOUT_MS),
       })
 
       if (!response.ok) {
-        log.debug(
-          'tokenizer',
-          `tokenize endpoint returned ${response.status}, falling back to estimate`,
-        )
-        return Math.ceil(text.length / 3.5)
+        return this.fallback(`tokenize endpoint returned ${response.status}`, text)
       }
 
       const data = (await response.json()) as { tokens: number[] }
@@ -53,12 +69,11 @@ export class LlamaCppTokenizer implements Tokenizer {
 
       return count
     } catch (error) {
-      log.debug('tokenizer', 'tokenize request failed, falling back to estimate:', error)
-      return Math.ceil(text.length / 3.5)
+      return this.fallback(`tokenize request failed (${error})`, text)
     }
   }
 }
 
-export function createLlamaCppTokenizer(endpoint: string): Tokenizer {
-  return new LlamaCppTokenizer(endpoint)
+export function createLlamaCppTokenizer(endpoint: string, apiKey?: string): Tokenizer {
+  return new LlamaCppTokenizer(endpoint, apiKey)
 }

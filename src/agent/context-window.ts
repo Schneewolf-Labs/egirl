@@ -351,6 +351,18 @@ function buildMessageGroups(messages: ChatMessage[], tokenCounts: number[]): Mes
  * When messages are dropped, they are returned in `droppedMessages` so the
  * caller can summarize them for context compaction.
  */
+/**
+ * Fraction of the context window held back from the fitting budget, beyond the output
+ * reserve. Token counts are never exact — per-message framing is approximated, and when the
+ * tokenizer endpoint is unreachable everything degrades to char-ratio estimates that run
+ * ~7% below real counts. A budget with no slack turns that error into a server-side
+ * rejection ("Prompt (262154 tokens) exceeds context size (262144)"); this margin makes
+ * compaction start early enough that the drift stays on our side of the line. Proportional
+ * with no absolute floor: the drift scales with the token count, and a fixed floor would
+ * eat small windows whole.
+ */
+const SAFETY_MARGIN_FRACTION = 0.08
+
 export async function fitToContextWindow(
   systemPrompt: string,
   messages: ChatMessage[],
@@ -360,9 +372,10 @@ export async function fitToContextWindow(
 ): Promise<FitResult> {
   const { contextLength, reserveForOutput = 2048, maxToolResultTokens = 8000 } = config
 
+  const safetyMargin = Math.floor(contextLength * SAFETY_MARGIN_FRACTION)
   const systemTokens = (await countStringTokens(systemPrompt, tokenizer)) + 4
   const toolDefTokens = await countToolDefinitionTokens(tools, tokenizer)
-  const budget = contextLength - reserveForOutput - systemTokens - toolDefTokens
+  const budget = contextLength - safetyMargin - reserveForOutput - systemTokens - toolDefTokens
 
   if (budget <= 0) {
     log.warn(

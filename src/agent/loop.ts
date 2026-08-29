@@ -96,7 +96,7 @@ export class AgentLoop {
     this.transcript = deps.transcript ?? null
     this.promptOptions = { skills: deps.skills, additionalContext: deps.additionalContext }
     this.context = createAgentContext(deps.config, deps.sessionId, this.promptOptions)
-    this.tokenizer = createLlamaCppTokenizer(deps.config.local.endpoint)
+    this.tokenizer = createLlamaCppTokenizer(deps.config.local.endpoint, deps.config.local.apiKey)
     this.history = new ConversationHistory(this.conversationStore, deps.sessionId)
     this.history.hydrate(this.context)
   }
