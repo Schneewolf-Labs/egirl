@@ -1,7 +1,7 @@
 import { spawn } from 'child_process'
 import { sanitizedEnv } from '../../../util/env'
 import { log } from '../../../util/logger'
-import { DEFAULT_TIMEOUT_MS } from './shared'
+import { DEFAULT_BACKGROUND_TIMEOUT_MS, DEFAULT_TIMEOUT_MS } from './shared'
 import type { CodeAgentBackend, CodeAgentConfig } from './types'
 
 interface OpencodeEvent {
@@ -141,16 +141,28 @@ async function handlePermission(
   await replyToPermission(baseUrl, permission, decision.action === 'deny' ? 'reject' : 'once')
 }
 
-export const runOpencodeCodeAgent: CodeAgentBackend = async (config, task, workingDir) => {
+export const runOpencodeCodeAgent: CodeAgentBackend = async (config, task, workingDir, control) => {
   const startTime = Date.now()
-  const timeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS
+  const timeoutMs =
+    config.timeoutMs ?? (control ? DEFAULT_BACKGROUND_TIMEOUT_MS : DEFAULT_TIMEOUT_MS)
   const abortController = new AbortController()
   let timedOut = false
+  let stopped = false
   let escalation: string | undefined
   const timeoutId = setTimeout(() => {
     timedOut = true
     abortController.abort()
   }, timeoutMs)
+  // `code_agent_stop`: the prompt request is what everything hangs on, so aborting it ends the
+  // run; the finally block kills the server the session lives in.
+  control?.signal.addEventListener(
+    'abort',
+    () => {
+      stopped = true
+      abortController.abort()
+    },
+    { once: true },
+  )
 
   const proc = spawn('opencode', ['serve', '--port', '0', '--hostname', '127.0.0.1'], {
     cwd: workingDir,
@@ -232,6 +244,9 @@ export const runOpencodeCodeAgent: CodeAgentBackend = async (config, task, worki
         success: false,
         output: `Code agent needs user approval before continuing.\n\n${escalation}`,
       }
+    }
+    if (stopped) {
+      return { success: false, output: 'Delegation stopped before it finished.' }
     }
     if (timedOut) {
       return {

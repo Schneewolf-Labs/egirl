@@ -24,7 +24,9 @@ import { createTaskStore, type TaskStore } from './tasks'
 import {
   type CodeAgentConfig,
   createDefaultToolExecutor,
+  createDelegationRegistry,
   createProcessRegistry,
+  type DelegationRegistry,
   type GitHubConfig,
   type ProcessRegistry,
   type ToolExecutor,
@@ -54,6 +56,7 @@ export interface AppServices {
   mcpConnections: McpConnection[]
   browser: BrowserManager
   processRegistry: ProcessRegistry
+  delegationRegistry: DelegationRegistry
 }
 
 /**
@@ -263,6 +266,7 @@ export async function createAppServices(config: RuntimeConfig): Promise<AppServi
     ...(config.browser.executablePath ? { executablePath: config.browser.executablePath } : {}),
   })
   const processRegistry = createProcessRegistry()
+  const delegationRegistry = createDelegationRegistry()
   const codeAgentConfig = getCodeAgentConfig(config)
   const permissionSupervisor = createPermissionSupervisor({
     config: config.permissionSupervisor,
@@ -301,6 +305,7 @@ export async function createAppServices(config: RuntimeConfig): Promise<AppServi
     skills,
     conversations,
     visionSupported,
+    delegationRegistry,
   )
   // MCP tools join the same executor as the builtins, so safety, energy and permissions apply to
   // them identically. A server that is down costs its own tools and nothing else.
@@ -375,5 +380,6 @@ export async function createAppServices(config: RuntimeConfig): Promise<AppServi
     skills,
     browser,
     processRegistry,
+    delegationRegistry,
   }
 }

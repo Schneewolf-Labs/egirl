@@ -33,6 +33,7 @@ export async function runAPI(config: RuntimeConfig, args: string[]): Promise<voi
     transcript,
     skills,
     processRegistry,
+    delegationRegistry,
   } = await createAppServices(config)
 
   const standup = await gatherStandup(config.workspace.path)
@@ -51,6 +52,7 @@ export async function runAPI(config: RuntimeConfig, args: string[]): Promise<voi
       skills,
       additionalContext: standup.context || undefined,
       sessionMutex,
+      delegations: delegationRegistry,
     })
 
   const agents = new Map<string, AgentLoop>()
@@ -152,6 +154,7 @@ export async function runAPI(config: RuntimeConfig, args: string[]): Promise<voi
     log.info('main', 'Shutting down...')
     taskRunner?.stop()
     server.stop()
+    delegationRegistry.stopAll()
     await processRegistry.shutdownAll()
     taskStore?.close()
     conversations?.close()

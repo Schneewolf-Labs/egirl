@@ -4,7 +4,7 @@ import { sanitizedEnv } from '../../../util/env'
 import { log } from '../../../util/logger'
 import type { ToolResult } from '../../types'
 import { NODE_BINARY_MISSING, nodeBinary } from './node-binary'
-import { DEFAULT_TIMEOUT_MS, stripAnsi } from './shared'
+import { DEFAULT_BACKGROUND_TIMEOUT_MS, DEFAULT_TIMEOUT_MS, stripAnsi } from './shared'
 import type { CodeAgentBackend, CodeAgentConfig } from './types'
 
 function codexSandboxFor(permissionMode: CodeAgentConfig['permissionMode']): string {
@@ -170,9 +170,10 @@ async function chooseCodexOption(
   return { choice: decision.optionId ?? '1' }
 }
 
-export const runCodexCodeAgent: CodeAgentBackend = (config, task, workingDir) => {
+export const runCodexCodeAgent: CodeAgentBackend = (config, task, workingDir, control) => {
   const startTime = Date.now()
-  const timeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS
+  const timeoutMs =
+    config.timeoutMs ?? (control ? DEFAULT_BACKGROUND_TIMEOUT_MS : DEFAULT_TIMEOUT_MS)
 
   // `node` by name resolves to bun under this project's bunfig -- see node-binary.ts. Checked
   // before the promise body, which cannot settle until its timer exists.
@@ -191,6 +192,7 @@ export const runCodexCodeAgent: CodeAgentBackend = (config, task, workingDir) =>
     let promptHandledAt = 0
     let lastPromptSignature = ''
     let stopSent = false
+    const seenBullets = new Set<string>()
 
     const finish = (result: ToolResult): void => {
       if (settled) return
@@ -214,6 +216,25 @@ export const runCodexCodeAgent: CodeAgentBackend = (config, task, workingDir) =>
       },
       stdio: ['pipe', 'pipe', 'pipe'],
     })
+
+    // `code_agent_stop`. Codex draws a full screen rather than streaming lines, so there is no
+    // clean mid-run interrupt to send: end the session and keep the transcript as the partial.
+    control?.signal.addEventListener(
+      'abort',
+      () => {
+        proc.stdin.write(`${JSON.stringify({ type: 'kill' })}\n`)
+        proc.kill('SIGTERM')
+        finish({
+          success: false,
+          output: [
+            'Delegation stopped before it finished.',
+            '',
+            stripAnsi(rawOutput).trim() || 'Nothing was reported yet.',
+          ].join('\n'),
+        })
+      },
+      { once: true },
+    )
 
     const timer = setTimeout(() => {
       timedOut = true
@@ -247,6 +268,19 @@ export const runCodexCodeAgent: CodeAgentBackend = (config, task, workingDir) =>
     const handleCodexData = (data: string): void => {
       rawOutput += data
       const screen = stripAnsi(rawOutput).slice(-5000)
+
+      // Codex redraws a whole screen per frame, so there is no line stream to tee into the
+      // progress buffer. Its completed-step bullets are the one stable, append-only signal on
+      // that screen, so those are what a watching operator gets.
+      if (control) {
+        for (const line of screen.split('\n')) {
+          const bullet = line.trim()
+          if (bullet.startsWith('• ') && !seenBullets.has(bullet)) {
+            seenBullets.add(bullet)
+            control.onProgress(bullet)
+          }
+        }
+      }
       const now = Date.now()
       const prompt = codexChoicePrompt(screen)
       const promptSignature = prompt?.slice(-500) ?? ''

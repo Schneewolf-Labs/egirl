@@ -39,6 +39,7 @@ export async function runServe(config: RuntimeConfig, args: string[]): Promise<v
     transcript,
     skills,
     processRegistry,
+    delegationRegistry,
   } = await createAppServices(config)
 
   const standup = await gatherStandup(config.workspace.path)
@@ -63,6 +64,7 @@ export async function runServe(config: RuntimeConfig, args: string[]): Promise<v
       skills,
       additionalContext: standup.context || undefined,
       sessionMutex,
+      delegations: delegationRegistry,
     })
 
   // --- Discord ---
@@ -194,6 +196,7 @@ export async function runServe(config: RuntimeConfig, args: string[]): Promise<v
     for (const fn of shutdownFns) {
       await fn().catch(() => {})
     }
+    delegationRegistry.stopAll()
     await processRegistry.shutdownAll()
     taskStore?.close()
     conversations?.close()

@@ -17,8 +17,16 @@ export async function runXMPP(config: RuntimeConfig, args: string[]): Promise<vo
     process.exit(1)
   }
 
-  const { providers, memory, conversations, toolExecutor, transcript, skills, processRegistry } =
-    await createAppServices(config)
+  const {
+    providers,
+    memory,
+    conversations,
+    toolExecutor,
+    transcript,
+    skills,
+    processRegistry,
+    delegationRegistry,
+  } = await createAppServices(config)
 
   const standup = await gatherStandup(config.workspace.path)
   const sessionMutex = new SessionMutex()
@@ -35,6 +43,7 @@ export async function runXMPP(config: RuntimeConfig, args: string[]): Promise<vo
     skills,
     additionalContext: standup.context || undefined,
     sessionMutex,
+    delegations: delegationRegistry,
   })
 
   const xmpp = createXMPPChannel(agent, config.channels.xmpp)
@@ -42,6 +51,7 @@ export async function runXMPP(config: RuntimeConfig, args: string[]): Promise<vo
   const shutdown = async () => {
     log.info('main', 'Shutting down...')
     await xmpp.stop()
+    delegationRegistry.stopAll()
     await processRegistry.shutdownAll()
     conversations?.close()
     process.exit(0)

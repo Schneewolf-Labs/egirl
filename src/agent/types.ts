@@ -4,6 +4,7 @@ import type { MemoryManager } from '../memory'
 import type { LLMProvider, ThinkingConfig } from '../providers/types'
 import type { Skill } from '../skills/types'
 import type { ToolExecutor } from '../tools'
+import type { DelegationRegistry } from '../tools/delegation-registry'
 import type { TranscriptLogger } from '../tracking/transcript'
 import type { AgentEventHandler } from './events'
 import type { SessionMutex } from './session-mutex'
@@ -85,4 +86,10 @@ export interface AgentLoopDeps {
   additionalContext?: string
   /** Shared mutex to serialize agent runs across entry points */
   sessionMutex?: SessionMutex
+  /**
+   * Background code-agent delegations. The loop drains their completion notices at turn
+   * boundaries so a delegation that lands while the operator is working gets read, instead of
+   * waiting for the operator to remember to poll `code_agent_status`.
+   */
+  delegations?: DelegationRegistry
 }

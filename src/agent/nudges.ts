@@ -17,6 +17,10 @@ export function interjectionNudge(message: string): string {
 }
 
 /** Consolidation break: externalize everything durable before continuing (or before compaction). */
+export function delegationNotice(message: string): string {
+  return `[System: a background code-agent delegation you started has finished. Read the result and decide what it means for the work in hand — it may need checking, following up, or nothing at all.]\n\n${message}`
+}
+
 export function checkpointNudge(contextPressed: boolean): string {
   const urgency = contextPressed
     ? 'Context is nearly full and the conversation is about to be compacted. Write everything durable NOW'

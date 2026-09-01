@@ -10,6 +10,7 @@ import type {
   Tokenizer,
 } from '../providers/types'
 import type { ToolExecutor } from '../tools'
+import type { DelegationRegistry } from '../tools/delegation-registry'
 import { hasStrandedToolCall, stripStrandedToolCalls } from '../tools/format'
 import { trace } from '../tracking/traces'
 import type { TranscriptLogger } from '../tracking/transcript'
@@ -29,6 +30,7 @@ import { ConversationHistory } from './history'
 import {
   checkpointNudge,
   DEFAULT_VALIDATION_FEEDBACK,
+  delegationNotice,
   interjectionNudge,
   MAX_TURNS_SUMMARY_NUDGE,
   planningModePrompt,
@@ -73,6 +75,7 @@ export class AgentLoop {
   private transcript: TranscriptLogger | null
   private promptOptions: SystemPromptOptions
   private mutex: SessionMutex | null
+  private delegations: DelegationRegistry | null
   private history: ConversationHistory
   private compactor = new CompactionScheduler()
   /**
@@ -93,6 +96,7 @@ export class AgentLoop {
     this.memory = deps.memory ?? null
     this.conversationStore = deps.conversationStore ?? null
     this.mutex = deps.sessionMutex ?? null
+    this.delegations = deps.delegations ?? null
     this.transcript = deps.transcript ?? null
     this.promptOptions = { skills: deps.skills, additionalContext: deps.additionalContext }
     this.context = createAgentContext(deps.config, deps.sessionId, this.promptOptions)
@@ -242,6 +246,14 @@ export class AgentLoop {
           for (const injected of this.activeRun.pendingInjections.splice(0)) {
             addMessage(this.context, { role: 'user', content: interjectionNudge(injected) })
           }
+        }
+
+        // Background delegations that finished land at the same boundary, and for the same
+        // reason: a user message spliced between a tool call and its results corrupts the
+        // transcript. Pulled rather than pushed, so a delegation that finishes while the agent
+        // is idle is still read on the next run instead of being dropped.
+        for (const finished of this.delegations?.takeNotices() ?? []) {
+          addMessage(this.context, { role: 'user', content: delegationNotice(finished) })
         }
 
         // Consolidation break: inject one checkpoint turn telling the agent to externalize

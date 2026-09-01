@@ -147,6 +147,61 @@ Tool call shape:
 
 The result includes the backend's final output plus metadata such as duration, session id, turns, or cost when the backend exposes it.
 
+## Background Delegations
+
+A foreground `code_agent` call blocks the operator for the whole job. That is fine for a
+five-minute fix and wrong for a long one: the operator cannot see what the delegate is doing,
+cannot correct a run that has gone the wrong way, and cannot end one without losing the work.
+
+`background: true` turns the delegation into a handle instead — the same shape `process_start`
+gives a long-running shell command:
+
+```json
+{
+  "name": "code_agent",
+  "arguments": {
+    "task": "Split src/agent/loop.ts into loop + chat + background",
+    "working_dir": "/home/user/projects/egirl",
+    "background": true
+  }
+}
+```
+
+The call returns a delegation id (`d3f9a1`) immediately and the operator carries on. Three
+tools act on it:
+
+| Tool | What it does |
+|------|--------------|
+| `code_agent_status` | List delegations, or show one delegation's progress and — once settled — its full result. `since_line` returns only what is new. |
+| `code_agent_steer` | Send a correction into a running delegation. It arrives as the next user turn in that delegate's own session, so everything it has already worked out is kept. |
+| `code_agent_stop` | End a run. Files it already wrote stay written, and whatever it reported stays readable through `code_agent_status`. |
+
+When a delegation finishes, its result is delivered to the operator at the next turn boundary
+rather than waiting to be polled — a delegation that lands while the agent is idle is read on
+the next run. Steering, stops and completions all land at turn boundaries for the same reason
+interjections do: a user message spliced between a tool call and its results would corrupt the
+transcript the model sees.
+
+Background runs get a 30-minute default ceiling rather than the foreground five, since nothing
+is blocked while they work. An explicit `timeout_ms` still wins over both.
+
+### Steering support by backend
+
+| Backend | Steerable | Stop | Progress |
+|---------|-----------|------|----------|
+| `claude` | Yes — the prompt is sent as an open stream, so a steer becomes another turn in the same session | Yes | Assistant text and tool names |
+| `codex` | No — the PTY is mid-render and injecting text confuses its completion detection | Yes | Completed-step bullets |
+| `opencode` | No | Yes | None |
+
+Capability is declared, not assumed: `code_agent_steer` on a backend that cannot take input
+says so and tells the operator to stop and re-delegate, rather than accepting a message that
+goes nowhere. The same rule covers failover — if a delegation falls back to a backend that
+cannot steer, queued steers are dropped with a note in the progress log instead of silently.
+
+Failover itself is narrower in the background than in the foreground: a backend that fails
+**after** producing progress is not retried on the next provider, because that would start a
+second agent over half-finished work under the same delegation id.
+
 ## Migration Notes
 
 Existing Claude users do not need to change config immediately. This still works:

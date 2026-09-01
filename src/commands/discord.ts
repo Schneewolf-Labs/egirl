@@ -34,6 +34,7 @@ export async function runDiscord(config: RuntimeConfig, args: string[]): Promise
     transcript,
     skills,
     processRegistry,
+    delegationRegistry,
   } = await createAppServices(config)
 
   // Gather workspace standup for agent context
@@ -56,6 +57,7 @@ export async function runDiscord(config: RuntimeConfig, args: string[]): Promise
       skills,
       additionalContext: standup.context || undefined,
       sessionMutex,
+      delegations: delegationRegistry,
     })
 
   const discord = createDiscordChannel(agentFactory, config.channels.discord, providers.local)
@@ -162,6 +164,7 @@ export async function runDiscord(config: RuntimeConfig, args: string[]): Promise
     discovery?.stop()
     taskRunner?.stop()
     await discord.stop()
+    delegationRegistry.stopAll()
     await processRegistry.shutdownAll()
     taskStore?.close()
     conversations?.close()

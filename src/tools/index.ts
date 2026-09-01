@@ -2,6 +2,7 @@ export {
   type CodeAgentConfig,
   createBrowserTools,
   createCodeAgentTool,
+  createDelegationControlTools,
   createGitHubTools,
   createMemoryTools,
   createPeerTools,
@@ -26,6 +27,12 @@ export {
   webResearchTool,
   writeTool,
 } from './builtin'
+export {
+  createDelegationRegistry,
+  type DelegationRegistry,
+  type DelegationSnapshot,
+  type DelegationStatus,
+} from './delegation-registry'
 export {
   type ConfirmCallback,
   createToolExecutor,
@@ -63,6 +70,7 @@ import {
   createBrowserTools,
   createCodeAgentTool,
   createConsultTool,
+  createDelegationControlTools,
   createGitHubTools,
   createMemoryTools,
   createPeerTools,
@@ -86,6 +94,7 @@ import {
 import { createSessionSearchTool } from './builtin/session-search'
 import { createSkillReadTool as buildSkillReadTool } from './builtin/skill'
 import { createSkillManageTool } from './builtin/skill-manage'
+import type { DelegationRegistry } from './delegation-registry'
 import { createToolExecutor } from './executor'
 import type { ProcessRegistry } from './process-registry'
 import type { Tool, ToolResult } from './types'
@@ -125,6 +134,7 @@ export function createDefaultToolExecutor(
   skills?: Skill[],
   conversationStore?: ConversationStore,
   visionSupported?: boolean,
+  delegationRegistry?: DelegationRegistry,
 ) {
   const executor = createToolExecutor()
   const t = config.tools
@@ -283,7 +293,13 @@ export function createDefaultToolExecutor(
 
   // Code agent tool (available if claude code config provided)
   if (t.codeAgent && codeAgent) {
-    executor.register(createCodeAgentTool(codeAgent))
+    executor.register(createCodeAgentTool(codeAgent, delegationRegistry))
+    // Handles on running delegations. Only worth the prompt space when a registry exists to
+    // hold them -- without one, code_agent is blocking and there is nothing to steer.
+    if (delegationRegistry) {
+      const dt = createDelegationControlTools(delegationRegistry)
+      executor.registerAll([dt.statusTool, dt.steerTool, dt.stopTool])
+    }
   } else if (t.codeAgent)
     missingDep('code_agent', 'no [channels.code_agent] or [channels.claude_code] config was found')
 

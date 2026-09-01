@@ -39,6 +39,7 @@ export async function runCLI(config: RuntimeConfig, args: string[]): Promise<voi
     transcript,
     skills,
     processRegistry,
+    delegationRegistry,
   } = await createAppServices(config)
 
   // Gather workspace standup for agent context
@@ -61,6 +62,7 @@ export async function runCLI(config: RuntimeConfig, args: string[]): Promise<voi
     skills,
     additionalContext: standup.context || undefined,
     sessionMutex,
+    delegations: delegationRegistry,
   })
 
   // Single message mode — no task runner
@@ -240,6 +242,7 @@ export async function runCLI(config: RuntimeConfig, args: string[]): Promise<voi
     discovery?.stop()
     taskRunner?.stop()
     await cli.stop()
+    delegationRegistry.stopAll()
     await processRegistry.shutdownAll()
     taskStore?.close()
     conversations?.close()

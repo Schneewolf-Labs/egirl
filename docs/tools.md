@@ -562,6 +562,7 @@ Delegate a coding task to an autonomous code agent. Backends are Claude Code via
 |-----------|------|----------|-------------|
 | `task` | string | Yes | A clear description of the coding task to perform |
 | `working_dir` | string | No | Working directory for the task (defaults to configured workspace) |
+| `background` | boolean | No | Return a delegation id immediately instead of waiting for the result (default: false). Only offered when a delegation registry exists |
 
 **Behavior:**
 - Launches Claude Code using the Agent SDK's `query()` function, Codex using its interactive terminal UI through a PTY, or OpenCode by spawning `opencode serve` and driving it over HTTP
@@ -577,6 +578,49 @@ Delegate a coding task to an autonomous code agent. Backends are Claude Code via
 ```json
 {"name": "code_agent", "arguments": {"task": "Split src/agent/loop.ts into loop + chat + background, keeping public exports unchanged"}}
 ```
+
+---
+
+## code_agent_status
+
+List background delegations, or show one delegation's progress and its result once it has settled.
+
+**Source:** `src/tools/builtin/code-agent/control-tools.ts`
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `id` | string | No | Delegation id from `code_agent` (omit to list all) |
+| `since_line` | number | No | Only return progress after this index (use `next_line` from a previous call) |
+| `tail_lines` | number | No | Cap returned progress to the last N lines |
+
+---
+
+## code_agent_steer
+
+Send a correction into a running background delegation. It arrives as the next message in that delegation's session, keeping everything the code agent has already worked out.
+
+**Source:** `src/tools/builtin/code-agent/control-tools.ts`
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `id` | string | Yes | Delegation id from `code_agent` |
+| `message` | string | Yes | What to tell the running code agent |
+
+**Behavior:**
+- Claude-backed delegations are steerable; Codex and OpenCode are not, and say so rather than swallowing the message
+- Delivered at the delegate's next turn; a steer that arrives as a run is finishing keeps the run alive instead of being dropped
+
+---
+
+## code_agent_stop
+
+Stop a running background delegation. Work already written to disk is kept, and whatever the agent reported before the stop stays readable through `code_agent_status`.
+
+**Source:** `src/tools/builtin/code-agent/control-tools.ts`
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `id` | string | Yes | Delegation id from `code_agent` |
 
 ---
 
