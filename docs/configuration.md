@@ -232,6 +232,15 @@ Required only when running `xmpp` (or `serve` with XMPP configured). XMPP creden
 | `resource` | string | `egirl` | XMPP resource identifier |
 | `allowed_jids` | string[] | `[]` | Bare JIDs allowed to message. Empty = allow all |
 
+### `[channels.telegram]`
+
+Required only when running `telegram` (or `serve` with Telegram configured). Create a bot with [@BotFather](https://t.me/BotFather) and put its token in `.env` as `TELEGRAM_BOT_TOKEN`. egirl long-polls the Bot API, so no webhook or public endpoint is needed.
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `allowed_users` | string[] | `[]` | Numeric Telegram user IDs or `@usernames` allowed to message. Empty = allow all (anyone who finds the bot) |
+
+Outbound targets (`report.to`, task notifications) use the chat ID: `telegram:123456789`. A DM chat ID equals the user's ID, so listing your numeric ID in `allowed_users` lets background tasks reach you before you've messaged the bot; otherwise `self` resolves to whoever messaged it last.
 ### `[channels.matrix]`
 
 Required only when running `matrix` (or `serve` with Matrix configured). Auth goes in `.env`: either `MATRIX_ACCESS_TOKEN` for a pre-provisioned bot token, or `MATRIX_USERNAME` + `MATRIX_PASSWORD` for password login (egirl logs the device out again on shutdown). Talks to the homeserver over plain HTTPS with no SDK. **Unencrypted rooms only** — the bot cannot read or send in end-to-end encrypted rooms, so create the DM room with encryption off.
@@ -484,6 +493,7 @@ Create starter files with `bun run start init --provider codex`, or copy the tem
 | `DISCORD_TOKEN` | For Discord mode | Discord bot token |
 | `XMPP_USERNAME` | For XMPP mode | XMPP account username (local part, without domain) |
 | `XMPP_PASSWORD` | For XMPP mode | XMPP account password |
+| `TELEGRAM_BOT_TOKEN` | For Telegram mode | Bot token from @BotFather |
 | `MATRIX_ACCESS_TOKEN` | For Matrix mode | Bot access token. Alternative to username/password |
 | `MATRIX_USERNAME` | For Matrix mode | Matrix localpart or full MXID, with `MATRIX_PASSWORD` |
 | `MATRIX_PASSWORD` | For Matrix mode | Matrix account password |
@@ -538,6 +548,8 @@ permission_mode = "default"
 # service = "xmpp://localhost:5222"
 # allowed_jids = ["you@localhost"]
 
+# [channels.telegram]
+# allowed_users = ["123456789"]
 # [channels.matrix]
 # homeserver = "https://matrix.example.com"
 # allowed_users = ["@you:example.com"]
@@ -578,6 +590,7 @@ dirs = ["~/.egirl/skills", "{workspace}/skills"]
 DISCORD_TOKEN=...
 XMPP_USERNAME=egirl
 XMPP_PASSWORD=...
+TELEGRAM_BOT_TOKEN=...
 MATRIX_ACCESS_TOKEN=...
 EGIRL_API_TOKEN=...
 GITHUB_TOKEN=ghp_...

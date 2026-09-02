@@ -17,13 +17,13 @@ import type { ReplyBroker } from './broker'
 
 export interface ReportTarget {
   kind: 'peer' | 'channel'
-  /** Peer name for kind=peer; outbound channel name (discord, xmpp) for kind=channel. */
+  /** Peer name for kind=peer; outbound channel name (discord, xmpp, telegram) for kind=channel. */
   channel: string
   /** Channel-specific target (JID, channel ID). Empty for kind=peer. */
   target: string
 }
 
-/** Parse a `report.to` string: `peer:hermes`, `xmpp:nick@example.com`, `discord:12345`. */
+/** Parse a `report.to` string: `peer:hermes`, `xmpp:nick@example.com`, `discord:12345`, `telegram:<chatId>`. */
 export function parseReportTarget(to: string): ReportTarget | undefined {
   const idx = to.indexOf(':')
   if (idx <= 0 || idx === to.length - 1) return undefined

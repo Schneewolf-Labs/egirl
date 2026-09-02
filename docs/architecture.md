@@ -53,6 +53,7 @@ Each channel is a thin adapter that converts its interface into a call to `Agent
 - **CLI** (`src/channels/cli.ts`): readline-based interactive terminal. Supports single-message mode via `-m`.
 - **Discord** (`src/channels/discord.ts`): discord.js bot responding to DMs and mentions. Filters by `allowed_channels` and `allowed_users`.
 - **XMPP** (`src/channels/xmpp.ts`): XMPP/Jabber chat via `@xmpp/client`. Connects to a Prosody (or other XMPP) server. Filters by `allowed_jids`.
+- **Telegram** (`src/channels/telegram.ts`): Telegram Bot API over long polling with built-in `fetch` (no library, no webhook). Filters by `allowed_users`.
 - **Matrix** (`src/channels/matrix.ts`): Matrix chat over the raw client-server API (`fetch` + long-polling `/sync`, no SDK). Unencrypted rooms only. Filters by `allowed_users` and `allowed_rooms`.
 - **Claude Code bridge** (`src/channels/claude-code.ts`): runs Claude Code directly and uses the local model to answer permission/clarification prompts. This is a channel, not the `code_agent` tool.
 - **HTTP API** (`src/api.ts`): small Bun.serve handler exposing chat, memory, and task endpoints. Bound to localhost by default; optional bearer auth via `EGIRL_API_TOKEN`.
@@ -132,7 +133,7 @@ When interior compaction is enabled, long conversations are summarized mid-histo
 
 ```
 src/index.ts (entry point — parses command, dispatches to runner)
-├── commands/        → command runners (cli, discord, xmpp, matrix, api, claude-code, serve, status)
+├── commands/        → command runners (cli, discord, xmpp, telegram, matrix, api, claude-code, serve, status)
 ├── bootstrap.ts     → shared AppServices factory
 │   ├── config/      → loads egirl.toml + .env → RuntimeConfig
 │   ├── workspace/   → bootstraps ~/.egirl/workspace with templates
@@ -145,7 +146,7 @@ src/index.ts (entry point — parses command, dispatches to runner)
 │   └── conversation/→ creates ConversationStore for persistence
 ├── agent/           → creates AgentLoop (orchestrates everything above)
 ├── api.ts           → HTTP API (chat, memory, tasks)
-└── channels/        → CLI / Discord / XMPP / Matrix / Claude Code bridge
+└── channels/        → CLI / Discord / XMPP / Telegram / Matrix / Claude Code bridge
 ```
 
 Dependencies flow downward. Channels depend on the agent loop; nothing depends on channels.
@@ -209,6 +210,7 @@ egirl/
 │   │   ├── discord/          # Event/formatting helpers
 │   │   ├── claude-code.ts    # Claude Code bridge channel
 │   │   ├── xmpp.ts           # XMPP/Jabber chat
+│   │   ├── telegram.ts       # Telegram Bot API (long polling)
 │   │   ├── matrix.ts         # Matrix chat (raw client-server API)
 │   │   └── plain-events.ts   # Tool-call narration for plain-text transports
 │   ├── commands/             # Command runners for each entry mode

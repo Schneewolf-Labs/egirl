@@ -33,7 +33,7 @@ No multi-model routing. No per-message cloud escalation. The local model solves 
 - **Conversation persistence** — picks up where you left off across restarts
 - **Background tasks** — cron-scheduled work with business-hours awareness and dependency ordering
 - **Tools that feel like hands** — file ops, shell, git, GitHub, browser (Playwright), web research, screenshots
-- **Five ways to talk to it** — interactive CLI, Discord DMs, self-hosted XMPP, Matrix, or a minimal HTTP API (for scripts, automations, LAN access)
+- **Six ways to talk to it** — interactive CLI, Discord DMs, self-hosted XMPP, Telegram, Matrix, or a minimal HTTP API (for scripts, automations, LAN access)
 - **Skills** — reusable Markdown instruction sets
 - **Safety guardrails** — command filter, path sandbox, sensitive file guard, audit log (guardrails, not a sandbox)
 - **Customizable personality** — Kira's the default, replace her with whoever
@@ -97,6 +97,7 @@ code_agent = true     # the primary tool — delegate coding to the configured c
 DISCORD_TOKEN=...     # for Discord bot
 XMPP_USERNAME=...     # for XMPP bot
 XMPP_PASSWORD=...
+TELEGRAM_BOT_TOKEN=... # for Telegram bot (from @BotFather)
 MATRIX_ACCESS_TOKEN=... # for Matrix bot (or MATRIX_USERNAME + MATRIX_PASSWORD)
 EGIRL_API_TOKEN=...   # optional bearer token for the HTTP API (required if exposing on LAN)
 GITHUB_TOKEN=...      # for gh_* tools
@@ -114,9 +115,10 @@ bun run src/index.ts --instance ops-big cli # Run a named instance
 bun run src/index.ts cli -m "hello"       # Single message, then exit
 bun run src/index.ts discord              # Discord bot only
 bun run src/index.ts xmpp                 # XMPP bot only (self-hosted)
+bun run src/index.ts telegram             # Telegram bot only
 bun run src/index.ts matrix               # Matrix bot only (unencrypted rooms)
 bun run src/index.ts api                  # HTTP API on localhost:3000 (configurable)
-bun run src/index.ts serve                # Discord/XMPP/Matrix + background task runner
+bun run src/index.ts serve                # Discord/XMPP/Telegram/Matrix + background task runner
 bun run src/index.ts claude-code          # Direct Claude Code bridge (alias: cc)
 bun run src/index.ts cc -m "fix the tests"
 bun run src/index.ts status               # Show config + connection status
@@ -132,7 +134,7 @@ egirl/
 │   ├── agent/                # The local LLM's loop, memory-aware
 │   ├── api.ts                # Minimal HTTP API (Bun.serve, ~200 lines)
 │   ├── browser/              # Playwright browser automation
-│   ├── channels/             # CLI, Discord, XMPP, Matrix, Claude Code bridge
+│   ├── channels/             # CLI, Discord, XMPP, Telegram, Matrix, Claude Code bridge
 │   ├── commands/             # Command runners
 │   ├── config/               # TOML loading + TypeBox validation
 │   ├── conversation/         # Persisted conversation store (SQLite)

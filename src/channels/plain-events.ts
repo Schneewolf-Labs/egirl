@@ -2,7 +2,7 @@ import type { AgentEventHandler } from '../agent/events'
 import type { ToolCall } from '../providers/types'
 
 /**
- * Tool-call narration for plain-text chat transports (XMPP, Matrix).
+ * Tool-call narration for plain-text chat transports (XMPP, Telegram, Matrix).
  *
  * These surfaces have no embeds or reactions to hang progress off, so the tool calls a turn
  * made are collected while the agent runs and prefixed to the final reply -- one compact line

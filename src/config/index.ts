@@ -494,6 +494,15 @@ export function loadConfig(options: LoadConfigOptions = {}): RuntimeConfig {
     }
   }
 
+  const telegramToken = process.env.TELEGRAM_BOT_TOKEN
+
+  if (telegramToken && toml.channels?.telegram) {
+    config.channels.telegram = {
+      token: telegramToken,
+      allowedUsers: toml.channels.telegram.allowed_users ?? [],
+    }
+  }
+
   const matrixToken = process.env.MATRIX_ACCESS_TOKEN
   const matrixUsername = process.env.MATRIX_USERNAME
   const matrixPassword = process.env.MATRIX_PASSWORD

@@ -10,6 +10,7 @@ import { runMatrix } from './commands/matrix'
 import { runNew } from './commands/new'
 import { runServe } from './commands/serve'
 import { showStatus } from './commands/status'
+import { runTelegram } from './commands/telegram'
 import { runXMPP } from './commands/xmpp'
 import { findConfigFile, loadConfig, type RuntimeConfig } from './config'
 import { loadInstanceEnv } from './config/env-files'
@@ -130,6 +131,10 @@ async function main() {
       await runXMPP(config, commandArgs)
       break
 
+    case 'telegram':
+      await runTelegram(config, commandArgs)
+      break
+
     case 'matrix':
       await runMatrix(config, commandArgs)
       break
@@ -165,9 +170,10 @@ ${c.primary}Commands${RESET}
   ${c.accent}doctor${RESET}         Check local model, config, and code-agent setup
   ${c.accent}discord${RESET}        Start Discord bot
   ${c.accent}xmpp${RESET}           Start XMPP bot (self-hosted chat)
+  ${c.accent}telegram${RESET}       Start Telegram bot
   ${c.accent}matrix${RESET}         Start Matrix bot (unencrypted rooms)
   ${c.accent}api${RESET}            Start HTTP API (localhost by default — scripts, automations, LAN access)
-  ${c.accent}serve${RESET}          Discord + XMPP + Matrix + background task runner in one process
+  ${c.accent}serve${RESET}          Discord + XMPP + Telegram + Matrix + background task runner in one process
   ${c.accent}claude-code${RESET}    Bridge to Claude Code with local model supervision ${DIM}(alias: cc)${RESET}
   ${c.accent}status${RESET}         Show current configuration and status
   ${c.accent}help${RESET}           Show this help message

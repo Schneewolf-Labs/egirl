@@ -1,7 +1,12 @@
 import { type AgentFactory, createAgentLoop } from '../agent'
 import { SessionMutex } from '../agent/session-mutex'
 import { createAppServices } from '../bootstrap'
-import { createDiscordChannel, createMatrixChannel, createXMPPChannel } from '../channels'
+import {
+  createDiscordChannel,
+  createMatrixChannel,
+  createTelegramChannel,
+  createXMPPChannel,
+} from '../channels'
 import type { RuntimeConfig } from '../config'
 import { createReplyBroker } from '../report/broker'
 import { registerReportTool } from '../report/register'
@@ -22,11 +27,12 @@ export async function runServe(config: RuntimeConfig, args: string[]): Promise<v
 
   const discordConf = config.channels.discord
   const xmppConf = config.channels.xmpp
+  const telegramConf = config.channels.telegram
   const matrixConf = config.channels.matrix
 
-  if (!discordConf && !xmppConf && !matrixConf) {
+  if (!discordConf && !xmppConf && !telegramConf && !matrixConf) {
     console.error(
-      'Error: No channels configured. Configure channels.discord, channels.xmpp or channels.matrix in egirl.toml to use serve mode, or run `bun run cli` instead.',
+      'Error: No channels configured. Configure channels.discord, channels.xmpp, channels.telegram or channels.matrix in egirl.toml to use serve mode, or run `bun run cli` instead.',
     )
     process.exit(1)
   }
@@ -90,6 +96,19 @@ export async function runServe(config: RuntimeConfig, args: string[]): Promise<v
     active.push('xmpp')
   }
 
+  // --- Telegram ---
+  // Same shape as XMPP: one long-lived session, one chat stream.
+  let telegram: ReturnType<typeof createTelegramChannel> | undefined
+  if (telegramConf) {
+    const telegramAgent = agentFactory('telegram:default')
+    telegram = createTelegramChannel(telegramAgent, telegramConf, replyBroker)
+    outbound.set('telegram', {
+      send: async (target, message) => telegram?.sendTo(target, message),
+    })
+    shutdownFns.push(async () => telegram?.stop())
+    active.push('telegram')
+  }
+
   // --- Matrix ---
   // Same shape as XMPP: one long-lived session, one chat stream.
   let matrix: ReturnType<typeof createMatrixChannel> | undefined
@@ -126,13 +145,19 @@ export async function runServe(config: RuntimeConfig, args: string[]): Promise<v
       sessionMutex,
     })
 
-    // Default task channel: prefer discord if configured, then xmpp, then matrix
-    const defaultChannel = discord ? 'discord' : xmpp ? 'xmpp' : 'matrix'
-    const defaultTarget = discord
-      ? discordDefaultTarget
-      : xmpp
-        ? (xmppConf?.allowedJids[0] ?? 'self')
-        : (matrixConf?.allowedRooms[0] ?? 'self')
+    // Default task channel: discord, then xmpp, then telegram, then matrix
+    let defaultChannel = 'matrix'
+    let defaultTarget = matrixConf?.allowedRooms[0] ?? 'self'
+    if (discord) {
+      defaultChannel = 'discord'
+      defaultTarget = discordDefaultTarget
+    } else if (xmpp) {
+      defaultChannel = 'xmpp'
+      defaultTarget = xmppConf?.allowedJids[0] ?? 'self'
+    } else if (telegram) {
+      defaultChannel = 'telegram'
+      defaultTarget = 'self'
+    }
 
     const taskTools = createTaskTools(taskStore, taskRunner, config.tasks.maxActiveTasks, () => ({
       channel: defaultChannel,
@@ -260,6 +285,12 @@ export async function runServe(config: RuntimeConfig, args: string[]): Promise<v
       () => xmpp.start(),
       async () => xmpp?.stop(),
     )
+  if (telegram)
+    await startChannel(
+      'telegram',
+      () => telegram.start(),
+      async () => telegram?.stop(),
+    )
   if (matrix)
     await startChannel(
       'matrix',
@@ -269,7 +300,8 @@ export async function runServe(config: RuntimeConfig, args: string[]): Promise<v
   taskRunner?.start()
   discovery?.start()
 
-  const inert = active.filter((a) => a !== 'discord' && a !== 'xmpp' && a !== 'matrix')
+  const chatChannels = new Set(['discord', 'xmpp', 'telegram', 'matrix'])
+  const inert = active.filter((a) => !chatChannels.has(a))
   const serving = [...started, ...inert]
   if (!serving.length) {
     log.warn('main', 'No channels started. Background tasks still run; chat is unavailable.')

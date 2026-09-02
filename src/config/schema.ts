@@ -170,6 +170,11 @@ const baseProperties = {
           allowed_jids: Type.Array(Type.String(), { default: [] }),
         }),
       ),
+      telegram: Type.Optional(
+        Type.Object({
+          allowed_users: Type.Array(Type.String(), { default: [] }),
+        }),
+      ),
       matrix: Type.Optional(
         Type.Object({
           homeserver: Type.String({ default: 'https://matrix.org' }),
@@ -310,7 +315,7 @@ const baseProperties = {
 
   // Who this agent reports to (docs/autonomy-loop.md, Phase 2): "peer:<name>" for an agent
   // supervisor, or "<channel>:<target>" — e.g. "xmpp:you@example.com", "discord:<channelId>",
-  // "matrix:!room:example.com"
+  // "telegram:<chatId>", "matrix:!room:example.com"
   // — for a human. The report tool is only registered when this is set.
   report: Type.Optional(
     Type.Object({
@@ -590,6 +595,11 @@ export interface RuntimeConfig {
       password: string
       resource?: string
       allowedJids: string[]
+    }
+    telegram?: {
+      token: string
+      /** Numeric user IDs or @usernames allowed to message (empty = allow all). */
+      allowedUsers: string[]
     }
     matrix?: {
       homeserver: string

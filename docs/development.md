@@ -37,9 +37,10 @@ Runs with `--watch` — auto-restarts on file changes.
 bun run start cli              # Interactive CLI
 bun run start discord          # Discord bot
 bun run start xmpp             # XMPP/Jabber chat
+bun run start telegram         # Telegram bot
 bun run start api              # HTTP REST API server
 bun run start claude-code      # Claude Code bridge (alias: cc)
-bun run start serve            # Discord/XMPP + background task runner in one process
+bun run start serve            # Discord/XMPP/Telegram + background task runner in one process
 bun run start status           # Check connections
 ```
 
@@ -171,11 +172,11 @@ See [architecture.md](architecture.md) for the full breakdown. Key points:
 
 - `src/index.ts` — entry point; parses the command and dispatches
 - `src/bootstrap.ts` — shared `AppServices` factory
-- `src/commands/` — command runners (cli, discord, xmpp, api, claude-code, serve, status)
+- `src/commands/` — command runners (cli, discord, xmpp, telegram, api, claude-code, serve, status)
 - `src/agent/` — conversation loop, context management, summarization
 - `src/api.ts` — minimal HTTP API (Bun.serve)
 - `src/browser/` — Playwright browser automation
-- `src/channels/` — user interfaces (CLI, Discord, XMPP, Claude Code bridge)
+- `src/channels/` — user interfaces (CLI, Discord, XMPP, Telegram, Claude Code bridge)
 - `src/config/` — config loading and TypeBox validation
 - `src/conversation/` — conversation persistence (SQLite)
 - `src/energy/` — energy-budget accounting for tool calls
