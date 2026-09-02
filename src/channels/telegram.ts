@@ -193,6 +193,11 @@ export class TelegramChannel implements Channel {
     // replying to the agent's question, not starting a new conversation turn.
     if (this.broker?.tryDeliver('telegram', chatId, text)) return
 
+    // Show "typing…" while she thinks. Telegram clears a chat action after ~5s, so refresh it
+    // on an interval until the reply goes out. Best-effort -- it never fails a turn.
+    void this.sendTyping(chatId)
+    const typing = setInterval(() => void this.sendTyping(chatId), 4000)
+
     try {
       const { handler, state } = createPlainTextEventHandler()
       const response = await this.agent.run(text, { events: handler })
@@ -205,6 +210,17 @@ export class TelegramChannel implements Channel {
       const errorMsg = error instanceof Error ? error.message : String(error)
       log.error('telegram', 'Error processing message:', error)
       await this.sendMessage(chatId, `Error: ${errorMsg}`).catch(() => {})
+    } finally {
+      clearInterval(typing)
+    }
+  }
+
+  /** Telegram chat action ("typing…"). Cosmetic -- swallow failures, never break a turn. */
+  private async sendTyping(chatId: string): Promise<void> {
+    try {
+      await this.call('sendChatAction', { chat_id: chatId, action: 'typing' })
+    } catch {
+      // A missing typing indicator is not worth surfacing.
     }
   }
 
