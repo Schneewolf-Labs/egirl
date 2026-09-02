@@ -1,8 +1,8 @@
 import type { AgentLoop } from '../agent'
 import type { ReplyBroker } from '../report/broker'
 import { log } from '../util/logger'
-import { buildToolCallPrefix, createPlainEventHandler } from './plain-events'
-import type { Channel } from './types'
+import { deliver, runTurn } from './spine'
+import type { ChatChannel } from './types'
 
 /**
  * Telegram over the Bot API with long polling.
@@ -60,21 +60,6 @@ export function isAllowedTelegramUser(allowedUsers: string[], user: TelegramUser
   })
 }
 
-/** Split on line boundaries where possible so a long reply lands as readable pieces. */
-export function chunkText(text: string, maxLength: number = TELEGRAM_MAX_MESSAGE_LENGTH): string[] {
-  if (text.length <= maxLength) return [text]
-  const chunks: string[] = []
-  let rest = text
-  while (rest.length > maxLength) {
-    let cut = rest.lastIndexOf('\n', maxLength)
-    if (cut <= 0) cut = maxLength
-    chunks.push(rest.slice(0, cut))
-    rest = rest.slice(cut).replace(/^\n/, '')
-  }
-  if (rest) chunks.push(rest)
-  return chunks
-}
-
 function sleep(ms: number, signal: AbortSignal): Promise<void> {
   return new Promise((resolve) => {
     const done = () => {
@@ -87,7 +72,7 @@ function sleep(ms: number, signal: AbortSignal): Promise<void> {
   })
 }
 
-export class TelegramChannel implements Channel {
+export class TelegramChannel implements ChatChannel {
   readonly name = 'telegram'
   private agent: AgentLoop
   private config: TelegramConfig
@@ -129,16 +114,25 @@ export class TelegramChannel implements Channel {
   }
 
   /** Outbound: send to a chat ID (used by the task runner and the report tool). */
-  async sendTo(to: string, body: string): Promise<void> {
+  async send(to: string, body: string): Promise<void> {
     const target = !to || to === 'self' ? this.defaultTarget() : to
     if (!target) {
       log.warn(
         'telegram',
-        'sendTo called without a target: nobody has messaged the bot yet and allowed_users has no numeric ID',
+        'send called without a target: nobody has messaged the bot yet and allowed_users has no numeric ID',
       )
       return
     }
-    await this.sendMessage(target, body)
+    await deliver(this.surface(target), body)
+  }
+
+  private surface(chatId: string) {
+    return {
+      maxLength: TELEGRAM_MAX_MESSAGE_LENGTH,
+      send: async (chunk: string) => {
+        await this.call('sendMessage', { chat_id: chatId, text: chunk })
+      },
+    }
   }
 
   private defaultTarget(): string | undefined {
@@ -189,46 +183,25 @@ export class TelegramChannel implements Channel {
     const who = from.username ? `@${from.username}` : String(from.id)
     log.info('telegram', `Message from ${who}: ${text.slice(0, 100)}...`)
 
-    // A pending report ask on this chat consumes the message as its answer -- the human is
-    // replying to the agent's question, not starting a new conversation turn.
-    if (this.broker?.tryDeliver('telegram', chatId, text)) return
-
-    // Show "typing…" while she thinks. Telegram clears a chat action after ~5s, so refresh it
-    // on an interval until the reply goes out. Best-effort -- it never fails a turn.
-    void this.sendTyping(chatId)
-    const typing = setInterval(() => void this.sendTyping(chatId), 4000)
-
-    try {
-      const { handler, state } = createPlainEventHandler()
-      const response = await this.agent.run(text, { events: handler })
-
-      const prefix = buildToolCallPrefix(state)
-      await this.sendMessage(chatId, prefix + response.content)
-
-      log.debug('telegram', `Responded via ${response.provider}`)
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : String(error)
-      log.error('telegram', 'Error processing message:', error)
-      await this.sendMessage(chatId, `Error: ${errorMsg}`).catch(() => {})
-    } finally {
-      clearInterval(typing)
-    }
-  }
-
-  /** Telegram chat action ("typing…"). Cosmetic -- swallow failures, never break a turn. */
-  private async sendTyping(chatId: string): Promise<void> {
-    try {
-      await this.call('sendChatAction', { chat_id: chatId, action: 'typing' })
-    } catch {
-      // A missing typing indicator is not worth surfacing.
-    }
-  }
-
-  private async sendMessage(chatId: string, body: string): Promise<void> {
-    const text = body.trim() || '(empty response)'
-    for (const chunk of chunkText(text)) {
-      await this.call('sendMessage', { chat_id: chatId, text: chunk })
-    }
+    await runTurn(
+      this.agent,
+      {
+        channel: 'telegram',
+        target: chatId,
+        format: 'plain',
+        ...this.surface(chatId),
+        // There is no "stop typing" action; the indicator clears itself a few seconds after
+        // the last refresh, or as soon as a message lands.
+        typing: {
+          refreshMs: 4000,
+          set: async (on) => {
+            if (on) await this.call('sendChatAction', { chat_id: chatId, action: 'typing' })
+          },
+        },
+      },
+      text,
+      this.broker,
+    )
   }
 
   private async call<T>(method: string, body?: unknown, signal?: AbortSignal): Promise<T> {

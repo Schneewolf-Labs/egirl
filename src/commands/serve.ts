@@ -2,6 +2,7 @@ import { type AgentFactory, createAgentLoop } from '../agent'
 import { SessionMutex } from '../agent/session-mutex'
 import { createAppServices } from '../bootstrap'
 import {
+  type ChatChannel,
   createDiscordChannel,
   createMatrixChannel,
   createTelegramChannel,
@@ -51,8 +52,6 @@ export async function runServe(config: RuntimeConfig, args: string[]): Promise<v
   const standup = await gatherStandup(config.workspace.path)
   const sessionMutex = new SessionMutex()
 
-  const active: string[] = []
-  const shutdownFns: Array<() => Promise<void>> = []
   const outbound = new Map<string, { send(target: string, message: string): Promise<void> }>()
   // Routes inbound chat messages to pending report asks (see src/report/broker.ts).
   const replyBroker = createReplyBroker()
@@ -72,55 +71,34 @@ export async function runServe(config: RuntimeConfig, args: string[]): Promise<v
       sessionMutex,
     })
 
-  // --- Discord ---
+  // Chat channels, in priority order: the first one configured is where background tasks
+  // and the heartbeat report by default. Discord runs one session per channel/thread/DM;
+  // the others are a single long-lived session -- the local model driving one chat stream.
+  const chat: Array<{ channel: ChatChannel; defaultTarget: string }> = []
   let discord: ReturnType<typeof createDiscordChannel> | undefined
-  let discordDefaultTarget = 'dm'
   if (discordConf) {
     discord = createDiscordChannel(agentFactory, discordConf, providers.local, replyBroker)
-    discordDefaultTarget = discordConf.allowedChannels[0] ?? 'dm'
-    outbound.set('discord', discord)
-    shutdownFns.push(async () => discord?.stop())
-    active.push('discord')
+    chat.push({ channel: discord, defaultTarget: discordConf.allowedChannels[0] ?? 'dm' })
   }
-
-  // --- XMPP ---
-  // XMPP uses a single long-lived session — the local model driving one chat stream.
-  let xmpp: ReturnType<typeof createXMPPChannel> | undefined
   if (xmppConf) {
-    const xmppAgent = agentFactory('xmpp:default')
-    xmpp = createXMPPChannel(xmppAgent, xmppConf, replyBroker)
-    outbound.set('xmpp', {
-      send: async (target, message) => xmpp?.sendTo(target, message),
+    chat.push({
+      channel: createXMPPChannel(agentFactory('xmpp:default'), xmppConf, replyBroker),
+      defaultTarget: xmppConf.allowedJids[0] ?? 'self',
     })
-    shutdownFns.push(async () => xmpp?.stop())
-    active.push('xmpp')
   }
-
-  // --- Telegram ---
-  // Same shape as XMPP: one long-lived session, one chat stream.
-  let telegram: ReturnType<typeof createTelegramChannel> | undefined
   if (telegramConf) {
-    const telegramAgent = agentFactory('telegram:default')
-    telegram = createTelegramChannel(telegramAgent, telegramConf, replyBroker)
-    outbound.set('telegram', {
-      send: async (target, message) => telegram?.sendTo(target, message),
+    chat.push({
+      channel: createTelegramChannel(agentFactory('telegram:default'), telegramConf, replyBroker),
+      defaultTarget: 'self',
     })
-    shutdownFns.push(async () => telegram?.stop())
-    active.push('telegram')
   }
-
-  // --- Matrix ---
-  // Same shape as XMPP: one long-lived session, one chat stream.
-  let matrix: ReturnType<typeof createMatrixChannel> | undefined
   if (matrixConf) {
-    const matrixAgent = agentFactory('matrix:default')
-    matrix = createMatrixChannel(matrixAgent, matrixConf, replyBroker)
-    outbound.set('matrix', {
-      send: async (target, message) => matrix?.sendTo(target, message),
+    chat.push({
+      channel: createMatrixChannel(agentFactory('matrix:default'), matrixConf, replyBroker),
+      defaultTarget: matrixConf.allowedRooms[0] ?? 'self',
     })
-    shutdownFns.push(async () => matrix?.stop())
-    active.push('matrix')
   }
+  for (const { channel } of chat) outbound.set(channel.name, channel)
 
   // The agent's line to its supervisor — registered once channels exist so asks can block
   // on a human reply through the broker.
@@ -145,19 +123,9 @@ export async function runServe(config: RuntimeConfig, args: string[]): Promise<v
       sessionMutex,
     })
 
-    // Default task channel: discord, then xmpp, then telegram, then matrix
-    let defaultChannel = 'matrix'
-    let defaultTarget = matrixConf?.allowedRooms[0] ?? 'self'
-    if (discord) {
-      defaultChannel = 'discord'
-      defaultTarget = discordDefaultTarget
-    } else if (xmpp) {
-      defaultChannel = 'xmpp'
-      defaultTarget = xmppConf?.allowedJids[0] ?? 'self'
-    } else if (telegram) {
-      defaultChannel = 'telegram'
-      defaultTarget = 'self'
-    }
+    const primary = chat[0]
+    const defaultChannel = primary?.channel.name ?? 'discord'
+    const defaultTarget = primary?.defaultTarget ?? 'self'
 
     const taskTools = createTaskTools(taskStore, taskRunner, config.tasks.maxActiveTasks, () => ({
       channel: defaultChannel,
@@ -234,8 +202,8 @@ export async function runServe(config: RuntimeConfig, args: string[]): Promise<v
     log.info('main', 'Shutting down...')
     discovery?.stop()
     taskRunner?.stop()
-    for (const fn of shutdownFns) {
-      await fn().catch(() => {})
+    for (const { channel } of chat) {
+      await channel.stop().catch(() => {})
     }
     await processRegistry.shutdownAll()
     taskStore?.close()
@@ -251,63 +219,29 @@ export async function runServe(config: RuntimeConfig, args: string[]): Promise<v
   // runner, peer discovery and every other channel with it -- an unattended agent should keep
   // doing the work it still can, and say which parts are missing.
   const started: string[] = []
-  const startChannel = async (
-    name: string,
-    start: () => Promise<unknown>,
-    stop: () => Promise<unknown>,
-  ) => {
+  for (const { channel } of chat) {
     try {
-      await start()
-      started.push(name)
+      await channel.start()
+      started.push(channel.name)
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
-      log.error('main', `Channel "${name}" failed to start: ${message}`)
+      log.error('main', `Channel "${channel.name}" failed to start: ${message}`)
       // Shut the client down rather than leaving it to reconnect. Some failures never resolve
       // on their own -- a self-signed certificate will be just as self-signed a second later --
       // and the client's own retry loop will otherwise log an error every second forever,
       // burying everything else the instance has to say.
-      try {
-        await stop()
-      } catch {}
-      log.warn('main', `Continuing without ${name}.`)
+      await channel.stop().catch(() => {})
+      log.warn('main', `Continuing without ${channel.name}.`)
     }
   }
-
-  if (discord)
-    await startChannel(
-      'discord',
-      () => discord.start(),
-      async () => discord?.stop(),
-    )
-  if (xmpp)
-    await startChannel(
-      'xmpp',
-      () => xmpp.start(),
-      async () => xmpp?.stop(),
-    )
-  if (telegram)
-    await startChannel(
-      'telegram',
-      () => telegram.start(),
-      async () => telegram?.stop(),
-    )
-  if (matrix)
-    await startChannel(
-      'matrix',
-      () => matrix.start(),
-      async () => matrix?.stop(),
-    )
   taskRunner?.start()
   discovery?.start()
 
-  const chatChannels = new Set(['discord', 'xmpp', 'telegram', 'matrix'])
-  const inert = active.filter((a) => !chatChannels.has(a))
-  const serving = [...started, ...inert]
-  if (!serving.length) {
+  if (!started.length) {
     log.warn('main', 'No channels started. Background tasks still run; chat is unavailable.')
   }
   log.info(
     'main',
-    `Serving: ${serving.join(' + ') || 'background tasks only'}. Press Ctrl+C to stop.`,
+    `Serving: ${started.join(' + ') || 'background tasks only'}. Press Ctrl+C to stop.`,
   )
 }

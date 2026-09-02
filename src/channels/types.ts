@@ -3,8 +3,8 @@ import type { AgentLoop } from '../agent'
 /**
  * Minimal contract for a communication channel.
  *
- * Each channel owns its transport (Discord WebSocket, XMPP stanza, etc.)
- * and calls agent.run() internally. No routing, no middleware, no magic.
+ * Each channel owns its transport (Discord WebSocket, XMPP stanza, Bot API poll, Matrix
+ * sync) and hands inbound messages to the spine (spine.ts). No routing, no middleware.
  */
 export interface Channel {
   readonly name: string
@@ -14,11 +14,15 @@ export interface Channel {
 
 /**
  * Outbound messaging — channels that can send messages without a user prompt.
- * Used by background tasks to deliver results.
+ * Used by background tasks and the report tool to deliver results. `target` is
+ * channel-specific (JID, chat ID, room ID); "self" means the channel's default target.
  */
 export interface OutboundChannel {
   send(target: string, message: string): Promise<void>
 }
+
+/** A chat transport: something a human talks to egirl through, and that she can reach back on. */
+export type ChatChannel = Channel & OutboundChannel
 
 /**
  * Factory signature for channels that wrap AgentLoop.

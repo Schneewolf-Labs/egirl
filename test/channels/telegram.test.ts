@@ -8,7 +8,6 @@
 import { describe, expect, test } from 'bun:test'
 import type { AgentLoop } from '../../src/agent'
 import {
-  chunkText,
   type FetchLike,
   isAllowedTelegramUser,
   TelegramChannel,
@@ -85,19 +84,6 @@ describe('isAllowedTelegramUser', () => {
   })
 })
 
-describe('chunkText', () => {
-  test('leaves short text alone', () => {
-    expect(chunkText('hi', 10)).toEqual(['hi'])
-  })
-
-  test('splits on newlines under the limit and never exceeds it', () => {
-    const chunks = chunkText('aaaa\nbbbb\ncccc', 10)
-    expect(chunks).toEqual(['aaaa\nbbbb', 'cccc'])
-    const hard = chunkText('x'.repeat(25), 10)
-    expect(hard).toEqual(['xxxxxxxxxx', 'xxxxxxxxxx', 'xxxxx'])
-  })
-})
-
 describe('TelegramChannel', () => {
   test('replies to an allowed user and ignores the rest', async () => {
     const { calls, fetchFn } = fakeApi([
@@ -132,7 +118,7 @@ describe('TelegramChannel', () => {
       undefined,
       fetchFn,
     )
-    await channel.sendTo('self', 'task done')
+    await channel.send('self', 'task done')
     expect(calls.at(-1)?.body).toEqual({ chat_id: '42', text: 'task done' })
   })
 
@@ -144,7 +130,7 @@ describe('TelegramChannel', () => {
       undefined,
       fetchFn,
     )
-    await channel.sendTo('1', 'x'.repeat(5000))
+    await channel.send('1', 'x'.repeat(5000))
     const sent = calls.filter((c) => c.method === 'sendMessage')
     expect(sent.length).toBe(2)
     expect(String(sent[0]?.body.text).length).toBe(4096)

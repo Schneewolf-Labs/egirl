@@ -3,8 +3,8 @@ import type { Element } from '@xmpp/xml'
 import type { AgentLoop } from '../agent'
 import type { ReplyBroker } from '../report/broker'
 import { log } from '../util/logger'
-import { buildToolCallPrefix, createPlainEventHandler } from './plain-events'
-import type { Channel } from './types'
+import { deliver, runTurn } from './spine'
+import type { ChatChannel } from './types'
 
 export interface XMPPConfig {
   service: string // e.g. "xmpp://chat.example.com:5222" or "xmpps://..." for TLS
@@ -19,7 +19,13 @@ function bareJid(fullJid: string): string {
   return fullJid.split('/')[0] ?? fullJid
 }
 
-export class XMPPChannel implements Channel {
+// XEP-0085 chat states: lets the client show "is typing…" while the agent thinks, so a long
+// turn reads as activity instead of dead air.
+const CHAT_STATES_NS = 'http://jabber.org/protocol/chatstates'
+// XMPP has no fixed cap, but servers commonly reject stanzas past a few tens of KB.
+const MAX_MESSAGE_LENGTH = 8000
+
+export class XMPPChannel implements ChatChannel {
   readonly name = 'xmpp'
   private xmpp: XMPPClient
   private agent: AgentLoop
@@ -86,18 +92,25 @@ export class XMPPChannel implements Channel {
     await this.xmpp.stop()
   }
 
-  /** Outbound: send a message to a JID (used by the task runner for notifications). */
-  async sendTo(to: string, body: string): Promise<void> {
+  /** Outbound: send a message to a JID (used by the task runner and the report tool). */
+  async send(to: string, body: string): Promise<void> {
     if (!to || to === 'self') {
       // Fall back to the first allowed JID if configured
       const fallback = this.config.allowedJids[0]
       if (!fallback) {
-        log.warn('xmpp', 'sendTo called without a target and no allowed_jids configured')
+        log.warn('xmpp', 'send called without a target and no allowed_jids configured')
         return
       }
       to = fallback
     }
-    await this.sendMessage(to, body)
+    await deliver(this.surface(to), body)
+  }
+
+  private surface(jid: string) {
+    return {
+      maxLength: MAX_MESSAGE_LENGTH,
+      send: (chunk: string) => this.sendMessage(jid, chunk),
+    }
   }
 
   private async handleMessage(stanza: Element): Promise<void> {
@@ -113,25 +126,30 @@ export class XMPPChannel implements Channel {
 
     log.info('xmpp', `Message from ${bareJid(from)}: ${body.slice(0, 100)}...`)
 
-    // A pending report ask on this JID consumes the message as its answer — the human is
-    // replying to the agent's question, not starting a new conversation turn.
-    if (this.broker?.tryDeliver('xmpp', bareJid(from), body)) return
+    // Reply to the full JID (the resource that spoke); the conversation is keyed by bare JID.
+    await runTurn(
+      this.agent,
+      {
+        channel: 'xmpp',
+        target: bareJid(from),
+        format: 'plain',
+        ...this.surface(from),
+        typing: {
+          refreshMs: 15_000,
+          set: (on) => this.sendChatState(from, on ? 'composing' : 'active'),
+        },
+      },
+      body,
+      this.broker,
+    )
+  }
 
-    try {
-      const { handler, state } = createPlainEventHandler()
-      const response = await this.agent.run(body, { events: handler })
-
-      const prefix = buildToolCallPrefix(state)
-      const fullResponse = prefix + response.content
-
-      await this.sendMessage(from, fullResponse)
-
-      log.debug('xmpp', `Responded via ${response.provider}`)
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : String(error)
-      log.error('xmpp', 'Error processing message:', error)
-      await this.sendMessage(from, `Error: ${errorMsg}`).catch(() => {})
-    }
+  /** XEP-0085 chat state (composing/active/paused). */
+  private async sendChatState(to: string, state: 'composing' | 'active' | 'paused'): Promise<void> {
+    if (this.xmpp.status !== 'online') return
+    await this.xmpp.send(
+      xml('message', { type: 'chat', to }, xml(state, { xmlns: CHAT_STATES_NS })),
+    )
   }
 
   private async sendMessage(to: string, body: string): Promise<void> {
