@@ -170,6 +170,14 @@ const baseProperties = {
           allowed_jids: Type.Array(Type.String(), { default: [] }),
         }),
       ),
+      matrix: Type.Optional(
+        Type.Object({
+          homeserver: Type.String({ default: 'https://matrix.org' }),
+          allowed_users: Type.Array(Type.String(), { default: [] }),
+          allowed_rooms: Type.Array(Type.String(), { default: [] }),
+          auto_join: Type.Boolean({ default: true }),
+        }),
+      ),
       api: Type.Optional(
         Type.Object({
           host: Type.String({ default: '127.0.0.1' }),
@@ -301,7 +309,8 @@ const baseProperties = {
   ),
 
   // Who this agent reports to (docs/autonomy-loop.md, Phase 2): "peer:<name>" for an agent
-  // supervisor, or "<channel>:<target>" — e.g. "xmpp:you@example.com", "discord:<channelId>"
+  // supervisor, or "<channel>:<target>" — e.g. "xmpp:you@example.com", "discord:<channelId>",
+  // "matrix:!room:example.com"
   // — for a human. The report tool is only registered when this is set.
   report: Type.Optional(
     Type.Object({
@@ -581,6 +590,15 @@ export interface RuntimeConfig {
       password: string
       resource?: string
       allowedJids: string[]
+    }
+    matrix?: {
+      homeserver: string
+      accessToken?: string
+      username?: string
+      password?: string
+      allowedUsers: string[]
+      allowedRooms: string[]
+      autoJoin: boolean
     }
     api?: {
       host: string

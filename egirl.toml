@@ -54,6 +54,14 @@ permission_mode = "default"              # default, acceptEdits, bypassPermissio
 # resource = "egirl"
 # allowed_jids = ["you@localhost"]      # empty = allow all
 
+# Matrix bot — unencrypted rooms only (no E2EE support).
+# Requires MATRIX_ACCESS_TOKEN, or MATRIX_USERNAME and MATRIX_PASSWORD, in .env.
+# [channels.matrix]
+# homeserver = "https://matrix.example.com"
+# allowed_users = ["@you:example.com"]  # MXIDs; empty = allow all
+# allowed_rooms = []                     # room IDs; empty = any room the bot is in
+# auto_join = true                       # accept invites from allowed users
+
 # HTTP API — localhost by default, for scripts / mobile / automations.
 # Set EGIRL_API_TOKEN in .env to require a bearer token (recommended if exposing on LAN).
 [channels.api]

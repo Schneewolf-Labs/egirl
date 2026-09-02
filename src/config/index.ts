@@ -494,6 +494,24 @@ export function loadConfig(options: LoadConfigOptions = {}): RuntimeConfig {
     }
   }
 
+  const matrixToken = process.env.MATRIX_ACCESS_TOKEN
+  const matrixUsername = process.env.MATRIX_USERNAME
+  const matrixPassword = process.env.MATRIX_PASSWORD
+  const hasMatrixAuth = !!matrixToken || !!(matrixUsername && matrixPassword)
+
+  if (hasMatrixAuth && toml.channels?.matrix) {
+    const matrixConf = toml.channels.matrix
+    config.channels.matrix = {
+      homeserver: matrixConf.homeserver ?? 'https://matrix.org',
+      ...(matrixToken ? { accessToken: matrixToken } : {}),
+      ...(matrixUsername ? { username: matrixUsername } : {}),
+      ...(matrixPassword ? { password: matrixPassword } : {}),
+      allowedUsers: matrixConf.allowed_users ?? [],
+      allowedRooms: matrixConf.allowed_rooms ?? [],
+      autoJoin: matrixConf.auto_join ?? true,
+    }
+  }
+
   if (toml.channels?.api) {
     const bearerToken = process.env.EGIRL_API_TOKEN
     config.channels.api = {

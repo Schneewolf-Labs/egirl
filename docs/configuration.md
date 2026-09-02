@@ -232,6 +232,19 @@ Required only when running `xmpp` (or `serve` with XMPP configured). XMPP creden
 | `resource` | string | `egirl` | XMPP resource identifier |
 | `allowed_jids` | string[] | `[]` | Bare JIDs allowed to message. Empty = allow all |
 
+### `[channels.matrix]`
+
+Required only when running `matrix` (or `serve` with Matrix configured). Auth goes in `.env`: either `MATRIX_ACCESS_TOKEN` for a pre-provisioned bot token, or `MATRIX_USERNAME` + `MATRIX_PASSWORD` for password login (egirl logs the device out again on shutdown). Talks to the homeserver over plain HTTPS with no SDK. **Unencrypted rooms only** — the bot cannot read or send in end-to-end encrypted rooms, so create the DM room with encryption off.
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `homeserver` | string | `https://matrix.org` | Homeserver base URL (client-server API) |
+| `allowed_users` | string[] | `[]` | MXIDs (`@you:example.com`) allowed to message. Empty = allow all |
+| `allowed_rooms` | string[] | `[]` | Room IDs (`!abc:example.com`) the bot answers in. Empty = any room it is in. The first entry is where `self`-targeted task notifications go |
+| `auto_join` | boolean | `true` | Accept room invites from allowed users |
+
+Use `report.to = "matrix:!roomid:example.com"` to make a Matrix room the supervisor channel.
+
 ### `[channels.api]`
 
 Required only when running `api` (or `serve` with the API enabled).
@@ -471,6 +484,9 @@ Create starter files with `bun run start init --provider codex`, or copy the tem
 | `DISCORD_TOKEN` | For Discord mode | Discord bot token |
 | `XMPP_USERNAME` | For XMPP mode | XMPP account username (local part, without domain) |
 | `XMPP_PASSWORD` | For XMPP mode | XMPP account password |
+| `MATRIX_ACCESS_TOKEN` | For Matrix mode | Bot access token. Alternative to username/password |
+| `MATRIX_USERNAME` | For Matrix mode | Matrix localpart or full MXID, with `MATRIX_PASSWORD` |
+| `MATRIX_PASSWORD` | For Matrix mode | Matrix account password |
 | `EGIRL_API_TOKEN` | For API mode on LAN | Bearer token required on HTTP API requests. Recommended whenever `host` is not `127.0.0.1` |
 | `GITHUB_TOKEN` | For GitHub tools | GitHub personal access token (for PR, issue, CI tools) |
 | `SEARXNG_API_KEY` | Optional | API key if your SearxNG instance requires one |
@@ -522,6 +538,10 @@ permission_mode = "default"
 # service = "xmpp://localhost:5222"
 # allowed_jids = ["you@localhost"]
 
+# [channels.matrix]
+# homeserver = "https://matrix.example.com"
+# allowed_users = ["@you:example.com"]
+
 # [channels.api]
 # host = "127.0.0.1"
 # port = 3000
@@ -558,6 +578,7 @@ dirs = ["~/.egirl/skills", "{workspace}/skills"]
 DISCORD_TOKEN=...
 XMPP_USERNAME=egirl
 XMPP_PASSWORD=...
+MATRIX_ACCESS_TOKEN=...
 EGIRL_API_TOKEN=...
 GITHUB_TOKEN=ghp_...
 ```
