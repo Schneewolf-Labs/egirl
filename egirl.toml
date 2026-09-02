@@ -54,6 +54,12 @@ permission_mode = "default"              # default, acceptEdits, bypassPermissio
 # resource = "egirl"
 # allowed_jids = ["you@localhost"]      # empty = allow all
 
+# Telegram bot — talk to @BotFather, put the token in .env as TELEGRAM_BOT_TOKEN.
+# Long polling, no webhook, nothing needs to be reachable from the internet.
+# [channels.telegram]
+# allowed_users = ["123456789"]          # numeric user IDs or @usernames; empty = allow all
+#                                        # (a numeric ID also lets background tasks DM you first)
+
 # HTTP API — localhost by default, for scripts / mobile / automations.
 # Set EGIRL_API_TOKEN in .env to require a bearer token (recommended if exposing on LAN).
 [channels.api]

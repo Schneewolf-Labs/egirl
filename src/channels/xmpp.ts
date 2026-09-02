@@ -1,11 +1,9 @@
 import { client, type Client as XMPPClient, xml } from '@xmpp/client'
 import type { Element } from '@xmpp/xml'
 import type { AgentLoop } from '../agent'
-import type { AgentEventHandler } from '../agent/events'
-import type { ToolCall } from '../providers/types'
 import type { ReplyBroker } from '../report/broker'
-import type { ToolResult } from '../tools/types'
 import { log } from '../util/logger'
+import { buildToolCallPrefix, createPlainTextEventHandler } from './plain-text-events'
 import type { Channel } from './types'
 
 export interface XMPPConfig {
@@ -15,66 +13,6 @@ export interface XMPPConfig {
   password: string
   resource?: string // XMPP resource (default: "egirl")
   allowedJids: string[] // Bare JIDs allowed to message (empty = allow all)
-}
-
-function formatToolCallsPlain(calls: ToolCall[]): string {
-  return calls
-    .map((call) => {
-      const args = Object.entries(call.arguments)
-      if (args.length === 0) return `${call.name}()`
-      if (args.length === 1) {
-        const entry = args[0]
-        if (!entry) return `${call.name}()`
-        const [key, val] = entry
-        const valStr = typeof val === 'string' ? val : JSON.stringify(val)
-        if (valStr.length < 60) return `${call.name}(${key}: ${valStr})`
-      }
-      return `${call.name}(${JSON.stringify(call.arguments)})`
-    })
-    .join('\n')
-}
-
-function truncateResult(output: string, maxLen: number): string {
-  const trimmed = output.trim()
-  if (!trimmed) return ''
-  if (trimmed.length <= maxLen) return trimmed
-  return `${trimmed.substring(0, maxLen)}...`
-}
-
-interface XMPPEventState {
-  entries: Array<{ call: string; result?: string }>
-}
-
-function createXMPPEventHandler(): { handler: AgentEventHandler; state: XMPPEventState } {
-  const state: XMPPEventState = { entries: [] }
-
-  const handler: AgentEventHandler = {
-    onToolCallStart(calls: ToolCall[]) {
-      for (const call of calls) {
-        state.entries.push({ call: formatToolCallsPlain([call]) })
-      }
-    },
-
-    onToolCallComplete(_callId: string, name: string, result: ToolResult) {
-      const entry = state.entries.find((e) => e.call.startsWith(name) && !e.result)
-      if (entry) {
-        const status = result.success ? 'ok' : 'err'
-        const preview = truncateResult(result.output, 150)
-        entry.result = `  -> ${status}${preview ? `: ${preview}` : ''}`
-      }
-    },
-  }
-
-  return { handler, state }
-}
-
-function buildToolCallPrefix(state: XMPPEventState): string {
-  if (state.entries.length === 0) return ''
-  const lines = state.entries.map((e) => {
-    if (e.result) return `${e.call}\n${e.result}`
-    return e.call
-  })
-  return `${lines.join('\n')}\n\n`
 }
 
 function bareJid(fullJid: string): string {
@@ -180,7 +118,7 @@ export class XMPPChannel implements Channel {
     if (this.broker?.tryDeliver('xmpp', bareJid(from), body)) return
 
     try {
-      const { handler, state } = createXMPPEventHandler()
+      const { handler, state } = createPlainTextEventHandler()
       const response = await this.agent.run(body, { events: handler })
 
       const prefix = buildToolCallPrefix(state)

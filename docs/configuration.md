@@ -232,6 +232,16 @@ Required only when running `xmpp` (or `serve` with XMPP configured). XMPP creden
 | `resource` | string | `egirl` | XMPP resource identifier |
 | `allowed_jids` | string[] | `[]` | Bare JIDs allowed to message. Empty = allow all |
 
+### `[channels.telegram]`
+
+Required only when running `telegram` (or `serve` with Telegram configured). Create a bot with [@BotFather](https://t.me/BotFather) and put its token in `.env` as `TELEGRAM_BOT_TOKEN`. egirl long-polls the Bot API, so no webhook or public endpoint is needed.
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `allowed_users` | string[] | `[]` | Numeric Telegram user IDs or `@usernames` allowed to message. Empty = allow all (anyone who finds the bot) |
+
+Outbound targets (`report.to`, task notifications) use the chat ID: `telegram:123456789`. A DM chat ID equals the user's ID, so listing your numeric ID in `allowed_users` lets background tasks reach you before you've messaged the bot; otherwise `self` resolves to whoever messaged it last.
+
 ### `[channels.api]`
 
 Required only when running `api` (or `serve` with the API enabled).
@@ -471,6 +481,7 @@ Create starter files with `bun run start init --provider codex`, or copy the tem
 | `DISCORD_TOKEN` | For Discord mode | Discord bot token |
 | `XMPP_USERNAME` | For XMPP mode | XMPP account username (local part, without domain) |
 | `XMPP_PASSWORD` | For XMPP mode | XMPP account password |
+| `TELEGRAM_BOT_TOKEN` | For Telegram mode | Bot token from @BotFather |
 | `EGIRL_API_TOKEN` | For API mode on LAN | Bearer token required on HTTP API requests. Recommended whenever `host` is not `127.0.0.1` |
 | `GITHUB_TOKEN` | For GitHub tools | GitHub personal access token (for PR, issue, CI tools) |
 | `SEARXNG_API_KEY` | Optional | API key if your SearxNG instance requires one |
@@ -522,6 +533,9 @@ permission_mode = "default"
 # service = "xmpp://localhost:5222"
 # allowed_jids = ["you@localhost"]
 
+# [channels.telegram]
+# allowed_users = ["123456789"]
+
 # [channels.api]
 # host = "127.0.0.1"
 # port = 3000
@@ -558,6 +572,7 @@ dirs = ["~/.egirl/skills", "{workspace}/skills"]
 DISCORD_TOKEN=...
 XMPP_USERNAME=egirl
 XMPP_PASSWORD=...
+TELEGRAM_BOT_TOKEN=...
 EGIRL_API_TOKEN=...
 GITHUB_TOKEN=ghp_...
 ```

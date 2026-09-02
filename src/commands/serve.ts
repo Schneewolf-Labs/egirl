@@ -1,7 +1,7 @@
 import { type AgentFactory, createAgentLoop } from '../agent'
 import { SessionMutex } from '../agent/session-mutex'
 import { createAppServices } from '../bootstrap'
-import { createDiscordChannel, createXMPPChannel } from '../channels'
+import { createDiscordChannel, createTelegramChannel, createXMPPChannel } from '../channels'
 import type { RuntimeConfig } from '../config'
 import { createReplyBroker } from '../report/broker'
 import { registerReportTool } from '../report/register'
@@ -22,10 +22,11 @@ export async function runServe(config: RuntimeConfig, args: string[]): Promise<v
 
   const discordConf = config.channels.discord
   const xmppConf = config.channels.xmpp
+  const telegramConf = config.channels.telegram
 
-  if (!discordConf && !xmppConf) {
+  if (!discordConf && !xmppConf && !telegramConf) {
     console.error(
-      'Error: No channels configured. Configure channels.discord or channels.xmpp in egirl.toml to use serve mode, or run `bun run cli` instead.',
+      'Error: No channels configured. Configure channels.discord, channels.xmpp or channels.telegram in egirl.toml to use serve mode, or run `bun run cli` instead.',
     )
     process.exit(1)
   }
@@ -89,6 +90,19 @@ export async function runServe(config: RuntimeConfig, args: string[]): Promise<v
     active.push('xmpp')
   }
 
+  // --- Telegram ---
+  // Same shape as XMPP: one long-lived session, one chat stream.
+  let telegram: ReturnType<typeof createTelegramChannel> | undefined
+  if (telegramConf) {
+    const telegramAgent = agentFactory('telegram:default')
+    telegram = createTelegramChannel(telegramAgent, telegramConf, replyBroker)
+    outbound.set('telegram', {
+      send: async (target, message) => telegram?.sendTo(target, message),
+    })
+    shutdownFns.push(async () => telegram?.stop())
+    active.push('telegram')
+  }
+
   // The agent's line to its supervisor — registered once channels exist so asks can block
   // on a human reply through the broker.
   registerReportTool(config, toolExecutor, outbound, replyBroker)
@@ -112,9 +126,16 @@ export async function runServe(config: RuntimeConfig, args: string[]): Promise<v
       sessionMutex,
     })
 
-    // Default task channel: prefer discord if configured, otherwise xmpp
-    const defaultChannel = discord ? 'discord' : 'xmpp'
-    const defaultTarget = discord ? discordDefaultTarget : (xmppConf?.allowedJids[0] ?? 'self')
+    // Default task channel: discord, then xmpp, then telegram
+    let defaultChannel = 'telegram'
+    let defaultTarget = 'self'
+    if (discord) {
+      defaultChannel = 'discord'
+      defaultTarget = discordDefaultTarget
+    } else if (xmpp) {
+      defaultChannel = 'xmpp'
+      defaultTarget = xmppConf?.allowedJids[0] ?? 'self'
+    }
 
     const taskTools = createTaskTools(taskStore, taskRunner, config.tasks.maxActiveTasks, () => ({
       channel: defaultChannel,
@@ -242,10 +263,16 @@ export async function runServe(config: RuntimeConfig, args: string[]): Promise<v
       () => xmpp.start(),
       async () => xmpp?.stop(),
     )
+  if (telegram)
+    await startChannel(
+      'telegram',
+      () => telegram.start(),
+      async () => telegram?.stop(),
+    )
   taskRunner?.start()
   discovery?.start()
 
-  const inert = active.filter((a) => a !== 'discord' && a !== 'xmpp')
+  const inert = active.filter((a) => a !== 'discord' && a !== 'xmpp' && a !== 'telegram')
   const serving = [...started, ...inert]
   if (!serving.length) {
     log.warn('main', 'No channels started. Background tasks still run; chat is unavailable.')

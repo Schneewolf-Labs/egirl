@@ -494,6 +494,15 @@ export function loadConfig(options: LoadConfigOptions = {}): RuntimeConfig {
     }
   }
 
+  const telegramToken = process.env.TELEGRAM_BOT_TOKEN
+
+  if (telegramToken && toml.channels?.telegram) {
+    config.channels.telegram = {
+      token: telegramToken,
+      allowedUsers: toml.channels.telegram.allowed_users ?? [],
+    }
+  }
+
   if (toml.channels?.api) {
     const bearerToken = process.env.EGIRL_API_TOKEN
     config.channels.api = {
