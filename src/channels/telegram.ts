@@ -1,7 +1,7 @@
 import type { AgentLoop } from '../agent'
 import type { ReplyBroker } from '../report/broker'
 import { log } from '../util/logger'
-import { buildToolCallPrefix, createPlainTextEventHandler } from './plain-text-events'
+import { buildToolCallPrefix, createPlainEventHandler } from './plain-events'
 import type { Channel } from './types'
 
 /**
@@ -199,7 +199,7 @@ export class TelegramChannel implements Channel {
     const typing = setInterval(() => void this.sendTyping(chatId), 4000)
 
     try {
-      const { handler, state } = createPlainTextEventHandler()
+      const { handler, state } = createPlainEventHandler()
       const response = await this.agent.run(text, { events: handler })
 
       const prefix = buildToolCallPrefix(state)

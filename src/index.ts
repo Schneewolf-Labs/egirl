@@ -6,6 +6,7 @@ import { runCLI } from './commands/cli'
 import { runDiscord } from './commands/discord'
 import { runDoctor } from './commands/doctor'
 import { runInit } from './commands/init'
+import { runMatrix } from './commands/matrix'
 import { runNew } from './commands/new'
 import { runServe } from './commands/serve'
 import { showStatus } from './commands/status'
@@ -134,6 +135,10 @@ async function main() {
       await runTelegram(config, commandArgs)
       break
 
+    case 'matrix':
+      await runMatrix(config, commandArgs)
+      break
+
     case 'api':
       await runAPI(config, commandArgs)
       break
@@ -166,8 +171,9 @@ ${c.primary}Commands${RESET}
   ${c.accent}discord${RESET}        Start Discord bot
   ${c.accent}xmpp${RESET}           Start XMPP bot (self-hosted chat)
   ${c.accent}telegram${RESET}       Start Telegram bot
+  ${c.accent}matrix${RESET}         Start Matrix bot (unencrypted rooms)
   ${c.accent}api${RESET}            Start HTTP API (localhost by default — scripts, automations, LAN access)
-  ${c.accent}serve${RESET}          Discord + XMPP + Telegram + background task runner in one process
+  ${c.accent}serve${RESET}          Discord + XMPP + Telegram + Matrix + background task runner in one process
   ${c.accent}claude-code${RESET}    Bridge to Claude Code with local model supervision ${DIM}(alias: cc)${RESET}
   ${c.accent}status${RESET}         Show current configuration and status
   ${c.accent}help${RESET}           Show this help message

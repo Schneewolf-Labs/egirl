@@ -3,7 +3,7 @@ import type { Element } from '@xmpp/xml'
 import type { AgentLoop } from '../agent'
 import type { ReplyBroker } from '../report/broker'
 import { log } from '../util/logger'
-import { buildToolCallPrefix, createPlainTextEventHandler } from './plain-text-events'
+import { buildToolCallPrefix, createPlainEventHandler } from './plain-events'
 import type { Channel } from './types'
 
 export interface XMPPConfig {
@@ -118,7 +118,7 @@ export class XMPPChannel implements Channel {
     if (this.broker?.tryDeliver('xmpp', bareJid(from), body)) return
 
     try {
-      const { handler, state } = createPlainTextEventHandler()
+      const { handler, state } = createPlainEventHandler()
       const response = await this.agent.run(body, { events: handler })
 
       const prefix = buildToolCallPrefix(state)

@@ -496,9 +496,9 @@ async function loadSessions(){
     const list=d.sessions||[];
     if(!list.some(x=>x.id===sid)) list.unshift({id:sid,channel:'web',message_count:0});
     // Where a conversation came from matters as much as its id: the same agent is reachable
-    // from a phone over XMPP or Telegram, a Discord DM, a peer agent and its own background tasks, and a
-    // bare "task:b80effeb" in a dropdown says none of that.
-    const MARK={web:'◇ web',cli:'▸ cli',xmpp:'✉ xmpp',telegram:'➤ telegram',discord:'✦ discord',task:'⚙ task',peer:'⇄ peer',api:'· api'};
+    // from a phone over XMPP, Telegram or Matrix, a Discord DM, a peer agent and its own background tasks,
+    // and a bare "task:b80effeb" in a dropdown says none of that.
+    const MARK={web:'◇ web',cli:'▸ cli',xmpp:'✉ xmpp',telegram:'➤ telegram',matrix:'⌗ matrix',discord:'✦ discord',task:'⚙ task',peer:'⇄ peer',api:'· api'};
     sessSel.innerHTML=list.map(x=>{
       const kind=String(x.id).split(':')[0];
       const label=(MARK[kind]||kind)+' · '+x.id+' · '+(x.message_count||0)+' msg'+

@@ -1,7 +1,12 @@
 import { type AgentFactory, createAgentLoop } from '../agent'
 import { SessionMutex } from '../agent/session-mutex'
 import { createAppServices } from '../bootstrap'
-import { createDiscordChannel, createTelegramChannel, createXMPPChannel } from '../channels'
+import {
+  createDiscordChannel,
+  createMatrixChannel,
+  createTelegramChannel,
+  createXMPPChannel,
+} from '../channels'
 import type { RuntimeConfig } from '../config'
 import { createReplyBroker } from '../report/broker'
 import { registerReportTool } from '../report/register'
@@ -23,10 +28,11 @@ export async function runServe(config: RuntimeConfig, args: string[]): Promise<v
   const discordConf = config.channels.discord
   const xmppConf = config.channels.xmpp
   const telegramConf = config.channels.telegram
+  const matrixConf = config.channels.matrix
 
-  if (!discordConf && !xmppConf && !telegramConf) {
+  if (!discordConf && !xmppConf && !telegramConf && !matrixConf) {
     console.error(
-      'Error: No channels configured. Configure channels.discord, channels.xmpp or channels.telegram in egirl.toml to use serve mode, or run `bun run cli` instead.',
+      'Error: No channels configured. Configure channels.discord, channels.xmpp, channels.telegram or channels.matrix in egirl.toml to use serve mode, or run `bun run cli` instead.',
     )
     process.exit(1)
   }
@@ -103,6 +109,19 @@ export async function runServe(config: RuntimeConfig, args: string[]): Promise<v
     active.push('telegram')
   }
 
+  // --- Matrix ---
+  // Same shape as XMPP: one long-lived session, one chat stream.
+  let matrix: ReturnType<typeof createMatrixChannel> | undefined
+  if (matrixConf) {
+    const matrixAgent = agentFactory('matrix:default')
+    matrix = createMatrixChannel(matrixAgent, matrixConf, replyBroker)
+    outbound.set('matrix', {
+      send: async (target, message) => matrix?.sendTo(target, message),
+    })
+    shutdownFns.push(async () => matrix?.stop())
+    active.push('matrix')
+  }
+
   // The agent's line to its supervisor — registered once channels exist so asks can block
   // on a human reply through the broker.
   registerReportTool(config, toolExecutor, outbound, replyBroker)
@@ -126,15 +145,18 @@ export async function runServe(config: RuntimeConfig, args: string[]): Promise<v
       sessionMutex,
     })
 
-    // Default task channel: discord, then xmpp, then telegram
-    let defaultChannel = 'telegram'
-    let defaultTarget = 'self'
+    // Default task channel: discord, then xmpp, then telegram, then matrix
+    let defaultChannel = 'matrix'
+    let defaultTarget = matrixConf?.allowedRooms[0] ?? 'self'
     if (discord) {
       defaultChannel = 'discord'
       defaultTarget = discordDefaultTarget
     } else if (xmpp) {
       defaultChannel = 'xmpp'
       defaultTarget = xmppConf?.allowedJids[0] ?? 'self'
+    } else if (telegram) {
+      defaultChannel = 'telegram'
+      defaultTarget = 'self'
     }
 
     const taskTools = createTaskTools(taskStore, taskRunner, config.tasks.maxActiveTasks, () => ({
@@ -269,10 +291,17 @@ export async function runServe(config: RuntimeConfig, args: string[]): Promise<v
       () => telegram.start(),
       async () => telegram?.stop(),
     )
+  if (matrix)
+    await startChannel(
+      'matrix',
+      () => matrix.start(),
+      async () => matrix?.stop(),
+    )
   taskRunner?.start()
   discovery?.start()
 
-  const inert = active.filter((a) => a !== 'discord' && a !== 'xmpp' && a !== 'telegram')
+  const chatChannels = new Set(['discord', 'xmpp', 'telegram', 'matrix'])
+  const inert = active.filter((a) => !chatChannels.has(a))
   const serving = [...started, ...inert]
   if (!serving.length) {
     log.warn('main', 'No channels started. Background tasks still run; chat is unavailable.')

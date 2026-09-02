@@ -59,6 +59,13 @@ permission_mode = "default"              # default, acceptEdits, bypassPermissio
 # [channels.telegram]
 # allowed_users = ["123456789"]          # numeric user IDs or @usernames; empty = allow all
 #                                        # (a numeric ID also lets background tasks DM you first)
+# Matrix bot — unencrypted rooms only (no E2EE support).
+# Requires MATRIX_ACCESS_TOKEN, or MATRIX_USERNAME and MATRIX_PASSWORD, in .env.
+# [channels.matrix]
+# homeserver = "https://matrix.example.com"
+# allowed_users = ["@you:example.com"]  # MXIDs; empty = allow all
+# allowed_rooms = []                     # room IDs; empty = any room the bot is in
+# auto_join = true                       # accept invites from allowed users
 
 # HTTP API — localhost by default, for scripts / mobile / automations.
 # Set EGIRL_API_TOKEN in .env to require a bearer token (recommended if exposing on LAN).

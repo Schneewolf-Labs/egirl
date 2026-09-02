@@ -65,6 +65,14 @@ permission_mode = "default"
 # allowed_channels = ["dm"]
 # allowed_users = []
 
+# Matrix bot, unencrypted rooms only. Requires MATRIX_ACCESS_TOKEN
+# (or MATRIX_USERNAME + MATRIX_PASSWORD) in .env.
+# [channels.matrix]
+# homeserver = "https://matrix.example.com"
+# allowed_users = ["@you:example.com"]  # MXIDs; empty = allow all
+# allowed_rooms = []                     # room IDs; empty = any room the bot is in
+# auto_join = true                       # accept invites from allowed users
+
 # HTTP API. Set EGIRL_API_TOKEN in .env if exposing beyond localhost.
 # [channels.api]
 # host = "127.0.0.1"

@@ -13,6 +13,7 @@ export {
   type ReactionEvent,
   type ReactionHandler,
 } from './discord'
+export { createMatrixChannel, MatrixChannel, type MatrixConfig } from './matrix'
 export { createTelegramChannel, TelegramChannel, type TelegramConfig } from './telegram'
 export type { Channel, ChannelFactory } from './types'
 export { createXMPPChannel, XMPPChannel, type XMPPConfig } from './xmpp'
