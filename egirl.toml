@@ -1,88 +1,191 @@
-# CLI color theme: egirl (purple/pink), midnight (blue/teal), neon (green/cyan), mono (grayscale)
-theme = "egirl"
+# egirl config — migrated to new format
+# Base config with local-codex profile, kira persona, and kira-local instance
 
-# Extended thinking / reasoning controls (Qwen3 /think mode)
-# Override per-session in CLI with: /think <level>
-[thinking]
-level = "off"                            # off, low, medium, high
-# budget_tokens = 8192                   # override budget (default: auto from level)
-show_thinking = true                     # display thinking output in CLI
+# The human these agents work for. Attributes a message typed into a peer or task thread,
+# so an agent knows a person is speaking rather than the peer whose conversation it is.
+[user]
+name = "Nick"
 
-[workspace]
-path = "~/.egirl/workspace"
+[defaults]
+workspace_root = "~/.egirl"
+profile = "local-codex"
+persona = "kira"
 
-[local]
-endpoint = "http://localhost:8080"       # llama.cpp (Qwen3.6-27B-TIES Q6_K, GPU)
-model = "qwen3.6-27b-ties-q6k"           # for display/logging only
-context_length = 16384                   # llama-server: --parallel 4 -c 65536
-max_concurrent = 4                       # match llama-server --parallel 4; enforced by a
-                                         # semaphore in the provider
-cache_slots = 0                          # llama.cpp does its own prefix caching; slot
-                                         # pinning is a sabrewing-only feature
-tool_format = "auto"                     # auto | qwen3 | qwen35 | laguna — asks in Qwen3 form
-                                         # (this is a Qwen3-family model) and accepts any back
-stale_stream_timeout_ms = 120000         # ~1100 tok/s prefill on GPU; fail fast
+[profiles.local-codex.local]
+# On the A6000 rather than the Spark. A llama-server holding 36GB of the Spark's unified pool is
+# what left a queued 27B DPO without headroom, and on unified memory that spike froze the box
+# instead of raising a CUDA OOM. Keeping inference and training on separate machines removes the
+# interaction entirely.
+endpoint = "http://127.0.0.1:8080"
+model = "wichtel-qwen3.6-27b-q8_0"
+context_length = 131072
+max_concurrent = 2
+tool_format = "auto"
+stale_stream_timeout_ms = 120000
 
-[local.embeddings]
-provider = "qwen3-vl"                    # Python service using transformers
+# Compaction summaries and memory extraction run on the A6000 instead of taking a Wichtel slot on
+# the Spark. Compactor is ReAligned-Qwen3.5-4B + the compaction LoRA, trained on egirl's own
+# transcripts, so it is doing the job it was built for rather than standing in for the operator.
+[profiles.local-codex.local.auxiliary]
+endpoint = "http://127.0.0.1:8215"
+model = "compactor-qwen3.5-4b"
+max_concurrent = 2
+temperature = 0.3
+
+[profiles.local-codex.channels.code_agent]
+provider = "codex"
+permission_mode = "default"
+
+[profiles.local-codex.channels.api]
+host = "127.0.0.1"
+port = 3000
+
+# XMPP on the private beerbower.net server. Loopback because prosody runs on this host; the
+# domain is set explicitly rather than left to be derived from the service URL, which would
+# otherwise make Kira's XMPP domain "127.0.0.1" -- wrong for the JID and wrong for the
+# certificate, which covers beerbower.net and not an address.
+[profiles.local-codex.channels.xmpp]
+service = "xmpps://127.0.0.1:5223"
+domain = "beerbower.net"
+resource = "kira"
+allowed_jids = ["nick@beerbower.net"]
+
+[profiles.local-codex.channels.discord]
+allowed_channels = ["dm"]
+allowed_users = []
+
+[profiles.local-codex.local.embeddings]
+provider = "qwen3-vl"
 endpoint = "http://localhost:8082"
 model = "qwen3-vl-embedding-2b"
 dimensions = 2048
 multimodal = true
 
-[channels.discord]
-allowed_channels = ["dm"]                # or specific channel IDs
-allowed_users = []                       # set your Discord user ID
+# Vibe-check profile: same everything, different weights. Qwen3.8-27B Q8_0 on the local A6000
+# instead of Wichtel on the Spark, so a side-by-side is a --profile flag and not a reconfigure.
+#
+# Worth knowing before judging it: on the 47-case operator bench Qwen3.8 scores 0/10 on
+# delegation. It does not refuse -- it goes and investigates the code itself (glob_files,
+# execute_command) instead of handing work to the code agent. That is what its agentic training
+# rewards, and it is the opposite of Kira's house policy. Expect it to feel more autonomous and
+# less like a dispatcher.
+[profiles.qwen38.local]
+endpoint = "http://127.0.0.1:8123"
+model = "qwen3.8-27b-q8_0"
+context_length = 131072
+max_concurrent = 2
+tool_format = "auto"
+stale_stream_timeout_ms = 120000
 
-[channels.code_agent]
-provider = "codex"                       # codex or claude
-permission_mode = "default"              # default, acceptEdits, bypassPermissions, plan
-# model = "gpt-5.5"                      # optional backend model
-# working_dir = "~/projects/myrepo"      # defaults to workspace
-# max_turns = 30                         # Claude backend only
+[profiles.qwen38.channels.code_agent]
+provider = "codex"
+permission_mode = "default"
 
-# Direct Claude Code bridge command only: bun run start cc
-# [channels.claude_code]
-# permission_mode = "bypassPermissions"
-# model = "sonnet"
-
-# XMPP bot — self-hosted chat (e.g. Prosody on localhost or a VPS).
-# Requires XMPP_USERNAME and XMPP_PASSWORD in .env.
-# [channels.xmpp]
-# service = "xmpp://localhost:5222"     # or "xmpps://chat.example.com:5223" for TLS
-# domain = "localhost"                   # inferred from service if omitted
-# resource = "egirl"
-# allowed_jids = ["you@localhost"]      # empty = allow all
-
-# Telegram bot — talk to @BotFather, put the token in .env as TELEGRAM_BOT_TOKEN.
-# Long polling, no webhook, nothing needs to be reachable from the internet.
-# [channels.telegram]
-# allowed_users = ["123456789"]          # numeric user IDs or @usernames; empty = allow all
-#                                        # (a numeric ID also lets background tasks DM you first)
-# Matrix bot — unencrypted rooms only (no E2EE support).
-# Requires MATRIX_ACCESS_TOKEN, or MATRIX_USERNAME and MATRIX_PASSWORD, in .env.
-# [channels.matrix]
-# homeserver = "https://matrix.example.com"
-# allowed_users = ["@you:example.com"]  # MXIDs; empty = allow all
-# allowed_rooms = []                     # room IDs; empty = any room the bot is in
-# auto_join = true                       # accept invites from allowed users
-
-# HTTP API — localhost by default, for scripts / mobile / automations.
-# Set EGIRL_API_TOKEN in .env to require a bearer token (recommended if exposing on LAN).
-[channels.api]
+[profiles.qwen38.channels.api]
 host = "127.0.0.1"
-port = 3000
+port = 3001
+
+[profiles.qwen38.channels.discord]
+allowed_channels = ["dm"]
+allowed_users = []
+
+[profiles.qwen38.local.embeddings]
+provider = "qwen3-vl"
+endpoint = "http://localhost:8082"
+model = "qwen3-vl-embedding-2b"
+dimensions = 2048
+multimodal = true
+
+# --- Emma: the supervisor peer -------------------------------------------------
+# Tech lead. Other agents report to her when they hit a question their own work can't answer;
+# she decides what actually needs Nick. Served by DeepSeek v4 on vLLM.
+[profiles.emma.local]
+endpoint = "http://192.168.72.251:8899"
+model = "deepseek-v4-flash-0731"
+tool_format = "qwen3"
+# Off: `/think` is Qwen3's soft-switch, and prepending it to a DeepSeek prompt just makes her
+# read it as something you typed -- she reported being asked "/think hey this is nick".
+thinking_directive = false
+# Far below the model's 384k on purpose: she answers discrete questions and reads org state,
+# she never holds a binary in her head. Oversized windows are how an agent stops engaging.
+context_length = 65536
+# This model spends 1200-2000 chars of reasoning even on a trivial question, so the stale
+# detector needs a long fuse -- a long think must not read as a hung stream. egirl does not cap
+# output tokens on normal turns, so there is nothing to raise for the reasoning itself.
+stale_stream_timeout_ms = 180000
+
+# Memory needs embeddings, and org context is her whole job -- a supervisor who cannot recall
+# what was decided last week is just a fast guess.
+[profiles.emma.local.embeddings]
+provider = "qwen3-vl"
+endpoint = "http://127.0.0.1:8083"
+model = "qwen3-vl-embedding-2b"
+dimensions = 2048
+
+[profiles.emma.thinking]
+# Medium where a worker runs high -- her callers are blocked on a peer timeout while she thinks.
+level = "medium"
+
+[profiles.emma.channels.api]
+# All interfaces: reachable from the LAN, from the phone, and from Zero's VM on the bridge.
+host = "0.0.0.0"
+port = 3002
+
+# Prosody on the Schneewolf Labs VPS (schneewolflabs.com) serves a real Let's Encrypt cert over
+# direct-TLS :5223, renewed by certbot with a deploy hook that re-imports into prosody. Because
+# the server lives on a public box with a public IP, there is no hairpin-NAT problem and no
+# /etc/hosts workaround: SNI resolves correctly from anywhere (phone on cellular included).
+# Emma runs this as a separate `xmpp` command process beside her api process; her account is
+# enakamura@schneewolflabs.com (XMPP_USERNAME=enakamura / XMPP_PASSWORD overridden at launch —
+# the .env values are Kira's account).
+[profiles.emma.channels.xmpp]
+service = "xmpps://schneewolflabs.com:5223"
+domain = "schneewolflabs.com"
+resource = "emma"
+allowed_jids = ["nbeerbower@schneewolflabs.com"]
+
+# Escalations land in the console's inbox, where Nick can answer them in the browser. Same
+# blocking contract a chat reply would satisfy -- the console is just the surface that actually
+# works here, since XMPP has no usable certificate.
+[profiles.emma.report]
+to = "console:nick"
+
+[profiles.emma.tools]
+# A supervisor advises; she does not do the work, and cannot reach into a worker's running job.
+code_agent = false
+peers = true
+
+# The workers she supervises. Zero lives in a KVM guest on the virbr0 bridge.
+[[profiles.emma.peers]]
+name = "zero"
+url = "http://192.168.122.123:3000"
+
+[personas.emma]
+theme = "egirl"
+
+[instances.emma]
+profile = "emma"
+persona = "emma"
+
+[personas.kira]
+theme = "egirl"
+
+[instances.kira-local]
+profile = "local-codex"
+persona = "kira"
+
+[instances.kira-qwen38]
+profile = "qwen38"
+persona = "kira"
 
 [safety]
 enabled = true
 
 [safety.command_filter]
 enabled = true
-# blocked_patterns = ["npm\\s+publish"]
 
 [safety.path_sandbox]
 enabled = false
-# allowed_paths = ["{workspace}", "~/projects"]
 
 [safety.sensitive_files]
 enabled = true
@@ -93,18 +196,34 @@ path = "{workspace}/audit.log"
 
 [safety.confirmation]
 enabled = false
-# tools = ["execute_command", "write_file", "edit_file"]
 
 [tasks]
-max_concurrent_tasks = 4                 # the real concurrency knob: concurrent background
-                                         # tasks each drive a local-model call, which is what
-                                         # sabrewing's batched decode is for
+max_concurrent_tasks = 4
 
 [tools]
-code_agent = true                        # enable configured code-agent delegation
-tasks = true                             # NOTE: gates the whole [tasks] section below.
-                                         # Without this, [tasks] is inert and POST /tasks
-                                         # returns 503 -- see the startup warning.
+code_agent = true
+tasks = true
 
 [skills]
 dirs = ["~/.egirl/skills", "{workspace}/skills"]
+
+[searxng]
+url = "http://localhost:8889"
+
+# Wald — the Schneewolf Labs information hub. Tools arrive namespaced as wald_*.
+[[mcp.servers]]
+name = "wald"
+url = "http://127.0.0.1:8091/mcp"
+# Wald requires a bearer token now; $VAR is resolved from the environment so the token
+# lives in .env rather than in a config file that gets committed.
+headers = { Authorization = "Bearer $WALD_TOKEN" }
+timeout_ms = 60000
+
+# DeepSeek v4 as a read-only consultant — big-context second opinions via the consult tool.
+[[consultants]]
+name = "deepseek"
+endpoint = "http://192.168.72.251:8899/v1"
+model = "deepseek-v4-flash-0731"
+context_length = 131072
+max_tokens = 16384
+timeout_ms = 600000
