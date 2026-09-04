@@ -206,8 +206,13 @@ export class LlamaCppProvider implements LLMProvider {
         // which throws off the token-budget and context-pressure accounting downstream. The
         // non-streaming path got usage for free in its response body.
         ...(shouldStream && { stream_options: { include_usage: true } }),
-        // Qwen3 supports enable_thinking parameter via llama.cpp
-        ...(isThinkingEnabled !== undefined && { enable_thinking: isThinkingEnabled }),
+        // The template variable Qwen3-class templates read. llama.cpp only passes template
+        // variables from chat_template_kwargs; a top-level enable_thinking is silently ignored,
+        // and the template's default is thinking ON -- so `off` was never off. Verified against
+        // /apply-template: only this form renders the closed `<think>\n\n</think>` block.
+        ...(isThinkingEnabled !== undefined && {
+          chat_template_kwargs: { enable_thinking: isThinkingEnabled },
+        }),
         // Servers with per-slot prefix caching (sabrewing) reuse this conversation's
         // already-prefilled context. Ignored by servers that don't implement it.
         ...(req.cacheSlot !== undefined && { cache_slot: req.cacheSlot }),
