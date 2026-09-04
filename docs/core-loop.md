@@ -95,6 +95,13 @@ Each iteration runs these stages in order:
       context immediately, summarized on the auxiliary provider, the result
       folded into the conversation summary. Summarizations chain — overlapping
       ones never race on the summary. The summary is bounded (§2, invariant 6).
+      With **context rollover** on instead (`context_rollover`, or any unbounded
+      run), fitting that would drop messages retires the whole window: the
+      request is sent on a fresh window holding one mechanical handoff record
+      (`src/agent/handoff.ts`), the live context adopts it afterwards, the
+      transcript stays append-only, and the retired messages get the same
+      memory flush — no summary is ever generated. The model can also trigger
+      this itself with `new_context`, applied atomically after its tool batch.
 6. **Bookkeeping.** Usage totals, the context-pressure measure for stage 3,
    transcript/trace records, token-budget warnings, thinking surfaced to events.
 7. **Guards.**

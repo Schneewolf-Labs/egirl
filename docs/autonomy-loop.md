@@ -141,6 +141,19 @@ The genuine failure here is narrow: if consolidate-then-reset still cannot recov
 headroom (NOTES.md itself grew pathological, or the write failed). That escalates as
 a semantic stop.
 
+**Shipped as context rollover** (`src/agent/handoff.ts`, `src/agent/rollover.ts`; the
+idea is fitchmultz/pi-posthorse). When fitting would drop messages, the whole window is
+replaced by one mechanically built handoff record — the operator's inputs verbatim,
+supervisor replies to `report` asks, the trailing tool batch the model has not yet
+answered, and whatever the model handed over itself — with no LLM call. Older assistant
+prose and consumed tool results are not treated as state. The transcript stays
+append-only in the conversation store (the record marks where the live window starts on
+restart) and `session_search` reaches all of it. The model gets `context_remaining` and
+`new_context({ handoff })` to roll over on its own terms right after a checkpoint. On
+for unbounded task runs; `conversation.context_rollover` turns it on everywhere else.
+The cheap reclamation tiers (tool-result truncation, stale-output clearing) still run
+first — rollover replaces only drop-and-summarize.
+
 ### 5. Human interject — esc, anytime
 
 Built for the interactive CLI (`captureDuringRun`: esc interrupts, typed input
@@ -202,7 +215,7 @@ the loop," recursively.
 | Stuck-inference abort | **done** | — |
 | Spiral guard (tool loops) | done | extend to reasoning-only loops |
 | Consolidation break | — | inject on turn-interval **or** context threshold |
-| Context recycle-from-NOTES | compaction exists | add reset-from-NOTES on high utilization |
+| Context recycle-from-NOTES | **done** (`context_rollover`, on for unbounded runs) | — |
 | Unbounded run mode | turn cap / wall-clock exist | make caps a far-off safety net, not the stop |
 | Human interject (background) | interactive only | `POST /sessions/:id/interrupt` |
 | `report` (ask/notify) | `peer_message` (agent await) exists | unify: `report_to` = agent **or** human channel |
@@ -233,9 +246,10 @@ trigger guidance injected into unbounded task runs (blocked → `ask`; goal-done
 ## Open questions
 
 - **Reset-from-NOTES leans entirely on capture discipline.** It is only safe once the
-  agent reliably writes everything durable to NOTES.md/work. That discipline is still
-  being hardened; until it is proven, keep lossy compaction as a fallback beneath the
-  reset, and treat a reset that loses tracked progress as a bug in the capture prompt.
+  agent reliably writes everything durable to NOTES.md/work. Rollover is therefore on
+  for unbounded runs (whose contract already mandates the discipline) and opt-in
+  elsewhere; lossy compaction stays the default for chat sessions. Treat a rollover
+  that loses tracked progress as a bug in the capture prompt.
 - **`ask` blocks a run indefinitely waiting on a human.** Resolved: an ask waits up
   to `ask_timeout_ms` (default 30 min), then parks the task as `awaiting`; the reply,
   sent to the task's session, is persisted into its conversation and reactivates it.

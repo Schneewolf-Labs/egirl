@@ -62,7 +62,7 @@ export function triggerCompaction(args: {
  * Prevents silent context loss — facts survive in durable memory even if
  * the LLM summary is lossy or compaction fails entirely.
  */
-function flushDroppedToMemory(args: {
+export function flushDroppedToMemory(args: {
   droppedMessages: ChatMessage[]
   provider: LLMProvider
   memory: MemoryManager

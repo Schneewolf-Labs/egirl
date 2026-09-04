@@ -199,6 +199,7 @@ const baseProperties = {
       max_messages: Type.Number({ default: 1000 }),
       compact_on_startup: Type.Boolean({ default: true }),
       context_compaction: Type.Boolean({ default: true }),
+      context_rollover: Type.Boolean({ default: false }),
       consolidation_interval: Type.Number({ default: 0 }),
     }),
   ),
@@ -624,6 +625,11 @@ export interface RuntimeConfig {
     maxMessages: number
     compactOnStartup: boolean
     contextCompaction: boolean
+    /**
+     * Roll over to a fresh window (mechanical handoff record, no summary) when the context
+     * fills, instead of summarizing. Unbounded task runs use it regardless. See src/agent/handoff.ts.
+     */
+    contextRollover: boolean
     /** Turns between consolidation-break nudges (0 = off). See docs/autonomy-loop.md. */
     consolidationInterval: number
   }

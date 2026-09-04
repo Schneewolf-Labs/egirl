@@ -17,9 +17,12 @@ export function interjectionNudge(message: string): string {
 }
 
 /** Consolidation break: externalize everything durable before continuing (or before compaction). */
-export function checkpointNudge(contextPressed: boolean): string {
+export function checkpointNudge(contextPressed: boolean, rollover = false): string {
+  const pressed = rollover
+    ? 'Context is nearly full and the window is about to roll over to a fresh one that keeps only your direct inputs and pending tool results — not your reasoning. Write everything durable NOW'
+    : 'Context is nearly full and the conversation is about to be compacted. Write everything durable NOW'
   const urgency = contextPressed
-    ? 'Context is nearly full and the conversation is about to be compacted. Write everything durable NOW'
+    ? pressed
     : 'Pause new work and consolidate — write everything you have learned since your last checkpoint'
   return `[System: Checkpoint. ${urgency} to your durable notes, and save any artifacts to files. Also store anything worth remembering across sessions — a proven fact, a decision and its why, a lesson — with memory_set now, while the context is still in front of you. Assume this run could end at any moment: nothing important should live only in this conversation. Then continue where you left off.]`
 }

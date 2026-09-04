@@ -310,6 +310,46 @@ Recall memories from a specific time period. Use this for temporal queries like 
 
 ---
 
+## context_remaining
+
+How full the context window is. Only offered when context rollover is on (`conversation.context_rollover`, or any unbounded task run). Run by the agent loop itself, not the shared tool executor.
+
+**Source:** `src/agent/rollover.ts`
+
+No parameters.
+
+**Behavior:**
+- Reports the last prompt's token count against the configured window, the distance to the checkpoint nudge (80%), and that automatic rollover follows when the conversation no longer fits
+
+**Example:**
+```json
+{"name": "context_remaining", "arguments": {}}
+```
+
+---
+
+## new_context
+
+Roll over to a fresh context window as soon as the current tool batch completes. Only offered when context rollover is on. Run by the agent loop itself, not the shared tool executor.
+
+**Source:** `src/agent/rollover.ts`, record built in `src/agent/handoff.ts`
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `handoff` | string | No | What the agent is doing right now and the very next step, 1-5 lines. Carried verbatim into the fresh window. |
+
+**Behavior:**
+- The whole history is replaced by one mechanically built record: operator inputs verbatim, supervisor replies to `report` asks, the tool batch just executed (including this call's result), and the handoff text — no summary, no LLM call
+- Older assistant prose and consumed tool results are retired; the transcript stays append-only in the conversation store and `session_search` reaches all of it
+- Applied atomically after the batch, so nothing is answered twice or not at all
+
+**Example:**
+```json
+{"name": "new_context", "arguments": {"handoff": "Parser handles 3 fields; next: the optional trailer."}}
+```
+
+---
+
 ## screenshot
 
 Capture a screenshot of the current display.
