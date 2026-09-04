@@ -175,6 +175,13 @@ export class CLIChannel implements Channel {
         const keys = captureDuringRun(this.session, {
           onInterrupt: () => console.log(`\n${c.warning}interrupting…${RESET}`),
           onQueued: (text) => console.log(renderQueuedMessage(text)),
+          onCommand: (text) => {
+            handleCommand(text, { agent: this.agent, session: this.session })
+              .then((r) => {
+                if (r.message) console.log(`\n${c.accent}${r.message}${RESET}`)
+              })
+              .catch(() => {})
+          },
         })
 
         // 'waiting' rather than 'thinking': nothing has come back yet, so this is prefill,

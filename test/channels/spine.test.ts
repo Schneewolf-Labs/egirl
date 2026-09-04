@@ -85,8 +85,28 @@ describe('runTurn', () => {
     const { surface, sent, typing } = fakeSurface()
     await runTurn(agent, surface, '/think on')
     expect(prompts).toEqual([])
-    expect(sent).toEqual(['thinking: off (config) → medium (session)'])
+    expect(sent).toEqual(['🧠 thinking: off (config) → medium (session)'])
     expect(typing).toEqual([])
+  })
+
+  test('a command answers while a turn is still running', async () => {
+    let finish: () => void = () => {}
+    const agent = {
+      isRunning: () => true,
+      getThinking: () => ({ level: 'off', source: 'config' }),
+      contextStatus: async () => ({ sessionId: 'room', utilization: 0.5 }),
+      run: () =>
+        new Promise((resolve) => {
+          finish = () => resolve({ content: 'finally', provider: 'local' })
+        }),
+    } as unknown as AgentLoop
+    const { surface, sent } = fakeSurface()
+    const turn = runTurn(agent, surface, 'do something slow')
+    await runTurn(agent, surface, '/status')
+    expect(sent).toEqual(['⏳ running · room · context 50% · thinking off (config)'])
+    finish()
+    await turn
+    expect(sent).toHaveLength(2)
   })
 
   test('a path at the start of a message is not a command', async () => {
@@ -102,7 +122,7 @@ describe('runTurn', () => {
     const { agent } = fakeAgent('ok')
     const { surface, sent } = fakeSurface()
     await runTurn(agent, surface, '/settings', broker)
-    expect(sent).toEqual(['thinking off (config)'])
+    expect(sent).toEqual(['🧠 thinking off (config)'])
     expect(await reply).toBeUndefined()
   })
 

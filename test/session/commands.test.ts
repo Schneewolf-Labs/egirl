@@ -9,12 +9,13 @@
 import { describe, expect, test } from 'bun:test'
 import type { AgentLoop } from '../../src/agent'
 import type { ThinkingConfig } from '../../src/providers/types'
-import { handleCommand } from '../../src/session/commands'
+import { handleCommand, isCommand } from '../../src/session/commands'
 import { SessionController } from '../../src/session/controller'
 
-function fakeAgent(configLevel: ThinkingConfig['level'] = 'medium'): AgentLoop {
+function fakeAgent(configLevel: ThinkingConfig['level'] = 'medium', running = false): AgentLoop {
   let override: ThinkingConfig['level'] | undefined
   return {
+    isRunning: () => running,
     setThinking(level: ThinkingConfig['level'] | undefined) {
       override = level
     },
@@ -50,6 +51,13 @@ describe('what counts as a command', () => {
     expect(r.handled).toBe(false)
   })
 
+  test('isCommand lets a channel spot one before its turn queue does', () => {
+    expect(isCommand('/status')).toBe(true)
+    expect(isCommand('/think off')).toBe(true)
+    expect(isCommand('/etc/hosts')).toBe(false)
+    expect(isCommand('status?')).toBe(false)
+  })
+
   test('an unknown command is reported, not sent to the model', async () => {
     // A mistyped command silently becoming a chat message is confusing in a way an error is not.
     const r = await handleCommand('/mxturns 50', { agent: fakeAgent() })
@@ -68,7 +76,7 @@ describe('/think', () => {
   test('off, on and default move the session setting on the agent', async () => {
     const agent = fakeAgent('medium')
     expect((await handleCommand('/think off', { agent })).message).toBe(
-      'thinking: medium (config) → off (session)',
+      '🧠 thinking: medium (config) → off (session)',
     )
     expect(agent.getThinking()).toEqual({ level: 'off', source: 'session' })
 
@@ -93,17 +101,28 @@ describe('/think', () => {
   })
 })
 
+describe('/status', () => {
+  test('answers busy or idle without touching the model', async () => {
+    const idle = await handleCommand('/status', { agent: fakeAgent('medium') })
+    expect(idle.message).toBe('🟢 idle · cli:default · context 43% · thinking medium (config)')
+    const busy = await handleCommand('/status', { agent: fakeAgent('medium', true) })
+    expect(busy.message).toStartWith('⏳ running')
+  })
+})
+
 describe('/context and /settings', () => {
   test('/context summarizes the window in plain text', async () => {
     const r = await handleCommand('/context', { agent: fakeAgent() })
-    expect(r.message).toContain('43% of 32,768 tokens')
+    expect(r.message).toContain('📊 context 43% ▓▓▓▓░░░░░░ 14,200 / 32,768')
     expect(r.message).toContain('12 messages')
     expect(r.message).toContain('compacted')
   })
 
   test('/settings shows only what the surface has', async () => {
     const agent = fakeAgent()
-    expect((await handleCommand('/settings', { agent })).message).toBe('thinking medium (config)')
+    expect((await handleCommand('/settings', { agent })).message).toBe(
+      '🧠 thinking medium (config)',
+    )
     const withSession = await handleCommand('/settings', {
       agent,
       session: new SessionController(),

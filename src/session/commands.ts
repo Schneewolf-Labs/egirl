@@ -6,6 +6,11 @@
  * share: the session's AgentLoop. The terminal has state a chat channel does not (a queue, a
  * turn cap, a run mode); those commands take the SessionController and are refused, not
  * silently ignored, where there isn't one.
+ *
+ * None of this touches the model. A command answers at once, including while a turn is
+ * running -- that is what makes /status a way to ping the harness rather than the LLM.
+ * Replies are plain text with an emoji lead so they read the same on a terminal, in a
+ * Matrix body and in a Discord message.
  */
 
 import type { AgentLoop } from '../agent'
@@ -32,7 +37,12 @@ const THINKING_LEVELS: readonly ThinkingLevel[] = ['off', 'low', 'medium', 'high
 // mistyped command, and goes to the model like any other text.
 const COMMAND_SHAPE = /^\/[a-z]+(\s|$)/i
 
-const TERMINAL_ONLY = 'only available in the terminal'
+/** Whether the text is a slash command -- so a channel can answer it ahead of its turn queue. */
+export function isCommand(text: string): boolean {
+  return COMMAND_SHAPE.test(text)
+}
+
+const THINK_USAGE = 'usage: /think <on|off|default>'
 
 /** Parse a `/think` argument. `on` is a level, not a return to config: config may be off. */
 function parseThinking(arg: string): ThinkingLevel | 'default' | undefined {
@@ -47,75 +57,100 @@ function describeThinking(agent: AgentLoop): string {
   return `${level} (${source})`
 }
 
+function reply(message: string): CommandResult {
+  return { handled: true, message }
+}
+
+function terminalOnly(cmd: string): CommandResult {
+  return reply(`🖥️ /${cmd} is only available in the terminal`)
+}
+
 function thinkCommand(arg: string, agent: AgentLoop): CommandResult {
-  if (!arg) {
-    return {
-      handled: true,
-      message: `thinking: ${describeThinking(agent)}\nusage: /think <on|off|default>`,
-    }
-  }
+  if (!arg) return reply(`🧠 thinking: ${describeThinking(agent)}\n${THINK_USAGE}`)
   const level = parseThinking(arg)
-  if (!level) return { handled: true, message: 'usage: /think <on|off|default>' }
+  if (!level) return reply(`🧠 ${THINK_USAGE}`)
   const before = describeThinking(agent)
   agent.setThinking(level === 'default' ? undefined : level)
-  return { handled: true, message: `thinking: ${before} → ${describeThinking(agent)}` }
+  return reply(`🧠 thinking: ${before} → ${describeThinking(agent)}`)
 }
+
+/** A ten-cell text bar; renders the same in every font, which a Unicode block gauge does not. */
+function bar(fraction: number): string {
+  const filled = Math.round(Math.min(1, Math.max(0, fraction)) * 10)
+  return '▓'.repeat(filled) + '░'.repeat(10 - filled)
+}
+
+const t = (n: number) => `${n.toLocaleString()}t`
 
 async function contextCommand(agent: AgentLoop): Promise<CommandResult> {
   const s = await agent.contextStatus()
   const pct = Math.round(s.utilization * 100)
   const lines = [
-    `context: ${pct}% of ${s.contextLength.toLocaleString()} tokens`,
-    `system prompt ~${s.systemPromptTokens.toLocaleString()}t · ${s.messageCount} messages ~${s.messageTokens.toLocaleString()}t`,
+    `📊 context ${pct}% ${bar(s.utilization)} ${s.totalUsed.toLocaleString()} / ${s.contextLength.toLocaleString()}`,
+    `system prompt ~${t(s.systemPromptTokens)} · ${s.messageCount} messages ~${t(s.messageTokens)}`,
   ]
-  if (s.hasSummary) lines.push(`summary ~${s.summaryTokens.toLocaleString()}t (compacted)`)
-  lines.push(`available ~${s.available.toLocaleString()}t`)
-  return { handled: true, message: lines.join('\n') }
+  if (s.hasSummary) lines.push(`summary ~${t(s.summaryTokens)} (compacted)`)
+  lines.push(`available ~${t(s.available)}`)
+  return reply(lines.join('\n'))
+}
+
+/** The harness at a glance: is she busy, and where does this session stand. */
+async function statusCommand(agent: AgentLoop): Promise<CommandResult> {
+  const s = await agent.contextStatus()
+  const state = agent.isRunning() ? '⏳ running' : '🟢 idle'
+  return reply(
+    `${state} · ${s.sessionId} · context ${Math.round(s.utilization * 100)}% · thinking ${describeThinking(agent)}`,
+  )
 }
 
 function settingsCommand(scope: CommandScope): CommandResult {
-  const parts = [`thinking ${describeThinking(scope.agent)}`]
+  const parts = [`🧠 thinking ${describeThinking(scope.agent)}`]
   if (scope.session) {
     const s = scope.session.get()
     parts.push(
-      `mode ${s.mode}`,
-      `maxTurns ${s.maxTurns}`,
-      `reasoning ${s.showReasoning ? 'on' : 'off'}`,
+      `🔁 mode ${s.mode}`,
+      `🔢 maxTurns ${s.maxTurns}`,
+      `💭 reasoning ${s.showReasoning ? 'on' : 'off'}`,
     )
   }
-  return { handled: true, message: parts.join(' · ') }
+  return reply(parts.join(' · '))
 }
 
 function helpCommand(scope: CommandScope): CommandResult {
   const lines = [
-    '/think <on|off|default> — thinking for this session',
-    '/context — how full the window is',
-    '/settings — current settings',
+    '🧠 /think <on|off|default> — thinking for this session',
+    '🟢 /status — busy or idle, context, thinking',
+    '📊 /context — how full the window is',
+    '⚙️ /settings — current settings',
   ]
   if (scope.session) {
     lines.push(
-      '/auto — toggle continuing past the turn cap without asking',
-      '/maxturns <1-500> — turn cap for a run',
-      '/reasoning — toggle showing reasoning inline',
-      '/queue — messages waiting for the next turn',
-      '/clear — drop queued messages',
-      '/quit — exit',
+      '🔁 /auto — continue past the turn cap without asking',
+      '🔢 /maxturns <1-500> — turn cap for a run',
+      '💭 /reasoning — show reasoning inline',
+      '📥 /queue — messages waiting for the next turn',
+      '🧹 /clear — drop queued messages',
+      '👋 /quit — exit',
     )
   }
-  return { handled: true, message: lines.join('\n') }
+  return reply(lines.join('\n'))
 }
 
 /** Interpret a slash command. `handled: false` means the text is for the model. */
 export async function handleCommand(input: string, scope: CommandScope): Promise<CommandResult> {
-  if (!COMMAND_SHAPE.test(input)) return { handled: false }
+  if (!isCommand(input)) return { handled: false }
 
-  const [cmd, ...rest] = input.slice(1).trim().split(/\s+/)
+  const [word, ...rest] = input.slice(1).trim().split(/\s+/)
+  const cmd = (word ?? '').toLowerCase()
   const arg = rest.join(' ')
   const { agent, session } = scope
 
-  switch ((cmd ?? '').toLowerCase()) {
+  switch (cmd) {
     case 'think':
       return thinkCommand(arg, agent)
+
+    case 'status':
+      return statusCommand(agent)
 
     case 'context':
       return contextCommand(agent)
@@ -127,44 +162,39 @@ export async function handleCommand(input: string, scope: CommandScope): Promise
       return helpCommand(scope)
 
     case 'auto':
-      if (!session) return { handled: true, message: `/auto is ${TERMINAL_ONLY}` }
-      return { handled: true, message: session.toggleMode() }
+      if (!session) return terminalOnly(cmd)
+      return reply(`🔁 ${session.toggleMode()}`)
 
     case 'maxturns': {
-      if (!session) return { handled: true, message: `/maxturns is ${TERMINAL_ONLY}` }
+      if (!session) return terminalOnly(cmd)
       const n = Number(arg)
-      if (!Number.isInteger(n) || n < 1 || n > 500) {
-        return { handled: true, message: 'usage: /maxturns <1-500>' }
-      }
-      return { handled: true, message: session.set('maxTurns', n) }
+      if (!Number.isInteger(n) || n < 1 || n > 500) return reply('🔢 usage: /maxturns <1-500>')
+      return reply(`🔢 ${session.set('maxTurns', n)}`)
     }
 
     case 'reasoning':
-      if (!session) return { handled: true, message: `/reasoning is ${TERMINAL_ONLY}` }
-      return {
-        handled: true,
-        message: session.set('showReasoning', !session.get().showReasoning),
-      }
+      if (!session) return terminalOnly(cmd)
+      return reply(`💭 ${session.set('showReasoning', !session.get().showReasoning)}`)
 
     case 'queue': {
-      if (!session) return { handled: true, message: `/queue is ${TERMINAL_ONLY}` }
+      if (!session) return terminalOnly(cmd)
       const q = session.peek()
-      if (q.length === 0) return { handled: true, message: 'queue empty' }
-      return { handled: true, message: q.map((m, i) => `  ${i + 1}. ${m.text}`).join('\n') }
+      if (q.length === 0) return reply('📥 queue empty')
+      return reply(`📥 queued:\n${q.map((m, i) => `  ${i + 1}. ${m.text}`).join('\n')}`)
     }
 
     case 'clear':
-      if (!session) return { handled: true, message: `/clear is ${TERMINAL_ONLY}` }
-      return { handled: true, message: `dropped ${session.clearQueue()} queued message(s)` }
+      if (!session) return terminalOnly(cmd)
+      return reply(`🧹 dropped ${session.clearQueue()} queued message(s)`)
 
     case 'quit':
     case 'exit':
-      if (!session) return { handled: true, message: `/${cmd} is ${TERMINAL_ONLY}` }
+      if (!session) return terminalOnly(cmd)
       return { handled: true, quit: true }
 
     // Unknown slash input is reported rather than sent to the model: a mistyped command that
     // silently becomes a chat message is confusing in a way a plain error is not.
     default:
-      return { handled: true, message: `unknown command: /${cmd} (try /help)` }
+      return reply(`❓ unknown command: /${cmd} — try /help`)
   }
 }
