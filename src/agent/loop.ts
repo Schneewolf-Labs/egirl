@@ -79,6 +79,12 @@ export class AgentLoop {
    * session; the CLI and runner are single-run by construction), so a single slot suffices.
    */
   private activeRun: { controller: AbortController; pendingInjections: string[] } | null = null
+  /**
+   * The session's thinking setting when it differs from config. It lives on the loop because
+   * the loop is the one object every surface on a session shares -- /think from the terminal,
+   * a room or the console must set the same thing, and did not while each kept its own copy.
+   */
+  private thinkingOverride: ThinkingConfig | undefined
 
   constructor(deps: AgentLoopDeps) {
     this.config = deps.config
@@ -147,6 +153,17 @@ export class AgentLoop {
     return this.activeRun !== null
   }
 
+  /** Set the session's thinking level; `undefined` returns to the config default. */
+  setThinking(level: ThinkingConfig['level'] | undefined): void {
+    this.thinkingOverride = level === undefined ? undefined : { level }
+  }
+
+  /** The thinking level the next run will use, and whether it came from the session or config. */
+  getThinking(): { level: ThinkingConfig['level']; source: 'session' | 'config' } {
+    if (this.thinkingOverride) return { level: this.thinkingOverride.level, source: 'session' }
+    return { level: this.config.thinking.level, source: 'config' }
+  }
+
   private async doRun(userMessage: string, options: AgentLoopOptions): Promise<AgentResponse> {
     await this.compactor.drain()
 
@@ -173,11 +190,12 @@ export class AgentLoop {
     const maxTurns = options.unbounded ? UNBOUNDED_SAFETY_CEILING : (options.maxTurns ?? 10)
     const turnStartedAt = Date.now()
 
-    const thinking: ThinkingConfig | undefined =
-      options.thinking ??
-      (this.config.thinking.level !== 'off'
-        ? { level: this.config.thinking.level, budgetTokens: this.config.thinking.budgetTokens }
-        : undefined)
+    // Always explicit, including `off`: an omitted setting leaves the chat template's own
+    // default in charge, and Qwen3's default is thinking on -- so config-off did not turn it off.
+    const thinking: ThinkingConfig = this.thinkingOverride ?? {
+      level: this.config.thinking.level,
+      budgetTokens: this.config.thinking.budgetTokens,
+    }
 
     const userContent = planningMode ? planningModePrompt(userMessage) : userMessage
 

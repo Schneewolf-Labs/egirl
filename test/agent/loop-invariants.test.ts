@@ -195,3 +195,35 @@ describe('isRunning lifecycle', () => {
     expect(agent.interrupt()).toBe(false)
   })
 })
+
+describe('thinking level', () => {
+  function recordingProvider(seen: (string | undefined)[]): LLMProvider {
+    return {
+      name: 'stub',
+      async chat(req: ChatRequest): Promise<ChatResponse> {
+        seen.push(req.thinking?.level)
+        return stubResponse({ content: 'ok' })
+      },
+    }
+  }
+
+  test('config off reaches the provider as an explicit off, not an omission', async () => {
+    // Left unset, the chat template's own default decides -- and Qwen3's default is thinking on.
+    const seen: (string | undefined)[] = []
+    const agent = makeAgent(recordingProvider(seen), 'test:thinking-off')
+    await agent.run('hi')
+    expect(seen).toEqual(['off'])
+    expect(agent.getThinking()).toEqual({ level: 'off', source: 'config' })
+  })
+
+  test('a session override wins over config until cleared', async () => {
+    const seen: (string | undefined)[] = []
+    const agent = makeAgent(recordingProvider(seen), 'test:thinking-session')
+    agent.setThinking('high')
+    expect(agent.getThinking()).toEqual({ level: 'high', source: 'session' })
+    await agent.run('one')
+    agent.setThinking(undefined)
+    await agent.run('two')
+    expect(seen).toEqual(['high', 'off'])
+  })
+})

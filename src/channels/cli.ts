@@ -1,18 +1,16 @@
 import * as readline from 'readline'
 import type { AgentLoop } from '../agent'
 import { buildLearnPrompt } from '../agent/learn-prompt'
-import type { ThinkingConfig } from '../providers/types'
-import { handleCommand, SessionController } from '../session/controller'
+import { handleCommand } from '../session/commands'
+import { SessionController } from '../session/controller'
 import { colors, DIM, RESET } from '../ui/theme'
 import { log } from '../util/logger'
 import {
   type CommandContext,
   handleCompactCommand,
-  handleContextCommand,
   handleDebugCommand,
   handlePlanCommand,
   handlePromptCommand,
-  handleThinkCommand,
   handleWipeCommand,
 } from './cli-commands'
 import { createCLIEventHandler, renderQueuedMessage } from './cli-events'
@@ -25,7 +23,6 @@ export class CLIChannel implements Channel {
   private rl: readline.Interface | null = null
   private agent: AgentLoop
   private running = false
-  private thinkingOverride: { current: ThinkingConfig | undefined } = { current: undefined }
   private showThinking: boolean
   /** Queue, abort handle and mutable settings -- everything that outlives a single turn. */
   private session = new SessionController()
@@ -62,7 +59,7 @@ export class CLIChannel implements Channel {
       `\n${c.secondary}✦ egirl${RESET} ${DIM}— enter sends · esc interrupts · typing mid-turn queues · /exit quits${RESET}`,
     )
     console.log(
-      `${DIM}  /think /plan /learn /context /compact /wipe /prompt /debug /auto /maxturns /reasoning /queue /settings${RESET}\n`,
+      `${DIM}  /help /think /plan /learn /context /compact /wipe /prompt /debug /auto /maxturns /reasoning /queue /settings${RESET}\n`,
     )
 
     this.prompt()
@@ -78,7 +75,6 @@ export class CLIChannel implements Channel {
     return {
       agent: this.agent,
       showThinking: this.showThinking,
-      thinkingOverride: this.thinkingOverride,
       askApproval: () => this.askApproval(),
     }
   }
@@ -86,10 +82,6 @@ export class CLIChannel implements Channel {
   private async handleCommand(input: string): Promise<boolean> {
     if (input === '/clear' || input.toLowerCase() === 'clear') {
       console.clear()
-      return true
-    }
-    if (input.startsWith('/think')) {
-      handleThinkCommand(input, this.commandCtx())
       return true
     }
     if (input.startsWith('/plan')) {
@@ -101,10 +93,6 @@ export class CLIChannel implements Channel {
       }
       return true
     }
-    if (input === '/context') {
-      await handleContextCommand(this.commandCtx())
-      return true
-    }
     if (input === '/compact') {
       await handleCompactCommand(this.commandCtx())
       return true
@@ -113,22 +101,23 @@ export class CLIChannel implements Channel {
       handleWipeCommand(this.commandCtx())
       return true
     }
-    const sessionCmd = handleCommand(input, this.session)
-    if (sessionCmd.handled) {
-      if (sessionCmd.quit) {
-        this.rl?.close()
-        return true
-      }
-      if (sessionCmd.message) console.log(`${colors().accent}${sessionCmd.message}${RESET}\n`)
-      return true
-    }
-
     if (input === '/prompt') {
       handlePromptCommand(this.commandCtx())
       return true
     }
     if (input === '/debug') {
       handleDebugCommand(this.commandCtx())
+      return true
+    }
+    // /learn is a turn, not a command: the prompt loop rewrites it and runs it.
+    if (input === '/learn' || input.startsWith('/learn ')) return false
+    const shared = await handleCommand(input, { agent: this.agent, session: this.session })
+    if (shared.handled) {
+      if (shared.quit) {
+        this.rl?.close()
+        return true
+      }
+      if (shared.message) console.log(`${colors().accent}${shared.message}${RESET}\n`)
       return true
     }
     return false
@@ -186,6 +175,13 @@ export class CLIChannel implements Channel {
         const keys = captureDuringRun(this.session, {
           onInterrupt: () => console.log(`\n${c.warning}interrupting…${RESET}`),
           onQueued: (text) => console.log(renderQueuedMessage(text)),
+          onCommand: (text) => {
+            handleCommand(text, { agent: this.agent, session: this.session })
+              .then((r) => {
+                if (r.message) console.log(`\n${c.accent}${r.message}${RESET}`)
+              })
+              .catch(() => {})
+          },
         })
 
         // 'waiting' rather than 'thinking': nothing has come back yet, so this is prefill,
@@ -199,7 +195,6 @@ export class CLIChannel implements Channel {
           const { handler, state } = createCLIEventHandler(this.showThinking, status)
           const response = await this.agent.run(pending, {
             events: handler,
-            thinking: this.thinkingOverride.current,
             maxTurns: this.session.get().maxTurns,
             signal,
           })

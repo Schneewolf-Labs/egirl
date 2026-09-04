@@ -15,6 +15,7 @@ import { type APIConfig, type APIDeps, startAPIServer } from '../src/api'
 
 /** Stub agent whose run() resolves when the test says so, to hold a session busy. */
 function gatedAgent(sessionId: string, order: string[]): AgentLoop {
+  let thinking: string | undefined
   return {
     async run(message: string) {
       order.push(`start:${message}`)
@@ -35,6 +36,28 @@ function gatedAgent(sessionId: string, order: string[]): AgentLoop {
       conversationSummary: undefined,
     }),
     resetSession() {},
+    setThinking(level: string | undefined) {
+      thinking = level
+    },
+    getThinking() {
+      return thinking
+        ? { level: thinking, source: 'session' }
+        : { level: 'medium', source: 'config' }
+    },
+    async contextStatus() {
+      return {
+        sessionId,
+        contextLength: 100,
+        systemPromptTokens: 10,
+        messageCount: 0,
+        messageTokens: 0,
+        summaryTokens: 0,
+        totalUsed: 10,
+        available: 90,
+        utilization: 0.1,
+        hasSummary: false,
+      }
+    },
   } as unknown as AgentLoop
 }
 
@@ -230,6 +253,24 @@ describe('sessions over the API', () => {
     } finally {
       s2.stop(true)
     }
+  })
+
+  test('POST /sessions/:id/thinking sets the level on the session agent itself', async () => {
+    const url = `${base}/sessions/${encodeURIComponent('web:t')}/thinking`
+    const post = (level: unknown) =>
+      fetch(url, { method: 'POST', body: JSON.stringify({ level }) }).then((r) => r.json())
+    expect(await post('off')).toEqual({ ok: true, level: 'off' })
+    // The same agent a room or a terminal would /think on -- not a map beside it.
+    expect(agents.get('web:t')?.getThinking()).toEqual({ level: 'off', source: 'session' })
+    const ctx = (await (
+      await fetch(`${base}/sessions/${encodeURIComponent('web:t')}/context`)
+    ).json()) as { thinking: string | null }
+    expect(ctx.thinking).toBe('off')
+    expect(await post('default')).toEqual({ ok: true, level: null })
+    expect(agents.get('web:t')?.getThinking().source).toBe('config')
+    expect(
+      (await fetch(url, { method: 'POST', body: JSON.stringify({ level: 'max' }) })).status,
+    ).toBe(400)
   })
 })
 

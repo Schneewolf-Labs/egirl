@@ -58,6 +58,8 @@ Each channel is a thin adapter that converts its interface into a call to `Agent
 - **Claude Code bridge** (`src/channels/claude-code.ts`): runs Claude Code directly and uses the local model to answer permission/clarification prompts. This is a channel, not the `code_agent` tool.
 - **HTTP API** (`src/api.ts`): small Bun.serve handler exposing chat, memory, and task endpoints. Bound to localhost by default; optional bearer auth via `EGIRL_API_TOKEN`.
 
+**Slash commands** (`src/session/commands.ts`) are one vocabulary on every surface and never reach the model: `/think <on|off|default>`, `/status`, `/context`, `/settings`, `/help`. They answer at once, even while a turn is running — the spine checks for one before the pending-ask broker or the agent see the text, Discord answers ahead of its per-channel queue, and the terminal answers mid-run instead of queueing — so `/status` is a way to ping the harness rather than the LLM. The terminal adds session-only commands (`/auto`, `/maxturns`, `/queue`, `/clear`, `/quit`, and the renderer's own `/plan`, `/compact`, `/wipe`, `/prompt`, `/debug`); on a chat surface those say so. The thinking setting itself lives on the session's `AgentLoop`, which is why `/think` from a room, the console's selector and `POST /sessions/:id/thinking` all change the same thing.
+
 ### 2. Agent loop processes the message
 
 `AgentLoop.run()` is the conversation engine. The implementation is split across a few files:
@@ -204,9 +206,9 @@ egirl/
 │   │   └── targeting.ts      # Accessibility-based element targeting
 │   ├── channels/
 │   │   ├── cli.ts            # Terminal interface
-│   │   ├── cli-commands.ts   # Slash commands (/wipe, /think, etc.)
+│   │   ├── cli-commands.ts   # Terminal-only commands (/plan, /wipe, /compact, ...)
 │   │   ├── cli-events.ts     # Event rendering
-│   │   ├── spine.ts          # Shared chat turn: broker, typing, narration, chunking, errors
+│   │   ├── spine.ts          # Shared chat turn: slash commands, broker, typing, narration, chunking
 │   │   ├── narration.ts      # Compact tool-call lines prefixed to chat replies
 │   │   ├── chunk.ts          # Split replies to a transport's message cap
 │   │   ├── discord.ts        # Discord bot

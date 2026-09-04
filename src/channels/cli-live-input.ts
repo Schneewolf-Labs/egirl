@@ -6,12 +6,13 @@
  * typing during a long run feels like the terminal has frozen, and why there is currently no way
  * to interrupt one.
  *
- * This takes over stdin for the duration: Escape aborts, typed lines go to the queue, and Ctrl-C
- * still reaches the process. It is deliberately separate from the channel so the raw-mode
+ * This takes over stdin for the duration: Escape aborts, typed lines go to the queue (a slash
+ * command is answered at once instead), and Ctrl-C still reaches the process. It is deliberately separate from the channel so the raw-mode
  * bookkeeping -- which is easy to get wrong and leaves a terminal unusable when it is -- lives in
  * one place with one exit path.
  */
 
+import { isCommand } from '../session/commands'
 import type { SessionController } from '../session/controller'
 
 export interface LiveInputHandle {
@@ -27,7 +28,12 @@ export interface LiveInputHandle {
  */
 export function captureDuringRun(
   session: SessionController,
-  hooks: { onInterrupt(): void; onQueued(text: string): void },
+  hooks: {
+    onInterrupt(): void
+    onQueued(text: string): void
+    /** A slash command typed mid-run is answered now, not queued behind the turn. */
+    onCommand?(text: string): void
+  },
 ): LiveInputHandle {
   const stdin = process.stdin
   const wasRaw = stdin.isRaw ?? false
@@ -62,7 +68,9 @@ export function captureDuringRun(
       if (ch === '\r' || ch === '\n') {
         const text = buffer.trim()
         buffer = ''
-        if (text) {
+        if (text && hooks.onCommand && isCommand(text)) {
+          hooks.onCommand(text)
+        } else if (text) {
           session.enqueue(text)
           hooks.onQueued(text)
         }

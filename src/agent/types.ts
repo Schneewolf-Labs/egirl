@@ -1,7 +1,7 @@
 import type { RuntimeConfig } from '../config'
 import type { ConversationStore } from '../conversation'
 import type { MemoryManager } from '../memory'
-import type { LLMProvider, ThinkingConfig } from '../providers/types'
+import type { LLMProvider } from '../providers/types'
 import type { Skill } from '../skills/types'
 import type { ToolExecutor } from '../tools'
 import type { AgentEventHandler } from './events'
@@ -10,8 +10,6 @@ import type { SessionMutex } from './session-mutex'
 export interface AgentLoopOptions {
   maxTurns?: number
   events?: AgentEventHandler
-  /** Override thinking level for this run */
-  thinking?: ThinkingConfig
   /** Planning mode: first response is a plan (no tools), user approves before execution */
   planningMode?: boolean
   /** Abort signal — checked between turns and after tool execution */
