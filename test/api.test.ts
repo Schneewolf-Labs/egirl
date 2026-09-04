@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import type { AgentLoop } from '../src/agent'
+import { endRun, resetSessionEvents, startRun } from '../src/agent/session-events'
 import { type APIConfig, type APIDeps, startAPIServer } from '../src/api'
 
 function stubAgent(sessionId: string): AgentLoop {
@@ -127,12 +128,12 @@ describe('API server', () => {
   test('POST /peer/message answers busy immediately when a run is in flight', async () => {
     // A worker deep in a long unbounded run cannot answer a peer message without queuing behind
     // its current turn, which can take minutes -- so the supervisor's timeout fires and it gets
-    // nothing. Instead the receiver checks the shared busy flag and replies at once, without
-    // touching the running work.
-    let busy = true
+    // nothing. Instead the receiver checks the session bus, which knows every live run in the
+    // process (here: a background task), and replies at once without touching the running work.
+    startRun('task:grind', stubAgent('task:grind'), 'keep going')
     const busyServer = startAPIServer(
       { host: '127.0.0.1', port: 3924 },
-      { ...deps, isBusy: () => busy, selfName: 'zero' },
+      { ...deps, selfName: 'zero' },
     )
     try {
       const res = await fetch('http://127.0.0.1:3924/peer/message', {
@@ -148,7 +149,18 @@ describe('API server', () => {
       expect(body.content).not.toContain('[agent-to-agent]')
 
       // And once free, the same message runs the agent normally.
-      busy = false
+      endRun('task:grind', {
+        t: 'run_end',
+        v: {
+          content: '',
+          input_tokens: 0,
+          output_tokens: 0,
+          turns: 1,
+          duration_ms: 0,
+          aborted: false,
+          awaiting: false,
+        },
+      })
       const res2 = await fetch('http://127.0.0.1:3924/peer/message', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -216,8 +228,6 @@ describe('API session interrupt', () => {
 
   let interrupted: string[]
   let injected: Array<{ session: string; message: string }>
-  let taskAborts: string[]
-  let taskInjects: Array<{ id: string; message: string }>
 
   function interruptibleAgent(sessionId: string): AgentLoop {
     const stub = stubAgent(sessionId)
@@ -233,35 +243,19 @@ describe('API session interrupt', () => {
     }) as AgentLoop
   }
 
-  const taskRunner = {
-    abortTask: (id: string) => {
-      taskAborts.push(id)
-      return true
-    },
-    injectTask: (id: string, message: string) => {
-      taskInjects.push({ id, message })
-      return true
-    },
-  }
-
   beforeEach(() => {
     agents.clear()
     interrupted = []
     injected = []
-    taskAborts = []
-    taskInjects = []
     server = startAPIServer(
       { host: '127.0.0.1', port },
-      {
-        agentFactory: (id) => interruptibleAgent(id),
-        agents,
-        taskRunner: taskRunner as unknown as APIDeps['taskRunner'],
-      },
+      { agentFactory: (id) => interruptibleAgent(id), agents },
     )
   })
 
   afterEach(() => {
     server.stop(true)
+    resetSessionEvents()
   })
 
   async function interrupt(sessionId: string, body: Record<string, unknown>) {
@@ -272,8 +266,10 @@ describe('API session interrupt', () => {
     })
   }
 
-  test('abort reaches the session agent', async () => {
-    agents.set('s1', interruptibleAgent('s1'))
+  // A real AgentLoop registers itself on the session bus for the life of a run; the stubs
+  // here do it by hand.
+  test('abort reaches the loop running the session', async () => {
+    startRun('s1', interruptibleAgent('s1'), 'go')
     const res = await interrupt('s1', { action: 'abort' })
     expect(res.status).toBe(200)
     const body = (await res.json()) as { delivered: boolean }
@@ -281,20 +277,29 @@ describe('API session interrupt', () => {
     expect(interrupted).toContain('s1')
   })
 
-  test('inject reaches the session agent with the message', async () => {
-    agents.set('s1', interruptibleAgent('s1'))
+  test('inject reaches the running loop with the message', async () => {
+    startRun('s1', interruptibleAgent('s1'), 'go')
     const res = await interrupt('s1', { action: 'inject', message: 'stop and report' })
     expect(res.status).toBe(200)
     expect(injected).toEqual([{ session: 's1', message: 'stop and report' }])
   })
 
-  test('task sessions route to the task runner', async () => {
+  test('a task session is reached the same way: whichever loop is running it', async () => {
+    // Nothing in `agents` for it -- the task runner built this loop, not the API.
+    startRun('task:abc123', interruptibleAgent('task:abc123'), 'grind')
     const abortRes = await interrupt('task:abc123', { action: 'abort' })
     expect(((await abortRes.json()) as { delivered: boolean }).delivered).toBe(true)
-    expect(taskAborts).toContain('abc123')
+    expect(interrupted).toContain('task:abc123')
 
     await interrupt('task:abc123', { action: 'inject', message: 'note this' })
-    expect(taskInjects).toEqual([{ id: 'abc123', message: 'note this' }])
+    expect(injected).toEqual([{ session: 'task:abc123', message: 'note this' }])
+  })
+
+  test('a cached but idle session delivers false', async () => {
+    agents.set('s1', interruptibleAgent('s1'))
+    const res = await interrupt('s1', { action: 'abort' })
+    expect(((await res.json()) as { delivered: boolean }).delivered).toBe(false)
+    expect(interrupted).toEqual([])
   })
 
   test('unknown session delivers false instead of erroring', async () => {

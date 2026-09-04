@@ -6,8 +6,9 @@ import { createReportTool, parseReportTarget } from './tool'
 
 /**
  * Register the report tool from [report] config, if present. Called by each entry point
- * after its channels exist — what "connected" means differs per process (serve has outbound
- * chat channels; api has only peers), and the tool degrades honestly for the rest.
+ * after its channels exist — what "connected" means differs per process (serve has the chat
+ * channels; api has the console, peers and send-only Matrix), and the tool degrades honestly
+ * for the rest.
  */
 export function registerReportTool(
   config: RuntimeConfig,

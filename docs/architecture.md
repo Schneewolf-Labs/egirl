@@ -141,7 +141,7 @@ src/index.ts (entry point — parses command, dispatches to runner)
 │   ├── tools/       → creates ToolExecutor with builtin tools
 │   ├── memory/      → creates MemoryManager (SQLite + embeddings)
 │   ├── safety/      → creates safety checkers
-│   ├── tracking/    → creates StatsTracker / transcript logger
+│   ├── tracking/    → creates StatsTracker / opens the trace store
 │   ├── tasks/       → creates TaskStore + TaskRunner for background work
 │   └── conversation/→ creates ConversationStore for persistence
 ├── agent/           → creates AgentLoop (orchestrates everything above)
@@ -282,7 +282,7 @@ egirl/
 │   │       ├── web-research.ts
 │   │       ├── web-search.ts # SearxNG-backed
 │   │       └── code-agent/   # Code agent delegation (claude, codex backends)
-│   ├── tracking/             # Stats, transcript logging
+│   ├── tracking/             # Stats, trace store, session journal
 │   ├── ui/
 │   │   └── theme.ts          # 256-color ANSI theme system
 │   ├── util/

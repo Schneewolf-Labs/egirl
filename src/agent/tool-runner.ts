@@ -1,12 +1,11 @@
 import type { ChatResponse, ToolCall } from '../providers/types'
 import type { ToolExecutor, ToolResult } from '../tools'
-import { trace } from '../tracking/traces'
-import type { TranscriptLogger } from '../tracking/transcript'
 import { log } from '../util/logger'
 import { type AgentContext, addMessage } from './context'
 import { truncateToolResultSync } from './context-window'
 import type { AgentEventHandler } from './events'
 import { duplicateToolWarning } from './nudges'
+import { publish } from './session-events'
 
 /** Default max tokens per tool result — matches context-window.ts default */
 const MAX_TOOL_RESULT_TOKENS = 8000
@@ -21,11 +20,10 @@ export async function runToolCalls(args: {
   context: AgentContext
   executor: ToolExecutor
   seenToolCalls: Set<string>
-  transcript: TranscriptLogger | null
   events?: AgentEventHandler
   signal?: AbortSignal
 }): Promise<{ awaitingInput: boolean }> {
-  const { response, context, executor, seenToolCalls, transcript, events, signal } = args
+  const { response, context, executor, seenToolCalls, events, signal } = args
   const calls = response.tool_calls ?? []
 
   const duplicateNames: string[] = []
@@ -49,7 +47,6 @@ export async function runToolCalls(args: {
     toolCalls: calls,
     context,
     executor,
-    transcript,
     events,
     signal,
   })
@@ -64,14 +61,13 @@ export async function runToolCalls(args: {
     const call = calls.find((c) => c.id === callId)
     events?.onToolCallComplete?.(callId, call?.name ?? 'unknown', result)
 
-    // Full-payload tool trace: the transcript logger keeps arg KEYS only; post-mortems need
-    // the actual command and the actual output.
-    trace({
-      session: context.sessionId,
-      kind: 'tool',
-      name: call?.name ?? 'unknown',
-      success: result.success,
-      payload: {
+    // Full-payload tool record: post-mortems need the actual command and the actual output,
+    // and the journal on the bus keeps it.
+    publish(context.sessionId, {
+      t: 'tool_done',
+      v: {
+        name: call?.name ?? 'unknown',
+        success: result.success,
         args: JSON.stringify(call?.arguments ?? {}),
         output: result.output,
       },
@@ -100,11 +96,10 @@ async function executeToolsWithHooks(args: {
   toolCalls: ToolCall[]
   context: AgentContext
   executor: ToolExecutor
-  transcript: TranscriptLogger | null
   events?: AgentEventHandler
   signal?: AbortSignal
 }): Promise<Map<string, ToolResult>> {
-  const { toolCalls, context, executor, transcript, events, signal } = args
+  const { toolCalls, context, executor, events, signal } = args
 
   // Don't start new tools after the run is aborted — emit skip results so
   // tool messages stay paired with their tool_calls in history.
@@ -113,7 +108,7 @@ async function executeToolsWithHooks(args: {
     output: 'Skipped: agent run was cancelled',
   })
 
-  if (!events?.onBeforeToolExec && !events?.onAfterToolExec && !transcript) {
+  if (!events?.onBeforeToolExec && !events?.onAfterToolExec) {
     if (signal?.aborted) {
       return new Map(toolCalls.map((call) => [call.id, skippedResult()]))
     }
@@ -141,17 +136,8 @@ async function executeToolsWithHooks(args: {
       }
     }
 
-    const toolStart = Date.now()
     const result = await executor.execute(call, context.workspaceDir)
-    const toolDuration = Date.now() - toolStart
-
     events?.onAfterToolExec?.(call, result)
-    transcript?.toolCall(context.sessionId, {
-      tool: call.name,
-      args_keys: Object.keys(call.arguments),
-      success: result.success,
-      duration_ms: toolDuration,
-    })
 
     results.set(call.id, result)
   }

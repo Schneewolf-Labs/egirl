@@ -38,16 +38,8 @@ export async function runServe(config: RuntimeConfig, args: string[]): Promise<v
     process.exit(1)
   }
 
-  const {
-    providers,
-    memory,
-    conversations,
-    taskStore,
-    toolExecutor,
-    transcript,
-    skills,
-    processRegistry,
-  } = await createAppServices(config)
+  const { providers, memory, conversations, taskStore, toolExecutor, skills, processRegistry } =
+    await createAppServices(config)
 
   const standup = await gatherStandup(config.workspace.path)
   const sessionMutex = new SessionMutex()
@@ -65,7 +57,6 @@ export async function runServe(config: RuntimeConfig, args: string[]): Promise<v
       sessionId,
       memory,
       conversationStore: conversations,
-      transcript,
       skills,
       additionalContext: standup.context || undefined,
       sessionMutex,
@@ -117,7 +108,6 @@ export async function runServe(config: RuntimeConfig, args: string[]): Promise<v
       localProvider: providers.local,
       auxProvider: providers.auxiliary,
       memory,
-      transcript,
       outbound,
       conversationStore: conversations,
       sessionMutex,
@@ -172,7 +162,6 @@ export async function runServe(config: RuntimeConfig, args: string[]): Promise<v
         localProvider: providers.local,
         auxProvider: providers.auxiliary,
         memory,
-        transcript,
       })
     }
 

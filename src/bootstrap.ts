@@ -31,8 +31,8 @@ import {
 } from './tools'
 import { setToolDialect } from './tools/dialects'
 import { createStatsTracker, type StatsTracker } from './tracking'
+import { journalSessionEvents } from './tracking/journal'
 import { initTraces } from './tracking/traces'
-import { createTranscriptLogger, type TranscriptLogger } from './tracking/transcript'
 import { log } from './util/logger'
 
 /**
@@ -49,7 +49,6 @@ export interface AppServices {
   taskStore: TaskStore | undefined
   toolExecutor: ToolExecutor
   stats: StatsTracker
-  transcript: TranscriptLogger | undefined
   skills: Skill[]
   mcpConnections: McpConnection[]
   browser: BrowserManager
@@ -271,12 +270,14 @@ export async function createAppServices(config: RuntimeConfig): Promise<AppServi
     localProvider: providers.local,
     memory,
   })
-  // Trace store first, so everything below is recorded from the start.
+  // Trace store first, so everything below is recorded from the start. Session runs reach it
+  // through the bus: one subscriber for every entry point, every channel, every task.
   initTraces(
     join(config.workspace.path, 'traces.db'),
     config.tracing.verbosity,
     config.tracing.retentionDays,
   )
+  journalSessionEvents()
 
   // Screenshot gating: unset in config means auto-detect from the endpoint's modalities.
   const visionSupported =
@@ -354,11 +355,6 @@ export async function createAppServices(config: RuntimeConfig): Promise<AppServi
     toolExecutor.setEnergy(energy)
   }
   const stats = createStatsTracker()
-  const transcript = createTranscriptLogger(config.transcript)
-
-  if (transcript) {
-    log.info('main', `JSONL transcripts enabled: ${config.transcript.path}`)
-  }
 
   return {
     config,
@@ -371,7 +367,6 @@ export async function createAppServices(config: RuntimeConfig): Promise<AppServi
     taskStore,
     toolExecutor,
     stats,
-    transcript,
     skills,
     browser,
     processRegistry,

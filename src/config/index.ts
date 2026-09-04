@@ -2,10 +2,11 @@ import type { TSchema } from '@sinclair/typebox'
 import { Value } from '@sinclair/typebox/value'
 import { existsSync, mkdirSync, readFileSync } from 'fs'
 import { homedir } from 'os'
-import { join, resolve } from 'path'
+import { resolve } from 'path'
 import { parse } from 'smol-toml'
 import { peerTokenEnvKey } from '../peers/protocol'
 import { setTheme } from '../ui/theme'
+import { log } from '../util/logger'
 import { loadConfigFragments } from './fragments'
 import {
   type CodeAgentProvider,
@@ -259,6 +260,12 @@ export function loadConfig(options: LoadConfigOptions = {}): RuntimeConfig {
     mkdirSync(workspacePath, { recursive: true })
   }
 
+  // The JSONL transcript writer is gone: the trace store (`[tracing]`) is the one journal, fed
+  // from the session bus. The key stays accepted so an old config still loads.
+  if (toml.transcript !== undefined) {
+    log.warn('config', '[transcript] is ignored; runs are journaled in the trace store ([tracing])')
+  }
+
   const themeName = toml.theme ?? 'egirl'
   try {
     setTheme(themeName)
@@ -414,12 +421,6 @@ export function loadConfig(options: LoadConfigOptions = {}): RuntimeConfig {
         schedule: toml.tasks?.heartbeat?.schedule ?? '*/30 * * * *',
         businessHours: toml.tasks?.heartbeat?.business_hours,
       },
-    },
-    transcript: {
-      enabled: toml.transcript?.enabled ?? true,
-      path: toml.transcript?.path
-        ? expandPath(toml.transcript.path, workspacePath)
-        : join(workspacePath, 'transcripts'),
     },
     permissionSupervisor: {
       mode: toml.permission_supervisor?.mode ?? 'supervised',

@@ -6,7 +6,6 @@
  * compared against the context window length to compute utilization.
  */
 
-import type { TranscriptLogger } from '../tracking/transcript'
 import { log } from '../util/logger'
 import { type AgentContext, addMessage } from './context'
 import type { AgentEventHandler } from './events'
@@ -115,7 +114,7 @@ function classifyUtilization(utilization: number): BudgetLevel {
 
 /**
  * Record a turn's token usage and surface threshold crossings:
- * logs, fires the budget event, records the transcript entry, and at
+ * logs, fires the budget event, and at
  * the critical level injects a wrap-up notice into the conversation.
  */
 export function reportTokenBudget(args: {
@@ -123,10 +122,9 @@ export function reportTokenBudget(args: {
   inputTokens: number
   outputTokens: number
   context: AgentContext
-  transcript: TranscriptLogger | null
   events?: AgentEventHandler
 }): void {
-  const { tracker, inputTokens, outputTokens, context, transcript, events } = args
+  const { tracker, inputTokens, outputTokens, context, events } = args
   const status = tracker.record(inputTokens, outputTokens)
 
   if (tracker.shouldWarnCritical()) {
@@ -135,12 +133,6 @@ export function reportTokenBudget(args: {
       `Token budget critical: ${Math.round(status.utilization * 100)}% of ${status.contextLength}t context used`,
     )
     events?.onTokenBudgetWarning?.('critical', status)
-    transcript?.tokenBudget(context.sessionId, {
-      level: 'critical',
-      utilization: status.utilization,
-      input_tokens: status.lastInputTokens,
-      context_length: status.contextLength,
-    })
     addMessage(context, {
       role: 'user',
       content:
@@ -152,11 +144,5 @@ export function reportTokenBudget(args: {
       `Token budget high: ${Math.round(status.utilization * 100)}% of ${status.contextLength}t context used`,
     )
     events?.onTokenBudgetWarning?.('high', status)
-    transcript?.tokenBudget(context.sessionId, {
-      level: 'high',
-      utilization: status.utilization,
-      input_tokens: status.lastInputTokens,
-      context_length: status.contextLength,
-    })
   }
 }

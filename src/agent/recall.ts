@@ -3,7 +3,6 @@ import type { MemoryManager } from '../memory'
 import { retrieveForContext } from '../memory/retrieval'
 import type { ChatMessage } from '../providers/types'
 import { auditMemoryOperation, sanitizeContent } from '../safety'
-import type { TranscriptLogger } from '../tracking/transcript'
 import type { AgentContext } from './context'
 import type { ConversationHistory } from './history'
 
@@ -33,9 +32,8 @@ export async function injectRecalledMemory(args: {
   memory: MemoryManager | null
   config: RuntimeConfig
   history: ConversationHistory
-  transcript: TranscriptLogger | null
 }): Promise<void> {
-  const { userMessage, context, memory, config, history, transcript } = args
+  const { userMessage, context, memory, config, history } = args
   if (!memory || !config.memory.proactiveRetrieval) return
 
   const recalled = await retrieveForContext(userMessage, memory, {
@@ -60,8 +58,6 @@ export async function injectRecalledMemory(args: {
   // Insert before the user message added at the start of this run
   const insertAt = Math.max(context.messages.length - 1, 0)
   context.messages.splice(insertAt, 0, recallMessage)
-
-  transcript?.memoryRecall(context.sessionId, userMessage, sanitized.length)
 
   const auditPath = config.safety.auditLog.path
   if (config.safety.auditLog.enabled && auditPath) {
