@@ -359,4 +359,33 @@ describe('live session events', () => {
     expect(frames.map((f) => f.t)).toEqual(['run_end'])
     expect((frames[0]?.v as { content: string }).content).toBe('echo: hi')
   })
+
+  test('GET /sessions/:id reads the running loop, whoever started it', async () => {
+    // A task's loop lives outside this server's agents map, and its context is ahead of
+    // anything persisted: the turn in flight is only there. The bus hands over the loop.
+    const live = {
+      getContext: () => ({
+        sessionId: 'task:live',
+        systemPrompt: 'x',
+        messages: [
+          { role: 'user', content: 'grind' },
+          { role: 'assistant', content: 'on it' },
+        ],
+        conversationSummary: undefined,
+      }),
+    } as unknown as AgentLoop
+    startRun('task:live', live, 'grind')
+    const res = await fetch(`${base}/sessions/${encodeURIComponent('task:live')}`)
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as {
+      busy: boolean
+      message_count: number
+      messages: Array<{ content: string }>
+    }
+    expect(body.busy).toBe(true)
+    expect(body.message_count).toBe(2)
+    expect(body.messages[1]?.content).toBe('on it')
+    endRun('task:live', finished)
+    expect((await fetch(`${base}/sessions/${encodeURIComponent('task:live')}`)).status).toBe(404)
+  })
 })

@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { AgentFactory, AgentLoop } from './agent'
+import type { AgentContext } from './agent/context'
 import { buildLearnPrompt } from './agent/learn-prompt'
 import {
   anyRunning,
@@ -110,6 +111,19 @@ function getOrCreateAgent(sessionId: string, deps: APIDeps): AgentLoop {
     deps.agents.set(sessionId, agent)
   }
   return agent
+}
+
+function sessionView(ctx: AgentContext, busy: boolean): JSONValue {
+  return {
+    session_id: ctx.sessionId,
+    message_count: ctx.messages.length,
+    has_summary: !!ctx.conversationSummary,
+    busy,
+    messages: ctx.messages.map((m) => ({
+      role: m.role,
+      content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
+    })),
+  }
 }
 
 function taskToJson(t: Task): JSONValue {
@@ -814,11 +828,13 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
           // the browser must load its history, not 404 because this server never touched it.
           // Unknown ids still 404: a GET that conjures sessions out of typos would make the
           // list fill with ghosts.
-          // Disk first, cache second. An agent held in `agents` only advances on runs made
-          // through that instance, so a task writing to the same session id through its own
-          // agent leaves the cached copy frozen at whatever it held when it was hydrated --
-          // which is how a live 1000-message task run can read as a stale 743 here. The store
-          // sees every write regardless of who made it, so it is the honest answer for a read.
+          // Live run first, then disk, then this server's own cache. The loop that is running
+          // the session holds the only context that includes the turn in progress; the store
+          // has everything persisted by anyone (a task writing through its own agent, which the
+          // cached copy in `agents` never sees); the cache is the last resort for a session
+          // nothing has persisted yet.
+          const live = runningLoop(sessionId)
+          if (live) return json(sessionView(live.getContext(), true))
           const stored = deps.conversationStore?.listSessions().some((s) => s.id === sessionId)
           if (stored && deps.conversationStore) {
             const messages = deps.conversationStore.loadMessages(sessionId)
@@ -836,23 +852,14 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
           // Not on disk: an in-memory-only session (persistence off, or nothing said yet).
           const agent = deps.agents.get(sessionId)
           if (!agent) return err('session not found', 404)
-          const ctx = agent.getContext()
-          return json({
-            session_id: ctx.sessionId,
-            message_count: ctx.messages.length,
-            has_summary: !!ctx.conversationSummary,
-            busy: isRunning(sessionId),
-            messages: ctx.messages.map((m) => ({
-              role: m.role,
-              content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
-            })),
-          })
+          return json(sessionView(agent.getContext(), false))
         }
 
         // Reach into a running loop: abort it, or inject an operator message it will see at
         // the next turn boundary. This is the background-run version of pressing esc in the
         // TTY — the piece that makes "the human can always stop the loop" true for unattended
-        // runs. task:* sessions live inside the task runner, not this server's agents map.
+        // runs. The bus knows which loop is running a session, whoever started it -- a task,
+        // a peer, a chat -- so there is one lookup and no special case per origin.
         {
           const m = method === 'POST' && path.match(/^\/sessions\/(.+)\/interrupt$/)
           if (m) {
@@ -866,19 +873,12 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
             if (action === 'inject' && (typeof message !== 'string' || !message.trim())) {
               return err('message required for inject')
             }
-            let delivered = false
-            if (sessionId.startsWith('task:') && deps.taskRunner) {
-              const taskId = sessionId.slice('task:'.length)
-              delivered =
-                action === 'abort'
-                  ? deps.taskRunner.abortTask(taskId)
-                  : deps.taskRunner.injectTask(taskId, message as string)
-            } else {
-              const agent = deps.agents.get(sessionId)
-              if (agent) {
-                delivered = action === 'abort' ? agent.interrupt() : agent.inject(message as string)
-              }
-            }
+            const live = runningLoop(sessionId)
+            const delivered = live
+              ? action === 'abort'
+                ? live.interrupt()
+                : live.inject(message as string)
+              : false
             // delivered=false means nothing was running — for inject, the caller should send
             // a normal chat message instead.
             return json({ ok: true, delivered })
