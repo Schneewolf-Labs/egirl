@@ -17,7 +17,7 @@ export async function runTelegram(config: RuntimeConfig, args: string[]): Promis
     process.exit(1)
   }
 
-  const { providers, memory, conversations, toolExecutor, transcript, skills, processRegistry } =
+  const { providers, memory, conversations, toolExecutor, skills, processRegistry } =
     await createAppServices(config)
 
   const standup = await gatherStandup(config.workspace.path)
@@ -31,7 +31,6 @@ export async function runTelegram(config: RuntimeConfig, args: string[]): Promis
     sessionId: 'telegram:default',
     memory,
     conversationStore: conversations,
-    transcript,
     skills,
     additionalContext: standup.context || undefined,
     sessionMutex,

@@ -4,7 +4,6 @@ import type { MemoryManager } from '../memory'
 import type { LLMProvider, ThinkingConfig } from '../providers/types'
 import type { Skill } from '../skills/types'
 import type { ToolExecutor } from '../tools'
-import type { TranscriptLogger } from '../tracking/transcript'
 import type { AgentEventHandler } from './events'
 import type { SessionMutex } from './session-mutex'
 
@@ -80,7 +79,6 @@ export interface AgentLoopDeps {
   sessionId: string
   memory?: MemoryManager
   conversationStore?: ConversationStore
-  transcript?: TranscriptLogger
   skills?: Skill[]
   additionalContext?: string
   /** Shared mutex to serialize agent runs across entry points */

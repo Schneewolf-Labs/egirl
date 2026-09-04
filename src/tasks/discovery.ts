@@ -6,7 +6,6 @@ import { retrieveForContext } from '../memory/retrieval'
 import type { LLMProvider } from '../providers/types'
 import { gatherStandup } from '../standup'
 import type { ToolExecutor } from '../tools'
-import type { TranscriptLogger } from '../tracking/transcript'
 import { log } from '../util/logger'
 import { formatInterval } from './parse-interval'
 import type { TaskRunner } from './runner'
@@ -41,7 +40,6 @@ export interface DiscoveryDeps {
   localProvider: LLMProvider
   auxProvider?: LLMProvider
   memory: MemoryManager | undefined
-  transcript?: TranscriptLogger
 }
 
 export class Discovery {
@@ -128,7 +126,6 @@ export class Discovery {
         auxProvider: this.deps.auxProvider,
         sessionId: 'discovery',
         memory: this.deps.memory,
-        transcript: this.deps.transcript,
         additionalContext: contextParts.join('\n\n'),
       }
 

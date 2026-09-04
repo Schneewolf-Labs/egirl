@@ -11,7 +11,6 @@ import { retrieveForContext } from '../memory/retrieval'
 import type { LLMProvider } from '../providers/types'
 import { gatherStandup } from '../standup'
 import type { ToolExecutor } from '../tools'
-import type { TranscriptLogger } from '../tracking/transcript'
 import { log } from '../util/logger'
 import { parseScheduleExpression } from './cron'
 import { classifyError, getRetryPolicy } from './error-classify'
@@ -65,7 +64,6 @@ export interface TaskRunnerDeps {
   localProvider: LLMProvider
   auxProvider?: LLMProvider
   memory: MemoryManager | undefined
-  transcript?: TranscriptLogger
   outbound: Map<string, OutboundChannel>
   /** Conversation store for tasks with persist_conversation enabled */
   conversationStore?: ConversationStore
@@ -490,7 +488,6 @@ export class TaskRunner {
       auxProvider: this.deps.auxProvider,
       sessionId: `task:${task.id}`,
       memory: this.deps.memory,
-      transcript: this.deps.transcript,
       conversationStore:
         task.persistConversation && this.deps.conversationStore
           ? this.deps.conversationStore

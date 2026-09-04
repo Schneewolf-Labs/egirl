@@ -24,16 +24,8 @@ export async function runAPI(config: RuntimeConfig, args: string[]): Promise<voi
     process.exit(1)
   }
 
-  const {
-    providers,
-    memory,
-    conversations,
-    taskStore,
-    toolExecutor,
-    transcript,
-    skills,
-    processRegistry,
-  } = await createAppServices(config)
+  const { providers, memory, conversations, taskStore, toolExecutor, skills, processRegistry } =
+    await createAppServices(config)
 
   const standup = await gatherStandup(config.workspace.path)
   const sessionMutex = new SessionMutex()
@@ -47,7 +39,6 @@ export async function runAPI(config: RuntimeConfig, args: string[]): Promise<voi
       sessionId,
       memory,
       conversationStore: conversations,
-      transcript,
       skills,
       additionalContext: standup.context || undefined,
       sessionMutex,
@@ -94,7 +85,6 @@ export async function runAPI(config: RuntimeConfig, args: string[]): Promise<voi
       localProvider: providers.local,
       auxProvider: providers.auxiliary,
       memory,
-      transcript,
       // Task notifications for api-channel tasks land in the console inbox as dismissable
       // notices — without a sender here they were warn-logged and never seen.
       outbound: new Map([['api', { send: consoleInbox.notice }]]),

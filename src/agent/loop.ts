@@ -11,8 +11,6 @@ import type {
 } from '../providers/types'
 import type { ToolExecutor } from '../tools'
 import { hasStrandedToolCall, stripStrandedToolCalls } from '../tools/format'
-import { trace } from '../tracking/traces'
-import type { TranscriptLogger } from '../tracking/transcript'
 import { log } from '../util/logger'
 import { runAutoExtraction } from './background'
 import { slotFor } from './cache-slots'
@@ -71,7 +69,6 @@ export class AgentLoop {
   private context: AgentContext
   private tokenizer: Tokenizer
   private conversationStore: ConversationStore | null
-  private transcript: TranscriptLogger | null
   private promptOptions: SystemPromptOptions
   private mutex: SessionMutex | null
   private history: ConversationHistory
@@ -94,7 +91,6 @@ export class AgentLoop {
     this.memory = deps.memory ?? null
     this.conversationStore = deps.conversationStore ?? null
     this.mutex = deps.sessionMutex ?? null
-    this.transcript = deps.transcript ?? null
     this.promptOptions = { skills: deps.skills, additionalContext: deps.additionalContext }
     this.context = createAgentContext(deps.config, deps.sessionId, this.promptOptions)
     this.tokenizer = createLlamaCppTokenizer(deps.config.local.endpoint, deps.config.local.apiKey)
@@ -185,7 +181,6 @@ export class AgentLoop {
 
     const userContent = planningMode ? planningModePrompt(userMessage) : userMessage
 
-    this.transcript?.turnStart(this.context.sessionId, userMessage)
     // Attached images ride the same message as the text, in the content-part shape the
     // provider already renders for the screenshot tool.
     if (options.images?.length) {
@@ -206,7 +201,6 @@ export class AgentLoop {
       memory: this.memory,
       config: this.config,
       history: this.history,
-      transcript: this.transcript,
     })
 
     // Every counter and flag scoped to this run — the loop's state machine, made explicit.
@@ -230,7 +224,7 @@ export class AgentLoop {
     const deadline = options.deadline
     const wrapupMarginMs = options.wrapupMarginMs ?? 7 * 60_000
 
-    // Persistence and transcript closure run in `finally` so a provider error
+    // Persistence and the run's end on the bus happen in `finally` so a provider error
     // mid-run doesn't lose the user message and tool activity already in context.
     let runError: unknown
     startRun(this.context.sessionId, this, userMessage)
@@ -326,16 +320,9 @@ export class AgentLoop {
         totalUsage.input_tokens += response.usage.input_tokens
         totalUsage.output_tokens += response.usage.output_tokens
 
-        this.transcript?.inference(this.context.sessionId, {
-          provider: provider.name,
-          input_tokens: response.usage.input_tokens,
-          output_tokens: response.usage.output_tokens,
-          duration_ms: inferenceDuration,
-          has_tool_calls: (response.tool_calls?.length ?? 0) > 0,
-        })
-
         // Full-fidelity turn record: thinking is otherwise streamed and dropped, and it is
-        // the single most useful artifact when reconstructing why a run went sideways.
+        // the single most useful artifact when reconstructing why a run went sideways. The
+        // journal subscribed to the bus is what makes it durable.
         const turn = {
           model: response.model ?? provider.name,
           input_tokens: response.usage.input_tokens,
@@ -346,22 +333,12 @@ export class AgentLoop {
           tool_calls: (response.tool_calls ?? []).map((c) => c.name).join(','),
         }
         publish(this.context.sessionId, { t: 'turn', v: turn })
-        trace({
-          session: this.context.sessionId,
-          kind: 'turn',
-          name: turn.model,
-          tokensIn: turn.input_tokens,
-          tokensOut: turn.output_tokens,
-          durationMs: turn.duration_ms,
-          payload: { content: turn.content, thinking: turn.thinking, tool_calls: turn.tool_calls },
-        })
 
         reportTokenBudget({
           tracker: budgetTracker,
           inputTokens: response.usage.input_tokens,
           outputTokens: response.usage.output_tokens,
           context: this.context,
-          transcript: this.transcript,
           events,
         })
 
@@ -412,7 +389,6 @@ export class AgentLoop {
               context: this.context,
               executor: this.toolExecutor,
               seenToolCalls,
-              transcript: this.transcript,
               events,
               signal,
             }),
@@ -512,14 +488,6 @@ export class AgentLoop {
       this.activeRun = null
       externalSignal?.removeEventListener('abort', forwardAbort)
       this.history.persistNew(this.context.messages)
-      this.transcript?.turnEnd(this.context.sessionId, {
-        content_length: finalContent.length,
-        provider: provider.name,
-        input_tokens: totalUsage.input_tokens,
-        output_tokens: totalUsage.output_tokens,
-        turns: state.turns,
-        duration_ms: Date.now() - turnStartedAt,
-      })
       if (runError !== undefined) {
         endRun(this.context.sessionId, {
           t: 'error',
