@@ -16,11 +16,11 @@ Controls Qwen3 `/think` mode (extended reasoning).
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `level` | `"off"` \| `"low"` \| `"medium"` \| `"high"` | `"off"` | Thinking level. Higher levels allocate more tokens for reasoning |
+| `level` | `"off"` \| `"low"` \| `"medium"` \| `"high"` | `"off"` | Thinking level. Sent explicitly, including `off` -- an omitted setting would leave the chat template's own default in charge, and Qwen3's is on |
 | `budget_tokens` | number | (auto from level) | Override the thinking token budget directly |
 | `show_thinking` | bool | `true` | Display thinking output in CLI |
 
-Override per-session in CLI with: `/think <level>`
+On llama.cpp the level is a switch: anything but `off` sends `enable_thinking: true`, and there is no per-request budget or effort knob (`--reasoning-budget` on the server is the only lever, and it is global). Override per session with `/think <on|off|default>` -- from the terminal, the web console, or any chat channel; it is the same setting wherever it is changed.
 
 ### `[workspace]`
 

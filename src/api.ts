@@ -11,10 +11,9 @@ import {
   subscribe,
 } from './agent/session-events'
 import type { RuntimeConfig } from './config'
-import type { ThinkingLevel } from './config/schema'
 import type { ChatMessage, ThinkingConfig } from './providers/types'
 
-const THINKING_LEVELS: readonly ThinkingLevel[] = ['off', 'low', 'medium', 'high'] as const
+const THINKING_LEVELS: readonly ThinkingConfig['level'][] = ['off', 'low', 'medium', 'high']
 
 import type { SessionInfo } from './conversation'
 import type { MemoryCategory, MemoryManager } from './memory'
@@ -104,6 +103,16 @@ async function readJson(req: Request): Promise<Record<string, unknown>> {
   }
 }
 
+function isThinkingLevel(value: string): value is ThinkingConfig['level'] {
+  return (THINKING_LEVELS as readonly string[]).includes(value)
+}
+
+/** The session's own thinking level, or null when it follows config. */
+function thinkingOverride(agent: AgentLoop): ThinkingConfig['level'] | null {
+  const t = agent.getThinking()
+  return t.source === 'session' ? t.level : null
+}
+
 function getOrCreateAgent(sessionId: string, deps: APIDeps): AgentLoop {
   let agent = deps.agents.get(sessionId)
   if (!agent) {
@@ -173,10 +182,6 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
   // contract the CLI gives typed-ahead input. `pending` is how many turns are waiting or
   // running, so the UI can say "queued" honestly instead of guessing.
   const chains = new Map<string, { tail: Promise<unknown>; pending: number }>()
-
-  // Per-session thinking overrides set via POST /sessions/:id/thinking, applied to that
-  // session's subsequent runs. The CLI holds the same thing per TTY session.
-  const sessionThinking = new Map<string, ThinkingConfig>()
 
   // Busy means a run is generating somewhere in this process -- a chat, a peer message, a
   // background task -- because the model has one generation slot and another run would queue
@@ -451,12 +456,7 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
                 if (ev.t === 'run_end' || ev.t === 'error') ended = true
                 send(ev)
               })
-              return agent.run(toRun, {
-                ...(images?.length ? { images } : {}),
-                ...(sessionThinking.has(sessionId)
-                  ? { thinking: sessionThinking.get(sessionId) }
-                  : {}),
-              })
+              return agent.run(toRun, images?.length ? { images } : {})
             })
             return sseResponse(async (emit) => {
               send = emit
@@ -487,12 +487,7 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
           }
 
           const { done, position } = enqueueRun(sessionId, () =>
-            agent.run(toRun, {
-              ...(images?.length ? { images } : {}),
-              ...(sessionThinking.has(sessionId)
-                ? { thinking: sessionThinking.get(sessionId) }
-                : {}),
-            }),
+            agent.run(toRun, images?.length ? { images } : {}),
           )
           const response = await done
           resumeParkedTask(sessionId, deps)
@@ -817,7 +812,7 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
               has_summary: s.hasSummary,
               summary_tokens: s.summaryTokens,
               available: s.available,
-              thinking: sessionThinking.get(sessionId)?.level ?? null,
+              thinking: thinkingOverride(agent),
             })
           }
         }
@@ -900,22 +895,23 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
           }
         }
 
-        // Per-session thinking level, mirroring the CLI's /think. Deliberately scoped to the
-        // session rather than mutating the shared config: turning thinking down to get a quick
-        // answer in one conversation should not silently reconfigure every other channel.
+        // Per-session thinking level, the same setting /think changes from a terminal or a
+        // room. Scoped to the session rather than mutating the shared config: turning thinking
+        // down for a quick answer in one conversation should not reconfigure every channel.
         {
           const m = method === 'POST' && path.match(/^\/sessions\/(.+)\/thinking$/)
           if (m) {
             const sessionId = decodeURIComponent(m[1] as string)
             const level = (await readJson(req)).level
+            const agent = getOrCreateAgent(sessionId, deps)
             if (level === 'default' || level === null) {
-              sessionThinking.delete(sessionId)
+              agent.setThinking(undefined)
               return json({ ok: true, level: null })
             }
-            if (typeof level !== 'string' || !THINKING_LEVELS.includes(level as ThinkingLevel)) {
+            if (typeof level !== 'string' || !isThinkingLevel(level)) {
               return err(`level must be one of ${THINKING_LEVELS.join(', ')}, or "default"`)
             }
-            sessionThinking.set(sessionId, { level: level as ThinkingConfig['level'] })
+            agent.setThinking(level)
             return json({ ok: true, level })
           }
         }

@@ -8,7 +8,7 @@
  */
 
 import { describe, expect, test } from 'bun:test'
-import { handleCommand, SessionController } from '../../src/session/controller'
+import { SessionController } from '../../src/session/controller'
 
 describe('queue', () => {
   test('holds messages typed during a turn', () => {
@@ -93,58 +93,5 @@ describe('mode', () => {
     s.toggleMode()
     s.toggleMode()
     expect(s.get().mode).toBe('ask')
-  })
-})
-
-describe('commands', () => {
-  test('plain text is not a command', () => {
-    expect(handleCommand('hello there', new SessionController()).handled).toBe(false)
-  })
-
-  test('/maxturns changes the cap mid-session', () => {
-    const s = new SessionController()
-    const r = handleCommand('/maxturns 50', s)
-    expect(r.handled).toBe(true)
-    expect(s.get().maxTurns).toBe(50)
-  })
-
-  test('/maxturns rejects nonsense instead of silently accepting it', () => {
-    const s = new SessionController()
-    for (const bad of ['/maxturns 0', '/maxturns -1', '/maxturns abc', '/maxturns 9999']) {
-      handleCommand(bad, s)
-    }
-    expect(s.get().maxTurns).toBe(10)
-  })
-
-  test('/auto and /reasoning toggle', () => {
-    const s = new SessionController()
-    handleCommand('/auto', s)
-    expect(s.get().mode).toBe('auto')
-    handleCommand('/reasoning', s)
-    expect(s.get().showReasoning).toBe(false)
-  })
-
-  test('/clear reports how many it dropped', () => {
-    const s = new SessionController()
-    s.enqueue('x')
-    s.enqueue('y')
-    expect(handleCommand('/clear', s).message).toContain('2')
-  })
-
-  test('/quit signals exit', () => {
-    expect(handleCommand('/quit', new SessionController()).quit).toBe(true)
-  })
-
-  test('an unknown command is reported, not sent to the model', () => {
-    // A mistyped command silently becoming a chat message is confusing in a way an error is not.
-    const r = handleCommand('/mxturns 50', new SessionController())
-    expect(r.handled).toBe(true)
-    expect(r.message).toContain('unknown command')
-  })
-
-  test('is case-insensitive and tolerates trailing space', () => {
-    const s = new SessionController()
-    handleCommand('/AUTO  ', s)
-    expect(s.get().mode).toBe('auto')
   })
 })

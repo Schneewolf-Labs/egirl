@@ -1,5 +1,6 @@
 import type { AgentLoop } from '../agent'
 import type { ReplyBroker } from '../report/broker'
+import { handleCommand } from '../session/commands'
 import { log } from '../util/logger'
 import { splitMessage } from './chunk'
 import { buildToolCallPrefix, createNarration, type NarrationFormat } from './narration'
@@ -8,8 +9,8 @@ import { buildToolCallPrefix, createNarration, type NarrationFormat } from './na
  * The shared half of every chat channel: what happens between "a human said something" and
  * "she replied". A transport (Discord, XMPP, Telegram, Matrix) owns its connection, its
  * allow-lists and how to parse a message out of its wire format; everything after that is
- * the same turn on every surface and lives here -- pending report asks, the typing
- * indicator, tool-call narration, running the agent, chunking the reply to the transport's
+ * the same turn on every surface and lives here -- slash commands, pending report asks, the
+ * typing indicator, tool-call narration, running the agent, chunking the reply to the transport's
  * cap, and turning a crash into an error message instead of silence.
  *
  * This is plumbing, not a registry. Channels are still hardcoded and constructed by name in
@@ -36,9 +37,10 @@ export interface Surface {
 /**
  * Run one inbound message through the agent and deliver the reply.
  *
- * A pending report ask on this surface consumes the message as its answer -- the human is
- * replying to the agent's question, not starting a new turn. Never throws: a failed turn
- * is reported back on the same surface.
+ * A slash command is answered here and never reaches the model -- checked first, so it
+ * cannot be swallowed as the answer to a pending ask. A pending report ask on this surface
+ * consumes the message as its answer -- the human is replying to the agent's question, not
+ * starting a new turn. Never throws: a failed turn is reported back on the same surface.
  */
 export async function runTurn(
   agent: AgentLoop,
@@ -46,6 +48,11 @@ export async function runTurn(
   text: string,
   broker?: ReplyBroker,
 ): Promise<void> {
+  const command = await handleCommand(text, { agent })
+  if (command.handled) {
+    await deliver(surface, command.message ?? 'ok').catch(() => {})
+    return
+  }
   if (broker?.tryDeliver(surface.channel, surface.target, text)) return
 
   const stopTyping = keepTyping(surface)

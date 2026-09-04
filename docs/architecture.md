@@ -204,9 +204,9 @@ egirl/
 │   │   └── targeting.ts      # Accessibility-based element targeting
 │   ├── channels/
 │   │   ├── cli.ts            # Terminal interface
-│   │   ├── cli-commands.ts   # Slash commands (/wipe, /think, etc.)
+│   │   ├── cli-commands.ts   # Terminal-only commands (/plan, /wipe, /compact, ...)
 │   │   ├── cli-events.ts     # Event rendering
-│   │   ├── spine.ts          # Shared chat turn: broker, typing, narration, chunking, errors
+│   │   ├── spine.ts          # Shared chat turn: slash commands, broker, typing, narration, chunking
 │   │   ├── narration.ts      # Compact tool-call lines prefixed to chat replies
 │   │   ├── chunk.ts          # Split replies to a transport's message cap
 │   │   ├── discord.ts        # Discord bot
