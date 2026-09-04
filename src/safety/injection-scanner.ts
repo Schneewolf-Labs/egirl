@@ -4,13 +4,10 @@
  * Detects common prompt injection patterns in text returned by tools
  * (web_research, browser, file reads, etc.) and either strips them
  * or flags the content for the model.
- *
- * Shared with the memory sanitizer in agent/loop.ts — the patterns
- * are defined once here and re-exported.
  */
 
 /** Patterns that indicate attempted prompt injection */
-export const INJECTION_PATTERNS: RegExp[] = [
+const INJECTION_PATTERNS: RegExp[] = [
   // Chat-ML / Instruct format markers
   /<\|im_start\|>/gi,
   /<\|im_end\|>/gi,

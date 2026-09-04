@@ -1,19 +1,7 @@
-export {
-  ClaudeCodeChannel,
-  type ClaudeCodeConfig,
-  createClaudeCodeChannel,
-  type TaskResult,
-} from './claude-code'
-export { CLIChannel, createCLIChannel } from './cli'
-export {
-  createDiscordChannel,
-  DiscordChannel,
-  type DiscordConfig,
-  type InteractionHandler,
-  type ReactionEvent,
-  type ReactionHandler,
-} from './discord'
-export { createMatrixChannel, MatrixChannel, type MatrixConfig } from './matrix'
-export { createTelegramChannel, TelegramChannel, type TelegramConfig } from './telegram'
-export type { Channel, ChannelFactory, ChatChannel, OutboundChannel } from './types'
-export { createXMPPChannel, XMPPChannel, type XMPPConfig } from './xmpp'
+export { type ClaudeCodeConfig, createClaudeCodeChannel, type TaskResult } from './claude-code'
+export { createCLIChannel } from './cli'
+export { createDiscordChannel, type DiscordConfig } from './discord'
+export { createMatrixChannel, type MatrixConfig } from './matrix'
+export { createTelegramChannel, type TelegramConfig } from './telegram'
+export type { Channel, ChatChannel, OutboundChannel } from './types'
+export { createXMPPChannel, type XMPPConfig } from './xmpp'

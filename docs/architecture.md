@@ -110,7 +110,6 @@ A few tools are worth calling out:
 
 - **`code_agent`** (`src/tools/builtin/code-agent/`) — delegates engineering work to the configured backend: Claude Code via `@anthropic-ai/claude-agent-sdk` or Codex via its interactive CLI. Each backend is one file implementing a shared `CodeAgentBackend` contract, dispatched by provider. This is the primary delegation surface for project work.
 - **`execute_command`** (`src/tools/builtin/exec.ts`) — shell access, gated by the safety layer.
-- **Deferred tool loading** (`src/tools/deferred-loader.ts`) — rarely-used tool schemas are lazy-loaded via a meta-tool to keep the base system prompt small.
 
 ### 5. Safety layer
 
@@ -271,7 +270,6 @@ egirl/
 │   │   ├── types.ts          # Tool, ToolResult interfaces
 │   │   ├── executor.ts       # Registry + concurrent execution
 │   │   ├── format.ts         # Qwen3 <tool_call> parsing
-│   │   ├── deferred-loader.ts # Lazy tool schema loading
 │   │   └── builtin/
 │   │       ├── read.ts / write.ts / edit.ts / glob.ts
 │   │       ├── exec.ts       # execute_command

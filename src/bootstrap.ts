@@ -30,7 +30,6 @@ import {
   type ToolExecutor,
 } from './tools'
 import { setToolDialect } from './tools/dialects'
-import { createStatsTracker, type StatsTracker } from './tracking'
 import { journalSessionEvents } from './tracking/journal'
 import { initTraces } from './tracking/traces'
 import { log } from './util/logger'
@@ -48,7 +47,6 @@ export interface AppServices {
   conversations: ConversationStore | undefined
   taskStore: TaskStore | undefined
   toolExecutor: ToolExecutor
-  stats: StatsTracker
   skills: Skill[]
   mcpConnections: McpConnection[]
   browser: BrowserManager
@@ -58,7 +56,7 @@ export interface AppServices {
 /**
  * Create conversation store if enabled, run compaction on startup.
  */
-export function createConversations(config: RuntimeConfig): ConversationStore | undefined {
+function createConversations(config: RuntimeConfig): ConversationStore | undefined {
   if (!config.conversation.enabled) {
     log.info('main', 'Conversation persistence disabled')
     return undefined
@@ -89,7 +87,7 @@ export function createConversations(config: RuntimeConfig): ConversationStore | 
 /**
  * Create memory manager with embeddings if configured.
  */
-export function createMemory(config: RuntimeConfig): MemoryManager | undefined {
+function createMemory(config: RuntimeConfig): MemoryManager | undefined {
   const embeddingsConfig = config.local.embeddings
   if (!embeddingsConfig) {
     log.info('main', 'No embeddings configured - memory system disabled')
@@ -126,7 +124,7 @@ export function createMemory(config: RuntimeConfig): MemoryManager | undefined {
 /**
  * Extract CodeAgentConfig from RuntimeConfig if a code agent channel is configured.
  */
-export function getCodeAgentConfig(config: RuntimeConfig): CodeAgentConfig | undefined {
+function getCodeAgentConfig(config: RuntimeConfig): CodeAgentConfig | undefined {
   const cc = config.channels.codeAgent
   if (!cc) return undefined
   return {
@@ -141,7 +139,7 @@ export function getCodeAgentConfig(config: RuntimeConfig): CodeAgentConfig | und
 /**
  * Extract GitHubConfig from RuntimeConfig if GITHUB_TOKEN is set.
  */
-export function getGitHubConfig(config: RuntimeConfig): GitHubConfig | undefined {
+function getGitHubConfig(config: RuntimeConfig): GitHubConfig | undefined {
   if (!config.github) return undefined
   return {
     token: config.github.token,
@@ -354,7 +352,6 @@ export async function createAppServices(config: RuntimeConfig): Promise<AppServi
   if (energy) {
     toolExecutor.setEnergy(energy)
   }
-  const stats = createStatsTracker()
 
   return {
     config,
@@ -366,7 +363,6 @@ export async function createAppServices(config: RuntimeConfig): Promise<AppServi
     conversations,
     taskStore,
     toolExecutor,
-    stats,
     skills,
     browser,
     processRegistry,

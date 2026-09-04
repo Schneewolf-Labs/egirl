@@ -136,7 +136,6 @@ test/
 │   ├── format.test.ts
 │   ├── executor.test.ts
 │   ├── executor-energy.test.ts
-│   ├── deferred-loader.test.ts
 │   ├── browser.test.ts
 │   ├── git.test.ts
 │   ├── web-research.test.ts

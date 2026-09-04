@@ -3,7 +3,6 @@ import {
   Client,
   Events,
   GatewayIntentBits,
-  type Interaction,
   type Message,
   type MessageReaction,
   type PartialMessageReaction,
@@ -43,7 +42,6 @@ export interface ReactionEvent {
 }
 
 export type ReactionHandler = (event: ReactionEvent) => void | Promise<void>
-export type InteractionHandler = (interaction: Interaction) => void | Promise<void>
 
 export class DiscordChannel implements ChatChannel {
   readonly name = 'discord'
@@ -53,7 +51,6 @@ export class DiscordChannel implements ChatChannel {
   private config: DiscordConfig
   private ready = false
   private reactionHandlers: ReactionHandler[] = []
-  private interactionHandlers: InteractionHandler[] = []
   private messageQueue: Array<() => Promise<void>> = []
   private processing = false
   private batcher: MessageBatcher | null = null
@@ -104,11 +101,6 @@ export class DiscordChannel implements ChatChannel {
     this.reactionHandlers.push(handler)
   }
 
-  /** Register a handler called when a Discord interaction occurs (slash commands, buttons, etc.) */
-  onInteraction(handler: InteractionHandler): void {
-    this.interactionHandlers.push(handler)
-  }
-
   private setupEventHandlers(): void {
     this.client.once(Events.ClientReady, (client) => {
       this.ready = true
@@ -127,10 +119,6 @@ export class DiscordChannel implements ChatChannel {
 
     this.client.on(Events.MessageReactionAdd, async (reaction, user) => {
       await this.handleReaction(reaction, user)
-    })
-
-    this.client.on(Events.InteractionCreate, async (interaction) => {
-      await this.handleInteraction(interaction)
     })
 
     this.client.on(Events.Error, (error) => {
@@ -169,18 +157,6 @@ export class DiscordChannel implements ChatChannel {
         await handler(event)
       } catch (error) {
         log.error('discord', 'Reaction handler error:', error)
-      }
-    }
-  }
-
-  private async handleInteraction(interaction: Interaction): Promise<void> {
-    log.debug('discord', `Interaction ${interaction.type} from ${interaction.user.tag}`)
-
-    for (const handler of this.interactionHandlers) {
-      try {
-        await handler(interaction)
-      } catch (error) {
-        log.error('discord', 'Interaction handler error:', error)
       }
     }
   }
@@ -467,10 +443,6 @@ export class DiscordChannel implements ChatChannel {
     this.batcher?.clear()
     this.client.destroy()
     this.ready = false
-  }
-
-  isReady(): boolean {
-    return this.ready
   }
 }
 

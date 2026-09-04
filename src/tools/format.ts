@@ -1,4 +1,4 @@
-import type { ChatMessage, ToolCall } from '../providers/types'
+import type { ToolCall } from '../providers/types'
 import { toolDialect } from './dialects'
 import type { ToolDefinition } from './types'
 
@@ -16,18 +16,6 @@ import type { ToolDefinition } from './types'
  * Rendering and parsing must agree, so both come from the same dialect object rather
  * than being hardcoded to one model family.
  */
-export function formatToolDefinition(tool: ToolDefinition): object {
-  return {
-    type: 'function',
-    function: {
-      name: tool.name,
-      description: tool.description,
-      parameters: tool.parameters,
-    },
-  }
-}
-
-/** Build the tools section to append to the system prompt. */
 export function buildToolsSection(tools: ToolDefinition[] | undefined): string {
   return toolDialect().buildToolsSection(tools)
 }
@@ -42,29 +30,6 @@ export function parseToolCalls(content: string): { content: string; toolCalls: T
  */
 export function formatToolResponse(output: string): string {
   return toolDialect().formatToolResponse(output)
-}
-
-/**
- * Format multiple tool responses into a single user message
- */
-export function formatToolResponses(results: Map<string, { output: string }>): string {
-  const responses: string[] = []
-
-  for (const [_id, result] of results) {
-    responses.push(formatToolResponse(result.output))
-  }
-
-  return responses.join('\n')
-}
-
-/**
- * Create a tool response message (Qwen3 uses user role)
- */
-export function createToolResponseMessage(results: Map<string, { output: string }>): ChatMessage {
-  return {
-    role: 'user',
-    content: formatToolResponses(results),
-  }
 }
 
 /**

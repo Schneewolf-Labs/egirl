@@ -27,7 +27,7 @@ export {
   Qwen3VLEmbeddings,
 } from './embeddings/index'
 export { type ExtractionResult, extractMemories } from './extractor'
-export { createMemoryFiles, type MemoryEntry, MemoryFiles } from './files'
+export { createMemoryFiles, MemoryFiles } from './files'
 export { collectGarbage, type GCConfig, type GCResult } from './gc'
 export {
   type ContentType,

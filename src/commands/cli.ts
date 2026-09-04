@@ -20,7 +20,7 @@ export async function runCLI(config: RuntimeConfig, args: string[]): Promise<voi
   const asJson = args.includes('--json')
 
   const rt = await createCommandRuntime(config)
-  const { conversations, taskStore, stats, processRegistry } = rt
+  const { conversations, taskStore, processRegistry } = rt
 
   // Create agent loop with conversation persistence and memory
   const agent = rt.agentFactory(singleMessage ? crypto.randomUUID() : 'cli:default')
@@ -68,12 +68,6 @@ export async function runCLI(config: RuntimeConfig, args: string[]): Promise<voi
     const t0 = Date.now()
     try {
       const response = await agent.run(singleMessage, events ? { events } : undefined)
-
-      stats.recordRequest(
-        response.provider,
-        response.usage.input_tokens,
-        response.usage.output_tokens,
-      )
 
       if (asJson) {
         // Exactly one JSON object on stdout, nothing else — logs go to stderr, so a caller can

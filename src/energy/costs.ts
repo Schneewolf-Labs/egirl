@@ -94,8 +94,3 @@ const DEFAULT_COST: EnergyCost = { cost: 2.0, isReadOnly: false }
 export function getToolCost(toolName: string): EnergyCost {
   return TOOL_COSTS[toolName] ?? DEFAULT_COST
 }
-
-/** Check if a tool is known to the cost system */
-export function hasToolCost(toolName: string): boolean {
-  return toolName in TOOL_COSTS
-}

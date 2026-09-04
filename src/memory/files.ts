@@ -2,35 +2,13 @@ import { appendFile, copyFile, mkdir, readFile, writeFile } from 'fs/promises'
 import { extname, join } from 'path'
 import { log } from '../util/logger'
 
-export interface MemoryEntry {
-  id: string
-  key: string
-  value: string
-  timestamp: Date
-  source?: string
-}
-
 export class MemoryFiles {
-  private memoryFile: string
   private dailyLogDir: string
   private imagesDir: string
 
   constructor(workspaceDir: string) {
-    this.memoryFile = join(workspaceDir, 'MEMORY.md')
     this.dailyLogDir = join(workspaceDir, 'logs')
     this.imagesDir = join(workspaceDir, 'images')
-  }
-
-  async readMemoryFile(): Promise<string> {
-    try {
-      return await readFile(this.memoryFile, 'utf-8')
-    } catch {
-      return ''
-    }
-  }
-
-  async appendToMemoryFile(content: string): Promise<void> {
-    await appendFile(this.memoryFile, `\n${content}`)
   }
 
   async getDailyLogPath(): Promise<string> {
@@ -102,13 +80,6 @@ export class MemoryFiles {
    */
   getImagesDir(): string {
     return this.imagesDir
-  }
-
-  /**
-   * Get the daily logs directory path
-   */
-  getDailyLogDir(): string {
-    return this.dailyLogDir
   }
 
   /**

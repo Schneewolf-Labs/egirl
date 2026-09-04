@@ -18,7 +18,7 @@ import { openDatabase } from '../util/db'
 import { log } from '../util/logger'
 import { getToolCost } from './costs'
 
-export { type EnergyCost, getToolCost, hasToolCost } from './costs'
+export { type EnergyCost, getToolCost } from './costs'
 
 export interface EnergyConfig {
   /** Maximum energy reserve. Default: 20 */

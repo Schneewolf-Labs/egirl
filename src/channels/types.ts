@@ -1,5 +1,3 @@
-import type { AgentLoop } from '../agent'
-
 /**
  * Minimal contract for a communication channel.
  *
@@ -23,9 +21,3 @@ export interface OutboundChannel {
 
 /** A chat transport: something a human talks to egirl through, and that she can reach back on. */
 export type ChatChannel = Channel & OutboundChannel
-
-/**
- * Factory signature for channels that wrap AgentLoop.
- * Claude Code channel is intentionally excluded — it uses LLMProvider directly.
- */
-export type ChannelFactory<C extends object> = (agent: AgentLoop, config: C) => Channel
