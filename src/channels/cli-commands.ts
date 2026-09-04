@@ -1,5 +1,6 @@
 import type { AgentLoop } from '../agent'
 import { colors, DIM, RESET } from '../ui/theme'
+import { errorMessage } from '../util/errors'
 import { createCLIEventHandler } from './cli-events'
 
 export interface CommandContext {
@@ -46,8 +47,7 @@ export async function handlePlanCommand(message: string, ctx: CommandContext): P
         .catch(() => {})
     }
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error)
-    console.error(`\n${c.error}Error:${RESET} ${errorMessage}\n`)
+    console.error(`\n${c.error}Error:${RESET} ${errorMessage(error)}\n`)
   }
 }
 
@@ -64,7 +64,7 @@ export async function handleCompactCommand(ctx: CommandContext): Promise<void> {
       )
     }
   } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error)
+    const msg = errorMessage(error)
     console.error(`${c.error}Compaction failed:${RESET} ${msg}\n`)
   }
 }

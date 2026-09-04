@@ -11,6 +11,7 @@ import { retrieveForContext } from '../memory/retrieval'
 import type { LLMProvider } from '../providers/types'
 import { gatherStandup } from '../standup'
 import type { ToolExecutor } from '../tools'
+import { errorMessage } from '../util/errors'
 import { log } from '../util/logger'
 import { parseScheduleExpression } from './cron'
 import { classifyError, getRetryPolicy } from './error-classify'
@@ -311,7 +312,7 @@ export class TaskRunner {
 
       return { ...run, status: 'success', result, completedAt: Date.now() }
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : String(err)
+      const errorMsg = errorMessage(err)
 
       // An unbounded run reaching its wall-clock time budget is a scheduled checkpoint boundary,
       // not a failure. It was warned to wrap up (the loop's deadline nudge), its work is already

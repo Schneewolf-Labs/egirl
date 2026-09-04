@@ -4,6 +4,7 @@ import { buildLearnPrompt } from '../agent/learn-prompt'
 import { handleCommand } from '../session/commands'
 import { SessionController } from '../session/controller'
 import { colors, DIM, RESET } from '../ui/theme'
+import { errorMessage } from '../util/errors'
 import { log } from '../util/logger'
 import {
   type CommandContext,
@@ -207,7 +208,7 @@ export class CLIChannel implements Channel {
 
           log.debug('cli', `[${response.provider}]`)
         } catch (error) {
-          const message = error instanceof Error ? error.message : String(error)
+          const message = errorMessage(error)
           console.error(`\n${c.error}Error:${RESET} ${message}\n`)
         } finally {
           status.stop()

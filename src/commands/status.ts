@@ -2,6 +2,7 @@ import type { RuntimeConfig } from '../config'
 import { createProviderRegistry } from '../providers'
 import { loadSkillsFromDirectories } from '../skills'
 import { BOLD, colors, DIM, getTheme, RESET } from '../ui/theme'
+import { errorMessage } from '../util/errors'
 
 export async function showStatus(config: RuntimeConfig): Promise<void> {
   const c = colors()
@@ -76,7 +77,7 @@ export async function showStatus(config: RuntimeConfig): Promise<void> {
       `  ${DIM}Local${RESET}       ${c.success}Connected${RESET} ${DIM}(${testResponse.model})${RESET}`,
     )
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
+    const message = errorMessage(error)
     console.log(`  ${DIM}Local${RESET}       ${c.error}Error${RESET} ${DIM}${message}${RESET}`)
   }
 
@@ -95,7 +96,7 @@ export async function showStatus(config: RuntimeConfig): Promise<void> {
         )
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
+      const message = errorMessage(error)
       console.log(`  ${DIM}Embeddings${RESET}  ${c.error}Error${RESET} ${DIM}${message}${RESET}`)
     }
   }

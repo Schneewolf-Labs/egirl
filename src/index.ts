@@ -11,6 +11,7 @@ import { showStatus } from './commands/status'
 import { findConfigFile, loadConfig, type RuntimeConfig } from './config'
 import { loadInstanceEnv } from './config/env-files'
 import { BOLD, colors, DIM, RESET } from './ui/theme'
+import { errorMessage } from './util/errors'
 import { log } from './util/logger'
 import { bootstrapWorkspace } from './workspace/bootstrap'
 
@@ -65,9 +66,7 @@ async function main() {
       await runNew(commandArgs)
     } catch (error) {
       const c = colors()
-      console.error(
-        `${c.error}error${RESET} ${error instanceof Error ? error.message : String(error)}`,
-      )
+      console.error(`${c.error}error${RESET} ${errorMessage(error)}`)
       process.exit(1)
     }
     return

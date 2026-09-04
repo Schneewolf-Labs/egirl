@@ -1,4 +1,5 @@
 import type { MemoryCategory, MemoryManager, SearchResult } from '../../memory'
+import { errorMessage } from '../../util/errors'
 import { log } from '../../util/logger'
 import type { Tool, ToolResult } from '../types'
 
@@ -22,7 +23,7 @@ async function runSafely(
   try {
     return await fn()
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
+    const message = errorMessage(error)
     log.error('memory', `${label} failed${detail ? ` for "${detail}"` : ''}:`, error)
     return { success: false, output: `${label} failed: ${message}` }
   }

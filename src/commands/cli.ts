@@ -3,6 +3,7 @@ import type { OutboundChannel } from '../channels/types'
 import type { RuntimeConfig } from '../config'
 import type { ToolResult } from '../tools/types'
 import { applyLogLevel } from '../util/args'
+import { errorMessage } from '../util/errors'
 import { createBackgroundTasks, createCommandRuntime, onShutdown } from './runtime'
 
 export async function runCLI(config: RuntimeConfig, args: string[]): Promise<void> {
@@ -94,7 +95,7 @@ export async function runCLI(config: RuntimeConfig, args: string[]): Promise<voi
         console.log(response.content)
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
+      const message = errorMessage(error)
       if (asJson) {
         process.stdout.write(
           `${JSON.stringify({

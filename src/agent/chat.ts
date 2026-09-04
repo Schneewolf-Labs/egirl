@@ -8,6 +8,7 @@ import type {
   ToolDefinition,
 } from '../providers/types'
 import { ContextSizeError } from '../providers/types'
+import { errorMessage } from '../util/errors'
 import { log } from '../util/logger'
 import { formatSummaryMessage } from './context-summarizer'
 import { fitToContextWindow } from './context-window'
@@ -96,7 +97,7 @@ export async function chatWithRetry(args: {
       if (error instanceof ContextSizeError) throw error
       if (signal?.aborted) throw error
 
-      const errorMsg = error instanceof Error ? error.message : String(error)
+      const errorMsg = errorMessage(error)
 
       // A text-only endpoint rejects the whole request when any message carries an image
       // ("image input is not supported ... you may need to provide the mmproj"). Retrying the

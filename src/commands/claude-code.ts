@@ -2,6 +2,7 @@ import { type ClaudeCodeConfig, createClaudeCodeChannel } from '../channels'
 import type { RuntimeConfig } from '../config'
 import { createProviderRegistry } from '../providers'
 import { applyLogLevel } from '../util/args'
+import { errorMessage } from '../util/errors'
 
 export async function runClaudeCode(config: RuntimeConfig, args: string[]): Promise<void> {
   applyLogLevel(args)
@@ -33,7 +34,7 @@ export async function runClaudeCode(config: RuntimeConfig, args: string[]): Prom
         `\n[${result.turns} turns | $${result.costUsd.toFixed(4)} | ${(result.durationMs / 1000).toFixed(1)}s]`,
       )
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
+      const message = errorMessage(error)
       console.error(`Error: ${message}`)
       process.exit(1)
     }
@@ -61,7 +62,7 @@ export async function runClaudeCode(config: RuntimeConfig, args: string[]): Prom
         `\n[${result.turns} turns | $${result.costUsd.toFixed(4)} | ${(result.durationMs / 1000).toFixed(1)}s]`,
       )
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
+      const message = errorMessage(error)
       console.error(`Error: ${message}`)
       process.exit(1)
     }

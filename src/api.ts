@@ -12,6 +12,7 @@ import {
 } from './agent/session-events'
 import type { RuntimeConfig } from './config'
 import type { ChatMessage, ThinkingConfig } from './providers/types'
+import { errorMessage } from './util/errors'
 
 const THINKING_LEVELS: readonly ThinkingConfig['level'][] = ['off', 'low', 'medium', 'high']
 
@@ -479,7 +480,7 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
                   })
                 }
               } catch (e) {
-                if (!ended) send({ t: 'error', v: e instanceof Error ? e.message : String(e) })
+                if (!ended) send({ t: 'error', v: errorMessage(e) })
               } finally {
                 unsubscribe?.()
               }
@@ -670,7 +671,7 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
                   reachable: false,
                   remote_name: null,
                   protocol: null,
-                  error: e instanceof Error ? e.message : String(e),
+                  error: errorMessage(e),
                 }
               } finally {
                 clearTimeout(timer)
@@ -1088,7 +1089,7 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
 
         return err('not found', 404)
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error)
+        const message = errorMessage(error)
         log.error('api', `Handler error: ${message}`, error)
         return err(message, 500)
       }

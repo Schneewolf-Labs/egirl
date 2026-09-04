@@ -1,3 +1,4 @@
+import { errorMessage } from '../util/errors'
 /**
  * Web Push: how an agent reaches a phone that is not looking at the console.
  *
@@ -132,7 +133,7 @@ export function createPushNotifier(
               log.warn('push', `Push to ${subscriptionId(sub.endpoint)} failed: HTTP ${res.status}`)
             }
           } catch (e) {
-            const msg = e instanceof Error ? e.message : String(e)
+            const msg = errorMessage(e)
             log.warn('push', `Push to ${subscriptionId(sub.endpoint)} failed: ${msg}`)
           }
         }),

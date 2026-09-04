@@ -2,6 +2,7 @@ import type { EnergyBudget } from '../energy'
 import type { ToolCall } from '../providers/types'
 import type { SafetyConfig } from '../safety'
 import { checkToolCall, getAuditLogPath, logToolExecution, scanForInjection } from '../safety'
+import { errorMessage } from '../util/errors'
 import { log } from '../util/logger'
 import { matchToolName, remapParamKeys } from './fuzzy-match'
 import type { Tool, ToolDefinition, ToolResult } from './types'
@@ -253,7 +254,7 @@ export class ToolExecutor {
       this.audit(call.name, call.arguments, { success: result.success })
       return result
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
+      const message = errorMessage(error)
       log.error('tools', `Tool ${call.name} failed:`, error)
 
       this.audit(call.name, call.arguments, { success: false, reason: message })

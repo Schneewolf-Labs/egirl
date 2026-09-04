@@ -1,3 +1,4 @@
+import { errorMessage } from '../util/errors'
 import {
   PEER_PROTOCOL,
   type PeerEntry,
@@ -74,7 +75,7 @@ export async function postPeerMessage(
     }
     return { ok: true, from: data.from ?? peer.name, content: data.content ?? '' }
   } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error)
+    const msg = errorMessage(error)
     if (msg.includes('abort')) {
       return {
         ok: false,

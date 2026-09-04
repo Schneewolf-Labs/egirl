@@ -1,6 +1,7 @@
 import type { AgentLoop } from '../agent'
 import type { ReplyBroker } from '../report/broker'
 import { handleCommand } from '../session/commands'
+import { errorMessage } from '../util/errors'
 import { log } from '../util/logger'
 import { splitMessage } from './chunk'
 import { buildToolCallPrefix, createNarration, type NarrationFormat } from './narration'
@@ -62,7 +63,7 @@ export async function runTurn(
     await deliver(surface, buildToolCallPrefix(state, surface.format) + response.content)
     log.debug(surface.channel, `Responded via ${response.provider}`)
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
+    const message = errorMessage(error)
     log.error(surface.channel, 'Error processing message:', error)
     await deliver(surface, `Error: ${message}`).catch(() => {})
   } finally {

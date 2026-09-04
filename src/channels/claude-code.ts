@@ -5,6 +5,7 @@ import {
 } from '@anthropic-ai/claude-agent-sdk'
 import * as readline from 'readline'
 import type { LLMProvider } from '../providers/types'
+import { errorMessage } from '../util/errors'
 import { log } from '../util/logger'
 
 // -- Public types --
@@ -80,7 +81,7 @@ export class ClaudeCodeChannel {
             `[${result.turns} turns | $${result.costUsd.toFixed(4)} | ${(result.durationMs / 1000).toFixed(1)}s]\n`,
           )
         } catch (error) {
-          const msg = error instanceof Error ? error.message : String(error)
+          const msg = errorMessage(error)
           console.error(`\nError: ${msg}\n`)
         }
 
@@ -158,7 +159,7 @@ export class ClaudeCodeChannel {
         }
       }
     } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error)
+      const msg = errorMessage(error)
       log.error('claude-code', `Query failed: ${msg}`)
       throw error
     }

@@ -1,6 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from 'fs'
 import { dirname, join } from 'path'
 import { parse } from 'smol-toml'
+import { errorMessage } from '../util/errors'
 
 /**
  * Drop-in config fragments, `egirl.d/*.toml` beside the main config.
@@ -55,7 +56,7 @@ export function loadConfigFragments(configPath: string): ConfigFragmentFile[] {
     try {
       return { path, toml: parse(readFileSync(path, 'utf-8')) as Record<string, unknown> }
     } catch (error) {
-      const detail = error instanceof Error ? error.message : String(error)
+      const detail = errorMessage(error)
       throw new Error(`Failed to parse config fragment ${path}: ${detail}`)
     }
   })

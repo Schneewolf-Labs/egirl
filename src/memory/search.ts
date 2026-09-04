@@ -1,3 +1,4 @@
+import { errorMessage } from '../util/errors'
 import { log } from '../util/logger'
 import type { EmbeddingInput, EmbeddingProvider } from './embeddings/index'
 import type { ContentType, IndexedMemory, MemoryCategory, MemoryIndexer } from './indexer'
@@ -262,7 +263,7 @@ export class MemorySearch {
         }
       } catch (error) {
         this.embedFailures++
-        const msg = error instanceof Error ? error.message : String(error)
+        const msg = errorMessage(error)
         // First failure at error level: losing semantic recall changes what the agent can
         // remember, which is not a debug detail. Then stay quiet, and mark every 50th so a
         // long-running process still shows the problem in its logs.

@@ -1,5 +1,6 @@
 import { mkdir, writeFile } from 'fs/promises'
 import { dirname, isAbsolute, resolve } from 'path'
+import { errorMessage } from '../../util/errors'
 import type { Tool, ToolResult } from '../types'
 
 export const writeTool: Tool = {
@@ -46,7 +47,7 @@ export const writeTool: Tool = {
         output: `Successfully wrote ${content.length} characters to ${path}`,
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
+      const message = errorMessage(error)
       return {
         success: false,
         output: `Failed to write file: ${message}`,

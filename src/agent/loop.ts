@@ -11,6 +11,7 @@ import type {
 } from '../providers/types'
 import type { ToolExecutor } from '../tools'
 import { hasStrandedToolCall, stripStrandedToolCalls } from '../tools/format'
+import { errorMessage } from '../util/errors'
 import { log } from '../util/logger'
 import { runAutoExtraction } from './background'
 import { slotFor } from './cache-slots'
@@ -556,7 +557,7 @@ export class AgentLoop {
       if (runError !== undefined) {
         endRun(this.context.sessionId, {
           t: 'error',
-          v: runError instanceof Error ? runError.message : String(runError),
+          v: errorMessage(runError),
         })
       } else {
         endRun(this.context.sessionId, {

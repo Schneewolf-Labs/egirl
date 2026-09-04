@@ -3,6 +3,7 @@ import { delimiter, join } from 'path'
 import type { RuntimeConfig } from '../config'
 import { type CheckResult, runPreflight } from '../instances/preflight'
 import { colors, DIM, RESET } from '../ui/theme'
+import { errorMessage } from '../util/errors'
 
 function commandExists(command: string): boolean {
   const paths = process.env.PATH?.split(delimiter) ?? []
@@ -41,7 +42,7 @@ async function checkLocalEndpoint(config: RuntimeConfig): Promise<CheckResult> {
     }
     return { label: 'local model', level: 'ok', message: `${config.local.endpoint} is reachable` }
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
+    const message = errorMessage(error)
     return { label: 'local model', level: 'fail', message }
   }
 }

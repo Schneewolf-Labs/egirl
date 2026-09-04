@@ -10,6 +10,7 @@ import type { RuntimeConfig } from '../config'
 import { createReplyBroker } from '../report/broker'
 import { registerReportTool } from '../report/register'
 import { applyLogLevel } from '../util/args'
+import { errorMessage } from '../util/errors'
 import { log } from '../util/logger'
 import { createBackgroundTasks, createCommandRuntime, onShutdown } from './runtime'
 
@@ -138,7 +139,7 @@ export async function runServe(
       await channel.start()
       started.push(channel.name)
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
+      const message = errorMessage(error)
       log.error('main', `Channel "${channel.name}" failed to start: ${message}`)
       // Shut the client down rather than leaving it to reconnect. Some failures never resolve
       // on their own -- a self-signed certificate will be just as self-signed a second later --
