@@ -1,20 +1,9 @@
-import { createAgentLoop } from '../agent'
-import { SessionMutex } from '../agent/session-mutex'
-import { createAppServices } from '../bootstrap'
 import { createCLIChannel } from '../channels'
+import type { OutboundChannel } from '../channels/types'
 import type { RuntimeConfig } from '../config'
-import { gatherStandup } from '../standup'
-import {
-  createDiscovery,
-  createTaskRunner,
-  seedHeartbeatTask,
-  taskRunnerEnabled,
-  taskRunnerOffReason,
-} from '../tasks'
-import { createTaskTools } from '../tools/builtin/tasks'
 import type { ToolResult } from '../tools/types'
 import { applyLogLevel } from '../util/args'
-import { log } from '../util/logger'
+import { createBackgroundTasks, createCommandRuntime, onShutdown } from './runtime'
 
 export async function runCLI(config: RuntimeConfig, args: string[]): Promise<void> {
   applyLogLevel(args)
@@ -29,37 +18,11 @@ export async function runCLI(config: RuntimeConfig, args: string[]): Promise<voi
   // worth measuring about an operator model.
   const asJson = args.includes('--json')
 
-  const {
-    providers,
-    memory,
-    conversations,
-    taskStore,
-    toolExecutor,
-    stats,
-    skills,
-    processRegistry,
-  } = await createAppServices(config)
-
-  // Gather workspace standup for agent context
-  const standup = await gatherStandup(config.workspace.path)
-
-  // Shared mutex serializes agent runs across CLI input and background tasks
-  const sessionMutex = new SessionMutex()
+  const rt = await createCommandRuntime(config)
+  const { conversations, taskStore, stats, processRegistry } = rt
 
   // Create agent loop with conversation persistence and memory
-  const sessionId = singleMessage ? crypto.randomUUID() : 'cli:default'
-  const agent = createAgentLoop({
-    config,
-    toolExecutor,
-    localProvider: providers.local,
-    auxProvider: providers.auxiliary,
-    sessionId,
-    memory,
-    conversationStore: conversations,
-    skills,
-    additionalContext: standup.context || undefined,
-    sessionMutex,
-  })
+  const agent = rt.agentFactory(singleMessage ? crypto.randomUUID() : 'cli:default')
 
   // Single message mode — no task runner
   if (singleMessage) {
@@ -156,98 +119,24 @@ export async function runCLI(config: RuntimeConfig, args: string[]): Promise<voi
     skillsDir: config.skills.dirs[0],
   })
 
-  // Set up background task runner if task store is available
-  let taskRunner: ReturnType<typeof createTaskRunner> | undefined
-  let discovery: ReturnType<typeof createDiscovery> | undefined
+  const tasks = createBackgroundTasks(rt, {
+    outbound: new Map<string, OutboundChannel>([['cli', cli]]),
+    channel: 'cli',
+    channelTarget: 'stdout',
+  })
 
-  if (taskRunnerEnabled(config, !!taskStore) && taskStore) {
-    const outbound = new Map<string, { send(target: string, message: string): Promise<void> }>()
-    outbound.set('cli', cli)
-
-    taskRunner = createTaskRunner({
-      config,
-      tasksConfig: config.tasks,
-      store: taskStore,
-      toolExecutor,
-      localProvider: providers.local,
-      auxProvider: providers.auxiliary,
-      memory,
-      outbound,
-      conversationStore: conversations,
-      sessionMutex,
-    })
-
-    // Register task tools on the shared tool executor
-    const taskTools = createTaskTools(taskStore, taskRunner, config.tasks.maxActiveTasks, () => ({
-      channel: 'cli',
-      channelTarget: 'stdout',
-    }))
-    toolExecutor.registerAll([
-      taskTools.taskAddTool,
-      taskTools.taskProposeTool,
-      taskTools.taskListTool,
-      taskTools.taskPauseTool,
-      taskTools.taskResumeTool,
-      taskTools.taskCancelTool,
-      taskTools.taskRunNowTool,
-      taskTools.taskHistoryTool,
-    ])
-
-    // Set up discovery if enabled
-    if (config.tasks.discoveryEnabled) {
-      discovery = createDiscovery({
-        config,
-        tasksConfig: config.tasks,
-        store: taskStore,
-        runner: taskRunner,
-        toolExecutor,
-        localProvider: providers.local,
-        auxProvider: providers.auxiliary,
-        memory,
-      })
-    }
-
-    // Seed built-in heartbeat task if enabled
-    seedHeartbeatTask({
-      store: taskStore,
-      runner: taskRunner,
-      tasksConfig: config.tasks,
-      heartbeatConfig: config.tasks.heartbeat,
-      workspacePath: config.workspace.path,
-      channel: 'cli',
-      channelTarget: 'stdout',
-    })
-
-    log.info('main', 'Background task system initialized')
-  } else {
-    // Say WHY, naming the flag. A bare silence here means a populated [tasks] section that
-    // simply never runs, which is exactly what happened in practice.
-    const why = taskRunnerOffReason(config, !!taskStore)
-    if (config.source.tasksConfiguredButGated) {
-      log.warn('tasks', `[tasks] is configured but INERT: ${why}`)
-    } else if (why) {
-      log.info('tasks', `Background tasks off: ${why}`)
-    }
-  }
-
-  // Handle graceful shutdown
-  const shutdown = async () => {
-    log.info('main', 'Shutting down...')
-    discovery?.stop()
-    taskRunner?.stop()
+  onShutdown(async () => {
+    tasks?.discovery?.stop()
+    tasks?.taskRunner.stop()
     await cli.stop()
     await processRegistry.shutdownAll()
     taskStore?.close()
     conversations?.close()
-    process.exit(0)
-  }
-
-  process.on('SIGINT', shutdown)
-  process.on('SIGTERM', shutdown)
+  })
 
   await cli.start()
 
   // Start task runner and discovery after CLI is ready
-  taskRunner?.start()
-  discovery?.start()
+  tasks?.taskRunner.start()
+  tasks?.discovery?.start()
 }

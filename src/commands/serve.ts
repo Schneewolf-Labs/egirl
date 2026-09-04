@@ -1,6 +1,3 @@
-import { type AgentFactory, createAgentLoop } from '../agent'
-import { SessionMutex } from '../agent/session-mutex'
-import { createAppServices } from '../bootstrap'
 import {
   type ChatChannel,
   createDiscordChannel,
@@ -8,59 +5,56 @@ import {
   createTelegramChannel,
   createXMPPChannel,
 } from '../channels'
+import type { OutboundChannel } from '../channels/types'
 import type { RuntimeConfig } from '../config'
 import { createReplyBroker } from '../report/broker'
 import { registerReportTool } from '../report/register'
-import { gatherStandup } from '../standup'
-import {
-  createDiscovery,
-  createTaskRunner,
-  seedHeartbeatTask,
-  taskRunnerEnabled,
-  taskRunnerOffReason,
-} from '../tasks'
-import { createTaskTools } from '../tools/builtin/tasks'
 import { applyLogLevel } from '../util/args'
 import { log } from '../util/logger'
+import { createBackgroundTasks, createCommandRuntime, onShutdown } from './runtime'
 
-export async function runServe(config: RuntimeConfig, args: string[]): Promise<void> {
+export type ServeChannel = 'discord' | 'xmpp' | 'telegram' | 'matrix'
+
+const CHANNEL_SETUP_HINTS: Record<ServeChannel, string> = {
+  discord: 'Add DISCORD_TOKEN to .env and configure channels.discord in egirl.toml',
+  xmpp: 'Add XMPP_USERNAME and XMPP_PASSWORD to .env and configure channels.xmpp in egirl.toml',
+  telegram: 'Add TELEGRAM_BOT_TOKEN to .env and configure channels.telegram in egirl.toml',
+  matrix:
+    'Add MATRIX_ACCESS_TOKEN (or MATRIX_USERNAME and MATRIX_PASSWORD) to .env and configure channels.matrix in egirl.toml',
+}
+
+/**
+ * Run the chat channels plus the background task runner in one process. With `only` set, run
+ * just that channel (the `egirl discord` / `xmpp` / `telegram` / `matrix` commands).
+ */
+export async function runServe(
+  config: RuntimeConfig,
+  args: string[],
+  only?: ServeChannel,
+): Promise<void> {
   applyLogLevel(args)
 
-  const discordConf = config.channels.discord
-  const xmppConf = config.channels.xmpp
-  const telegramConf = config.channels.telegram
-  const matrixConf = config.channels.matrix
+  const want = (name: ServeChannel) => !only || only === name
+  const discordConf = want('discord') ? config.channels.discord : undefined
+  const xmppConf = want('xmpp') ? config.channels.xmpp : undefined
+  const telegramConf = want('telegram') ? config.channels.telegram : undefined
+  const matrixConf = want('matrix') ? config.channels.matrix : undefined
 
   if (!discordConf && !xmppConf && !telegramConf && !matrixConf) {
     console.error(
-      'Error: No channels configured. Configure channels.discord, channels.xmpp, channels.telegram or channels.matrix in egirl.toml to use serve mode, or run `bun run cli` instead.',
+      only
+        ? `Error: ${only} not configured. ${CHANNEL_SETUP_HINTS[only]}`
+        : 'Error: No channels configured. Configure channels.discord, channels.xmpp, channels.telegram or channels.matrix in egirl.toml to use serve mode, or run `bun run cli` instead.',
     )
     process.exit(1)
   }
 
-  const { providers, memory, conversations, taskStore, toolExecutor, skills, processRegistry } =
-    await createAppServices(config)
+  const rt = await createCommandRuntime(config)
+  const { providers, conversations, taskStore, toolExecutor, processRegistry, agentFactory } = rt
 
-  const standup = await gatherStandup(config.workspace.path)
-  const sessionMutex = new SessionMutex()
-
-  const outbound = new Map<string, { send(target: string, message: string): Promise<void> }>()
+  const outbound = new Map<string, OutboundChannel>()
   // Routes inbound chat messages to pending report asks (see src/report/broker.ts).
   const replyBroker = createReplyBroker()
-
-  const agentFactory: AgentFactory = (sessionId: string) =>
-    createAgentLoop({
-      config,
-      toolExecutor,
-      localProvider: providers.local,
-      auxProvider: providers.auxiliary,
-      sessionId,
-      memory,
-      conversationStore: conversations,
-      skills,
-      additionalContext: standup.context || undefined,
-      sessionMutex,
-    })
 
   // Chat channels, in priority order: the first one configured is where background tasks
   // and the heartbeat report by default. Discord runs one session per channel/thread/DM;
@@ -95,113 +89,44 @@ export async function runServe(config: RuntimeConfig, args: string[]): Promise<v
   // on a human reply through the broker.
   registerReportTool(config, toolExecutor, outbound, replyBroker)
 
-  // --- Background tasks (shared across channels) ---
-  let taskRunner: ReturnType<typeof createTaskRunner> | undefined
-  let discovery: ReturnType<typeof createDiscovery> | undefined
+  const primary = chat[0]
+  const tasks = createBackgroundTasks(rt, {
+    outbound,
+    channel: primary?.channel.name ?? 'discord',
+    channelTarget: primary?.defaultTarget ?? 'self',
+  })
 
-  if (taskRunnerEnabled(config, !!taskStore) && taskStore) {
-    taskRunner = createTaskRunner({
-      config,
-      tasksConfig: config.tasks,
-      store: taskStore,
-      toolExecutor,
-      localProvider: providers.local,
-      auxProvider: providers.auxiliary,
-      memory,
-      outbound,
-      conversationStore: conversations,
-      sessionMutex,
+  if (tasks && discord && taskStore) {
+    // Proposal approval via reactions.
+    discord.onReaction(async (event) => {
+      if (event.isBot) return
+      const proposal = taskStore.getProposalByMessage(event.messageId)
+      if (!proposal) return
+
+      if (event.emoji === '✅') {
+        taskStore.update(proposal.taskId, { status: 'active' as const })
+        taskStore.updateProposal(proposal.id, { status: 'approved' })
+        tasks.taskRunner.activateTask(proposal.taskId)
+        log.info('tasks', `Task ${proposal.taskId} approved via reaction`)
+      }
+      if (event.emoji === '❌') {
+        taskStore.updateProposal(proposal.id, { status: 'rejected', rejectedAt: Date.now() })
+        taskStore.delete(proposal.taskId)
+        log.info('tasks', `Task ${proposal.taskId} rejected via reaction`)
+      }
     })
-
-    const primary = chat[0]
-    const defaultChannel = primary?.channel.name ?? 'discord'
-    const defaultTarget = primary?.defaultTarget ?? 'self'
-
-    const taskTools = createTaskTools(taskStore, taskRunner, config.tasks.maxActiveTasks, () => ({
-      channel: defaultChannel,
-      channelTarget: defaultTarget,
-    }))
-    toolExecutor.registerAll([
-      taskTools.taskAddTool,
-      taskTools.taskProposeTool,
-      taskTools.taskListTool,
-      taskTools.taskPauseTool,
-      taskTools.taskResumeTool,
-      taskTools.taskCancelTool,
-      taskTools.taskRunNowTool,
-      taskTools.taskHistoryTool,
-    ])
-
-    if (discord) {
-      discord.onReaction(async (event) => {
-        if (event.isBot) return
-        const proposal = taskStore.getProposalByMessage(event.messageId)
-        if (!proposal) return
-
-        if (event.emoji === '✅') {
-          taskStore.update(proposal.taskId, { status: 'active' as const })
-          taskStore.updateProposal(proposal.id, { status: 'approved' })
-          taskRunner?.activateTask(proposal.taskId)
-          log.info('tasks', `Task ${proposal.taskId} approved via reaction`)
-        }
-        if (event.emoji === '❌') {
-          taskStore.updateProposal(proposal.id, { status: 'rejected', rejectedAt: Date.now() })
-          taskStore.delete(proposal.taskId)
-          log.info('tasks', `Task ${proposal.taskId} rejected via reaction`)
-        }
-      })
-    }
-
-    if (config.tasks.discoveryEnabled) {
-      discovery = createDiscovery({
-        config,
-        tasksConfig: config.tasks,
-        store: taskStore,
-        runner: taskRunner,
-        toolExecutor,
-        localProvider: providers.local,
-        auxProvider: providers.auxiliary,
-        memory,
-      })
-    }
-
-    seedHeartbeatTask({
-      store: taskStore,
-      runner: taskRunner,
-      tasksConfig: config.tasks,
-      heartbeatConfig: config.tasks.heartbeat,
-      workspacePath: config.workspace.path,
-      channel: defaultChannel,
-      channelTarget: defaultTarget,
-    })
-
-    log.info('main', 'Background task system initialized')
-  } else {
-    // Say WHY, naming the flag. A bare silence here means a populated [tasks] section that
-    // simply never runs, which is exactly what happened in practice.
-    const why = taskRunnerOffReason(config, !!taskStore)
-    if (config.source.tasksConfiguredButGated) {
-      log.warn('tasks', `[tasks] is configured but INERT: ${why}`)
-    } else if (why) {
-      log.info('tasks', `Background tasks off: ${why}`)
-    }
   }
 
-  const shutdown = async () => {
-    log.info('main', 'Shutting down...')
-    discovery?.stop()
-    taskRunner?.stop()
+  onShutdown(async () => {
+    tasks?.discovery?.stop()
+    tasks?.taskRunner.stop()
     for (const { channel } of chat) {
       await channel.stop().catch(() => {})
     }
     await processRegistry.shutdownAll()
     taskStore?.close()
     conversations?.close()
-    process.exit(0)
-  }
-
-  process.on('SIGINT', shutdown)
-  process.on('SIGTERM', shutdown)
+  })
 
   // A chat channel that cannot connect leaves a degraded instance, not a dead one. Letting the
   // failure propagate meant one optional transport with a bad certificate took down the task
@@ -223,8 +148,8 @@ export async function runServe(config: RuntimeConfig, args: string[]): Promise<v
       log.warn('main', `Continuing without ${channel.name}.`)
     }
   }
-  taskRunner?.start()
-  discovery?.start()
+  tasks?.taskRunner.start()
+  tasks?.discovery?.start()
 
   if (!started.length) {
     log.warn('main', 'No channels started. Background tasks still run; chat is unavailable.')

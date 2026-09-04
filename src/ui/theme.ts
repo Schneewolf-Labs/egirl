@@ -149,10 +149,6 @@ export function getTheme(): Theme {
   return activeTheme
 }
 
-export function listThemes(): Theme[] {
-  return Object.values(THEMES)
-}
-
 /** Shorthand: get current theme colors */
 export function colors(): ThemeColors {
   return activeTheme.colors

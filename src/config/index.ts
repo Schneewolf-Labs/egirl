@@ -639,16 +639,3 @@ export function loadConfig(options: LoadConfigOptions = {}): RuntimeConfig {
 
   return config
 }
-
-let _config: RuntimeConfig | null = null
-
-export function getConfig(): RuntimeConfig {
-  if (!_config) {
-    _config = loadConfig()
-  }
-  return _config
-}
-
-export function setConfig(config: RuntimeConfig): void {
-  _config = config
-}

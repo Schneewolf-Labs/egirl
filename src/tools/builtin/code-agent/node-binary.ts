@@ -55,10 +55,6 @@ export function nodeBinary(): string | undefined {
   return cached ?? undefined
 }
 
-export function resetNodeBinaryCache(): void {
-  cached = undefined
-}
-
 export const NODE_BINARY_MISSING =
   'Code agent unavailable: no real Node.js binary was found for the codex runner. ' +
   'The runner needs node-pty, a native module bun cannot load. Install Node.js, or set ' +
