@@ -8,7 +8,12 @@
 
 import { describe, expect, test } from 'bun:test'
 import type { AgentLoop } from '../../src/agent'
-import { extractText, MatrixChannel, stripReplyFallback } from '../../src/channels/matrix'
+import {
+  extractText,
+  MatrixChannel,
+  MatrixOutbound,
+  stripReplyFallback,
+} from '../../src/channels/matrix'
 import type { MatrixApi, MatrixEvent } from '../../src/channels/matrix/api'
 import { createReplyBroker } from '../../src/report/broker'
 
@@ -197,5 +202,66 @@ describe('MatrixChannel lifecycle', () => {
     const { channel, calls } = channelWith()
     await channel.stop()
     expect(calls).toEqual([])
+  })
+})
+
+describe('MatrixOutbound', () => {
+  // The api process has no sync loop, so nothing here ever calls sync or whoami: a token
+  // needs no round-trip at all, and a password logs in once, on the first send.
+  const base = {
+    homeserver: 'https://hs.test',
+    allowedUsers: [],
+    allowedRooms: [],
+    autoJoin: false,
+  }
+
+  test('with a token, sends without any auth round-trip', async () => {
+    const { api, sent, calls } = fakeApi()
+    const out = new MatrixOutbound({ ...base, accessToken: 'tok' }, api)
+    await out.send('!room:hs.test', 'task finished')
+    expect(sent).toEqual([{ roomId: '!room:hs.test', body: 'task finished' }])
+    expect(calls).toEqual([])
+    await out.stop()
+    expect(calls).toEqual([])
+  })
+
+  test('with a password, logs in on first send only and logs the device out on stop', async () => {
+    const { api, sent, calls } = fakeApi()
+    const out = new MatrixOutbound({ ...base, username: 'egirl', password: 'pw' }, api)
+    await out.send('!room:hs.test', 'one')
+    await out.send('!room:hs.test', 'two')
+    expect(sent.map((s) => s.body)).toEqual(['one', 'two'])
+    expect(calls).toEqual(['login'])
+    await out.stop()
+    expect(calls).toEqual(['login', 'logout'])
+  })
+
+  test('self resolves to the first allowed room; nothing to fall back to is a no-op', async () => {
+    const { api, sent } = fakeApi()
+    const out = new MatrixOutbound(
+      { ...base, accessToken: 'tok', allowedRooms: ['!a:hs.test'] },
+      api,
+    )
+    await out.send('self', 'hi')
+    expect(sent).toEqual([{ roomId: '!a:hs.test', body: 'hi' }])
+    const none = new MatrixOutbound({ ...base, accessToken: 'tok' }, api)
+    await none.send('self', 'lost')
+    expect(sent).toHaveLength(1)
+  })
+
+  test('a failed login is retried on the next send', async () => {
+    const { api, sent, calls } = fakeApi()
+    let fail = true
+    api.login = async () => {
+      calls.push('login')
+      if (fail) throw new Error('homeserver down')
+      return { userId: '@egirl:hs.test', accessToken: 'tok' }
+    }
+    const out = new MatrixOutbound({ ...base, username: 'egirl', password: 'pw' }, api)
+    await expect(out.send('!r:hs.test', 'x')).rejects.toThrow('homeserver down')
+    fail = false
+    await out.send('!r:hs.test', 'y')
+    expect(calls).toEqual(['login', 'login'])
+    expect(sent.map((s) => s.body)).toEqual(['y'])
   })
 })
