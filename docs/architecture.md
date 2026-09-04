@@ -48,7 +48,7 @@ A message from the user follows this path:
 
 ### 1. Channel receives input
 
-Each channel is a thin adapter that converts its interface into a call to `AgentLoop.run()`.
+Each channel is a thin adapter that converts its interface into a call to `AgentLoop.run()`. The chat transports (Discord, XMPP, Telegram, Matrix) own only their connection, allow-lists and wire format; everything after "a human said something" is the same turn on every surface and lives in the **channel spine** (`src/channels/spine.ts`): a pending report ask consuming the message as its answer, the typing indicator, tool-call narration (`narration.ts`), running the agent, chunking the reply to the transport's cap (`chunk.ts`), and turning a crash into an error message. A transport describes one conversation to `runTurn()` as a `Surface` — channel name, target, max length, narration format, a `send(chunk)` and an optional typing primitive — and the spine does the rest. The same `deliver()` backs each channel's outbound `send(target, message)`, so the task runner and the report tool see one shape everywhere.
 
 - **CLI** (`src/channels/cli.ts`): readline-based interactive terminal. Supports single-message mode via `-m`.
 - **Discord** (`src/channels/discord.ts`): discord.js bot responding to DMs and mentions. Filters by `allowed_channels` and `allowed_users`.
@@ -206,13 +206,15 @@ egirl/
 │   │   ├── cli.ts            # Terminal interface
 │   │   ├── cli-commands.ts   # Slash commands (/wipe, /think, etc.)
 │   │   ├── cli-events.ts     # Event rendering
+│   │   ├── spine.ts          # Shared chat turn: broker, typing, narration, chunking, errors
+│   │   ├── narration.ts      # Compact tool-call lines prefixed to chat replies
+│   │   ├── chunk.ts          # Split replies to a transport's message cap
 │   │   ├── discord.ts        # Discord bot
-│   │   ├── discord/          # Event/formatting helpers
+│   │   ├── discord/          # Passive-channel batch evaluator
 │   │   ├── claude-code.ts    # Claude Code bridge channel
 │   │   ├── xmpp.ts           # XMPP/Jabber chat
 │   │   ├── telegram.ts       # Telegram Bot API (long polling)
-│   │   ├── matrix.ts         # Matrix chat (raw client-server API)
-│   │   └── plain-events.ts   # Tool-call narration for plain-text transports
+│   │   └── matrix.ts         # Matrix chat (raw client-server API)
 │   ├── commands/             # Command runners for each entry mode
 │   ├── config/
 │   │   ├── schema.ts         # TypeBox schema for egirl.toml
@@ -312,9 +314,9 @@ egirl used to route between a local and remote provider. That's gone. The model 
 
 `bun:sqlite` is zero-dependency, in-process, and supports FTS5 natively. Vector search is done in application code using cosine similarity over `Float32Array`s — no vector database at this scale. See [memory.md](memory.md).
 
-### Why no channel abstraction?
+### Why a channel spine but no channel registry?
 
-Each transport is different enough that a shared abstraction would add indirection without removing code. Channels share a minimal `start()` / `stop()` interface and nothing more. CLI, Discord, XMPP, Matrix, the Claude Code bridge, and the HTTP API are hardcoded; adding a fourth means writing a fourth — the extensibility point is the HTTP API, not an in-process plugin layer.
+Channels share plumbing, not a plugin layer. The spine (`src/channels/spine.ts`) exists because four chat transports had grown four copies of the same turn — broker check, typing refresh, narration, chunking, error reply — and each copy drifted (Telegram had no typing indicator; Discord's error text differed from everyone else's). What they share is the turn, so that is what is shared. What they do not share is discovery: CLI, Discord, XMPP, Telegram, Matrix, the Claude Code bridge, and the HTTP API are hardcoded and constructed by name in `serve.ts`; adding a fifth means writing a fifth and adding it to the list — the extensibility point is the HTTP API, not an in-process plugin layer.
 
 ### Why no streaming?
 

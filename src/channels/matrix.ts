@@ -1,10 +1,9 @@
 import type { AgentLoop } from '../agent'
 import type { ReplyBroker } from '../report/broker'
 import { log } from '../util/logger'
-import { splitMessage } from './discord/formatting'
 import { createMatrixApi, type MatrixApi, MatrixApiError, type MatrixEvent } from './matrix/api'
-import { buildToolCallPrefix, createPlainEventHandler } from './plain-events'
-import type { Channel } from './types'
+import { deliver, runTurn } from './spine'
+import type { ChatChannel } from './types'
 
 export interface MatrixConfig {
   homeserver: string // e.g. "https://matrix.example.com"
@@ -46,7 +45,7 @@ export function extractText(event: MatrixEvent): string | undefined {
   return text.trim() || undefined
 }
 
-export class MatrixChannel implements Channel {
+export class MatrixChannel implements ChatChannel {
   readonly name = 'matrix'
   private api: MatrixApi
   private agent: AgentLoop
@@ -102,17 +101,22 @@ export class MatrixChannel implements Channel {
   }
 
   /** Outbound: post to a room (used by the task runner and the report tool). */
-  async sendTo(to: string, body: string): Promise<void> {
+  async send(to: string, body: string): Promise<void> {
     if (!to || to === 'self') {
       const fallback = this.config.allowedRooms[0] ?? this.lastRoomId
       if (!fallback) {
-        log.warn('matrix', 'sendTo called without a target, no allowed_rooms and no room seen yet')
+        log.warn('matrix', 'send called without a target, no allowed_rooms and no room seen yet')
         return
       }
       to = fallback
     }
-    for (const chunk of splitMessage(body, MAX_MESSAGE_LENGTH)) {
-      await this.api.sendText(to, chunk)
+    await deliver(this.surface(to), body)
+  }
+
+  private surface(roomId: string) {
+    return {
+      maxLength: MAX_MESSAGE_LENGTH,
+      send: (chunk: string) => this.api.sendText(roomId, chunk),
     }
   }
 
@@ -177,26 +181,21 @@ export class MatrixChannel implements Channel {
     this.lastRoomId = roomId
     log.info('matrix', `Message from ${sender} in ${roomId}: ${text.slice(0, 100)}...`)
 
-    // A pending report ask on this room consumes the message as its answer.
-    if (this.broker?.tryDeliver('matrix', roomId, text)) return
-
-    const typing = setInterval(() => {
-      this.api.setTyping(roomId, this.userId, true).catch(() => {})
-    }, 20_000)
-    try {
-      await this.api.setTyping(roomId, this.userId, true).catch(() => {})
-      const { handler, state } = createPlainEventHandler()
-      const response = await this.agent.run(text, { events: handler })
-      await this.sendTo(roomId, buildToolCallPrefix(state) + response.content)
-      log.debug('matrix', `Responded via ${response.provider}`)
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : String(error)
-      log.error('matrix', 'Error processing message:', error)
-      await this.sendTo(roomId, `Error: ${errorMsg}`).catch(() => {})
-    } finally {
-      clearInterval(typing)
-      await this.api.setTyping(roomId, this.userId, false).catch(() => {})
-    }
+    await runTurn(
+      this.agent,
+      {
+        channel: 'matrix',
+        target: roomId,
+        format: 'plain',
+        ...this.surface(roomId),
+        typing: {
+          refreshMs: 20_000,
+          set: (on) => this.api.setTyping(roomId, this.userId, on),
+        },
+      },
+      text,
+      this.broker,
+    )
   }
 
   private isAllowedUser(userId: string): boolean {

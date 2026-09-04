@@ -165,7 +165,7 @@ describe('MatrixChannel.handleEvent', () => {
     const { channel, sent } = channelWith()
     await channel.start()
     await channel.handleEvent('!room:hs.test', textEvent('@boss:hs.test', 'hello'))
-    await channel.sendTo('self', 'task done')
+    await channel.send('self', 'task done')
     await channel.stop()
     expect(sent.at(-1)).toEqual({ roomId: '!room:hs.test', body: 'task done' })
   })

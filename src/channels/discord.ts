@@ -21,9 +21,8 @@ import {
   formatBatchForAgent,
   MessageBatcher,
 } from './discord/batch-evaluator'
-import { buildToolCallPrefix, createDiscordEventHandler } from './discord/events'
-import { splitMessage } from './discord/formatting'
-import type { Channel } from './types'
+import { deliver, runTurn } from './spine'
+import type { ChatChannel } from './types'
 
 export interface DiscordConfig {
   token: string
@@ -32,6 +31,8 @@ export interface DiscordConfig {
   passiveChannels: string[] // Channel IDs to passively monitor (respond without being tagged)
   batchWindowMs: number // Debounce window before evaluating a batch (ms)
 }
+
+const DISCORD_MAX_MESSAGE_LENGTH = 2000
 
 export interface ReactionEvent {
   emoji: string
@@ -43,7 +44,7 @@ export interface ReactionEvent {
 export type ReactionHandler = (event: ReactionEvent) => void | Promise<void>
 export type InteractionHandler = (interaction: Interaction) => void | Promise<void>
 
-export class DiscordChannel implements Channel {
+export class DiscordChannel implements ChatChannel {
   readonly name = 'discord'
   private client: Client
   private agentFactory: AgentFactory
@@ -294,36 +295,36 @@ export class DiscordChannel implements Channel {
 
     const sessionKey = this.resolveSessionKey(message)
     const agent = this.getOrCreateAgent(sessionKey)
-
-    // Keep typing indicator alive (Discord expires it after ~10s)
     const channel = message.channel
-    const typingInterval = setInterval(() => {
-      if ('sendTyping' in channel) channel.sendTyping().catch(() => {})
-    }, 8_000)
 
-    try {
-      // Show typing indicator immediately
-      if ('sendTyping' in channel) await channel.sendTyping()
-
-      // Run through agent with event handler for tool transparency
-      const { handler, state } = createDiscordEventHandler()
-      const response = await agent.run(content, { events: handler })
-
-      // Build response with tool call prefix
-      const prefix = buildToolCallPrefix(state)
-      const fullResponse = prefix + response.content
-
-      // Send response (split if too long)
-      await this.sendResponse(message, fullResponse)
-
-      log.debug('discord', `[${sessionKey}] Responded via ${response.provider}`)
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : String(error)
-      log.error('discord', `Error processing message:`, error)
-      await message.reply(`Sorry, I encountered an error: ${errorMsg}`).catch(() => {})
-    } finally {
-      clearInterval(typingInterval)
-    }
+    // The first piece is a reply to the triggering message; the rest follow as plain sends.
+    let replied = false
+    await runTurn(
+      agent,
+      {
+        channel: 'discord',
+        target: channel.id,
+        maxLength: DISCORD_MAX_MESSAGE_LENGTH,
+        format: 'markdown',
+        send: async (chunk) => {
+          if (!replied) {
+            replied = true
+            await message.reply(chunk)
+          } else if ('send' in channel) {
+            await channel.send(chunk)
+          }
+        },
+        // Discord has no explicit "stopped typing"; the indicator lapses once a message lands.
+        typing: {
+          refreshMs: 8_000,
+          set: async (on) => {
+            if (on && 'sendTyping' in channel) await channel.sendTyping()
+          },
+        },
+      },
+      content,
+      this.broker,
+    )
   }
 
   private isUserAllowed(userId: string): boolean {
@@ -418,30 +419,6 @@ export class DiscordChannel implements Channel {
     return content.trim()
   }
 
-  private async sendResponse(message: Message, content: string): Promise<void> {
-    // Discord message limit is 2000 characters
-    const maxLength = 2000
-
-    if (content.length <= maxLength) {
-      await message.reply(content)
-      return
-    }
-
-    // Split into chunks
-    const chunks = splitMessage(content, maxLength)
-
-    // Reply to first chunk
-    await message.reply(chunks[0] ?? content.slice(0, maxLength))
-
-    // Send remaining chunks as follow-up messages
-    for (let i = 1; i < chunks.length; i++) {
-      const chunk = chunks[i]
-      if (chunk) {
-        if ('send' in message.channel) await message.channel.send(chunk)
-      }
-    }
-  }
-
   /** Outbound: send a message to a channel or user without an inbound trigger */
   async send(target: string, message: string): Promise<void> {
     if (!this.ready) {
@@ -452,10 +429,15 @@ export class DiscordChannel implements Channel {
     try {
       const channel = await this.client.channels.fetch(target)
       if (channel?.isTextBased() && 'send' in channel) {
-        const chunks = splitMessage(message, 2000)
-        for (const chunk of chunks) {
-          await channel.send(chunk)
-        }
+        await deliver(
+          {
+            maxLength: DISCORD_MAX_MESSAGE_LENGTH,
+            send: async (chunk) => {
+              await channel.send(chunk)
+            },
+          },
+          message,
+        )
       } else {
         log.warn('discord', `Channel ${target} not found or not text-based`)
       }

@@ -2,16 +2,21 @@ import type { AgentEventHandler } from '../agent/events'
 import type { ToolCall } from '../providers/types'
 
 /**
- * Tool-call narration for plain-text chat transports (XMPP, Telegram, Matrix).
+ * Tool-call narration for chat channels.
  *
- * These surfaces have no embeds or reactions to hang progress off, so the tool calls a turn
- * made are collected while the agent runs and prefixed to the final reply -- one compact line
- * per call ("🔍 Web Search: \"schneewolf labs llc\""), then a blank line, then her reply. The
- * raw arguments and results stay out of the chat; the web UI and traces are where that lives.
+ * Chat surfaces have no live tool panel, so the tool calls a turn made are collected while
+ * the agent runs and prefixed to the final reply -- one compact line per call
+ * ("🔍 Web Search: \"schneewolf labs llc\""), then a blank line, then her reply. The raw
+ * arguments and results stay out of the chat; the web UI and traces are where that lives.
+ *
+ * Markdown-capable surfaces (Discord) get the lines in a code block so underscores and
+ * asterisks in a shell command or a path are not rendered as formatting.
  */
 
-export interface PlainEventState {
-  entries: Array<{ call: string; result?: string }>
+export type NarrationFormat = 'plain' | 'markdown'
+
+export interface NarrationState {
+  lines: string[]
 }
 
 interface ToolMeta {
@@ -36,6 +41,7 @@ const TOOL_META: Record<string, ToolMeta> = {
   memory_search: { icon: '🧠', label: 'Recall', arg: 'query' },
   memory_list: { icon: '🧠', label: 'Memory' },
   memory_set: { icon: '🧠', label: 'Remember', arg: 'name' },
+  report: { icon: '📣', label: 'Report', arg: 'mode' },
 }
 
 const FAMILY_META: Array<[string, ToolMeta]> = [
@@ -43,6 +49,7 @@ const FAMILY_META: Array<[string, ToolMeta]> = [
   ['github_', { icon: '🐙', label: 'GitHub' }],
   ['git_', { icon: '🔀', label: 'Git' }],
   ['memory_', { icon: '🧠', label: 'Memory' }],
+  ['task_', { icon: '🗓️', label: 'Task' }],
 ]
 
 function humanize(name: string): string {
@@ -84,19 +91,19 @@ function keyArg(call: ToolCall, preferred?: string): string {
   return isString ? `"${s}"` : s
 }
 
-function formatToolCallCompact(call: ToolCall): string {
+export function formatToolCallCompact(call: ToolCall): string {
   const meta = metaFor(call.name)
   const arg = keyArg(call, meta.arg)
   return arg ? `${meta.icon} ${meta.label}: ${arg}` : `${meta.icon} ${meta.label}`
 }
 
-export function createPlainEventHandler(): { handler: AgentEventHandler; state: PlainEventState } {
-  const state: PlainEventState = { entries: [] }
+export function createNarration(): { handler: AgentEventHandler; state: NarrationState } {
+  const state: NarrationState = { lines: [] }
 
   const handler: AgentEventHandler = {
     onToolCallStart(calls: ToolCall[]) {
       for (const call of calls) {
-        state.entries.push({ call: formatToolCallCompact(call) })
+        state.lines.push(formatToolCallCompact(call))
       }
     },
   }
@@ -104,7 +111,10 @@ export function createPlainEventHandler(): { handler: AgentEventHandler; state: 
   return { handler, state }
 }
 
-export function buildToolCallPrefix(state: PlainEventState): string {
-  if (state.entries.length === 0) return ''
-  return `${state.entries.map((e) => e.call).join('\n')}\n\n`
+/** The narration block to put in front of a reply; empty when the turn used no tools. */
+export function buildToolCallPrefix(state: NarrationState, format: NarrationFormat): string {
+  if (state.lines.length === 0) return ''
+  const body = state.lines.join('\n')
+  if (format === 'markdown') return `\`\`\`\n${body}\n\`\`\`\n`
+  return `${body}\n\n`
 }
