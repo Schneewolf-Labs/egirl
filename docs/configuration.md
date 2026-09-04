@@ -20,7 +20,7 @@ Controls Qwen3 `/think` mode (extended reasoning).
 | `budget_tokens` | number | (auto from level) | Override the thinking token budget directly |
 | `show_thinking` | bool | `true` | Display thinking output in CLI |
 
-On llama.cpp the level is a switch: anything but `off` sends `enable_thinking: true`, and there is no per-request budget or effort knob (`--reasoning-budget` on the server is the only lever, and it is global). Override per session with `/think <on|off|default>` -- from the terminal, the web console, or any chat channel; it is the same setting wherever it is changed.
+On llama.cpp the level is a switch: anything but `off` sends `chat_template_kwargs: {"enable_thinking": true}` (the template variable; a top-level `enable_thinking` is silently ignored, which is what made `off` not off), and there is no per-request budget or effort knob (`--reasoning-budget` on the server is the only lever, and it is global). Override per session with `/think <on|off|default>` -- from the terminal, the web console, or any chat channel; it is the same setting wherever it is changed.
 
 ### `[workspace]`
 
