@@ -11,17 +11,21 @@ import { log } from '../util/logger'
  * verbose: on a single-user machine the disk is cheap and the post-mortem that reconstructs
  * why a run went sideways is not. Retention pruning keeps it bounded.
  *
- * Module-level singleton, same shape as the logger: the taps live in the loop, the tool
- * runner, and the aux callers, and threading a store through every one of those constructors
- * would couple half the codebase to tracing. Uninitialized = every call is a no-op.
+ * Module-level singleton, same shape as the logger: session runs arrive through the journal
+ * subscribed to the session bus (see journal.ts), aux callers tap it directly, and threading
+ * a store through every constructor would couple half the codebase to tracing.
+ * Uninitialized = every call is a no-op.
  */
 
 export type TraceVerbosity = 'off' | 'metadata' | 'verbose'
 
 export interface TraceEvent {
   session?: string
-  /** 'turn' = one inference; 'tool' = one tool execution; 'aux' = side-model work. */
-  kind: 'turn' | 'tool' | 'aux'
+  /**
+   * 'run_start'/'run_end' bracket one agent run; 'turn' = one inference; 'tool' = one tool
+   * execution; 'aux' = side-model work.
+   */
+  kind: 'run_start' | 'run_end' | 'turn' | 'tool' | 'aux'
   /** Tool name, aux job name ('compaction', 'extraction'), or model for turns. */
   name?: string
   success?: boolean

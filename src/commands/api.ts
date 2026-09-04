@@ -3,6 +3,8 @@ import { type AgentFactory, type AgentLoop, createAgentLoop } from '../agent'
 import { SessionMutex } from '../agent/session-mutex'
 import { startAPIServer } from '../api'
 import { createAppServices } from '../bootstrap'
+import { createMatrixOutbound } from '../channels/matrix'
+import type { OutboundChannel } from '../channels/types'
 import type { RuntimeConfig } from '../config'
 import { createPushNotifier, generateVapidKeys, PushStore } from '../push'
 import { createReplyBroker } from '../report/broker'
@@ -24,16 +26,8 @@ export async function runAPI(config: RuntimeConfig, args: string[]): Promise<voi
     process.exit(1)
   }
 
-  const {
-    providers,
-    memory,
-    conversations,
-    taskStore,
-    toolExecutor,
-    transcript,
-    skills,
-    processRegistry,
-  } = await createAppServices(config)
+  const { providers, memory, conversations, taskStore, toolExecutor, skills, processRegistry } =
+    await createAppServices(config)
 
   const standup = await gatherStandup(config.workspace.path)
   const sessionMutex = new SessionMutex()
@@ -47,7 +41,6 @@ export async function runAPI(config: RuntimeConfig, args: string[]): Promise<voi
       sessionId,
       memory,
       conversationStore: conversations,
-      transcript,
       skills,
       additionalContext: standup.context || undefined,
       sessionMutex,
@@ -60,12 +53,12 @@ export async function runAPI(config: RuntimeConfig, args: string[]): Promise<voi
   // human's call" died in a tool error, and the agent went back to guessing.
   const consoleInbox = new ConsoleInbox(config.source.instance ?? 'egirl')
   const replyBroker = createReplyBroker()
-  registerReportTool(
-    config,
-    toolExecutor,
-    new Map([['console', { send: consoleInbox.send }]]),
-    replyBroker,
-  )
+  // Matrix is send-only here: serve owns the room conversation, but a task or a report that
+  // runs in this process still has to reach the room the human actually reads.
+  const outbound = new Map<string, OutboundChannel>([['console', { send: consoleInbox.send }]])
+  const matrix = config.channels.matrix ? createMatrixOutbound(config.channels.matrix) : undefined
+  if (matrix) outbound.set('matrix', matrix)
+  registerReportTool(config, toolExecutor, outbound, replyBroker)
 
   // Web Push. Keys and subscriptions live in the workspace beside the other state, so an
   // instance keeps its identity across restarts -- regenerating the VAPID pair would silently
@@ -94,10 +87,13 @@ export async function runAPI(config: RuntimeConfig, args: string[]): Promise<voi
       localProvider: providers.local,
       auxProvider: providers.auxiliary,
       memory,
-      transcript,
       // Task notifications for api-channel tasks land in the console inbox as dismissable
-      // notices — without a sender here they were warn-logged and never seen.
-      outbound: new Map([['api', { send: consoleInbox.notice }]]),
+      // notices — without a sender here they were warn-logged and never seen. A task created
+      // from the room reports back to the room.
+      outbound: new Map<string, OutboundChannel>([
+        ['api', { send: consoleInbox.notice }],
+        ...(matrix ? [['matrix', matrix] as const] : []),
+      ]),
       conversationStore: conversations,
       sessionMutex,
     })
@@ -130,9 +126,6 @@ export async function runAPI(config: RuntimeConfig, args: string[]): Promise<voi
   }
 
   const server = startAPIServer(config.channels.api, {
-    // A grinding background task makes the instance busy; the server's own in-flight runs are
-    // tracked internally. The session mutex is not used here -- it guards only tool execution.
-    isBusy: () => taskRunner?.isRunning() ?? false,
     consoleInbox,
     replyBroker,
     push,
@@ -152,6 +145,7 @@ export async function runAPI(config: RuntimeConfig, args: string[]): Promise<voi
     log.info('main', 'Shutting down...')
     taskRunner?.stop()
     server.stop()
+    await matrix?.stop()
     await processRegistry.shutdownAll()
     taskStore?.close()
     conversations?.close()

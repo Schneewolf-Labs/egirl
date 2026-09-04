@@ -3,7 +3,7 @@ import type { ReplyBroker } from '../report/broker'
 import { log } from '../util/logger'
 import { createMatrixApi, type MatrixApi, MatrixApiError, type MatrixEvent } from './matrix/api'
 import { deliver, runTurn } from './spine'
-import type { ChatChannel } from './types'
+import type { ChatChannel, OutboundChannel } from './types'
 
 export interface MatrixConfig {
   homeserver: string // e.g. "https://matrix.example.com"
@@ -110,14 +110,11 @@ export class MatrixChannel implements ChatChannel {
       }
       to = fallback
     }
-    await deliver(this.surface(to), body)
+    await deliver(roomSurface(this.api, to), body)
   }
 
   private surface(roomId: string) {
-    return {
-      maxLength: MAX_MESSAGE_LENGTH,
-      send: (chunk: string) => this.api.sendText(roomId, chunk),
-    }
+    return roomSurface(this.api, roomId)
   }
 
   private async runSyncLoop(since: string, signal: AbortSignal): Promise<void> {
@@ -205,6 +202,77 @@ export class MatrixChannel implements ChatChannel {
   private isAllowedRoom(roomId: string): boolean {
     return this.config.allowedRooms.length === 0 || this.config.allowedRooms.includes(roomId)
   }
+}
+
+function roomSurface(api: MatrixApi, roomId: string) {
+  return {
+    maxLength: MAX_MESSAGE_LENGTH,
+    send: (chunk: string) => api.sendText(roomId, chunk),
+  }
+}
+
+/**
+ * Send-only Matrix, for a process that does not own the conversation. serve runs the sync
+ * loop and answers in the room; the api process runs tasks and the report tool, and a
+ * report addressed to a room has to reach it from there too. Authenticates on first send so
+ * an unreachable homeserver costs one delivery, not the process start. No inbound: a reply
+ * typed in the room lands in serve's session, so an ask from here parks the run until a
+ * human resumes it through the console or a peer.
+ */
+export class MatrixOutbound implements OutboundChannel {
+  readonly name = 'matrix'
+  private api: MatrixApi
+  private config: MatrixConfig
+  private ready: Promise<void> | undefined
+  private isPasswordSession = false
+
+  constructor(config: MatrixConfig, api?: MatrixApi) {
+    this.config = config
+    this.api = api ?? createMatrixApi(config.homeserver, config.accessToken)
+  }
+
+  async send(to: string, body: string): Promise<void> {
+    if (!to || to === 'self') {
+      const fallback = this.config.allowedRooms[0]
+      if (!fallback) {
+        log.warn('matrix', 'send called without a target and no allowed_rooms to fall back to')
+        return
+      }
+      to = fallback
+    }
+    await this.connect()
+    await deliver(roomSurface(this.api, to), body)
+  }
+
+  /** A password login minted a device; drop it rather than leave one per restart. */
+  async stop(): Promise<void> {
+    if (this.isPasswordSession) await this.api.logout().catch(() => {})
+  }
+
+  private connect(): Promise<void> {
+    if (this.config.accessToken) return Promise.resolve()
+    if (!this.ready) {
+      this.ready = this.login().catch((error) => {
+        // Try again on the next send rather than failing every delivery after one bad start.
+        this.ready = undefined
+        throw error
+      })
+    }
+    return this.ready
+  }
+
+  private async login(): Promise<void> {
+    if (!this.config.username || !this.config.password) {
+      throw new Error('Matrix needs MATRIX_ACCESS_TOKEN or MATRIX_USERNAME + MATRIX_PASSWORD')
+    }
+    const session = await this.api.login(this.config.username, this.config.password)
+    this.isPasswordSession = true
+    log.info('matrix', `Outbound connected as ${session.userId}`)
+  }
+}
+
+export function createMatrixOutbound(config: MatrixConfig, api?: MatrixApi): MatrixOutbound {
+  return new MatrixOutbound(config, api)
 }
 
 export function createMatrixChannel(

@@ -36,7 +36,6 @@ export async function runCLI(config: RuntimeConfig, args: string[]): Promise<voi
     taskStore,
     toolExecutor,
     stats,
-    transcript,
     skills,
     processRegistry,
   } = await createAppServices(config)
@@ -57,7 +56,6 @@ export async function runCLI(config: RuntimeConfig, args: string[]): Promise<voi
     sessionId,
     memory,
     conversationStore: conversations,
-    transcript,
     skills,
     additionalContext: standup.context || undefined,
     sessionMutex,
@@ -174,7 +172,6 @@ export async function runCLI(config: RuntimeConfig, args: string[]): Promise<voi
       localProvider: providers.local,
       auxProvider: providers.auxiliary,
       memory,
-      transcript,
       outbound,
       conversationStore: conversations,
       sessionMutex,
@@ -207,7 +204,6 @@ export async function runCLI(config: RuntimeConfig, args: string[]): Promise<voi
         localProvider: providers.local,
         auxProvider: providers.auxiliary,
         memory,
-        transcript,
       })
     }
 

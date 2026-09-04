@@ -409,12 +409,8 @@ Optional. Configures the [background task framework](background-tasks.md).
 
 ### `[transcript]`
 
-Optional. JSONL conversation transcripts.
-
-| Key | Type | Default | Description |
-|-----|------|---------|-------------|
-| `enabled` | bool | `true` | Log conversations to JSONL files |
-| `path` | string | (workspace default) | Path to the transcript log file. Supports `{workspace}` |
+Deprecated and ignored. Runs are journaled in the trace store — see `[tracing]`. The key is
+still accepted so an existing config loads; the loader logs a warning.
 
 ### `[permission_supervisor]`
 

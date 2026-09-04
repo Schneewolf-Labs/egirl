@@ -394,9 +394,11 @@ const baseProperties = {
     }),
   ),
 
+  // Deprecated: the JSONL transcript writer was replaced by the trace store. Still parsed so an
+  // existing config keeps loading; the loader warns and ignores it.
   transcript: Type.Optional(
     Type.Object({
-      enabled: Type.Boolean({ default: true }),
+      enabled: Type.Optional(Type.Boolean()),
       path: Type.Optional(Type.String()),
     }),
   ),
@@ -746,10 +748,6 @@ export interface RuntimeConfig {
       schedule: string
       businessHours?: string
     }
-  }
-  transcript: {
-    enabled: boolean
-    path: string
   }
   tracing: {
     verbosity: 'off' | 'metadata' | 'verbose'

@@ -187,7 +187,7 @@ See [architecture.md](architecture.md) for the full breakdown. Key points:
 - `src/standup/` — workspace context gathering
 - `src/tasks/` — background task scheduler and event sources
 - `src/tools/` — built-in tools (including `code_agent`)
-- `src/tracking/` — usage stats, transcript logging
+- `src/tracking/` — usage stats, trace store, session journal
 - `src/ui/` — 256-color ANSI theme system
 - `src/workspace/` — workspace bootstrapping
 

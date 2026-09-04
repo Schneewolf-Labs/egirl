@@ -68,7 +68,6 @@ function makeConfig(workspacePath: string): RuntimeConfig {
       idleThresholdMs: 300000,
       heartbeat: { enabled: false, schedule: '0 9 * * 1-5' },
     },
-    transcript: { enabled: false, path: '' },
     tools: {
       files: true,
       exec: true,

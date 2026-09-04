@@ -10,6 +10,7 @@
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import type { AgentLoop } from '../src/agent'
+import { endRun, publish, resetSessionEvents, startRun } from '../src/agent/session-events'
 import { type APIConfig, type APIDeps, startAPIServer } from '../src/api'
 
 /** Stub agent whose run() resolves when the test says so, to hold a session busy. */
@@ -269,5 +270,122 @@ describe('image attachments', () => {
     } finally {
       s3.stop(true)
     }
+  })
+})
+
+/** Collect the `data:` frames of an SSE body until it closes. */
+async function readFrames(res: Response): Promise<Array<{ t: string; v?: unknown }>> {
+  const text = await res.text()
+  return text
+    .split('\n\n')
+    .filter((l) => l.startsWith('data:'))
+    .map((l) => JSON.parse(l.slice(5).trim()) as { t: string; v?: unknown })
+}
+
+describe('live session events', () => {
+  const port = 3895
+  const base = `http://127.0.0.1:${port}`
+  let server: ReturnType<typeof startAPIServer>
+  const finished = {
+    t: 'run_end' as const,
+    v: {
+      content: 'all done',
+      input_tokens: 3,
+      output_tokens: 4,
+      turns: 2,
+      duration_ms: 9,
+      aborted: false,
+      awaiting: false,
+    },
+  }
+
+  beforeEach(() => {
+    resetSessionEvents()
+    server = startAPIServer({ host: '127.0.0.1', port } as APIConfig, {
+      agentFactory: (id) => gatedAgent(id, []),
+      agents: new Map(),
+    })
+  })
+  afterEach(() => {
+    server.stop(true)
+    resetSessionEvents()
+  })
+
+  test('GET /sessions/:id/events relays a run started elsewhere and closes with it', async () => {
+    // A task run, a peer message, a send from another device: none of them came through this
+    // request, and the spectator sees them all the same because the loop narrates on the bus.
+    startRun('task:abc', gatedAgent('task:abc', []), 'grind')
+    const res = await fetch(`${base}/sessions/task:abc/events`)
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-type')).toBe('text/event-stream')
+    // Give the subscription a beat to attach before publishing.
+    await new Promise((r) => setTimeout(r, 20))
+    publish('task:abc', { t: 'reasoning', v: 'hmm' })
+    publish('task:abc', { t: 'tool', v: ['execute_command'] })
+    publish('task:abc', { t: 'token', v: 'all ' })
+    endRun('task:abc', finished)
+    const frames = await readFrames(res)
+    expect(frames.map((f) => f.t)).toEqual(['reasoning', 'tool', 'token', 'run_end'])
+    expect((frames[3]?.v as { content: string }).content).toBe('all done')
+  })
+
+  test('GET /sessions/:id/events says idle at once when nothing is running', async () => {
+    const frames = await readFrames(await fetch(`${base}/sessions/web:quiet/events`))
+    expect(frames).toEqual([{ t: 'idle', v: null }])
+  })
+
+  test("busy in the session list comes from the bus, not from this server's own queue", async () => {
+    startRun('task:abc', gatedAgent('task:abc', []), 'grind')
+    const list = (await (await fetch(`${base}/sessions`)).json()) as {
+      sessions: Array<{ id: string; busy: boolean }>
+    }
+    expect(list.sessions.find((s) => s.id === 'task:abc')?.busy).toBe(true)
+    endRun('task:abc', finished)
+    const after = (await (await fetch(`${base}/sessions`)).json()) as {
+      sessions: Array<{ id: string; busy: boolean }>
+    }
+    expect(after.sessions.find((s) => s.id === 'task:abc')?.busy ?? false).toBe(false)
+  })
+
+  test('POST /chat stream:true relays the bus and closes with run_end', async () => {
+    // The stub agent never publishes; a real loop would. Its return value still closes the
+    // stream, so a client always sees the run end whichever agent sits behind the factory.
+    const res = await fetch(`${base}/chat`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ message: 'hi', session_id: 'web:s', stream: true }),
+    })
+    const frames = await readFrames(res)
+    expect(frames.map((f) => f.t)).toEqual(['run_end'])
+    expect((frames[0]?.v as { content: string }).content).toBe('echo: hi')
+  })
+
+  test('GET /sessions/:id reads the running loop, whoever started it', async () => {
+    // A task's loop lives outside this server's agents map, and its context is ahead of
+    // anything persisted: the turn in flight is only there. The bus hands over the loop.
+    const live = {
+      getContext: () => ({
+        sessionId: 'task:live',
+        systemPrompt: 'x',
+        messages: [
+          { role: 'user', content: 'grind' },
+          { role: 'assistant', content: 'on it' },
+        ],
+        conversationSummary: undefined,
+      }),
+    } as unknown as AgentLoop
+    startRun('task:live', live, 'grind')
+    const res = await fetch(`${base}/sessions/${encodeURIComponent('task:live')}`)
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as {
+      busy: boolean
+      message_count: number
+      messages: Array<{ content: string }>
+    }
+    expect(body.busy).toBe(true)
+    expect(body.message_count).toBe(2)
+    expect(body.messages[1]?.content).toBe('on it')
+    endRun('task:live', finished)
+    expect((await fetch(`${base}/sessions/${encodeURIComponent('task:live')}`)).status).toBe(404)
   })
 })
