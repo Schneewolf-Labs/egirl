@@ -116,13 +116,6 @@ export class AgentLoop {
     return slotFor(this.context.sessionId, this.config.local.cacheSlots)
   }
 
-  async run(userMessage: string, options: AgentLoopOptions = {}): Promise<AgentResponse> {
-    // The mutex guards tool execution only (see SessionMutex): inference runs outside it
-    // so concurrent sessions can be batched by the local server. Wrapping the whole run
-    // here would serialize every entry point again.
-    return this.doRun(userMessage, options)
-  }
-
   /** Run a tool phase under the shared-state lock. */
   private async exclusive<T>(fn: () => Promise<T>): Promise<T> {
     return this.mutex ? this.mutex.run(fn) : fn()
@@ -167,7 +160,10 @@ export class AgentLoop {
     return { level: this.config.thinking.level, source: 'config' }
   }
 
-  private async doRun(userMessage: string, options: AgentLoopOptions): Promise<AgentResponse> {
+  // The mutex guards tool execution only (see `exclusive`): inference runs outside it so
+  // concurrent sessions can be batched by the local server. Wrapping the whole run would
+  // serialize every entry point again.
+  async run(userMessage: string, options: AgentLoopOptions = {}): Promise<AgentResponse> {
     await this.compactor.drain()
 
     const { planningMode } = options

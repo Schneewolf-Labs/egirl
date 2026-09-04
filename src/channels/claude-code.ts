@@ -31,12 +31,11 @@ export class ClaudeCodeChannel {
   private localProvider: LLMProvider
   private config: ClaudeCodeConfig
   private conversationLog: string[] = []
-  private emit: (line: string) => void
+  private emit = (line: string): void => console.log(line)
 
-  constructor(localProvider: LLMProvider, config: ClaudeCodeConfig, emit?: (line: string) => void) {
+  constructor(localProvider: LLMProvider, config: ClaudeCodeConfig) {
     this.localProvider = localProvider
     this.config = config
-    this.emit = emit ?? ((line) => console.log(line))
   }
 
   async runTask(prompt: string): Promise<TaskResult> {
@@ -442,7 +441,6 @@ export class ClaudeCodeChannel {
 export function createClaudeCodeChannel(
   localProvider: LLMProvider,
   config: ClaudeCodeConfig,
-  emit?: (line: string) => void,
 ): ClaudeCodeChannel {
-  return new ClaudeCodeChannel(localProvider, config, emit)
+  return new ClaudeCodeChannel(localProvider, config)
 }

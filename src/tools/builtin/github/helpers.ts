@@ -1,7 +1,6 @@
-import { spawn } from 'child_process'
+import { gitStdout } from '../../../util/git'
 
 const API_BASE = 'https://api.github.com'
-const MAX_OUTPUT = 20000
 
 export interface GitHubConfig {
   token: string
@@ -29,45 +28,15 @@ export async function ghFetch(
   return { status: response.status, data }
 }
 
-export function truncate(text: string, max = MAX_OUTPUT): string {
-  if (text.length <= max) return text
-  const half = Math.floor(max / 2)
-  const omitted = text.length - max
-  return `${text.slice(0, half)}\n\n... (${omitted} characters omitted) ...\n\n${text.slice(-half)}`
-}
-
 /**
  * Detect owner/repo from the git remote in the given directory.
  */
-function detectRepo(cwd: string): Promise<{ owner: string; repo: string } | undefined> {
-  return new Promise((res) => {
-    const proc = spawn('git', ['remote', 'get-url', 'origin'], { cwd })
-    let stdout = ''
-    proc.stdout.on('data', (d) => {
-      stdout += d.toString()
-    })
-    proc.on('error', () => res(undefined))
-    proc.on('close', (code) => {
-      if (code !== 0) {
-        res(undefined)
-        return
-      }
-      const url = stdout.trim()
-      // Handle SSH: git@github.com:owner/repo.git
-      const sshMatch = url.match(/github\.com[:/]([^/]+)\/([^/.]+)/)
-      if (sshMatch) {
-        res({ owner: sshMatch[1] ?? '', repo: sshMatch[2] ?? '' })
-        return
-      }
-      // Handle HTTPS: https://github.com/owner/repo.git
-      const httpsMatch = url.match(/github\.com\/([^/]+)\/([^/.]+)/)
-      if (httpsMatch) {
-        res({ owner: httpsMatch[1] ?? '', repo: httpsMatch[2] ?? '' })
-        return
-      }
-      res(undefined)
-    })
-  })
+async function detectRepo(cwd: string): Promise<{ owner: string; repo: string } | undefined> {
+  const url = (await gitStdout(['remote', 'get-url', 'origin'], cwd))?.trim()
+  if (!url) return undefined
+  // SSH (git@github.com:owner/repo.git) or HTTPS (https://github.com/owner/repo.git)
+  const match = url.match(/github\.com[:/]([^/]+)\/([^/.]+)/)
+  return match ? { owner: match[1] ?? '', repo: match[2] ?? '' } : undefined
 }
 
 export async function resolveRepo(
@@ -97,14 +66,6 @@ export function apiError(status: number, data: unknown): string {
   return `GitHub API error (${status})`
 }
 
-export function resolveHeadRef(cwd: string): Promise<string | undefined> {
-  return new Promise((res) => {
-    const proc = spawn('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd })
-    let out = ''
-    proc.stdout.on('data', (d) => {
-      out += d.toString()
-    })
-    proc.on('error', () => res(undefined))
-    proc.on('close', (code) => res(code === 0 ? out.trim() : undefined))
-  })
+export async function resolveHeadRef(cwd: string): Promise<string | undefined> {
+  return (await gitStdout(['rev-parse', '--abbrev-ref', 'HEAD'], cwd))?.trim()
 }

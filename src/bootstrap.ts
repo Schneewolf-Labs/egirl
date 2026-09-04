@@ -15,8 +15,11 @@ import {
 import { discoverPeers, mergePeers, registerSelf } from './peers/discovery'
 import { createPermissionSupervisor } from './permissions/supervisor'
 import { createProviderRegistry, type ProviderRegistry } from './providers'
-import { probeServerContextLength } from './providers/context-probe'
-import { probeVisionSupport } from './providers/vision-probe'
+import {
+  probeServerProps,
+  serverContextLength,
+  serverSupportsVision,
+} from './providers/server-props'
 import { buildSafetyConfig } from './safety/config-bridge'
 import { loadSkillsFromDirectories } from './skills'
 import type { Skill } from './skills/types'
@@ -197,7 +200,8 @@ export async function createAppServices(config: RuntimeConfig): Promise<AppServi
   // token estimates run enough below real counts that a config within a few percent of the
   // server window overflows it in practice. Clamp before anything downstream captures the
   // value (providers, budget tracker, fitting all read config.local.contextLength).
-  const serverCtx = await probeServerContextLength(config.local.endpoint, config.local.apiKey)
+  const serverProps = await probeServerProps(config.local.endpoint, config.local.apiKey)
+  const serverCtx = serverContextLength(serverProps)
   if (serverCtx !== undefined && config.local.contextLength > serverCtx) {
     log.warn(
       'bootstrap',
@@ -279,9 +283,7 @@ export async function createAppServices(config: RuntimeConfig): Promise<AppServi
 
   // Screenshot gating: unset in config means auto-detect from the endpoint's modalities.
   const visionSupported =
-    config.tools.screenshot === 'auto'
-      ? await probeVisionSupport(config.local.endpoint, config.local.apiKey)
-      : undefined
+    config.tools.screenshot === 'auto' ? serverSupportsVision(serverProps) : undefined
   if (config.tools.screenshot === 'auto') {
     log.info(
       'bootstrap',

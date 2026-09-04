@@ -31,7 +31,11 @@ export interface CommandScope {
 }
 
 type ThinkingLevel = ThinkingConfig['level']
-const THINKING_LEVELS: readonly ThinkingLevel[] = ['off', 'low', 'medium', 'high']
+export const THINKING_LEVELS: readonly ThinkingLevel[] = ['off', 'low', 'medium', 'high']
+
+export function isThinkingLevel(value: string): value is ThinkingLevel {
+  return (THINKING_LEVELS as readonly string[]).includes(value)
+}
 
 // A word right after the slash. `/etc/hosts is wrong` is a sentence about a path, not a
 // mistyped command, and goes to the model like any other text.

@@ -15,20 +15,6 @@ export type PeerSendResult =
   | { ok: true; busy: true; from: string; content: string }
   | { ok: false; error: string; timedOut?: boolean }
 
-async function fetchWithTimeout(
-  url: string,
-  init: RequestInit,
-  timeoutMs: number,
-): Promise<Response> {
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), timeoutMs)
-  try {
-    return await fetch(url, { ...init, signal: controller.signal })
-  } finally {
-    clearTimeout(timer)
-  }
-}
-
 export function peerHeaders(peer: PeerEntry): Record<string, string> {
   return {
     'content-type': 'application/json',
@@ -47,15 +33,12 @@ export async function postPeerMessage(
   timeoutMs: number,
 ): Promise<PeerSendResult> {
   try {
-    const res = await fetchWithTimeout(
-      `${peer.url}/peer/message`,
-      {
-        method: 'POST',
-        headers: peerHeaders(peer),
-        body: JSON.stringify({ protocol: PEER_PROTOCOL, from, message }),
-      },
-      timeoutMs,
-    )
+    const res = await fetch(`${peer.url}/peer/message`, {
+      method: 'POST',
+      headers: peerHeaders(peer),
+      body: JSON.stringify({ protocol: PEER_PROTOCOL, from, message }),
+      signal: AbortSignal.timeout(timeoutMs),
+    })
 
     if (!res.ok) {
       const body = await res.text().catch(() => '')
@@ -76,7 +59,8 @@ export async function postPeerMessage(
     return { ok: true, from: data.from ?? peer.name, content: data.content ?? '' }
   } catch (error) {
     const msg = errorMessage(error)
-    if (msg.includes('abort')) {
+    const name = error instanceof Error ? error.name : ''
+    if (name === 'TimeoutError' || name === 'AbortError') {
       return {
         ok: false,
         timedOut: true,

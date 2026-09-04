@@ -4,6 +4,12 @@ import type { ToolResult } from '../tools/types'
 import { colors, DIM, RESET } from '../ui/theme'
 import type { StatusLine } from './cli-status'
 
+/** Print the reply unless it already streamed to the terminal. */
+export function printReply(state: CLIEventState, content: string | undefined): void {
+  if (state.streamed || !content) return
+  console.log(`\n${colors().secondary}✦ egirl${RESET} ${content}\n`)
+}
+
 export interface CLIEventState {
   streamed: boolean
   showThinking: boolean

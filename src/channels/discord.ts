@@ -43,6 +43,20 @@ export interface ReactionEvent {
 
 export type ReactionHandler = (event: ReactionEvent) => void | Promise<void>
 
+/**
+ * Whether a message's channel is in a configured list. A thread counts through its parent;
+ * a DM matches only the given marker (or never, when there is none).
+ */
+function channelListed(message: Message, list: string[], dmMarker: string | undefined): boolean {
+  if (message.channel.type === ChannelType.DM)
+    return dmMarker !== undefined && list.includes(dmMarker)
+  if (list.includes(message.channel.id)) return true
+  if ('parentId' in message.channel && message.channel.parentId) {
+    return list.includes(message.channel.parentId)
+  }
+  return false
+}
+
 export class DiscordChannel implements ChatChannel {
   readonly name = 'discord'
   private client: Client
@@ -321,39 +335,12 @@ export class DiscordChannel implements ChatChannel {
   }
 
   private isChannelAllowed(message: Message): boolean {
-    const { allowedChannels } = this.config
-
-    // Check for DM
-    if (message.channel.type === ChannelType.DM) {
-      return allowedChannels.includes('dm')
-    }
-
-    // Check specific channel ID
-    if (allowedChannels.includes(message.channel.id)) return true
-
-    // Check parent channel for threads
-    if ('parentId' in message.channel && message.channel.parentId) {
-      return allowedChannels.includes(message.channel.parentId)
-    }
-
-    return false
+    return channelListed(message, this.config.allowedChannels, 'dm')
   }
 
+  /** DMs are never passive. */
   private isPassiveChannel(message: Message): boolean {
-    const { passiveChannels } = this.config
-    if (passiveChannels.length === 0) return false
-
-    // DMs are never passive
-    if (message.channel.type === ChannelType.DM) return false
-
-    if (passiveChannels.includes(message.channel.id)) return true
-
-    // Check parent channel for threads
-    if ('parentId' in message.channel && message.channel.parentId) {
-      return passiveChannels.includes(message.channel.parentId)
-    }
-
-    return false
+    return channelListed(message, this.config.passiveChannels, undefined)
   }
 
   /**

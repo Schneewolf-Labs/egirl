@@ -14,7 +14,7 @@ import {
   handlePromptCommand,
   handleWipeCommand,
 } from './cli-commands'
-import { createCLIEventHandler, renderQueuedMessage } from './cli-events'
+import { createCLIEventHandler, printReply, renderQueuedMessage } from './cli-events'
 import { captureDuringRun } from './cli-live-input'
 import { contextBar, createStatusLine } from './cli-status'
 import type { Channel } from './types'
@@ -202,8 +202,8 @@ export class CLIChannel implements Channel {
 
           if (this.session.wasInterrupted) {
             console.log(`\n${c.warning}stopped.${RESET}\n`)
-          } else if (!state.streamed && response.content) {
-            console.log(`\n${c.secondary}✦ egirl${RESET} ${response.content}\n`)
+          } else {
+            printReply(state, response.content)
           }
 
           log.debug('cli', `[${response.provider}]`)

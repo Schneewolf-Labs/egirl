@@ -1,7 +1,7 @@
 import type { AgentLoop } from '../agent'
 import { colors, DIM, RESET } from '../ui/theme'
 import { errorMessage } from '../util/errors'
-import { createCLIEventHandler } from './cli-events'
+import { createCLIEventHandler, printReply } from './cli-events'
 
 export interface CommandContext {
   agent: AgentLoop
@@ -19,9 +19,7 @@ export async function handlePlanCommand(message: string, ctx: CommandContext): P
       planningMode: true,
     })
 
-    if (!state.streamed && response.content) {
-      console.log(`\n${c.secondary}✦ egirl${RESET} ${response.content}\n`)
-    }
+    printReply(state, response.content)
 
     if (!response.isPlan) return
 
@@ -35,9 +33,7 @@ export async function handlePlanCommand(message: string, ctx: CommandContext): P
         maxTurns: 20,
       })
 
-      if (!execState.streamed && execResponse.content) {
-        console.log(`\n${c.secondary}✦ egirl${RESET} ${execResponse.content}\n`)
-      }
+      printReply(execState, execResponse.content)
     } else {
       console.log(
         `\n${c.warning}Plan rejected.${RESET} You can modify your request and try again.\n`,

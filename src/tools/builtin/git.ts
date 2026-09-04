@@ -1,55 +1,7 @@
-import { spawn } from 'child_process'
 import { isAbsolute, resolve } from 'path'
+import { runGit } from '../../util/git'
+import { truncate } from '../../util/text'
 import type { Tool, ToolResult } from '../types'
-
-const MAX_OUTPUT = 20000
-
-function runGit(
-  args: string[],
-  cwd: string,
-  timeout = 15000,
-): Promise<{ code: number; stdout: string; stderr: string }> {
-  return new Promise((res) => {
-    let stdout = ''
-    let stderr = ''
-    let killed = false
-
-    const proc = spawn('git', args, { cwd, env: { ...process.env, GIT_TERMINAL_PROMPT: '0' } })
-
-    const timer = setTimeout(() => {
-      killed = true
-      proc.kill('SIGTERM')
-    }, timeout)
-
-    proc.stdout.on('data', (d) => {
-      stdout += d.toString()
-    })
-    proc.stderr.on('data', (d) => {
-      stderr += d.toString()
-    })
-
-    proc.on('error', (err) => {
-      clearTimeout(timer)
-      res({ code: 1, stdout: '', stderr: err.message })
-    })
-
-    proc.on('close', (code) => {
-      clearTimeout(timer)
-      if (killed) {
-        res({ code: 1, stdout, stderr: 'git command timed out' })
-        return
-      }
-      res({ code: code ?? 1, stdout, stderr })
-    })
-  })
-}
-
-function truncate(text: string, max = MAX_OUTPUT): string {
-  if (text.length <= max) return text
-  const half = Math.floor(max / 2)
-  const omitted = text.length - max
-  return `${text.slice(0, half)}\n\n... (${omitted} characters omitted) ...\n\n${text.slice(-half)}`
-}
 
 function resolveCwd(dir: string | undefined, cwd: string): string {
   if (!dir) return cwd

@@ -3,7 +3,7 @@ import type { Element } from '@xmpp/xml'
 import type { AgentLoop } from '../agent'
 import type { ReplyBroker } from '../report/broker'
 import { log } from '../util/logger'
-import { deliver, runTurn } from './spine'
+import { deliver, resolveTarget, runTurn } from './spine'
 import type { ChatChannel } from './types'
 
 export interface XMPPConfig {
@@ -94,16 +94,8 @@ export class XMPPChannel implements ChatChannel {
 
   /** Outbound: send a message to a JID (used by the task runner and the report tool). */
   async send(to: string, body: string): Promise<void> {
-    if (!to || to === 'self') {
-      // Fall back to the first allowed JID if configured
-      const fallback = this.config.allowedJids[0]
-      if (!fallback) {
-        log.warn('xmpp', 'send called without a target and no allowed_jids configured')
-        return
-      }
-      to = fallback
-    }
-    await deliver(this.surface(to), body)
+    const jid = resolveTarget('xmpp', to, this.config.allowedJids[0], 'no allowed_jids configured')
+    if (jid) await deliver(this.surface(jid), body)
   }
 
   private surface(jid: string) {

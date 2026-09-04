@@ -1,4 +1,5 @@
-import { Database } from 'bun:sqlite'
+import type { Database } from 'bun:sqlite'
+import { openDatabase } from '../util/db'
 import { log } from '../util/logger'
 
 /**
@@ -78,9 +79,8 @@ export class TraceStore {
   private ftsAvailable = true
 
   constructor(path: string, verbosity: TraceVerbosity, retentionDays: number) {
-    this.db = new Database(path)
+    this.db = openDatabase(path)
     this.verbosity = verbosity
-    this.db.run('PRAGMA journal_mode = WAL')
     this.db.run(`
       CREATE TABLE IF NOT EXISTS traces (
         id INTEGER PRIMARY KEY,

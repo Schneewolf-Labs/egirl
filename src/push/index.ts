@@ -11,7 +11,8 @@ import { errorMessage } from '../util/errors'
  * Notifications carry no content by design — see the note in vapid.ts.
  */
 
-import { Database } from 'bun:sqlite'
+import type { Database } from 'bun:sqlite'
+import { openDatabase } from '../util/db'
 import { log } from '../util/logger'
 import { subscriptionId, type VapidKeys, vapidAuthHeader } from './vapid'
 
@@ -27,7 +28,7 @@ export class PushStore {
   private db: Database
 
   constructor(path: string) {
-    this.db = new Database(path, { create: true })
+    this.db = openDatabase(path)
     this.db.run(`CREATE TABLE IF NOT EXISTS push_subscriptions (
       endpoint TEXT PRIMARY KEY,
       p256dh TEXT,

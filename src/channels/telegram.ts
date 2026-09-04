@@ -1,7 +1,7 @@
 import type { AgentLoop } from '../agent'
 import type { ReplyBroker } from '../report/broker'
 import { log } from '../util/logger'
-import { deliver, runTurn } from './spine'
+import { deliver, resolveTarget, runTurn } from './spine'
 import type { ChatChannel } from './types'
 
 /**
@@ -115,15 +115,13 @@ export class TelegramChannel implements ChatChannel {
 
   /** Outbound: send to a chat ID (used by the task runner and the report tool). */
   async send(to: string, body: string): Promise<void> {
-    const target = !to || to === 'self' ? this.defaultTarget() : to
-    if (!target) {
-      log.warn(
-        'telegram',
-        'send called without a target: nobody has messaged the bot yet and allowed_users has no numeric ID',
-      )
-      return
-    }
-    await deliver(this.surface(target), body)
+    const target = resolveTarget(
+      'telegram',
+      to,
+      this.defaultTarget(),
+      'nobody has messaged the bot yet and allowed_users has no numeric ID',
+    )
+    if (target) await deliver(this.surface(target), body)
   }
 
   private surface(chatId: string) {

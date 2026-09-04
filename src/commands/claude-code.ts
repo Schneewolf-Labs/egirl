@@ -1,8 +1,22 @@
-import { type ClaudeCodeConfig, createClaudeCodeChannel } from '../channels'
+import { type ClaudeCodeConfig, createClaudeCodeChannel, type TaskResult } from '../channels'
 import type { RuntimeConfig } from '../config'
 import { createProviderRegistry } from '../providers'
 import { applyLogLevel } from '../util/args'
 import { errorMessage } from '../util/errors'
+
+/** Print a task's result and cost line, or the error and exit. */
+async function report(run: () => Promise<TaskResult>): Promise<void> {
+  try {
+    const result = await run()
+    console.log(`\n${result.result}`)
+    console.log(
+      `\n[${result.turns} turns | $${result.costUsd.toFixed(4)} | ${(result.durationMs / 1000).toFixed(1)}s]`,
+    )
+  } catch (error) {
+    console.error(`Error: ${errorMessage(error)}`)
+    process.exit(1)
+  }
+}
 
 export async function runClaudeCode(config: RuntimeConfig, args: string[]): Promise<void> {
   applyLogLevel(args)
@@ -27,17 +41,7 @@ export async function runClaudeCode(config: RuntimeConfig, args: string[]): Prom
       process.exit(1)
     }
 
-    try {
-      const result = await channel.runTask(prompt)
-      console.log(`\n${result.result}`)
-      console.log(
-        `\n[${result.turns} turns | $${result.costUsd.toFixed(4)} | ${(result.durationMs / 1000).toFixed(1)}s]`,
-      )
-    } catch (error) {
-      const message = errorMessage(error)
-      console.error(`Error: ${message}`)
-      process.exit(1)
-    }
+    await report(() => channel.runTask(prompt))
     return
   }
 
@@ -55,17 +59,7 @@ export async function runClaudeCode(config: RuntimeConfig, args: string[]): Prom
     const followUp =
       promptIdx !== -1 ? (args[promptIdx + 1] ?? 'Continue.') : 'Continue the previous task.'
 
-    try {
-      const result = await channel.resumeSession(sessionId, followUp)
-      console.log(`\n${result.result}`)
-      console.log(
-        `\n[${result.turns} turns | $${result.costUsd.toFixed(4)} | ${(result.durationMs / 1000).toFixed(1)}s]`,
-      )
-    } catch (error) {
-      const message = errorMessage(error)
-      console.error(`Error: ${message}`)
-      process.exit(1)
-    }
+    await report(() => channel.resumeSession(sessionId, followUp))
     return
   }
 

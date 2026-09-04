@@ -19,6 +19,24 @@ import { buildToolCallPrefix, createNarration, type NarrationFormat } from './na
  * to runTurn. Nothing here discovers, negotiates or routes.
  */
 
+/**
+ * Resolve an outbound target. Empty or "self" means the channel's default; without one there
+ * is nowhere to send, which is logged rather than thrown -- a task report is best-effort.
+ */
+export function resolveTarget(
+  channel: string,
+  to: string,
+  fallback: string | undefined,
+  missing: string,
+): string | undefined {
+  if (to && to !== 'self') return to
+  if (!fallback) {
+    log.warn(channel, `send called without a target and ${missing}`)
+    return undefined
+  }
+  return fallback
+}
+
 /** One conversation on one transport, as the spine needs to see it. */
 export interface Surface {
   /** Channel name, for the broker key and logs ("xmpp", "telegram", ...). */
