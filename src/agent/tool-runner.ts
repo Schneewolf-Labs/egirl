@@ -7,6 +7,7 @@ import { type AgentContext, addMessage } from './context'
 import { truncateToolResultSync } from './context-window'
 import type { AgentEventHandler } from './events'
 import { duplicateToolWarning } from './nudges'
+import { publish } from './session-events'
 
 /** Default max tokens per tool result — matches context-window.ts default */
 const MAX_TOOL_RESULT_TOKENS = 8000
@@ -64,17 +65,21 @@ export async function runToolCalls(args: {
     const call = calls.find((c) => c.id === callId)
     events?.onToolCallComplete?.(callId, call?.name ?? 'unknown', result)
 
-    // Full-payload tool trace: the transcript logger keeps arg KEYS only; post-mortems need
+    // Full-payload tool record: the transcript logger keeps arg KEYS only; post-mortems need
     // the actual command and the actual output.
+    const done = {
+      name: call?.name ?? 'unknown',
+      success: result.success,
+      args: JSON.stringify(call?.arguments ?? {}),
+      output: result.output,
+    }
+    publish(context.sessionId, { t: 'tool_done', v: done })
     trace({
       session: context.sessionId,
       kind: 'tool',
-      name: call?.name ?? 'unknown',
-      success: result.success,
-      payload: {
-        args: JSON.stringify(call?.arguments ?? {}),
-        output: result.output,
-      },
+      name: done.name,
+      success: done.success,
+      payload: { args: done.args, output: done.output },
     })
 
     // Truncate oversized tool results at ingestion to prevent context bloat.

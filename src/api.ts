@@ -2,6 +2,13 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { AgentFactory, AgentLoop } from './agent'
 import { buildLearnPrompt } from './agent/learn-prompt'
+import {
+  anyRunning,
+  isRunning,
+  runningLoop,
+  runningSessions,
+  subscribe,
+} from './agent/session-events'
 import type { RuntimeConfig } from './config'
 import type { ThinkingLevel } from './config/schema'
 import type { ChatMessage, ThinkingConfig } from './providers/types'
@@ -22,6 +29,7 @@ import type { ConsoleInbox } from './report/console-channel'
 import { readLedger } from './skills/ledger'
 import { lintSkill } from './skills/linter'
 import { loadSkillsFromDirectories } from './skills/loader'
+import { sseResponse } from './sse'
 import type { Task, TaskRunner, TaskStore } from './tasks'
 import { WORKING_MEMORY_MAX_CHARS } from './tools/builtin/working-memory'
 import { traceStore } from './tracking/traces'
@@ -55,12 +63,6 @@ export interface APIDeps {
    * server has touched; the store knows every conversation from every channel, which is what
    * a session picker actually wants to show.
    */
-  /**
-   * External busy sources the server cannot see on its own — chiefly a background task grinding,
-   * whose runs do not pass through the server's own run queue. Combined with the server's
-   * in-flight count so a peer message can answer "busy" instead of queuing behind a long turn.
-   */
-  isBusy?: () => boolean
   /** Escalations addressed to `console:` — questions waiting for a human in the browser. */
   consoleInbox?: ConsoleInbox
   /** Delivers a console answer back to the run parked on it. */
@@ -162,14 +164,12 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
   // session's subsequent runs. The CLI holds the same thing per TTY session.
   const sessionThinking = new Map<string, ThinkingConfig>()
 
-  // Runs in flight through this server (chat, peer). The model has one generation slot, so a run
-  // generating here means another would queue behind it -- which is what "busy" reports. The
-  // session mutex is the wrong signal for this: it guards only tool execution, so it reads free
-  // during the long generation phase that is exactly when the instance is busiest.
-  let runsInFlight = 0
-  // Busy if a run is generating here OR a background task is grinding (deps.isBusy carries the
-  // task runner, whose runs do not pass through enqueueRun).
-  const instanceBusy = () => runsInFlight > 0 || (deps.isBusy?.() ?? false)
+  // Busy means a run is generating somewhere in this process -- a chat, a peer message, a
+  // background task -- because the model has one generation slot and another run would queue
+  // behind it. The session bus knows every live run, whoever started it. The session mutex is
+  // the wrong signal for this: it guards only tool execution, so it reads free during the long
+  // generation phase that is exactly when the instance is busiest.
+  const instanceBusy = () => anyRunning()
 
   function enqueueRun<T>(
     sessionId: string,
@@ -178,7 +178,6 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
     const chain = chains.get(sessionId) ?? { tail: Promise.resolve(), pending: 0 }
     const position = chain.pending
     chain.pending++
-    runsInFlight++
     // The tail never rejects (see below), so chaining directly off it is safe.
     const done = chain.tail.then(run)
     // Settle before bookkeeping: swallowing the rejection HERE is what keeps one failed turn
@@ -192,7 +191,6 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
       )
       .then(() => {
         chain.pending--
-        runsInFlight--
         if (chain.pending <= 0) chains.delete(sessionId)
       })
     chains.set(sessionId, chain)
@@ -424,74 +422,53 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
           // answer as they happen — the same live view the CLI gets. The JSON path below is
           // untouched for scripts and anything that doesn't ask to stream.
           if (body.stream === true) {
-            const enc = new TextEncoder()
-            let sink: (o: JSONValue) => void = () => {}
-            const { done, position } = enqueueRun(sessionId, () =>
-              agent.run(toRun, {
+            // The run narrates itself on the session bus; this request subscribes once its
+            // turn comes (inside the queued closure, so a run queued behind another on the same
+            // session never relays the earlier run's events) and forwards every frame as-is.
+            // `queued` is the request's own; everything else is the bus shape. The bus ends a
+            // run with `run_end` or `error`; only an agent that never published (a stub, or
+            // something other than AgentLoop behind the factory) gets one synthesized here from
+            // its return value, so the client always sees the run close.
+            let unsubscribe: (() => void) | undefined
+            let send: (frame: unknown) => void = () => {}
+            let ended = false
+            const { done, position } = enqueueRun(sessionId, () => {
+              unsubscribe = subscribe(sessionId, (ev) => {
+                if (ev.t === 'run_end' || ev.t === 'error') ended = true
+                send(ev)
+              })
+              return agent.run(toRun, {
                 ...(images?.length ? { images } : {}),
                 ...(sessionThinking.has(sessionId)
                   ? { thinking: sessionThinking.get(sessionId) }
                   : {}),
-                events: {
-                  onThinkingToken: (v) => sink({ t: 'reasoning', v }),
-                  onToken: (v) => sink({ t: 'token', v }),
-                  onToolCallStart: (calls) => sink({ t: 'tool', v: calls.map((c) => c.name) }),
-                  onToolCallComplete: (_id, name) => sink({ t: 'tool_done', v: name }),
-                },
-              }),
-            )
-            const stream = new ReadableStream<Uint8Array>({
-              async start(controller) {
-                // Guard every enqueue: if the client navigates away the controller closes, and a
-                // late token must not crash the run that's still finishing server-side.
-                sink = (o) => {
-                  try {
-                    controller.enqueue(enc.encode(`data: ${JSON.stringify(o)}\n\n`))
-                  } catch {}
-                }
-                // Keepalive: no token flows during a big prefill (minutes before the first
-                // token) or while a long tool runs mid-turn, and with no byte on the wire the
-                // connection idles out — Bun's own timeout, and any proxy in between. An SSE
-                // comment is ignored by the client's parser but resets every idle timer, so the
-                // stream survives an arbitrarily long gap anywhere in the turn. Sent only when
-                // the wire has actually been quiet, so real output is never delayed by it.
-                let lastByteAt = Date.now()
-                const realSink = sink
-                sink = (o) => {
-                  lastByteAt = Date.now()
-                  realSink(o)
-                }
-                const keepalive = setInterval(() => {
-                  if (Date.now() - lastByteAt < 4000) return
-                  try {
-                    controller.enqueue(enc.encode(': keepalive\n\n'))
-                    lastByteAt = Date.now()
-                  } catch {}
-                }, 4000)
-                if (position > 0) sink({ t: 'queued', position })
-                try {
-                  const response = await done
-                  resumeParkedTask(sessionId, deps)
-                  sink({
-                    t: 'done',
-                    content: response.content,
-                    output_tokens: response.usage.output_tokens,
-                    turns: response.turns,
-                    aborted: response.aborted ?? false,
-                    awaiting: response.awaitingInput ?? false,
-                  })
-                } catch (e) {
-                  sink({ t: 'error', message: e instanceof Error ? e.message : String(e) })
-                } finally {
-                  clearInterval(keepalive)
-                  try {
-                    controller.close()
-                  } catch {}
-                }
-              },
+              })
             })
-            return new Response(stream, {
-              headers: { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' },
+            return sseResponse(async (emit) => {
+              send = emit
+              if (position > 0) send({ t: 'queued', v: position })
+              try {
+                const response = await done
+                resumeParkedTask(sessionId, deps)
+                if (!ended) {
+                  send({
+                    t: 'run_end',
+                    v: {
+                      content: response.content,
+                      input_tokens: response.usage.input_tokens,
+                      output_tokens: response.usage.output_tokens,
+                      turns: response.turns,
+                      duration_ms: 0,
+                      aborted: response.aborted ?? false,
+                      awaiting: response.awaitingInput ?? false,
+                    },
+                  })
+                }
+              } catch (e) {
+                if (!ended) send({ t: 'error', v: e instanceof Error ? e.message : String(e) })
+              } finally {
+                unsubscribe?.()
+              }
             })
           }
 
@@ -736,7 +713,7 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
         // --- Sessions ---
         // Every conversation from every channel, newest first -- the CLI session started on the
         // train shows up here so the browser at work can pick it up. The store is the source of
-        // truth; the chains map layers on what is running right now.
+        // truth; the session bus layers on what is running right now.
         if (method === 'GET' && path === '/sessions') {
           const persisted = deps.conversationStore?.listSessions() ?? []
           const seen = new Set(persisted.map((s) => s.id))
@@ -745,20 +722,90 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
             channel: s.channel,
             message_count: s.messageCount,
             last_active_at: s.lastActiveAt,
-            busy: chains.has(s.id),
+            busy: isRunning(s.id),
           }))
-          // In-memory agents the store has not persisted (persistence off, or nothing said yet).
+          // In-memory agents the store has not persisted (persistence off, or nothing said yet),
+          // then runs the bus knows about that neither holds -- a task mid-flight, which has no
+          // agent in this map and nothing in the store until its first turn lands.
           for (const id of deps.agents.keys()) {
             if (seen.has(id)) continue
+            seen.add(id)
             sessions.push({
               id,
               channel: id.split(':')[0] ?? 'api',
               message_count: deps.agents.get(id)?.getContext().messages.length ?? 0,
               last_active_at: null,
-              busy: chains.has(id),
+              busy: isRunning(id),
+            })
+          }
+          for (const id of runningSessions()) {
+            if (seen.has(id)) continue
+            sessions.push({
+              id,
+              channel: id.split(':')[0] ?? 'api',
+              message_count: runningLoop(id)?.getContext().messages.length ?? 0,
+              last_active_at: null,
+              busy: true,
             })
           }
           return json({ sessions })
+        }
+
+        // Watch a session that is already running -- the spectator's half of the live view. A
+        // run started by a task, a peer, or another browser narrates on the session bus exactly
+        // as a /chat stream does, so the console can attach to it mid-flight. Ends with the
+        // run: `run_end` or `error` from the bus, or `idle` at once if nothing is running.
+        {
+          const m = method === 'GET' && path.match(/^\/sessions\/(.+)\/events$/)
+          if (m) {
+            const sessionId = decodeURIComponent(m[1] as string)
+            return sseResponse(
+              (send, closed) =>
+                new Promise<void>((resolve) => {
+                  const finish = () => {
+                    unsubscribe()
+                    resolve()
+                  }
+                  const unsubscribe = subscribe(sessionId, (ev) => {
+                    send(ev)
+                    if (ev.t === 'run_end' || ev.t === 'error') finish()
+                  })
+                  // Subscribed first, then checked: a run ending between the two would
+                  // otherwise be missed and the stream left waiting for one already over.
+                  if (!isRunning(sessionId)) {
+                    send({ t: 'idle', v: null })
+                    finish()
+                    return
+                  }
+                  closed.addEventListener('abort', finish, { once: true })
+                }),
+              { signal: req.signal },
+            )
+          }
+        }
+
+        // How full the window is, the same numbers /context prints in the CLI. For an agent that
+        // degrades well before it hits its limit, this is the number worth watching -- and it was
+        // previously only visible from a terminal attached to the process.
+        {
+          const m = method === 'GET' && path.match(/^\/sessions\/(.+)\/context$/)
+          if (m) {
+            const sessionId = decodeURIComponent(m[1] as string)
+            const agent = getOrCreateAgent(sessionId, deps)
+            const s = await agent.contextStatus()
+            return json({
+              session_id: s.sessionId,
+              utilization: s.utilization,
+              context_length: s.contextLength,
+              system_prompt_tokens: s.systemPromptTokens,
+              message_count: s.messageCount,
+              message_tokens: s.messageTokens,
+              has_summary: s.hasSummary,
+              summary_tokens: s.summaryTokens,
+              available: s.available,
+              thinking: sessionThinking.get(sessionId)?.level ?? null,
+            })
+          }
         }
 
         if (method === 'GET' && path.startsWith('/sessions/')) {
@@ -779,7 +826,7 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
               session_id: sessionId,
               message_count: messages.length,
               has_summary: !!deps.conversationStore.loadSummary(sessionId),
-              busy: chains.has(sessionId),
+              busy: isRunning(sessionId),
               messages: messages.map((m) => ({
                 role: m.role,
                 content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
@@ -794,7 +841,7 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
             session_id: ctx.sessionId,
             message_count: ctx.messages.length,
             has_summary: !!ctx.conversationSummary,
-            busy: chains.has(sessionId),
+            busy: isRunning(sessionId),
             messages: ctx.messages.map((m) => ({
               role: m.role,
               content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
@@ -835,30 +882,6 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
             // delivered=false means nothing was running — for inject, the caller should send
             // a normal chat message instead.
             return json({ ok: true, delivered })
-          }
-        }
-
-        // How full the window is, the same numbers /context prints in the CLI. For an agent that
-        // degrades well before it hits its limit, this is the number worth watching -- and it was
-        // previously only visible from a terminal attached to the process.
-        {
-          const m = method === 'GET' && path.match(/^\/sessions\/(.+)\/context$/)
-          if (m) {
-            const sessionId = decodeURIComponent(m[1] as string)
-            const agent = getOrCreateAgent(sessionId, deps)
-            const s = await agent.contextStatus()
-            return json({
-              session_id: s.sessionId,
-              utilization: s.utilization,
-              context_length: s.contextLength,
-              system_prompt_tokens: s.systemPromptTokens,
-              message_count: s.messageCount,
-              message_tokens: s.messageTokens,
-              has_summary: s.hasSummary,
-              summary_tokens: s.summaryTokens,
-              available: s.available,
-              thinking: sessionThinking.get(sessionId)?.level ?? null,
-            })
           }
         }
 

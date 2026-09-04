@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import type { AgentLoop } from '../src/agent'
+import { endRun, startRun } from '../src/agent/session-events'
 import { type APIConfig, type APIDeps, startAPIServer } from '../src/api'
 
 function stubAgent(sessionId: string): AgentLoop {
@@ -127,12 +128,12 @@ describe('API server', () => {
   test('POST /peer/message answers busy immediately when a run is in flight', async () => {
     // A worker deep in a long unbounded run cannot answer a peer message without queuing behind
     // its current turn, which can take minutes -- so the supervisor's timeout fires and it gets
-    // nothing. Instead the receiver checks the shared busy flag and replies at once, without
-    // touching the running work.
-    let busy = true
+    // nothing. Instead the receiver checks the session bus, which knows every live run in the
+    // process (here: a background task), and replies at once without touching the running work.
+    startRun('task:grind', stubAgent('task:grind'), 'keep going')
     const busyServer = startAPIServer(
       { host: '127.0.0.1', port: 3924 },
-      { ...deps, isBusy: () => busy, selfName: 'zero' },
+      { ...deps, selfName: 'zero' },
     )
     try {
       const res = await fetch('http://127.0.0.1:3924/peer/message', {
@@ -148,7 +149,18 @@ describe('API server', () => {
       expect(body.content).not.toContain('[agent-to-agent]')
 
       // And once free, the same message runs the agent normally.
-      busy = false
+      endRun('task:grind', {
+        t: 'run_end',
+        v: {
+          content: '',
+          input_tokens: 0,
+          output_tokens: 0,
+          turns: 1,
+          duration_ms: 0,
+          aborted: false,
+          awaiting: false,
+        },
+      })
       const res2 = await fetch('http://127.0.0.1:3924/peer/message', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },

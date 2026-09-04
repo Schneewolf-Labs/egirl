@@ -130,9 +130,6 @@ export async function runAPI(config: RuntimeConfig, args: string[]): Promise<voi
   }
 
   const server = startAPIServer(config.channels.api, {
-    // A grinding background task makes the instance busy; the server's own in-flight runs are
-    // tracked internally. The session mutex is not used here -- it guards only tool execution.
-    isBusy: () => taskRunner?.isRunning() ?? false,
     consoleInbox,
     replyBroker,
     push,

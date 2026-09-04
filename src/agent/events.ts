@@ -1,6 +1,34 @@
 import type { ToolCall } from '../providers/types'
 import type { ToolResult } from '../tools/types'
+import { publish } from './session-events'
 import type { BudgetLevel, BudgetStatus } from './token-budget'
+
+/**
+ * The caller's handler, with the streaming events also published on the session bus. Only the
+ * narration hooks are wrapped: the others (validation, before/after tool hooks) change the
+ * loop's behaviour, and tool-runner picks its execution path by whether they are defined.
+ * Tool completion is published by tool-runner itself, which holds the call and its result.
+ */
+export function publishingEvents(
+  sessionId: string,
+  caller: AgentEventHandler | undefined,
+): AgentEventHandler {
+  return {
+    ...caller,
+    onThinkingToken(token) {
+      publish(sessionId, { t: 'reasoning', v: token })
+      caller?.onThinkingToken?.(token)
+    },
+    onToken(token) {
+      publish(sessionId, { t: 'token', v: token })
+      caller?.onToken?.(token)
+    },
+    onToolCallStart(calls) {
+      publish(sessionId, { t: 'tool', v: calls.map((c) => c.name) })
+      caller?.onToolCallStart?.(calls)
+    },
+  }
+}
 
 /**
  * Result of post-response validation.

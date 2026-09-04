@@ -555,12 +555,14 @@ async function loadHistory(){
         // Say who it came from when it was not you -- in a peer session both sides are agents.
         if(msg.from)el.dataset.from=msg.from;
       }
+      if(d.busy&&inflight<=0)spectate();
     }
     if(!log.children.length)add('new conversation — say hi','sys');
   }catch(e){add('could not load history: '+(e.message||e),'sys')}
 }
 
 function switchSession(id){
+  stopSpectating();
   sid=id;localStorage.setItem('egirl-sid',sid);
   loaded.prompt=0;$('sysprompt').textContent='loading…';
   loadHistory();m.focus();
@@ -632,6 +634,64 @@ function collapseThink(el){
   head.onclick=()=>{bd.hidden=!bd.hidden;head.textContent=(bd.hidden?'▸':'▾')+' thinking'};
   el.append(head,bd);
 }
+// One live bubble for a run in progress: reasoning, the tool line, the streaming answer. The
+// same rendering whether this tab started the run (a send) or is watching one that
+// something else started (a spectator on a task or peer session). Frames are the session bus
+// shape, {t, v}, forwarded verbatim by the server.
+function liveBubble(mine){
+  const ph=add('','her pending');
+  ph.innerHTML='<div class="think" hidden></div><div class="toolline" hidden></div><div class="body cursor">…</div>';
+  const think=ph.querySelector('.think'),toolline=ph.querySelector('.toolline'),bodyEl=ph.querySelector('.body');
+  const t0=Date.now(); let answer='',reasoning='',ntok=0,started=false,ended=false;
+  const startAnswer=()=>{if(!started){started=true;bodyEl.textContent='';mine?.classList.remove('queued')}};
+  const finish=(v)=>{
+    if(ended)return; ended=true;
+    answer=(v&&v.content)||answer||(v?'(empty reply)':'(no output)');
+    ph.className='msg her'; bodyEl.className='body md'; bodyEl.innerHTML=md(answer);
+    if(reasoning)collapseThink(think); else think.hidden=true;
+    toolline.hidden=true;
+    status.textContent=v?Math.round((Date.now()-t0)/1000)+'s · '+(v.output_tokens??ntok)+' tok · '+(v.turns??'?')+' turns'+(v.aborted?' · stopped':'')+(v.awaiting?' · awaiting reply':''):'';
+  };
+  return {
+    el:ph,
+    // Returns true once the run is over.
+    on(ev){
+      if(ev.t==='queued'){status.textContent='queued ('+(ev.v+1)+')';}
+      else if(ev.t==='run_start'){status.textContent='thinking…';}
+      else if(ev.t==='reasoning'){reasoning+=ev.v;think.hidden=false;think.textContent=reasoning;think.scrollTop=think.scrollHeight;mine?.classList.remove('queued');status.textContent='thinking… '+Math.round((Date.now()-t0)/1000)+'s';}
+      else if(ev.t==='token'){startAnswer();answer+=ev.v;bodyEl.textContent=answer;log.scrollTop=log.scrollHeight;status.textContent='writing… '+(++ntok)+' tok';}
+      else if(ev.t==='tool'){toolline.hidden=false;toolline.textContent='· '+(ev.v||[]).join(', ')+' …';status.textContent='running '+(ev.v||[]).join(', ');}
+      else if(ev.t==='tool_done'){toolline.textContent='· '+(ev.v&&ev.v.name)+(ev.v&&ev.v.success===false?' ✗':' ✓');}
+      else if(ev.t==='inject'){add('↳ '+ev.v,'me queued');}
+      else if(ev.t==='error'){throw new Error(ev.v||'stream error');}
+      else if(ev.t==='run_end'){finish(ev.v||{});return true}
+      return false;
+    },
+    // Stream ended without a run_end frame (dropped connection): keep whatever streamed in.
+    finish(){finish()},
+    fail(err){
+      // Rendered in place: a local model can take minutes, and a swallowed error is
+      // indistinguishable from one that is merely slow.
+      ph.className='msg her fail'; ph.innerHTML=''; ph.textContent=String(err.message||err); status.textContent='failed';
+    },
+  };
+}
+// Read an SSE body frame by frame. fetch rather than EventSource: EventSource cannot carry the
+// bearer token.
+async function readSSE(r,onEvent){
+  const reader=r.body.getReader(),dec=new TextDecoder(); let buf='';
+  for(;;){
+    const {value,done}=await reader.read(); if(done)break;
+    buf+=dec.decode(value,{stream:true});
+    let i;
+    while((i=buf.indexOf('\\n\\n'))>=0){
+      const line=buf.slice(0,i).trim(); buf=buf.slice(i+2);
+      if(!line.startsWith('data:'))continue;
+      let ev; try{ev=JSON.parse(line.slice(5).trim())}catch(_){continue}
+      if(onEvent(ev))return;
+    }
+  }
+}
 f.onsubmit=async e=>{
   e.preventDefault();
   if(b.dataset.stop==='1') return; // the button is Stop right now — click handler owns it
@@ -643,46 +703,40 @@ f.onsubmit=async e=>{
   if(wasBusy)mine.classList.add('queued');
   setStreaming(true);
   status.textContent=wasBusy?'queued ('+inflight+')':'thinking…';
-  const ph=add('','her pending');
-  ph.innerHTML='<div class="think" hidden></div><div class="toolline" hidden></div><div class="body cursor">…</div>';
-  const think=ph.querySelector('.think'),toolline=ph.querySelector('.toolline'),bodyEl=ph.querySelector('.body');
-  const t0=Date.now(); let answer='',reasoning='',ntok=0,started=false;
-  const startAnswer=()=>{if(!started){started=true;bodyEl.textContent='';mine.classList.remove('queued')}};
+  // A spectator on this session would now double-render the run this send starts.
+  stopSpectating();
+  const bubble=liveBubble(mine);
   try{
     const r=await fetch('chat',{method:'POST',headers:H(),body:JSON.stringify({message:text||'(see attached image)',session_id:sid,images:imgs.length?imgs:undefined,stream:true})});
     if(!r.ok||!r.body) throw new Error('HTTP '+r.status+(r.status===401?' — bad or missing token':''));
-    const reader=r.body.getReader(),dec=new TextDecoder(); let buf='';
-    for(;;){
-      const {value,done}=await reader.read(); if(done)break;
-      buf+=dec.decode(value,{stream:true});
-      let i;
-      while((i=buf.indexOf('\\n\\n'))>=0){
-        const line=buf.slice(0,i).trim(); buf=buf.slice(i+2);
-        if(!line.startsWith('data:'))continue;
-        let ev; try{ev=JSON.parse(line.slice(5).trim())}catch(_){continue}
-        if(ev.t==='queued'){status.textContent='queued ('+(ev.position+1)+')';}
-        else if(ev.t==='reasoning'){reasoning+=ev.v;think.hidden=false;think.textContent=reasoning;think.scrollTop=think.scrollHeight;mine.classList.remove('queued');status.textContent='thinking… '+Math.round((Date.now()-t0)/1000)+'s';}
-        else if(ev.t==='token'){startAnswer();answer+=ev.v;bodyEl.textContent=answer;log.scrollTop=log.scrollHeight;status.textContent='writing… '+(++ntok)+' tok';}
-        else if(ev.t==='tool'){toolline.hidden=false;toolline.textContent='· '+(ev.v||[]).join(', ')+' …';status.textContent='running '+(ev.v||[]).join(', ');}
-        else if(ev.t==='tool_done'){toolline.textContent='· '+ev.v+' ✓';}
-        else if(ev.t==='error'){throw new Error(ev.message||'stream error');}
-        else if(ev.t==='done'){
-          answer=ev.content||answer||'(empty reply)';
-          ph.className='msg her'; bodyEl.className='body md'; bodyEl.innerHTML=md(answer);
-          if(reasoning)collapseThink(think); else think.hidden=true;
-          toolline.hidden=true;
-          status.textContent=Math.round((Date.now()-t0)/1000)+'s · '+(ev.output_tokens??ntok)+' tok · '+(ev.turns??'?')+' turns'+(ev.aborted?' · stopped':'')+(ev.awaiting?' · awaiting reply':'');
-        }
-      }
-    }
-    // Stream ended without a done frame (dropped connection): keep whatever streamed in.
-    if(ph.classList.contains('pending')){ph.className='msg her';bodyEl.className='body md';bodyEl.innerHTML=md(answer||'(no output)');if(reasoning)collapseThink(think);}
+    await readSSE(r,ev=>bubble.on(ev));
+    bubble.finish();
   }catch(err){
-    // Rendered in place: a local model can take minutes, and a swallowed error is
-    // indistinguishable from one that is merely slow.
-    ph.className='msg her fail'; ph.innerHTML=''; ph.textContent=String(err.message||err); status.textContent='failed';
+    bubble.fail(err);
   }finally{ inflight--; if(inflight<=0)setStreaming(false); m.focus() }
 };
+
+// ---- Spectating -------------------------------------------------------------
+// Switching to a session that is busy -- a task grinding, a peer conversation mid-reply, a run
+// started from another device -- attaches to its narration instead of showing a frozen history
+// with "working…" in the picker. Same bubble as a send; the run just was not ours to start.
+let spectator=null;
+function stopSpectating(){ if(spectator){spectator.abort();spectator=null} }
+async function spectate(){
+  stopSpectating();
+  const ctl=new AbortController(); spectator=ctl;
+  const bubble=liveBubble(null); status.textContent='watching…'; setStreaming(true);
+  try{
+    const r=await fetch('sessions/'+encodeURIComponent(sid)+'/events',{headers:H(),signal:ctl.signal});
+    if(!r.ok||!r.body) throw new Error('HTTP '+r.status);
+    let idle=false;
+    await readSSE(r,ev=>{ if(ev.t==='idle'){idle=true;return true} return bubble.on(ev) });
+    if(idle){bubble.el.remove();status.textContent=''} else bubble.finish();
+  }catch(err){
+    if(ctl.signal.aborted){bubble.el.remove();return}
+    bubble.fail(err);
+  }finally{ if(spectator===ctl)spectator=null; if(inflight<=0)setStreaming(false) }
+}
 
 async function loadPrompt(){
   try{

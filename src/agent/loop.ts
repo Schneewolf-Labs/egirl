@@ -24,7 +24,7 @@ import {
   createAgentContext,
   type SystemPromptOptions,
 } from './context'
-import type { AgentEventHandler } from './events'
+import { type AgentEventHandler, publishingEvents } from './events'
 import { ConversationHistory } from './history'
 import {
   checkpointNudge,
@@ -38,6 +38,7 @@ import {
 import { injectRecalledMemory } from './recall'
 import { attemptRecovery, resolveRecoveryCaps } from './recovery'
 import { createRunState } from './run-state'
+import { endRun, publish, startRun } from './session-events'
 import type { SessionMutex } from './session-mutex'
 import { isReasoningLooping, SpiralDetector, turnSignature } from './spiral-guard'
 import { type ContextStatus, computeContextStatus } from './status'
@@ -142,6 +143,7 @@ export class AgentLoop {
   inject(message: string): boolean {
     if (!this.activeRun) return false
     this.activeRun.pendingInjections.push(message)
+    publish(this.context.sessionId, { t: 'inject', v: message })
     return true
   }
 
@@ -152,7 +154,10 @@ export class AgentLoop {
   private async doRun(userMessage: string, options: AgentLoopOptions): Promise<AgentResponse> {
     await this.compactor.drain()
 
-    const { events, planningMode } = options
+    const { planningMode } = options
+    // Whoever started this run, its narration goes on the session bus too — that is what the
+    // spectator view and the journal read, so a task run nobody attached events to still shows.
+    const events = publishingEvents(this.context.sessionId, options.events)
     // Every run gets its own controller so interrupt() can end it without the caller having
     // passed a signal. An external signal (task timeout, shutdown) forwards into it, keeping
     // one signal — `signal` below — as the single thing the loop body watches.
@@ -227,6 +232,8 @@ export class AgentLoop {
 
     // Persistence and transcript closure run in `finally` so a provider error
     // mid-run doesn't lose the user message and tool activity already in context.
+    let runError: unknown
+    startRun(this.context.sessionId, this, userMessage)
     try {
       while (state.turns < maxTurns) {
         if (signal?.aborted) {
@@ -327,20 +334,26 @@ export class AgentLoop {
           has_tool_calls: (response.tool_calls?.length ?? 0) > 0,
         })
 
-        // Full-fidelity turn trace: thinking is otherwise streamed and dropped, and it is
+        // Full-fidelity turn record: thinking is otherwise streamed and dropped, and it is
         // the single most useful artifact when reconstructing why a run went sideways.
+        const turn = {
+          model: response.model ?? provider.name,
+          input_tokens: response.usage.input_tokens,
+          output_tokens: response.usage.output_tokens,
+          duration_ms: inferenceDuration,
+          content: response.content ?? '',
+          thinking: response.thinking ?? '',
+          tool_calls: (response.tool_calls ?? []).map((c) => c.name).join(','),
+        }
+        publish(this.context.sessionId, { t: 'turn', v: turn })
         trace({
           session: this.context.sessionId,
           kind: 'turn',
-          name: response.model ?? provider.name,
-          tokensIn: response.usage.input_tokens,
-          tokensOut: response.usage.output_tokens,
-          durationMs: inferenceDuration,
-          payload: {
-            content: response.content ?? '',
-            thinking: response.thinking ?? '',
-            tool_calls: (response.tool_calls ?? []).map((c) => c.name).join(','),
-          },
+          name: turn.model,
+          tokensIn: turn.input_tokens,
+          tokensOut: turn.output_tokens,
+          durationMs: turn.duration_ms,
+          payload: { content: turn.content, thinking: turn.thinking, tool_calls: turn.tool_calls },
         })
 
         reportTokenBudget({
@@ -492,6 +505,9 @@ export class AgentLoop {
         aborted: signal?.aborted ? true : undefined,
         awaitingInput: state.awaitingInput ? true : undefined,
       }
+    } catch (error) {
+      runError = error
+      throw error
     } finally {
       this.activeRun = null
       externalSignal?.removeEventListener('abort', forwardAbort)
@@ -504,6 +520,25 @@ export class AgentLoop {
         turns: state.turns,
         duration_ms: Date.now() - turnStartedAt,
       })
+      if (runError !== undefined) {
+        endRun(this.context.sessionId, {
+          t: 'error',
+          v: runError instanceof Error ? runError.message : String(runError),
+        })
+      } else {
+        endRun(this.context.sessionId, {
+          t: 'run_end',
+          v: {
+            content: finalContent,
+            input_tokens: totalUsage.input_tokens,
+            output_tokens: totalUsage.output_tokens,
+            turns: state.turns,
+            duration_ms: Date.now() - turnStartedAt,
+            aborted: signal?.aborted ?? false,
+            awaiting: state.awaitingInput,
+          },
+        })
+      }
     }
   }
 
