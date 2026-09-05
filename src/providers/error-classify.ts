@@ -1,3 +1,11 @@
+import {
+  AUTH_PATTERNS,
+  CONTEXT_OVERFLOW_PATTERNS,
+  matchesAny,
+  RATE_LIMIT_PATTERNS,
+  TRANSIENT_PATTERNS,
+} from '../util/error-patterns'
+
 /**
  * Error classification for LLM provider failures.
  * Used by the agent loop to decide retry vs fail-fast behavior.
@@ -10,67 +18,14 @@ export type ProviderErrorKind =
   | 'transient' // 5xx, network errors → retry with backoff
   | 'non_retryable' // billing, format errors → fail fast
 
-const RATE_LIMIT_PATTERNS = [
-  /rate[_ ]limit/i,
-  /too many requests/i,
-  /\b429\b/,
-  /exceeded.*quota/i,
-  /resource[_ ]exhausted/i,
-  /overloaded/i,
-]
-
-const AUTH_PATTERNS = [
-  /invalid[_ ]?api[_ ]?key/i,
-  /incorrect api key/i,
-  /authentication/i,
-  /unauthorized/i,
-  /\b401\b/,
-  /\b403\b/,
-  /access denied/i,
-  /forbidden/i,
-]
-
-const CONTEXT_PATTERNS = [
-  /context[_ ]?(?:length|window|limit)/i,
-  /too many tokens/i,
-  /maximum.*tokens/i,
-  /token limit/i,
-  /context_length_exceeded/i,
-]
-
-const TRANSIENT_PATTERNS = [
-  /\b50[0-4]\b/,
-  /internal server error/i,
-  /bad gateway/i,
-  /service unavailable/i,
-  /gateway timeout/i,
-  /ECONNREFUSED/,
-  /ECONNRESET/,
-  /ETIMEDOUT/,
-  /ENOTFOUND/,
-  /network/i,
-  /fetch failed/i,
-  /socket/i,
-]
-
 const NON_RETRYABLE_PATTERNS = [/billing/i, /payment/i, /insufficient.*funds/i]
 
 export function classifyProviderError(errorMessage: string): ProviderErrorKind {
-  for (const p of RATE_LIMIT_PATTERNS) {
-    if (p.test(errorMessage)) return 'rate_limit'
-  }
-  for (const p of AUTH_PATTERNS) {
-    if (p.test(errorMessage)) return 'auth'
-  }
-  for (const p of CONTEXT_PATTERNS) {
-    if (p.test(errorMessage)) return 'context_overflow'
-  }
-  for (const p of NON_RETRYABLE_PATTERNS) {
-    if (p.test(errorMessage)) return 'non_retryable'
-  }
-  for (const p of TRANSIENT_PATTERNS) {
-    if (p.test(errorMessage)) return 'transient'
-  }
+  if (matchesAny(errorMessage, RATE_LIMIT_PATTERNS)) return 'rate_limit'
+  if (matchesAny(errorMessage, AUTH_PATTERNS)) return 'auth'
+  if (matchesAny(errorMessage, CONTEXT_OVERFLOW_PATTERNS)) return 'context_overflow'
+  if (matchesAny(errorMessage, NON_RETRYABLE_PATTERNS)) return 'non_retryable'
+  if (matchesAny(errorMessage, TRANSIENT_PATTERNS)) return 'transient'
   return 'transient' // Default: assume transient and retry
 }
 

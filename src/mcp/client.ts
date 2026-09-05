@@ -9,7 +9,7 @@ import { log } from '../util/logger'
  * Connect to MCP servers and expose their tools as ordinary egirl tools.
  *
  * The point is that nothing downstream knows the difference. An MCP tool arrives at the executor
- * with the same shape as `read_file`, so safety, energy, permissions and the prompt all treat it
+ * with the same shape as `read_file`, so safety, permissions and the prompt all treat it
  * identically. MCP's `inputSchema` is already JSON Schema, which is what ToolDefinition.parameters
  * holds, so the conversion is a rename rather than a translation.
  *

@@ -2,7 +2,6 @@ import { join } from 'path'
 import { BrowserManager } from './browser'
 import type { RuntimeConfig } from './config'
 import { type ConversationStore, createConversationStore } from './conversation'
-import { createEnergyBudget, type EnergyBudget } from './energy'
 import { connectMcpServers, type McpConnection } from './mcp/client'
 import {
   createEmbeddingProvider,
@@ -46,7 +45,6 @@ export interface AppServices {
   providers: ProviderRegistry
   memory: MemoryManager | undefined
   workingMemory: WorkingMemory | undefined
-  energy: EnergyBudget | undefined
   conversations: ConversationStore | undefined
   taskStore: TaskStore | undefined
   toolExecutor: ToolExecutor
@@ -236,25 +234,6 @@ export async function createAppServices(config: RuntimeConfig): Promise<AppServi
     log.warn('main', 'Failed to initialize working memory:', error)
   }
 
-  // Energy budget (constrains autonomous actions)
-  let energy: EnergyBudget | undefined
-  if (config.energy.enabled) {
-    try {
-      const energyDbPath = join(config.workspace.path, 'energy.db')
-      energy = createEnergyBudget(energyDbPath, {
-        maxEnergy: config.energy.maxEnergy,
-        regenPerHour: config.energy.regenPerHour,
-      })
-      const state = energy.getState()
-      log.info(
-        'main',
-        `Energy budget initialized (${state.current.toFixed(1)}/${state.max} energy, +${state.regenPerHour}/hr)`,
-      )
-    } catch (error) {
-      log.warn('main', 'Failed to initialize energy budget:', error)
-    }
-  }
-
   const conversations = createConversations(config)
   const taskStore = createTasks(config)
   const skills = await loadSkills(config)
@@ -303,7 +282,7 @@ export async function createAppServices(config: RuntimeConfig): Promise<AppServi
     conversations,
     visionSupported,
   )
-  // MCP tools join the same executor as the builtins, so safety, energy and permissions apply to
+  // MCP tools join the same executor as the builtins, so safety and permissions apply to
   // them identically. A server that is down costs its own tools and nothing else.
   const mcpConnections: McpConnection[] = []
   if (config.mcp?.servers?.length) {
@@ -351,16 +330,12 @@ export async function createAppServices(config: RuntimeConfig): Promise<AppServi
   }
 
   toolExecutor.setSafety(buildSafetyConfig(config))
-  if (energy) {
-    toolExecutor.setEnergy(energy)
-  }
 
   return {
     config,
     providers,
     memory,
     workingMemory,
-    energy,
     mcpConnections,
     conversations,
     taskStore,

@@ -13,9 +13,6 @@ export interface SkillMetadata {
   // egirl extensions
   egirl?: {
     complexity: 'local' | 'remote' | 'auto'
-    canEscalate?: boolean
-    escalationTriggers?: string[]
-    preferredProvider?: string
   }
 }
 

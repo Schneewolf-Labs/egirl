@@ -104,7 +104,6 @@ test/
 │   └── loader.test.ts
 ├── conversation/
 │   └── store.test.ts
-├── energy/                           # Energy-budget accounting
 ├── memory/
 │   ├── search.test.ts
 │   ├── indexer.test.ts
@@ -135,7 +134,6 @@ test/
 ├── tools/
 │   ├── format.test.ts
 │   ├── executor.test.ts
-│   ├── executor-energy.test.ts
 │   ├── browser.test.ts
 │   ├── git.test.ts
 │   ├── web-research.test.ts
@@ -178,7 +176,6 @@ See [architecture.md](architecture.md) for the full breakdown. Key points:
 - `src/channels/` — user interfaces (CLI, Discord, XMPP, Telegram, Claude Code bridge)
 - `src/config/` — config loading and TypeBox validation
 - `src/conversation/` — conversation persistence (SQLite)
-- `src/energy/` — energy-budget accounting for tool calls
 - `src/memory/` — hybrid-search memory system with embeddings
 - `src/providers/` — llama.cpp provider (the only one)
 - `src/safety/` — command filtering, path sandboxing, audit, permission rules

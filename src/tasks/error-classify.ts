@@ -1,3 +1,11 @@
+import {
+  AUTH_PATTERNS,
+  CONTEXT_OVERFLOW_PATTERNS,
+  matchesAny,
+  RATE_LIMIT_PATTERNS,
+  TRANSIENT_PATTERNS,
+} from '../util/error-patterns'
+
 /**
  * Error classification for task failures.
  * Determines the appropriate recovery strategy based on error type.
@@ -11,73 +19,20 @@ export type TaskErrorKind =
   | 'transient' // 5xx, network errors → retry with backoff
   | 'unknown' // unclassified → use default retry policy
 
-interface ErrorPatterns {
-  rateLimit: RegExp[]
-  auth: RegExp[]
-  timeout: RegExp[]
-  contextOverflow: RegExp[]
-  transient: RegExp[]
-}
-
-const PATTERNS: ErrorPatterns = {
-  rateLimit: [
-    /rate[_ ]limit/i,
-    /too many requests/i,
-    /\b429\b/,
-    /exceeded.*quota/i,
-    /resource[_ ]exhausted/i,
-    /usage[_ ]limit/i,
-    /overloaded/i,
-  ],
-  auth: [
-    /invalid[_ ]?api[_ ]?key/i,
-    /incorrect api key/i,
-    /authentication/i,
-    /unauthorized/i,
-    /\b401\b/,
-    /\b403\b/,
-    /access denied/i,
-    /forbidden/i,
-    /token.*expired/i,
-    /invalid token/i,
-  ],
-  timeout: [/timed? ?out/i, /deadline exceeded/i, /aborted/i, /ETIMEDOUT/, /ECONNRESET/],
-  contextOverflow: [
-    /context[_ ]?(?:length|window|limit)/i,
-    /too many tokens/i,
-    /maximum.*tokens/i,
-    /token limit/i,
-    /context_length_exceeded/i,
-  ],
-  transient: [
-    /\b50[0-4]\b/,
-    /internal server error/i,
-    /bad gateway/i,
-    /service unavailable/i,
-    /gateway timeout/i,
-    /ECONNREFUSED/,
-    /ENOTFOUND/,
-    /network/i,
-    /fetch failed/i,
-  ],
-}
+const TIMEOUT_PATTERNS = [
+  /timed? ?out/i,
+  /deadline exceeded/i,
+  /aborted/i,
+  /ETIMEDOUT/,
+  /ECONNRESET/,
+]
 
 export function classifyError(error: string): TaskErrorKind {
-  for (const pattern of PATTERNS.rateLimit) {
-    if (pattern.test(error)) return 'rate_limit'
-  }
-  for (const pattern of PATTERNS.auth) {
-    if (pattern.test(error)) return 'auth'
-  }
-  for (const pattern of PATTERNS.timeout) {
-    if (pattern.test(error)) return 'timeout'
-  }
-  for (const pattern of PATTERNS.contextOverflow) {
-    if (pattern.test(error)) return 'context_overflow'
-  }
-  for (const pattern of PATTERNS.transient) {
-    if (pattern.test(error)) return 'transient'
-  }
+  if (matchesAny(error, RATE_LIMIT_PATTERNS)) return 'rate_limit'
+  if (matchesAny(error, AUTH_PATTERNS)) return 'auth'
+  if (matchesAny(error, TIMEOUT_PATTERNS)) return 'timeout'
+  if (matchesAny(error, CONTEXT_OVERFLOW_PATTERNS)) return 'context_overflow'
+  if (matchesAny(error, TRANSIENT_PATTERNS)) return 'transient'
   return 'unknown'
 }
 

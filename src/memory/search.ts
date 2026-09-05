@@ -195,20 +195,6 @@ export class MemorySearch {
   }
 
   /**
-   * Search using an image (requires multimodal embeddings)
-   */
-  async searchByImage(imageUrl: string, options: SearchOptions = {}): Promise<SearchResult[]> {
-    if (!this.embeddings || !this.embeddings.supportsImages) {
-      throw new Error('Image search requires a multimodal embedding provider')
-    }
-
-    const input: EmbeddingInput = { type: 'image', image: imageUrl }
-    const queryEmbedding = await this.embeddings.embed(input)
-
-    return this.searchVector(queryEmbedding, options)
-  }
-
-  /**
    * Search using text, embedding the query first
    */
   async searchSemantic(query: string, options: SearchOptions = {}): Promise<SearchResult[]> {

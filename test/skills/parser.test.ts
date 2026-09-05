@@ -14,7 +14,6 @@ openclaw:
   emoji: "🔀"
 egirl:
   complexity: "remote"
-  canEscalate: true
 ---
 
 # Git Operations
@@ -26,7 +25,6 @@ Instructions for git operations.`
     expect(result.metadata.openclaw?.requires?.bins).toEqual(['git'])
     expect(result.metadata.openclaw?.emoji).toBe('🔀')
     expect(result.metadata.egirl?.complexity).toBe('remote')
-    expect(result.metadata.egirl?.canEscalate).toBe(true)
     expect(result.content).toContain('# Git Operations')
     expect(result.content).toContain('Instructions for git operations.')
   })
@@ -46,7 +44,6 @@ Just some instructions.`
     const md = `---
 egirl:
   complexity: "local"
-  escalationTriggers: ["error", "timeout"]
 ---
 
 # Local Skill
@@ -56,7 +53,6 @@ Does stuff locally.`
     const result = parseSkillMarkdown(md)
 
     expect(result.metadata.egirl?.complexity).toBe('local')
-    expect(result.metadata.egirl?.escalationTriggers).toEqual(['error', 'timeout'])
     expect(result.metadata.openclaw).toBeUndefined()
   })
 

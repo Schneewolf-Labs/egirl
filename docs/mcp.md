@@ -4,7 +4,7 @@ egirl can connect to [Model Context Protocol](https://modelcontextprotocol.io) s
 their tools to the agent alongside the builtins.
 
 Nothing downstream knows the difference. An MCP tool reaches the executor in the same shape as
-`read_file`, so safety rules, the energy budget, the permission supervisor and the system prompt
+`read_file`, so safety rules, the permission supervisor and the system prompt
 all treat it identically.
 
 ## Configuration

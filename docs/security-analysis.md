@@ -230,23 +230,6 @@ Missing patterns:
 
 ---
 
-### 4.2 Confirmation Mode Disabled by Default
-
-**File**: `src/safety/index.ts:58-61`
-
-```typescript
-confirmation: {
-  enabled: false,
-  tools: ['execute_command', 'write_file', 'edit_file'],
-},
-```
-
-The confirmation system (requiring user approval before dangerous tools run) is configured but disabled. This is **intentional by design** — egirl is a single-user local-first agent where the operator trusts the agent to execute autonomously. The command allowlist provides the safety boundary instead of interactive confirmation.
-
-**Status**: Won't fix — by design. Documented in code. Users can enable via `safety.confirmation.enabled = true` in `egirl.toml`.
-
----
-
 ### 4.3 Hardcoded User-Agent String
 
 **File**: `src/tools/builtin/web-research.ts` (if present)
@@ -283,6 +266,5 @@ Based on OpenClaw's security model and public vulnerability disclosures:
 5. **Replace command blocklist with allowlist** — Rewrite `src/safety/command-filter.ts`
 6. **Remove or restrict `browser_eval`** — Remove from `src/tools/builtin/browser.ts`
 7. **Add rate limiting to API** — Simple counter in `src/api.ts`
-8. **Enable confirmation for `execute_command`** — Default change in `src/safety/index.ts`
 9. **Add try/catch to JSON parse** — `src/conversation/store.ts:83-86`
 10. **Require bearer token when binding outside localhost** — `src/api.ts` (default host is already `127.0.0.1`)

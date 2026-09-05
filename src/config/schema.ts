@@ -255,12 +255,6 @@ const baseProperties = {
           path: Type.Optional(Type.String()),
         }),
       ),
-      confirmation: Type.Optional(
-        Type.Object({
-          enabled: Type.Boolean({ default: false }),
-          tools: Type.Optional(Type.Array(Type.String())),
-        }),
-      ),
       permission_rules: Type.Optional(
         Type.Object({
           allow: Type.Array(Type.String(), { default: [] }),
@@ -361,14 +355,6 @@ const baseProperties = {
           }),
         ),
       ),
-    }),
-  ),
-
-  energy: Type.Optional(
-    Type.Object({
-      enabled: Type.Boolean({ default: true }),
-      max_energy: Type.Number({ default: 20 }),
-      regen_per_hour: Type.Number({ default: 10 }),
     }),
   ),
 
@@ -671,10 +657,6 @@ export interface RuntimeConfig {
       enabled: boolean
       path?: string
     }
-    confirmation: {
-      enabled: boolean
-      tools: string[]
-    }
     permissionRules: {
       allow: string[]
       deny: string[]
@@ -732,11 +714,6 @@ export interface RuntimeConfig {
       headers?: Record<string, string>
       timeoutMs?: number
     }>
-  }
-  energy: {
-    enabled: boolean
-    maxEnergy: number
-    regenPerHour: number
   }
   tasks: {
     enabled: boolean

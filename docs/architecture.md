@@ -222,7 +222,6 @@ egirl/
 │   │   └── index.ts          # Config loading + validation
 │   ├── conversation/
 │   │   └── store.ts          # SQLite conversation persistence
-│   ├── energy/               # Energy-budget system for tool calls
 │   ├── memory/
 │   │   ├── index.ts          # MemoryManager (public API)
 │   │   ├── files.ts          # MEMORY.md + daily logs + images

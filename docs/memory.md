@@ -9,14 +9,12 @@ egirl has a hybrid memory system that combines keyword search (SQLite FTS5) with
 │              MemoryManager                │
 │                                           │
 │  set() / get() / search()                 │
-│  setImage() / setMultimodal()             │
 │                                           │
 │  ┌─────────────┐  ┌───────────────────┐   │
 │  │ MemoryFiles │  │  MemoryIndexer    │   │
 │  │             │  │                   │   │
 │  │ MEMORY.md   │  │  SQLite (FTS5)    │   │
 │  │ daily logs  │  │  embedding vectors│   │
-│  │ images/     │  │                   │   │
 │  └─────────────┘  └────────┬──────────┘   │
 │                            │              │
 │                   ┌────────▼──────────┐   │
@@ -46,15 +44,9 @@ The public API. All memory operations go through this class.
 - `get(key)` — Retrieve by exact key
 - `delete(key)` — Remove a memory
 
-**Image operations:**
-- `setImage(key, imageData, description?)` — Store an image (base64) with optional text description
-- `setMultimodal(key, text, imageData)` — Store text + image together
-- `getWithImage(key)` — Retrieve a memory including its image data
-
 **Search operations:**
 - `searchText(query, limit?)` — Keyword search (FTS only)
 - `searchSemantic(query, limit?)` — Vector similarity search
-- `searchByImage(imageData, limit?)` — Find memories similar to an image
 - `searchHybrid(query, limit?)` — Combined FTS + vector search (default for tools)
 - `findSimilar(key, limit?)` — Find memories similar to a given memory
 
@@ -64,7 +56,6 @@ Handles filesystem storage:
 
 - **MEMORY.md**: The curated memory file in the workspace. This is a sacred file — never modified programmatically without user permission.
 - **Daily logs**: Append-only logs in `workspace/logs/` recording memory operations.
-- **Images**: Stored in `workspace/images/` as PNG files keyed by memory key.
 
 ### MemoryIndexer (`src/memory/indexer.ts`)
 
@@ -78,8 +69,7 @@ Schema (conceptual):
 memories:
   key         TEXT PRIMARY KEY
   value       TEXT
-  contentType TEXT ('text' | 'image' | 'multimodal')
-  imagePath   TEXT
+  contentType TEXT
   embedding   BLOB (Float32Array)
   createdAt   TEXT
   updatedAt   TEXT
@@ -97,7 +87,6 @@ Implements search strategies:
 - Loads all embeddings into memory
 - Computes cosine similarity between query vector and each stored vector
 - Sorts by similarity score
-- Can filter by content type (text, image, multimodal)
 
 **Hybrid search** (`searchHybrid`):
 - Runs both FTS and vector search in parallel
@@ -105,10 +94,6 @@ Implements search strategies:
 - Deduplicates by key, keeping the higher combined score
 - This is the default search used by the `memory_search` tool
 
-**Image search** (`searchByImage`):
-- Embeds the query image using the multimodal embedding provider
-- Runs vector search against stored embeddings
-- Requires a multimodal embedding provider (e.g., Qwen3-VL-Embedding)
 
 ## Embedding Providers
 

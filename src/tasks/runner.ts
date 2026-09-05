@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { isAbsolute, resolve } from 'node:path'
 import { AgentLoop } from '../agent/loop'
+import { subscribeAll } from '../agent/session-events'
 import type { SessionMutex } from '../agent/session-mutex'
 import type { AgentLoopDeps } from '../agent/types'
 import type { RuntimeConfig } from '../config'
@@ -84,6 +85,7 @@ export class TaskRunner {
   private runningCount = 0
   private runningTasks: Map<string, { controller: AbortController }> = new Map()
   private lastInteractionAt: number = Date.now()
+  private unsubscribeBus: (() => void) | undefined
 
   constructor(deps: TaskRunnerDeps) {
     this.deps = deps
@@ -107,6 +109,11 @@ export class TaskRunner {
         log.info('tasks', `Re-armed ${task.name} (${task.id}): active with no nextRunAt`)
       }
     }
+    // Presence, for discovery's idle check: any run that is not a task's own is a human talking
+    // to the agent on some channel.
+    this.unsubscribeBus = subscribeAll((sessionId, event) => {
+      if (event.t === 'run_start' && !sessionId.startsWith('task:')) this.recordInteraction()
+    })
     const { tickIntervalMs } = this.deps.tasksConfig
     this.tickTimer = setInterval(() => this.tick(), tickIntervalMs)
     log.info('tasks', `Task runner started (tick=${tickIntervalMs}ms)`)
@@ -115,6 +122,8 @@ export class TaskRunner {
   stop(): void {
     if (this.tickTimer) clearInterval(this.tickTimer)
     this.tickTimer = undefined
+    this.unsubscribeBus?.()
+    this.unsubscribeBus = undefined
 
     for (const [, entry] of this.runningTasks) {
       entry.controller.abort()

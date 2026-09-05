@@ -27,9 +27,7 @@ export {
   writeTool,
 } from './builtin'
 export {
-  type ConfirmCallback,
   createToolExecutor,
-  type ExecutionContext,
   ToolExecutor,
 } from './executor'
 export {
