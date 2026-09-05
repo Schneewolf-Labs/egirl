@@ -74,7 +74,7 @@ Requirements:
 
 ## Codex Backend
 
-Codex uses the installed `codex` CLI in interactive mode. egirl starts it in a PTY, watches the terminal screen, and asks the local model to choose numbered responses for trust prompts, permission prompts, and clarifying questions.
+Codex uses the installed CLI's `app-server` over stdio with subscription authentication. Structured turn events determine completion, and command/file approvals go through the local permission supervisor. Missing supervisors, unsupported questions, and supervisor errors stop the task instead of silently approving. No terminal scraping is involved.
 
 ```toml
 [channels.code_agent]
@@ -87,17 +87,19 @@ working_dir = "~/projects/myrepo"
 Requirements:
 
 - Install and authenticate the local `codex` CLI.
-- Keep `node-pty` installed through `bun install`.
-- Run a local llama.cpp chat model, because egirl uses it to decide Codex interactive prompts.
+- Use a CLI version that supports `codex app-server` (verified with 0.153.1).
+- Set `EGIRL_CODEX_BIN` to an absolute executable path when Codex is not on PATH. Native Windows `codex.exe` is supported without a Node or PTY shim.
+- Run a local llama.cpp chat model for supervised approvals.
 
 Codex permission modes map to CLI sandbox choices:
 
 | egirl mode | Codex sandbox |
 |------------|---------------|
 | `bypassPermissions` | danger-full-access |
-| anything else | workspace-write |
+| `plan` | read-only |
+| `default`, `acceptEdits` | workspace-write |
 
-Codex ignores `max_turns`; the CLI decides when the interactive task is complete.
+Codex ignores `max_turns`; the app-server reports when its turn completes. A successful tool result means Codex returned a final answer; read that answer for whether the requested work and tests succeeded. Timeouts and interrupted or failed turns always return failure, and the owned server process tree is stopped. Each delegation starts a fresh ephemeral thread in the selected working directory.
 
 ## OpenCode Backend
 

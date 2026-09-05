@@ -252,7 +252,7 @@ Current production dependencies:
 @sinclair/typebox                # runtime schema validation
 @xmpp/client                     # XMPP/Jabber protocol client
 discord.js                       # Discord bot framework
-node-pty                         # interactive Codex backend for code_agent
+codex app-server (installed CLI)  # structured Codex backend for code_agent
 playwright                       # browser automation
 smol-toml                        # TOML parser
 yaml                             # YAML parsing (skill frontmatter)
