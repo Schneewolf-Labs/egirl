@@ -42,7 +42,7 @@ export async function createCommandRuntime(config: RuntimeConfig): Promise<Comma
       memory: services.memory,
       conversationStore: services.conversations,
       skills: services.skills,
-      additionalContext: standup.context || undefined,
+      additionalContext: standup || undefined,
       sessionMutex,
     })
 

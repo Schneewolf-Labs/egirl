@@ -434,7 +434,7 @@ export class TaskRunner {
     const standup = await gatherStandup(cwd)
 
     const contextParts: string[] = []
-    if (standup.context) contextParts.push(standup.context)
+    if (standup) contextParts.push(standup)
 
     // Pinned task state. Lives in the system prompt (via additionalContext), so it is present
     // every turn and survives compaction — unlike notes the agent reads with a tool call, whose

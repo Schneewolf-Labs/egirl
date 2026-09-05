@@ -37,7 +37,12 @@ import {
 } from './nudges'
 import { injectRecalledMemory } from './recall'
 import { attemptRecovery, resolveRecoveryCaps } from './recovery'
-import { createRolloverTools, performRollover, type RolloverRequest } from './rollover'
+import {
+  CONTEXT_BREAK_THRESHOLD,
+  createRolloverTools,
+  performRollover,
+  type RolloverRequest,
+} from './rollover'
 import { createRunState } from './run-state'
 import { endRun, publish, startRun } from './session-events'
 import type { SessionMutex } from './session-mutex'
@@ -53,13 +58,6 @@ import type { AgentLoopDeps, AgentLoopOptions, AgentResponse } from './types'
  * failed to catch a runaway, which is logged as an error. High enough to never bound real work.
  */
 const UNBOUNDED_SAFETY_CEILING = 10_000
-
-/**
- * Context utilization at which a consolidation break fires regardless of the turn interval —
- * the point where compaction is imminent, so durable capture must happen now. Matches the
- * /context "getting tight" threshold so the two agree.
- */
-const CONTEXT_BREAK_THRESHOLD = 0.8
 
 export type AgentFactory = (sessionId: string) => AgentLoop
 

@@ -83,6 +83,16 @@ function decisionFromAction(
   }
 }
 
+/** A fixed action as a decision: `allow` picks the allow option when the prompt offers one. */
+function fallbackDecision(
+  request: PermissionRequest,
+  action: 'allow' | 'deny' | 'ask_user',
+  reason: string,
+): PermissionDecision {
+  const optionId = action === 'allow' ? optionForAction(request, 'allow') : undefined
+  return decisionFromAction(optionId ? 'choose' : action, reason, optionId)
+}
+
 function optionForAction(request: PermissionRequest, action: 'allow' | 'deny'): string | undefined {
   const options = request.options ?? []
   const preferred =
@@ -211,12 +221,7 @@ export class PermissionSupervisor {
     const { config } = this.deps
 
     if (config.mode === 'bypass') {
-      const optionId = optionForAction(request, 'allow')
-      return decisionFromAction(
-        optionId ? 'choose' : 'allow',
-        'Permission supervisor bypassed',
-        optionId,
-      )
+      return fallbackDecision(request, 'allow', 'Permission supervisor bypassed')
     }
 
     if (config.mode === 'ask_user') {
@@ -227,12 +232,10 @@ export class PermissionSupervisor {
     if (ruleDecision) return ruleDecision
 
     if (config.mode === 'rules_only' || !this.deps.localProvider) {
-      const optionId =
-        config.defaultAction === 'allow' ? optionForAction(request, 'allow') : undefined
-      return decisionFromAction(
-        optionId ? 'choose' : config.defaultAction,
+      return fallbackDecision(
+        request,
+        config.defaultAction,
         'No rule matched; used default permission action',
-        optionId,
       )
     }
 
@@ -297,12 +300,10 @@ export class PermissionSupervisor {
       return decision
     } catch (error) {
       log.warn('permissions', `Local model decision failed: ${error}`)
-      const optionId =
-        config.defaultAction === 'allow' ? optionForAction(request, 'allow') : undefined
-      return decisionFromAction(
-        optionId ? 'choose' : config.defaultAction,
+      return fallbackDecision(
+        request,
+        config.defaultAction,
         'Local model decision failed; used default permission action',
-        optionId,
       )
     }
   }

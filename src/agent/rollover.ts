@@ -14,8 +14,12 @@ import type { ConversationHistory } from './history'
  * `conversation.context_rollover` is on (or per run, for unbounded tasks).
  */
 
-/** Utilization at which the checkpoint nudge fires; mirrors CONTEXT_BREAK_THRESHOLD in loop.ts. */
-const CHECKPOINT_UTILIZATION = 0.8
+/**
+ * Context utilization (last prompt tokens / window) at which the loop injects the checkpoint
+ * nudge: the window is filling and compaction or rollover is imminent, so durable capture must
+ * happen now. Shared with the loop so the nudge and `context_remaining` agree.
+ */
+export const CONTEXT_BREAK_THRESHOLD = 0.8
 
 export interface RolloverRequest {
   handoff?: string
@@ -47,7 +51,7 @@ export function createRolloverTools(deps: RolloverToolDeps): Map<string, Tool> {
       const pct = Math.round((used / Math.max(1, deps.contextLength)) * 100)
       const untilCheckpoint = Math.max(
         0,
-        Math.floor(deps.contextLength * CHECKPOINT_UTILIZATION) - used,
+        Math.floor(deps.contextLength * CONTEXT_BREAK_THRESHOLD) - used,
       )
       return {
         success: true,

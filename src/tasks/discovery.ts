@@ -105,7 +105,7 @@ export class Discovery {
 
       // Proactive memory retrieval
       const contextParts: string[] = []
-      if (standup.context) contextParts.push(standup.context)
+      if (standup) contextParts.push(standup)
       contextParts.push(tasksSummary)
 
       if (this.deps.memory) {

@@ -8,26 +8,16 @@ import {
   isGitRepo,
 } from './gather'
 
-export interface StandupReport {
-  /** Formatted context string for injection into agent system prompt */
-  context: string
-  /** Whether the workspace is a git repo at all */
-  isGitRepo: boolean
-}
-
 /**
  * Gather workspace state and produce a standup report.
  * Runs git commands against the workspace directory, collects branch info,
  * recent commits, working tree status, and stashes.
  *
  * Returns a formatted string suitable for injection into the agent's
- * system prompt as additionalContext.
+ * system prompt as additionalContext; empty when the workspace is not a git repo.
  */
-export async function gatherStandup(workspaceDir: string): Promise<StandupReport> {
-  const hasGit = await isGitRepo(workspaceDir)
-  if (!hasGit) {
-    return { context: '', isGitRepo: false }
-  }
+export async function gatherStandup(workspaceDir: string): Promise<string> {
+  if (!(await isGitRepo(workspaceDir))) return ''
 
   const [branch, status, commits, stashCount, lastActivity] = await Promise.all([
     gatherBranch(workspaceDir),
@@ -102,5 +92,5 @@ export async function gatherStandup(workspaceDir: string): Promise<StandupReport
   const context = sections.join('\n\n')
   log.debug('standup', `Gathered standup: ${context.length} chars`)
 
-  return { context, isGitRepo: true }
+  return context
 }
