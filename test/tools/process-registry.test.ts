@@ -49,7 +49,10 @@ describe('ProcessRegistry', () => {
   test('output supports since_line for incremental reads', async () => {
     const reg = makeRegistry()
     const snap = reg.start({
-      command: "printf 'one\\ntwo\\nthree\\n'",
+      command:
+        process.platform === 'win32'
+          ? 'echo one&&echo two&&echo three'
+          : "printf 'one\\ntwo\\nthree\\n'",
       cwd: tmpdir(),
     })
     await waitFor(() => reg.list().find((p) => p.id === snap.id)?.status === 'exited')
@@ -74,7 +77,11 @@ describe('ProcessRegistry', () => {
 
   test('sendInput writes to stdin and process consumes it', async () => {
     const reg = makeRegistry()
-    const snap = reg.start({ command: 'cat', cwd: tmpdir() })
+    const command =
+      process.platform === 'win32'
+        ? 'powershell.exe -NoProfile -Command "$line = [Console]::ReadLine(); [Console]::WriteLine($line)"'
+        : 'cat'
+    const snap = reg.start({ command, cwd: tmpdir() })
     const ok = reg.sendInput(snap.id, 'ping')
     expect(ok).toBe(true)
 

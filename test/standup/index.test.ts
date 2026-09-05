@@ -61,7 +61,7 @@ describe('gatherStandup', () => {
     expect(report).toContain('untracked.txt')
 
     exec('git checkout -- hello.txt')
-    exec('rm untracked.txt')
+    await rm(join(testDir, 'untracked.txt'))
   })
 
   test('shows stash count in standup', async () => {

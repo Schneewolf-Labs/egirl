@@ -9,7 +9,7 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
-import { join } from 'path'
+import { basename, join } from 'path'
 import { findConfigFragments, loadConfigFragments } from '../../src/config/fragments'
 
 const dirs: string[] = []
@@ -42,7 +42,7 @@ describe('findConfigFragments', () => {
     // Directory order varies by filesystem; without the sort, two machines with identical files
     // would resolve overlapping keys differently and only differ where the fragments overlap.
     const config = sandbox({ 'zzz.toml': '', 'aaa.toml': '', 'mmm.toml': '' })
-    expect(findConfigFragments(config).map((p) => p.split('/').pop())).toEqual([
+    expect(findConfigFragments(config).map((p) => basename(p))).toEqual([
       'aaa.toml',
       'mmm.toml',
       'zzz.toml',

@@ -30,14 +30,14 @@ function createCookieDb(path: string, value: string): void {
   const db = new Database(path)
   db.exec('CREATE TABLE IF NOT EXISTS cookies (host_key TEXT, value TEXT)')
   db.exec('DELETE FROM cookies')
-  db.prepare('INSERT INTO cookies (host_key, value) VALUES (?, ?)').run('example.com', value)
+  db.query('INSERT INTO cookies (host_key, value) VALUES (?, ?)').run('example.com', value)
   db.close()
 }
 
 function readCookieValue(path: string): string | undefined {
   const db = new Database(path, { readonly: true })
   try {
-    const row = db.prepare('SELECT value FROM cookies').get() as { value: string } | null
+    const row = db.query('SELECT value FROM cookies').get() as { value: string } | null
     return row?.value
   } finally {
     db.close()
@@ -155,14 +155,17 @@ describe('snapshotRealProfile', () => {
     expect(readCookieValue(join(result.dir, 'Default', 'Network', 'Cookies'))).toBe('fresh-token')
   })
 
-  test('locks the store down to owner-only permissions', () => {
-    const src = makeFakeProfile(tmp)
-    const store = join(tmp, 'store')
+  test.skipIf(process.platform === 'win32')(
+    'locks the store down to POSIX owner-only permissions',
+    () => {
+      const src = makeFakeProfile(tmp)
+      const store = join(tmp, 'store')
 
-    const result = snapshotRealProfile('chrome', store, src)
-    expect(result.ok).toBe(true)
-    expect(statSync(store).mode & 0o777).toBe(0o700)
-  })
+      const result = snapshotRealProfile('chrome', store, src)
+      expect(result.ok).toBe(true)
+      expect(statSync(store).mode & 0o777).toBe(0o700)
+    },
+  )
 
   test('fails when the profile directory does not exist', () => {
     const result = snapshotRealProfile('chrome', join(tmp, 'store'), join(tmp, 'nope'))

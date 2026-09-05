@@ -65,10 +65,10 @@ level = "off"
 show_thinking = true
 
 [workspace]
-path = "${options.workspace}"
+path = ${JSON.stringify(options.workspace)}
 
 [local]
-endpoint = "${options.endpoint}"
+endpoint = ${JSON.stringify(options.endpoint)}
 model = "${model}"
 context_length = 32768
 max_concurrent = 2

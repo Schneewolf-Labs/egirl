@@ -88,7 +88,7 @@ describe('git tools', () => {
     expect(result.output).toContain('new-file.txt')
 
     // Cleanup
-    exec('rm new-file.txt')
+    await rm(join(testDir, 'new-file.txt'))
   })
 
   test('git_diff shows unstaged changes', async () => {

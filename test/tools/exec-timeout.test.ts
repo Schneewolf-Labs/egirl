@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test'
+import { tmpdir } from 'os'
 import { execTool, HARD_DEADLINE_SLACK_MS, KILL_GRACE_MS } from '../../src/tools/builtin/exec'
 
 /**
@@ -15,7 +16,7 @@ const ESCALATION_CEILING = KILL_GRACE_MS + HARD_DEADLINE_SLACK_MS + 10_000
  * forever, which meant the tool call never returned and the agent run holding the session
  * mutex never finished. A regression here looks like a test TIMEOUT, not a failed assertion.
  */
-const CWD = '/tmp'
+const CWD = tmpdir()
 
 describe('execute_command timeout escalation', () => {
   test('a normal command still succeeds', async () => {
@@ -31,7 +32,11 @@ describe('execute_command timeout escalation', () => {
 
   test('a sleeping command is killed at the timeout and reports partial output', async () => {
     const t0 = Date.now()
-    const r = await execTool.execute({ command: 'echo before; sleep 30', timeout: 300 }, CWD)
+    const command =
+      process.platform === 'win32'
+        ? 'echo before && powershell.exe -NoProfile -Command "Start-Sleep 30"'
+        : 'echo before; sleep 30'
+    const r = await execTool.execute({ command, timeout: 300 }, CWD)
     const elapsed = Date.now() - t0
     expect(r.success).toBe(false)
     expect(r.output).toContain('timed out')
@@ -39,35 +44,43 @@ describe('execute_command timeout escalation', () => {
     expect(elapsed).toBeLessThan(ESCALATION_CEILING)
   }, 30000)
 
-  test('a command that TRAPS SIGTERM is still killed (SIGKILL escalation)', async () => {
-    // Without escalation this survives SIGTERM and runs for its full 30s; with it, the
-    // SIGKILL lands after the grace period.
-    const t0 = Date.now()
-    const r = await execTool.execute(
-      { command: "trap '' TERM; echo trapped; sleep 30", timeout: 300 },
-      CWD,
-    )
-    const elapsed = Date.now() - t0
-    expect(r.success).toBe(false)
-    expect(r.output).toContain('timed out')
-    // must come back on the escalation path, well before the command's own 30s
-    expect(elapsed).toBeLessThan(ESCALATION_CEILING)
-  }, 45000)
+  test.skipIf(process.platform === 'win32')(
+    'a command that TRAPS SIGTERM is still killed (SIGKILL escalation)',
+    async () => {
+      // Without escalation this survives SIGTERM and runs for its full 30s; with it, the
+      // SIGKILL lands after the grace period.
+      const t0 = Date.now()
+      const r = await execTool.execute(
+        { command: "trap '' TERM; echo trapped; sleep 30", timeout: 300 },
+        CWD,
+      )
+      const elapsed = Date.now() - t0
+      expect(r.success).toBe(false)
+      expect(r.output).toContain('timed out')
+      // must come back on the escalation path, well before the command's own 30s
+      expect(elapsed).toBeLessThan(ESCALATION_CEILING)
+    },
+    45000,
+  )
 
-  test('a backgrounded child holding stdout does not hang the call', async () => {
-    // The shell exits immediately but the grandchild keeps the pipe open, so `close` never
-    // fires. Signalling the process GROUP reaches the grandchild; the hard deadline covers
-    // the case where even that is not enough.
-    const t0 = Date.now()
-    const r = await execTool.execute(
-      { command: 'sleep 30 & echo spawned; wait', timeout: 300 },
-      CWD,
-    )
-    const elapsed = Date.now() - t0
-    expect(r.success).toBe(false)
-    expect(r.output).toContain('timed out')
-    expect(elapsed).toBeLessThan(ESCALATION_CEILING)
-  }, 45000)
+  test.skipIf(process.platform === 'win32')(
+    'a backgrounded child holding stdout does not hang the call',
+    async () => {
+      // The shell exits immediately but the grandchild keeps the pipe open, so `close` never
+      // fires. Signalling the process GROUP reaches the grandchild; the hard deadline covers
+      // the case where even that is not enough.
+      const t0 = Date.now()
+      const r = await execTool.execute(
+        { command: 'sleep 30 & echo spawned; wait', timeout: 300 },
+        CWD,
+      )
+      const elapsed = Date.now() - t0
+      expect(r.success).toBe(false)
+      expect(r.output).toContain('timed out')
+      expect(elapsed).toBeLessThan(ESCALATION_CEILING)
+    },
+    45000,
+  )
 
   test('a failure to spawn resolves rather than hanging', async () => {
     const r = await execTool.execute(

@@ -18,7 +18,7 @@ import { tmpdir } from 'os'
 import { join } from 'path'
 import { connectMcpServers, type McpConnection } from '../../src/mcp/client'
 
-const SDK = join(import.meta.dir, '../../node_modules/@modelcontextprotocol/sdk/dist/esm')
+const SDK = new URL('../../node_modules/@modelcontextprotocol/sdk/dist/esm', import.meta.url).href
 
 const SERVER = `
 import { Server } from '${SDK}/server/index.js'

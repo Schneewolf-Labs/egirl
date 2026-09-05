@@ -6,6 +6,22 @@ import {
 } from '../../src/safety/path-guard'
 
 describe('path-guard', () => {
+  test.skipIf(process.platform !== 'win32')(
+    'handles native Windows paths and sensitive files',
+    () => {
+      const cwd = 'C:\\games\\RaifuWars'
+      const allowed = ['C:/games/RaifuWars']
+      expect(
+        isPathAllowed('c:\\GAMES\\RaifuWars\\scripts\\player.gml', cwd, allowed),
+      ).toBeUndefined()
+      expect(isPathAllowed('scripts/player.gml', cwd, allowed)).toBeUndefined()
+      expect(isPathAllowed('..\\other\\player.gml', cwd, allowed)).toBeDefined()
+      expect(isPathAllowed('C:\\games\\RaifuWars-old\\player.gml', cwd, allowed)).toBeDefined()
+      expect(
+        isSensitivePath('C:\\Users\\dev\\.AWS\\credentials', cwd, getDefaultSensitivePatterns()),
+      ).toBeDefined()
+    },
+  )
   describe('isPathAllowed', () => {
     const cwd = '/home/user/project'
     const allowedPaths = ['/home/user/project', '/tmp']

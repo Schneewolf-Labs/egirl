@@ -11,6 +11,9 @@
 
 import { describe, expect, test } from 'bun:test'
 import { createPublicKey, createVerify } from 'node:crypto'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { createPushNotifier, generateVapidKeys, PushStore } from '../../src/push'
 import { vapidAuthHeader } from '../../src/push/vapid'
 
@@ -141,15 +144,19 @@ describe('push delivery', () => {
   test('keeps its VAPID keys across restarts', () => {
     // Regenerating would invalidate every subscription already issued, because the browser
     // bound each one to the old key -- silently, with no error anywhere.
-    const path = `/tmp/egirl-push-test-${process.pid}.db`
+    const dir = mkdtempSync(join(tmpdir(), 'egirl-push-'))
+    const path = join(dir, 'push.db')
+    const firstStore = new PushStore(path)
+    const secondStore = new PushStore(path)
     try {
-      const first = new PushStore(path).keys(generateVapidKeys)
-      const second = new PushStore(path).keys(generateVapidKeys)
+      const first = firstStore.keys(generateVapidKeys)
+      firstStore.close()
+      const second = secondStore.keys(generateVapidKeys)
       expect(second.publicKey).toBe(first.publicKey)
     } finally {
-      try {
-        require('node:fs').unlinkSync(path)
-      } catch {}
+      firstStore.close()
+      secondStore.close()
+      rmSync(dir, { recursive: true, force: true })
     }
   })
 })

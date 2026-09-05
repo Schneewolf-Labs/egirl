@@ -6,6 +6,13 @@ import {
 } from '../../src/skills/parser'
 
 describe('parseSkillMarkdown', () => {
+  test('preserves metadata with Windows CRLF line endings', () => {
+    const parsed = parseSkillMarkdown(
+      '---\r\negirl:\r\n  complexity: remote\r\n---\r\n# Review\r\n',
+    )
+    expect(parsed.metadata.egirl?.complexity).toBe('remote')
+    expect(parsed.content).toBe('# Review')
+  })
   test('parses frontmatter and content', () => {
     const md = `---
 openclaw:

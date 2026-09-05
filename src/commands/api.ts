@@ -91,6 +91,7 @@ export async function runAPI(config: RuntimeConfig, args: string[]): Promise<voi
   onShutdown(async () => {
     taskRunner?.stop()
     server.stop()
+    pushStore.close()
     await matrix?.stop()
     await processRegistry.shutdownAll()
     taskStore?.close()

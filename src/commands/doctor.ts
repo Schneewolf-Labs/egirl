@@ -1,23 +1,10 @@
-import { accessSync, constants } from 'fs'
-import { delimiter, join } from 'path'
 import type { RuntimeConfig } from '../config'
 import { type CheckResult, runPreflight } from '../instances/preflight'
 import { colors, DIM, RESET } from '../ui/theme'
 import { errorMessage } from '../util/errors'
 
 function commandExists(command: string): boolean {
-  const paths = process.env.PATH?.split(delimiter) ?? []
-
-  for (const dir of paths) {
-    try {
-      accessSync(join(dir, command), constants.X_OK)
-      return true
-    } catch {
-      // Try next PATH entry.
-    }
-  }
-
-  return false
+  return Bun.which(command) !== null
 }
 
 function endpointUsesBindAddress(endpoint: string): boolean {
