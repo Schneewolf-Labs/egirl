@@ -41,7 +41,7 @@ Feature priorities:
 | Runtime | Bun |
 | Language | TypeScript (strict mode) |
 | Local LLM | llama.cpp HTTP server (OpenAI-compatible API) |
-| Code agent | Claude Agent SDK or interactive Codex CLI (subscription auth) |
+| Code agent | Claude Agent SDK or Codex app-server (subscription auth) |
 | Database | `bun:sqlite` for memory, conversations, tasks |
 | Embeddings | Qwen3-VL-Embedding served via Python (see `services/embeddings/`) |
 | Discord | `discord.js` |
@@ -120,7 +120,7 @@ Don't install new packages without asking. The current stack is intentionally mi
 
 ```
 @anthropic-ai/claude-agent-sdk   # Claude Code backend
-node-pty                         # interactive Codex backend
+codex app-server (installed CLI)  # structured Codex backend
 @sinclair/typebox                # config validation
 discord.js                       # one remote interface
 playwright                       # browser tool
