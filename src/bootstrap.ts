@@ -2,7 +2,6 @@ import { join } from 'path'
 import { BrowserManager } from './browser'
 import type { RuntimeConfig } from './config'
 import { type ConversationStore, createConversationStore } from './conversation'
-import { createEnergyBudget, type EnergyBudget } from './energy'
 import { connectMcpServers, type McpConnection } from './mcp/client'
 import {
   createEmbeddingProvider,
@@ -15,8 +14,11 @@ import {
 import { discoverPeers, mergePeers, registerSelf } from './peers/discovery'
 import { createPermissionSupervisor } from './permissions/supervisor'
 import { createProviderRegistry, type ProviderRegistry } from './providers'
-import { probeServerContextLength } from './providers/context-probe'
-import { probeVisionSupport } from './providers/vision-probe'
+import {
+  probeServerProps,
+  serverContextLength,
+  serverSupportsVision,
+} from './providers/server-props'
 import { buildSafetyConfig } from './safety/config-bridge'
 import { loadSkillsFromDirectories } from './skills'
 import type { Skill } from './skills/types'
@@ -30,7 +32,6 @@ import {
   type ToolExecutor,
 } from './tools'
 import { setToolDialect } from './tools/dialects'
-import { createStatsTracker, type StatsTracker } from './tracking'
 import { journalSessionEvents } from './tracking/journal'
 import { initTraces } from './tracking/traces'
 import { log } from './util/logger'
@@ -44,11 +45,9 @@ export interface AppServices {
   providers: ProviderRegistry
   memory: MemoryManager | undefined
   workingMemory: WorkingMemory | undefined
-  energy: EnergyBudget | undefined
   conversations: ConversationStore | undefined
   taskStore: TaskStore | undefined
   toolExecutor: ToolExecutor
-  stats: StatsTracker
   skills: Skill[]
   mcpConnections: McpConnection[]
   browser: BrowserManager
@@ -58,7 +57,7 @@ export interface AppServices {
 /**
  * Create conversation store if enabled, run compaction on startup.
  */
-export function createConversations(config: RuntimeConfig): ConversationStore | undefined {
+function createConversations(config: RuntimeConfig): ConversationStore | undefined {
   if (!config.conversation.enabled) {
     log.info('main', 'Conversation persistence disabled')
     return undefined
@@ -89,7 +88,7 @@ export function createConversations(config: RuntimeConfig): ConversationStore | 
 /**
  * Create memory manager with embeddings if configured.
  */
-export function createMemory(config: RuntimeConfig): MemoryManager | undefined {
+function createMemory(config: RuntimeConfig): MemoryManager | undefined {
   const embeddingsConfig = config.local.embeddings
   if (!embeddingsConfig) {
     log.info('main', 'No embeddings configured - memory system disabled')
@@ -126,7 +125,7 @@ export function createMemory(config: RuntimeConfig): MemoryManager | undefined {
 /**
  * Extract CodeAgentConfig from RuntimeConfig if a code agent channel is configured.
  */
-export function getCodeAgentConfig(config: RuntimeConfig): CodeAgentConfig | undefined {
+function getCodeAgentConfig(config: RuntimeConfig): CodeAgentConfig | undefined {
   const cc = config.channels.codeAgent
   if (!cc) return undefined
   return {
@@ -141,7 +140,7 @@ export function getCodeAgentConfig(config: RuntimeConfig): CodeAgentConfig | und
 /**
  * Extract GitHubConfig from RuntimeConfig if GITHUB_TOKEN is set.
  */
-export function getGitHubConfig(config: RuntimeConfig): GitHubConfig | undefined {
+function getGitHubConfig(config: RuntimeConfig): GitHubConfig | undefined {
   if (!config.github) return undefined
   return {
     token: config.github.token,
@@ -199,7 +198,8 @@ export async function createAppServices(config: RuntimeConfig): Promise<AppServi
   // token estimates run enough below real counts that a config within a few percent of the
   // server window overflows it in practice. Clamp before anything downstream captures the
   // value (providers, budget tracker, fitting all read config.local.contextLength).
-  const serverCtx = await probeServerContextLength(config.local.endpoint, config.local.apiKey)
+  const serverProps = await probeServerProps(config.local.endpoint, config.local.apiKey)
+  const serverCtx = serverContextLength(serverProps)
   if (serverCtx !== undefined && config.local.contextLength > serverCtx) {
     log.warn(
       'bootstrap',
@@ -234,25 +234,6 @@ export async function createAppServices(config: RuntimeConfig): Promise<AppServi
     log.warn('main', 'Failed to initialize working memory:', error)
   }
 
-  // Energy budget (constrains autonomous actions)
-  let energy: EnergyBudget | undefined
-  if (config.energy.enabled) {
-    try {
-      const energyDbPath = join(config.workspace.path, 'energy.db')
-      energy = createEnergyBudget(energyDbPath, {
-        maxEnergy: config.energy.maxEnergy,
-        regenPerHour: config.energy.regenPerHour,
-      })
-      const state = energy.getState()
-      log.info(
-        'main',
-        `Energy budget initialized (${state.current.toFixed(1)}/${state.max} energy, +${state.regenPerHour}/hr)`,
-      )
-    } catch (error) {
-      log.warn('main', 'Failed to initialize energy budget:', error)
-    }
-  }
-
   const conversations = createConversations(config)
   const taskStore = createTasks(config)
   const skills = await loadSkills(config)
@@ -281,9 +262,7 @@ export async function createAppServices(config: RuntimeConfig): Promise<AppServi
 
   // Screenshot gating: unset in config means auto-detect from the endpoint's modalities.
   const visionSupported =
-    config.tools.screenshot === 'auto'
-      ? await probeVisionSupport(config.local.endpoint, config.local.apiKey)
-      : undefined
+    config.tools.screenshot === 'auto' ? serverSupportsVision(serverProps) : undefined
   if (config.tools.screenshot === 'auto') {
     log.info(
       'bootstrap',
@@ -303,7 +282,7 @@ export async function createAppServices(config: RuntimeConfig): Promise<AppServi
     conversations,
     visionSupported,
   )
-  // MCP tools join the same executor as the builtins, so safety, energy and permissions apply to
+  // MCP tools join the same executor as the builtins, so safety and permissions apply to
   // them identically. A server that is down costs its own tools and nothing else.
   const mcpConnections: McpConnection[] = []
   if (config.mcp?.servers?.length) {
@@ -351,22 +330,16 @@ export async function createAppServices(config: RuntimeConfig): Promise<AppServi
   }
 
   toolExecutor.setSafety(buildSafetyConfig(config))
-  if (energy) {
-    toolExecutor.setEnergy(energy)
-  }
-  const stats = createStatsTracker()
 
   return {
     config,
     providers,
     memory,
     workingMemory,
-    energy,
     mcpConnections,
     conversations,
     taskStore,
     toolExecutor,
-    stats,
     skills,
     browser,
     processRegistry,

@@ -4,6 +4,7 @@ import type { TaskRunner } from '../../tasks/runner'
 import { parseBusinessHours } from '../../tasks/schedule'
 import type { TaskStore } from '../../tasks/store'
 import type { NewTask, TaskKind, TaskNotify } from '../../tasks/types'
+import { errorMessage } from '../../util/errors'
 import type { Tool, ToolResult } from '../types'
 
 interface TaskToolContext {
@@ -196,7 +197,7 @@ Options:
 
         return { success: true, output: parts.join('\n') }
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err)
+        const msg = errorMessage(err)
         return { success: false, output: `Failed to create task: ${msg}` }
       }
     },
@@ -248,7 +249,7 @@ Options:
           output: `Proposed task **${task.name}** (${task.id})\n${task.description}\nReason: ${reason}\n\nAwaiting user approval.`,
         }
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err)
+        const msg = errorMessage(err)
         return { success: false, output: `Failed to propose task: ${msg}` }
       }
     },
@@ -404,7 +405,7 @@ Options:
               : `Task "${task.name}" failed (${run.errorKind ?? 'unknown'}): ${run.error ?? 'unknown error'}`,
         }
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err)
+        const msg = errorMessage(err)
         return { success: false, output: `Error running task: ${msg}` }
       }
     },

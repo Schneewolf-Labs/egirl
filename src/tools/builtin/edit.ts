@@ -1,5 +1,6 @@
 import { readFile, writeFile } from 'fs/promises'
 import { isAbsolute, resolve } from 'path'
+import { errorMessage } from '../../util/errors'
 import type { Tool, ToolResult } from '../types'
 
 export const editTool: Tool = {
@@ -61,7 +62,7 @@ export const editTool: Tool = {
         output: `Successfully edited ${path}`,
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
+      const message = errorMessage(error)
       return {
         success: false,
         output: `Failed to edit file: ${message}`,

@@ -340,13 +340,6 @@ Master switch and per-feature toggles for the safety layer. See [safety.md](safe
 | `enabled` | bool | `true` | Log every tool call (including blocked ones) to JSONL |
 | `path` | string | — | Path to the audit log file. Supports `{workspace}` |
 
-#### `[safety.confirmation]`
-
-| Key | Type | Default | Description |
-|-----|------|---------|-------------|
-| `enabled` | bool | `false` | Require CLI confirmation before running destructive tools |
-| `tools` | string[] | `["execute_command", "write_file", "edit_file"]` | Tools that require confirmation |
-
 #### `[safety.permission_rules]`
 
 Pattern-based allow/deny rules that match on `tool_name(argument_pattern)`.
@@ -374,16 +367,6 @@ Optional. Powers the `web_search` tool.
 | `url` | string | — | URL of a SearxNG instance |
 
 `SEARXNG_API_KEY` may be set in `.env` if your instance requires it.
-
-### `[energy]`
-
-Optional. Per-user energy budget that throttles expensive tool calls.
-
-| Key | Type | Default | Description |
-|-----|------|---------|-------------|
-| `enabled` | bool | `true` | Enable energy accounting |
-| `max_energy` | number | `20` | Max energy pool |
-| `regen_per_hour` | number | `10` | Regen rate per hour |
 
 ### `[tasks]`
 
@@ -571,9 +554,6 @@ enabled = true
 [safety.audit_log]
 enabled = true
 path = "{workspace}/audit.log"
-
-[safety.confirmation]
-enabled = false
 
 [tools]
 code_agent = true   # the primary tool — delegate coding to the configured code agent

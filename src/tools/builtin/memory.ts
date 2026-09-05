@@ -1,4 +1,5 @@
 import type { MemoryCategory, MemoryManager, SearchResult } from '../../memory'
+import { errorMessage } from '../../util/errors'
 import { log } from '../../util/logger'
 import type { Tool, ToolResult } from '../types'
 
@@ -22,7 +23,7 @@ async function runSafely(
   try {
     return await fn()
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
+    const message = errorMessage(error)
     log.error('memory', `${label} failed${detail ? ` for "${detail}"` : ''}:`, error)
     return { success: false, output: `${label} failed: ${message}` }
   }
@@ -114,8 +115,7 @@ export function createMemoryTools(memory: MemoryManager): {
 
         const created = new Date(result.createdAt).toISOString()
         const updated = new Date(result.updatedAt).toISOString()
-        let output = `Memory [${key}] (${result.category}, ${result.source}):\n${result.value}\n\nCreated: ${created}\nUpdated: ${updated}`
-        if (result.imagePath) output += `\n[Image: ${result.imagePath}]`
+        const output = `Memory [${key}] (${result.category}, ${result.source}):\n${result.value}\n\nCreated: ${created}\nUpdated: ${updated}`
 
         return { success: true, output }
       })
@@ -374,10 +374,9 @@ function formatSearchResults(results: SearchResult[]): string {
       const score = r.score.toFixed(3)
       const value = r.memory.value
       const preview = value.length > 200 ? `${value.slice(0, 200)}...` : value
-      const imageNote = r.memory.imagePath ? ` [has image]` : ''
       const cat = r.memory.category !== 'general' ? ` ${r.memory.category}` : ''
       const date = new Date(r.memory.createdAt).toISOString().slice(0, 10)
-      return `${i + 1}. [${r.memory.key}] (score: ${score},${cat} ${date})${imageNote}\n   ${preview}`
+      return `${i + 1}. [${r.memory.key}] (score: ${score},${cat} ${date})\n   ${preview}`
     })
     .join('\n\n')
 }

@@ -20,25 +20,19 @@ export interface AuditMemoryEntry {
   sessionId?: string
 }
 
-export async function appendAuditLog(entry: AuditEntry, logPath: string): Promise<void> {
+async function appendJsonl(entry: unknown, logPath: string, what: string): Promise<void> {
   try {
     await mkdir(dirname(logPath), { recursive: true })
-    const line = `${JSON.stringify(entry)}\n`
-    await appendFile(logPath, line, 'utf-8')
+    await appendFile(logPath, `${JSON.stringify(entry)}\n`, 'utf-8')
   } catch (error) {
-    log.warn('safety', `Failed to write audit log: ${error}`)
+    log.warn('safety', `Failed to write ${what}: ${error}`)
   }
 }
 
-export async function auditMemoryOperation(
-  entry: AuditMemoryEntry,
-  logPath: string,
-): Promise<void> {
-  try {
-    await mkdir(dirname(logPath), { recursive: true })
-    const line = `${JSON.stringify(entry)}\n`
-    await appendFile(logPath, line, 'utf-8')
-  } catch (error) {
-    log.warn('safety', `Failed to write memory audit log: ${error}`)
-  }
+export function appendAuditLog(entry: AuditEntry, logPath: string): Promise<void> {
+  return appendJsonl(entry, logPath, 'audit log')
+}
+
+export function auditMemoryOperation(entry: AuditMemoryEntry, logPath: string): Promise<void> {
+  return appendJsonl(entry, logPath, 'memory audit log')
 }

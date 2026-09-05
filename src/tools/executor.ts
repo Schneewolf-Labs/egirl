@@ -1,15 +1,10 @@
-import type { EnergyBudget } from '../energy'
 import type { ToolCall } from '../providers/types'
 import type { SafetyConfig } from '../safety'
 import { checkToolCall, getAuditLogPath, logToolExecution, scanForInjection } from '../safety'
+import { errorMessage } from '../util/errors'
 import { log } from '../util/logger'
 import { matchToolName, remapParamKeys } from './fuzzy-match'
 import type { Tool, ToolDefinition, ToolResult } from './types'
-
-export type ConfirmCallback = (toolName: string, args: Record<string, unknown>) => Promise<boolean>
-
-/** Execution context: interactive calls bypass energy checks, autonomous calls are gated */
-export type ExecutionContext = 'interactive' | 'autonomous'
 
 /**
  * Tools whose output may contain untrusted external content
@@ -45,24 +40,9 @@ const SEQUENTIAL_TOOLS = new Set([
 export class ToolExecutor {
   private tools: Map<string, Tool> = new Map()
   private safety?: SafetyConfig
-  private confirmCallback?: ConfirmCallback
-  private energy?: EnergyBudget
-  private executionContext: ExecutionContext = 'interactive'
 
   setSafety(config: SafetyConfig): void {
     this.safety = config
-  }
-
-  setEnergy(budget: EnergyBudget): void {
-    this.energy = budget
-  }
-
-  setExecutionContext(context: ExecutionContext): void {
-    this.executionContext = context
-  }
-
-  setConfirmCallback(callback: ConfirmCallback): void {
-    this.confirmCallback = callback
   }
 
   register(tool: Tool): void {
@@ -106,7 +86,7 @@ export class ToolExecutor {
   }
 
   async execute(call: ToolCall, cwd: string): Promise<ToolResult> {
-    // Resolve near-miss names before safety/energy checks so they all see
+    // Resolve near-miss names before safety checks so they all see
     // the tool that actually runs, not the name the model emitted.
     if (!this.tools.has(call.name)) {
       const { match, suggestions } = matchToolName(call.name, this.listTools())
@@ -130,7 +110,7 @@ export class ToolExecutor {
       }
     }
 
-    // Same reason as the name resolution above: remap before the safety and energy checks,
+    // Same reason as the name resolution above: remap before the safety checks,
     // so they inspect the arguments the tool will actually receive. Remapping afterwards
     // would let a renamed argument slip past safety entirely.
     {
@@ -179,56 +159,17 @@ export class ToolExecutor {
       const check = checkToolCall(call.name, call.arguments, cwd, this.safety)
 
       if (!check.allowed) {
-        if (check.needsConfirmation) {
-          if (this.confirmCallback) {
-            const confirmed = await this.confirmCallback(call.name, call.arguments)
-            if (!confirmed) {
-              this.audit(call.name, call.arguments, {
-                success: false,
-                blocked: true,
-                reason: 'User denied confirmation',
-              })
-              return { success: false, output: 'Tool execution denied by user.' }
-            }
-            // Confirmed — fall through to execute
-          } else {
-            // No confirmation callback wired up — allow with warning rather than
-            // silently blocking. The user enabled confirmation mode but no channel
-            // supports it yet, so fail-open is safer than breaking all tool calls.
-            log.warn(
-              'safety',
-              `Tool ${call.name} needs confirmation but no callback is registered — allowing`,
-            )
-          }
-        } else {
-          this.audit(call.name, call.arguments, {
-            success: false,
-            blocked: true,
-            reason: check.reason,
-          })
-          log.warn('safety', `Blocked tool call: ${call.name}`, { reason: check.reason })
-          return { success: false, output: `Safety check failed: ${check.reason}` }
-        }
+        this.audit(call.name, call.arguments, {
+          success: false,
+          blocked: true,
+          reason: check.reason,
+        })
+        log.warn('safety', `Blocked tool call: ${call.name}`, { reason: check.reason })
+        return { success: false, output: `Safety check failed: ${check.reason}` }
       }
     }
 
     // Energy check (only for autonomous context — interactive calls bypass)
-    if (this.energy && this.executionContext === 'autonomous') {
-      const spend = this.energy.spend(call.name, `tool:${call.name}`)
-      if (!spend.allowed) {
-        this.audit(call.name, call.arguments, {
-          success: false,
-          blocked: true,
-          reason: spend.reason,
-        })
-        log.info('energy', `Blocked ${call.name}: ${spend.reason}`)
-        return {
-          success: false,
-          output: `Energy budget exceeded: ${call.name} costs ${spend.cost} energy, current balance is ${spend.remaining.toFixed(1)}. Wait for energy to regenerate.`,
-        }
-      }
-    }
-
     log.debug('tools', `Executing tool: ${call.name}`, call.arguments)
 
     try {
@@ -253,7 +194,7 @@ export class ToolExecutor {
       this.audit(call.name, call.arguments, { success: result.success })
       return result
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
+      const message = errorMessage(error)
       log.error('tools', `Tool ${call.name} failed:`, error)
 
       this.audit(call.name, call.arguments, { success: false, reason: message })
@@ -266,32 +207,6 @@ export class ToolExecutor {
 
   async executeAll(calls: ToolCall[], cwd: string): Promise<Map<string, ToolResult>> {
     const results = new Map<string, ToolResult>()
-
-    // Pre-check energy budget for the entire batch to avoid partial completion.
-    // Without this, parallel tools race to spend energy and some succeed while
-    // others fail — leaving the batch in an inconsistent half-done state.
-    if (this.energy && this.executionContext === 'autonomous' && calls.length > 1) {
-      const toolNames = calls.map((c) => this.resolveName(c.name) ?? c.name)
-      const batch = this.energy.checkBatch(toolNames)
-      if (!batch.allowed) {
-        log.info(
-          'energy',
-          `Blocked batch of ${calls.length} tools: total cost ${batch.totalCost}, balance ${batch.current.toFixed(1)}`,
-        )
-        for (const call of calls) {
-          this.audit(call.name, call.arguments, {
-            success: false,
-            blocked: true,
-            reason: 'Batch energy budget exceeded',
-          })
-          results.set(call.id, {
-            success: false,
-            output: `Energy budget exceeded for batch: ${calls.length} tools cost ${batch.totalCost} total energy, current balance is ${batch.current.toFixed(1)}. Wait for energy to regenerate.`,
-          })
-        }
-        return results
-      }
-    }
 
     // Mutating tools run strictly in emission order; everything else runs concurrently
     // alongside them. Two execute_command calls in one turn racing each other corrupts the

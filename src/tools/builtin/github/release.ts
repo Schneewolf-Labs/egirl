@@ -1,5 +1,6 @@
+import { truncate } from '../../../util/text'
 import type { Tool, ToolResult } from '../../types'
-import { apiError, type GitHubConfig, ghFetch, resolveRepo, truncate } from './helpers'
+import { apiError, type GitHubConfig, ghFetch, resolveRepo } from './helpers'
 
 export function createGhReleaseList(config: GitHubConfig): Tool {
   return {

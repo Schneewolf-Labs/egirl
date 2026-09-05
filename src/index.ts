@@ -3,18 +3,15 @@
 import { runAPI } from './commands/api'
 import { runClaudeCode } from './commands/claude-code'
 import { runCLI } from './commands/cli'
-import { runDiscord } from './commands/discord'
 import { runDoctor } from './commands/doctor'
 import { runInit } from './commands/init'
-import { runMatrix } from './commands/matrix'
 import { runNew } from './commands/new'
 import { runServe } from './commands/serve'
 import { showStatus } from './commands/status'
-import { runTelegram } from './commands/telegram'
-import { runXMPP } from './commands/xmpp'
 import { findConfigFile, loadConfig, type RuntimeConfig } from './config'
 import { loadInstanceEnv } from './config/env-files'
 import { BOLD, colors, DIM, RESET } from './ui/theme'
+import { errorMessage } from './util/errors'
 import { log } from './util/logger'
 import { bootstrapWorkspace } from './workspace/bootstrap'
 
@@ -69,9 +66,7 @@ async function main() {
       await runNew(commandArgs)
     } catch (error) {
       const c = colors()
-      console.error(
-        `${c.error}error${RESET} ${error instanceof Error ? error.message : String(error)}`,
-      )
+      console.error(`${c.error}error${RESET} ${errorMessage(error)}`)
       process.exit(1)
     }
     return
@@ -124,19 +119,10 @@ async function main() {
       break
 
     case 'discord':
-      await runDiscord(config, commandArgs)
-      break
-
     case 'xmpp':
-      await runXMPP(config, commandArgs)
-      break
-
     case 'telegram':
-      await runTelegram(config, commandArgs)
-      break
-
     case 'matrix':
-      await runMatrix(config, commandArgs)
+      await runServe(config, commandArgs, command)
       break
 
     case 'api':

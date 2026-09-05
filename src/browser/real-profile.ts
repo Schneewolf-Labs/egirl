@@ -12,6 +12,7 @@ import {
 } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
+import { errorMessage } from '../util/errors'
 import { log } from '../util/logger'
 
 /**
@@ -459,7 +460,7 @@ export function snapshotRealProfile(
       writeFileSync(marker, sourceProfile, 'utf8')
     }
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
+    const message = errorMessage(error)
     return { ok: false, reason: `could not snapshot the "${browser}" profile: ${message}` }
   }
   return { ok: true, dir: dst }

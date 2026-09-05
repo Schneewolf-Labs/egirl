@@ -15,20 +15,6 @@ function findPeer(peers: PeerEntry[], name: string): PeerEntry | undefined {
   return peers.find((p) => p.name.toLowerCase() === name.toLowerCase())
 }
 
-async function fetchWithTimeout(
-  url: string,
-  init: RequestInit,
-  timeoutMs: number,
-): Promise<Response> {
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), timeoutMs)
-  try {
-    return await fetch(url, { ...init, signal: controller.signal })
-  } finally {
-    clearTimeout(timer)
-  }
-}
-
 export function createPeerTools(config: PeerToolsConfig): {
   peerMessageTool: Tool
   peerListTool: Tool
@@ -112,11 +98,10 @@ export function createPeerTools(config: PeerToolsConfig): {
       const lines = await Promise.all(
         config.peers.map(async (peer) => {
           try {
-            const res = await fetchWithTimeout(
-              `${peer.url}/peer/identity`,
-              { headers: peerHeaders(peer) },
-              IDENTITY_TIMEOUT,
-            )
+            const res = await fetch(`${peer.url}/peer/identity`, {
+              headers: peerHeaders(peer),
+              signal: AbortSignal.timeout(IDENTITY_TIMEOUT),
+            })
             if (!res.ok) {
               return `${peer.name} — ${peer.url} — unreachable (HTTP ${res.status})`
             }

@@ -2,7 +2,7 @@ import type { AgentLoop } from '../agent'
 import type { ReplyBroker } from '../report/broker'
 import { log } from '../util/logger'
 import { createMatrixApi, type MatrixApi, MatrixApiError, type MatrixEvent } from './matrix/api'
-import { deliver, runTurn } from './spine'
+import { deliver, resolveTarget, runTurn } from './spine'
 import type { ChatChannel, OutboundChannel } from './types'
 
 export interface MatrixConfig {
@@ -102,19 +102,13 @@ export class MatrixChannel implements ChatChannel {
 
   /** Outbound: post to a room (used by the task runner and the report tool). */
   async send(to: string, body: string): Promise<void> {
-    if (!to || to === 'self') {
-      const fallback = this.config.allowedRooms[0] ?? this.lastRoomId
-      if (!fallback) {
-        log.warn('matrix', 'send called without a target, no allowed_rooms and no room seen yet')
-        return
-      }
-      to = fallback
-    }
-    await deliver(roomSurface(this.api, to), body)
-  }
-
-  private surface(roomId: string) {
-    return roomSurface(this.api, roomId)
+    const room = resolveTarget(
+      'matrix',
+      to,
+      this.config.allowedRooms[0] ?? this.lastRoomId,
+      'no allowed_rooms and no room seen yet',
+    )
+    if (room) await deliver(roomSurface(this.api, room), body)
   }
 
   private async runSyncLoop(since: string, signal: AbortSignal): Promise<void> {
@@ -184,7 +178,7 @@ export class MatrixChannel implements ChatChannel {
         channel: 'matrix',
         target: roomId,
         format: 'plain',
-        ...this.surface(roomId),
+        ...roomSurface(this.api, roomId),
         typing: {
           refreshMs: 20_000,
           set: (on) => this.api.setTyping(roomId, this.userId, on),
@@ -232,16 +226,10 @@ export class MatrixOutbound implements OutboundChannel {
   }
 
   async send(to: string, body: string): Promise<void> {
-    if (!to || to === 'self') {
-      const fallback = this.config.allowedRooms[0]
-      if (!fallback) {
-        log.warn('matrix', 'send called without a target and no allowed_rooms to fall back to')
-        return
-      }
-      to = fallback
-    }
+    const room = resolveTarget('matrix', to, this.config.allowedRooms[0], 'no allowed_rooms')
+    if (!room) return
     await this.connect()
-    await deliver(roomSurface(this.api, to), body)
+    await deliver(roomSurface(this.api, room), body)
   }
 
   /** A password login minted a device; drop it rather than leave one per restart. */

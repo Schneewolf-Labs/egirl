@@ -11,6 +11,7 @@ import type {
 } from '../providers/types'
 import type { ToolExecutor } from '../tools'
 import { hasStrandedToolCall, stripStrandedToolCalls } from '../tools/format'
+import { errorMessage } from '../util/errors'
 import { log } from '../util/logger'
 import { runAutoExtraction } from './background'
 import { slotFor } from './cache-slots'
@@ -36,7 +37,12 @@ import {
 } from './nudges'
 import { injectRecalledMemory } from './recall'
 import { attemptRecovery, resolveRecoveryCaps } from './recovery'
-import { createRolloverTools, performRollover, type RolloverRequest } from './rollover'
+import {
+  CONTEXT_BREAK_THRESHOLD,
+  createRolloverTools,
+  performRollover,
+  type RolloverRequest,
+} from './rollover'
 import { createRunState } from './run-state'
 import { endRun, publish, startRun } from './session-events'
 import type { SessionMutex } from './session-mutex'
@@ -52,13 +58,6 @@ import type { AgentLoopDeps, AgentLoopOptions, AgentResponse } from './types'
  * failed to catch a runaway, which is logged as an error. High enough to never bound real work.
  */
 const UNBOUNDED_SAFETY_CEILING = 10_000
-
-/**
- * Context utilization at which a consolidation break fires regardless of the turn interval —
- * the point where compaction is imminent, so durable capture must happen now. Matches the
- * /context "getting tight" threshold so the two agree.
- */
-const CONTEXT_BREAK_THRESHOLD = 0.8
 
 export type AgentFactory = (sessionId: string) => AgentLoop
 
@@ -115,13 +114,6 @@ export class AgentLoop {
     return slotFor(this.context.sessionId, this.config.local.cacheSlots)
   }
 
-  async run(userMessage: string, options: AgentLoopOptions = {}): Promise<AgentResponse> {
-    // The mutex guards tool execution only (see SessionMutex): inference runs outside it
-    // so concurrent sessions can be batched by the local server. Wrapping the whole run
-    // here would serialize every entry point again.
-    return this.doRun(userMessage, options)
-  }
-
   /** Run a tool phase under the shared-state lock. */
   private async exclusive<T>(fn: () => Promise<T>): Promise<T> {
     return this.mutex ? this.mutex.run(fn) : fn()
@@ -166,7 +158,10 @@ export class AgentLoop {
     return { level: this.config.thinking.level, source: 'config' }
   }
 
-  private async doRun(userMessage: string, options: AgentLoopOptions): Promise<AgentResponse> {
+  // The mutex guards tool execution only (see `exclusive`): inference runs outside it so
+  // concurrent sessions can be batched by the local server. Wrapping the whole run would
+  // serialize every entry point again.
+  async run(userMessage: string, options: AgentLoopOptions = {}): Promise<AgentResponse> {
     await this.compactor.drain()
 
     const { planningMode } = options
@@ -556,7 +551,7 @@ export class AgentLoop {
       if (runError !== undefined) {
         endRun(this.context.sessionId, {
           t: 'error',
-          v: runError instanceof Error ? runError.message : String(runError),
+          v: errorMessage(runError),
         })
       } else {
         endRun(this.context.sessionId, {

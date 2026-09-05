@@ -24,9 +24,6 @@ path = "{workspace}/audit.log"          # JSONL log of all tool calls
 
 [safety.path_sandbox]
 enabled = false                         # opt-in: restrict file ops to dirs
-
-[safety.confirmation]
-enabled = false                         # opt-in: require confirmation
 ```
 
 ## Features

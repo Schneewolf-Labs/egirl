@@ -73,8 +73,6 @@ function levelColor(level: LogLevel): string {
 
 class Logger {
   private minLevel: LogLevel = 'info'
-  private entries: LogEntry[] = []
-  private maxEntries = 1000
 
   setLevel(level: LogLevel): void {
     this.minLevel = level
@@ -112,11 +110,6 @@ class Logger {
       timestamp: new Date(),
     }
 
-    this.entries.push(entry)
-    if (this.entries.length > this.maxEntries) {
-      this.entries.shift()
-    }
-
     if (this.shouldLog(level)) {
       // Logs go to stderr so stdout carries only the program's actual output. That is what makes
       // `egirl cli -m "..." --json 2>/dev/null | jq` work; with logs on stdout the two are
@@ -139,24 +132,6 @@ class Logger {
 
   error(category: string, message: string, data?: unknown): void {
     this.log('error', category, message, data)
-  }
-
-  getEntries(filter?: { level?: LogLevel; category?: string; limit?: number }): LogEntry[] {
-    let filtered = this.entries
-
-    if (filter?.level) {
-      filtered = filtered.filter((e) => e.level === filter.level)
-    }
-
-    if (filter?.category) {
-      filtered = filtered.filter((e) => e.category === filter.category)
-    }
-
-    if (filter?.limit) {
-      filtered = filtered.slice(-filter.limit)
-    }
-
-    return filtered
   }
 }
 

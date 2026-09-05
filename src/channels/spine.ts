@@ -1,6 +1,7 @@
 import type { AgentLoop } from '../agent'
 import type { ReplyBroker } from '../report/broker'
 import { handleCommand } from '../session/commands'
+import { errorMessage } from '../util/errors'
 import { log } from '../util/logger'
 import { splitMessage } from './chunk'
 import { buildToolCallPrefix, createNarration, type NarrationFormat } from './narration'
@@ -17,6 +18,24 @@ import { buildToolCallPrefix, createNarration, type NarrationFormat } from './na
  * serve.ts; a new transport implements Channel + OutboundChannel and describes its surface
  * to runTurn. Nothing here discovers, negotiates or routes.
  */
+
+/**
+ * Resolve an outbound target. Empty or "self" means the channel's default; without one there
+ * is nowhere to send, which is logged rather than thrown -- a task report is best-effort.
+ */
+export function resolveTarget(
+  channel: string,
+  to: string,
+  fallback: string | undefined,
+  missing: string,
+): string | undefined {
+  if (to && to !== 'self') return to
+  if (!fallback) {
+    log.warn(channel, `send called without a target and ${missing}`)
+    return undefined
+  }
+  return fallback
+}
 
 /** One conversation on one transport, as the spine needs to see it. */
 export interface Surface {
@@ -62,7 +81,7 @@ export async function runTurn(
     await deliver(surface, buildToolCallPrefix(state, surface.format) + response.content)
     log.debug(surface.channel, `Responded via ${response.provider}`)
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
+    const message = errorMessage(error)
     log.error(surface.channel, 'Error processing message:', error)
     await deliver(surface, `Error: ${message}`).catch(() => {})
   } finally {

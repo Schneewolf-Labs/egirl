@@ -24,7 +24,6 @@ export interface IndexedMemory {
   category: MemoryCategory
   source: MemorySource
   sessionId?: string
-  imagePath?: string // Path to stored image file
   embedding?: Float32Array
   importance: number // 0.0-1.0, higher = more important. Default 0.5
   confidence: number // 0.0-1.0, how confident we are in this memory. Default 0.5
@@ -159,7 +158,6 @@ export class MemoryIndexer {
       category?: MemoryCategory
       source?: MemorySource
       sessionId?: string
-      imagePath?: string
       embedding?: Float32Array
       importance?: number
       confidence?: number
@@ -171,7 +169,6 @@ export class MemoryIndexer {
       category = 'general',
       source = 'manual',
       sessionId,
-      imagePath,
       embedding,
       importance = 0.5,
       confidence = 0.5,
@@ -185,15 +182,14 @@ export class MemoryIndexer {
     }
 
     const stmt = this.db.prepare(`
-      INSERT INTO memories (key, value, content_type, category, source, session_id, image_path, embedding, importance, confidence, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO memories (key, value, content_type, category, source, session_id, embedding, importance, confidence, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(key) DO UPDATE SET
         value = excluded.value,
         content_type = excluded.content_type,
         category = excluded.category,
         source = excluded.source,
         session_id = excluded.session_id,
-        image_path = excluded.image_path,
         embedding = excluded.embedding,
         importance = excluded.importance,
         confidence = excluded.confidence,
@@ -207,7 +203,6 @@ export class MemoryIndexer {
       category,
       source,
       sessionId ?? null,
-      imagePath ?? null,
       embedding ? Buffer.from(embedding.buffer) : null,
       importance,
       confidence,
@@ -232,7 +227,7 @@ export class MemoryIndexer {
   get(key: string): IndexedMemory | null {
     const row = this.db
       .query(`
-      SELECT id, key, value, content_type, category, source, session_id, image_path, embedding, importance, confidence, created_at, updated_at, last_accessed_at, access_count
+      SELECT id, key, value, content_type, category, source, session_id, embedding, importance, confidence, created_at, updated_at, last_accessed_at, access_count
       FROM memories WHERE key = ?
     `)
       .get(key) as MemoryRow | null
@@ -250,7 +245,7 @@ export class MemoryIndexer {
       this.embeddingCache = new Map()
       const rows = this.db
         .query(`
-        SELECT id, key, value, content_type, category, source, session_id, image_path, embedding, importance, confidence, created_at, updated_at, last_accessed_at, access_count
+        SELECT id, key, value, content_type, category, source, session_id, embedding, importance, confidence, created_at, updated_at, last_accessed_at, access_count
         FROM memories
         WHERE embedding IS NOT NULL
       `)
@@ -265,23 +260,6 @@ export class MemoryIndexer {
     return Array.from(this.embeddingCache.values())
   }
 
-  /**
-   * Get memories by content type
-   */
-  getByContentType(contentType: ContentType, limit = 100): IndexedMemory[] {
-    const rows = this.db
-      .query(`
-      SELECT id, key, value, content_type, category, source, session_id, image_path, embedding, importance, confidence, created_at, updated_at, last_accessed_at, access_count
-      FROM memories
-      WHERE content_type = ?
-      ORDER BY updated_at DESC
-      LIMIT ?
-    `)
-      .all(contentType, limit) as MemoryRow[]
-
-    return rows.map(rowToMemory)
-  }
-
   searchFTS(query: string, limit = 10): FTSResult[] {
     const sanitized = sanitizeFTSQuery(query)
     if (!sanitized) return []
@@ -289,7 +267,7 @@ export class MemoryIndexer {
     const rows = this.db
       .query(`
       SELECT m.id, m.key, m.value, m.content_type, m.category, m.source, m.session_id,
-             m.image_path, m.importance, m.confidence,
+             m.importance, m.confidence,
              m.created_at, m.updated_at, m.last_accessed_at, m.access_count, fts.rank
       FROM memories m
       JOIN memories_fts fts ON m.id = fts.rowid
@@ -366,7 +344,7 @@ export class MemoryIndexer {
   getByCategory(category: MemoryCategory, limit = 100): IndexedMemory[] {
     const rows = this.db
       .query(`
-      SELECT id, key, value, content_type, category, source, session_id, image_path, embedding, importance, confidence, created_at, updated_at, last_accessed_at, access_count
+      SELECT id, key, value, content_type, category, source, session_id, embedding, importance, confidence, created_at, updated_at, last_accessed_at, access_count
       FROM memories
       WHERE category = ?
       ORDER BY updated_at DESC
@@ -381,7 +359,7 @@ export class MemoryIndexer {
     const untilTs = until ?? Date.now()
     const rows = this.db
       .query(`
-      SELECT id, key, value, content_type, category, source, session_id, image_path, embedding, importance, confidence, created_at, updated_at, last_accessed_at, access_count
+      SELECT id, key, value, content_type, category, source, session_id, embedding, importance, confidence, created_at, updated_at, last_accessed_at, access_count
       FROM memories
       WHERE created_at >= ? AND created_at <= ?
       ORDER BY created_at DESC
@@ -460,7 +438,6 @@ interface MemoryRow {
   category: string
   source: string
   session_id: string | null
-  image_path: string | null
   embedding: Buffer | null
   importance: number
   confidence: number
@@ -479,7 +456,6 @@ function rowToMemory(row: MemoryRow): IndexedMemory {
     category: (row.category ?? 'general') as MemoryCategory,
     source: (row.source ?? 'manual') as MemorySource,
     sessionId: row.session_id ?? undefined,
-    imagePath: row.image_path ?? undefined,
     embedding: row.embedding ? new Float32Array(row.embedding.buffer) : undefined,
     importance: row.importance ?? 0.5,
     confidence: row.confidence ?? 0.5,

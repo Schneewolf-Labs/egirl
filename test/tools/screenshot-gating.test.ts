@@ -2,11 +2,13 @@ import { afterAll, describe, expect, test } from 'bun:test'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { probeVisionSupport } from '../../src/providers/vision-probe'
+import { probeServerProps, serverSupportsVision } from '../../src/providers/server-props'
 import { createDefaultToolExecutor } from '../../src/tools'
 import { makeConfig } from '../agent/helpers'
 
-describe('probeVisionSupport', () => {
+describe('serverSupportsVision', () => {
+  const probeVisionSupport = async (url: string) =>
+    serverSupportsVision(await probeServerProps(url))
   let visionOn = false
   let respond404 = false
   const server = Bun.serve({

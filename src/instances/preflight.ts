@@ -1,4 +1,5 @@
 import type { RuntimeConfig } from '../config'
+import { errorMessage } from '../util/errors'
 import { isPortFree } from './scaffold'
 
 /**
@@ -27,7 +28,7 @@ async function reachable(url: string, path: string): Promise<{ ok: boolean; deta
       ? { ok: true, detail: url }
       : { ok: false, detail: `${url} returned HTTP ${response.status}` }
   } catch (error) {
-    return { ok: false, detail: error instanceof Error ? error.message : String(error) }
+    return { ok: false, detail: errorMessage(error) }
   }
 }
 
@@ -64,7 +65,7 @@ export async function checkServedModel(config: RuntimeConfig): Promise<CheckResu
     return {
       label: 'served model',
       level: 'fail',
-      message: error instanceof Error ? error.message : String(error),
+      message: errorMessage(error),
     }
   }
 }
@@ -134,7 +135,7 @@ export async function checkMcpServers(config: RuntimeConfig): Promise<CheckResul
       results.push({
         label: `mcp ${server.name}`,
         level: 'fail',
-        message: `${server.url}: ${error instanceof Error ? error.message : String(error)}`,
+        message: `${server.url}: ${errorMessage(error)}`,
       })
     }
   }

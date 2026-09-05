@@ -477,12 +477,7 @@ export const deepseekDialect: ToolDialect = {
   name: 'deepseek',
   buildToolsSection: qwen3Dialect.buildToolsSection,
   parseToolCalls(content) {
-    const normalized = normalizeDsmlToolCalls(content)
-    const json = parseJsonToolCalls(normalized)
-    if (json.toolCalls.length > 0) return withIds(json)
-    const kv = parseKeyValueToolCalls(normalized)
-    if (kv.toolCalls.length > 0) return withIds(kv)
-    return withIds(parseFunctionParamToolCalls(normalized))
+    return autoDialect.parseToolCalls(normalizeDsmlToolCalls(content))
   },
   formatToolResponse: qwen3Dialect.formatToolResponse,
 }

@@ -113,7 +113,7 @@ async function executeToolsWithHooks(args: {
   })
 
   // Intrinsic tools only touch the loop's own state, so they bypass the executor (and its
-  // safety/energy path) and the hooks. Results are reassembled in call order at the end.
+  // safety path) and the hooks. Results are reassembled in call order at the end.
   const intrinsicResults = new Map<string, ToolResult>()
   const external: ToolCall[] = []
   for (const call of toolCalls) {

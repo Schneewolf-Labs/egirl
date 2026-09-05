@@ -1,6 +1,7 @@
 import type { AgentLoop } from '../agent'
 import { colors, DIM, RESET } from '../ui/theme'
-import { createCLIEventHandler } from './cli-events'
+import { errorMessage } from '../util/errors'
+import { createCLIEventHandler, printReply } from './cli-events'
 
 export interface CommandContext {
   agent: AgentLoop
@@ -18,9 +19,7 @@ export async function handlePlanCommand(message: string, ctx: CommandContext): P
       planningMode: true,
     })
 
-    if (!state.streamed && response.content) {
-      console.log(`\n${c.secondary}✦ egirl${RESET} ${response.content}\n`)
-    }
+    printReply(state, response.content)
 
     if (!response.isPlan) return
 
@@ -34,9 +33,7 @@ export async function handlePlanCommand(message: string, ctx: CommandContext): P
         maxTurns: 20,
       })
 
-      if (!execState.streamed && execResponse.content) {
-        console.log(`\n${c.secondary}✦ egirl${RESET} ${execResponse.content}\n`)
-      }
+      printReply(execState, execResponse.content)
     } else {
       console.log(
         `\n${c.warning}Plan rejected.${RESET} You can modify your request and try again.\n`,
@@ -46,8 +43,7 @@ export async function handlePlanCommand(message: string, ctx: CommandContext): P
         .catch(() => {})
     }
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error)
-    console.error(`\n${c.error}Error:${RESET} ${errorMessage}\n`)
+    console.error(`\n${c.error}Error:${RESET} ${errorMessage(error)}\n`)
   }
 }
 
@@ -64,7 +60,7 @@ export async function handleCompactCommand(ctx: CommandContext): Promise<void> {
       )
     }
   } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error)
+    const msg = errorMessage(error)
     console.error(`${c.error}Compaction failed:${RESET} ${msg}\n`)
   }
 }

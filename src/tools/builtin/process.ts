@@ -1,4 +1,5 @@
 import { isAbsolute, resolve } from 'path'
+import { errorMessage } from '../../util/errors'
 import type { ProcessRegistry, ProcessSnapshot } from '../process-registry'
 import type { Tool, ToolResult } from '../types'
 
@@ -58,7 +59,7 @@ export function createProcessTools(registry: ProcessRegistry): {
         })
         return { success: true, output: `Started:\n${summarize(snap)}` }
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err)
+        const msg = errorMessage(err)
         return { success: false, output: `Failed to start process: ${msg}` }
       }
     },

@@ -1,10 +1,9 @@
-import {
-  type Options as ClaudeAgentOptions,
-  type PermissionResult,
-  query,
-} from '@anthropic-ai/claude-agent-sdk'
+import { type Options as ClaudeAgentOptions, query } from '@anthropic-ai/claude-agent-sdk'
 import * as readline from 'readline'
+import type { PermissionSupervisor } from '../permissions/supervisor'
 import type { LLMProvider } from '../providers/types'
+import { buildCanUseTool } from '../tools/builtin/code-agent/claude'
+import { errorMessage } from '../util/errors'
 import { log } from '../util/logger'
 
 // -- Public types --
@@ -14,6 +13,8 @@ export interface ClaudeCodeConfig {
   claudeModel?: string
   workingDir: string
   maxTurns?: number
+  /** Decides gated tool calls; without one every request is allowed. */
+  permissionSupervisor?: PermissionSupervisor
 }
 
 export interface TaskResult {
@@ -29,22 +30,18 @@ export interface TaskResult {
 export class ClaudeCodeChannel {
   private localProvider: LLMProvider
   private config: ClaudeCodeConfig
-  private conversationLog: string[] = []
-  private emit: (line: string) => void
+  private emit = (line: string): void => console.log(line)
 
-  constructor(localProvider: LLMProvider, config: ClaudeCodeConfig, emit?: (line: string) => void) {
+  constructor(localProvider: LLMProvider, config: ClaudeCodeConfig) {
     this.localProvider = localProvider
     this.config = config
-    this.emit = emit ?? ((line) => console.log(line))
   }
 
   async runTask(prompt: string): Promise<TaskResult> {
-    this.conversationLog = [`Task: ${prompt}`]
     return this.executeQuery(prompt)
   }
 
   async resumeSession(sessionId: string, prompt: string): Promise<TaskResult> {
-    this.conversationLog = [`Resumed session ${sessionId}`, `Follow-up: ${prompt}`]
     return this.executeQuery(prompt, sessionId)
   }
 
@@ -80,7 +77,7 @@ export class ClaudeCodeChannel {
             `[${result.turns} turns | $${result.costUsd.toFixed(4)} | ${(result.durationMs / 1000).toFixed(1)}s]\n`,
           )
         } catch (error) {
-          const msg = error instanceof Error ? error.message : String(error)
+          const msg = errorMessage(error)
           console.error(`\nError: ${msg}\n`)
         }
 
@@ -101,6 +98,12 @@ export class ClaudeCodeChannel {
     let finalResult = ''
 
     const isBypass = this.config.permissionMode === 'bypassPermissions'
+    const gate = buildCanUseTool(
+      this.config.permissionSupervisor,
+      prompt,
+      this.config.workingDir,
+      (reason) => this.emit(`[cc:halt] ${reason}`),
+    )
     const options: ClaudeAgentOptions = {
       permissionMode: isBypass ? 'bypassPermissions' : 'default',
       ...(isBypass && { allowDangerouslySkipPermissions: true }),
@@ -109,9 +112,12 @@ export class ClaudeCodeChannel {
       cwd: this.config.workingDir,
       resume: resumeSessionId,
 
-      // Handle tool permissions and questions with local model
-      canUseTool: async (toolName, input) => {
-        return this.handleToolRequest(toolName, input, prompt)
+      // Clarifying questions are answered by the local model; everything else goes through
+      // the same permission supervisor the code_agent tool uses.
+      canUseTool: async (toolName, input, context) => {
+        if (toolName === 'AskUserQuestion') return this.handleAskUserQuestion(input, prompt)
+        this.emit(`[cc:permission] ${toolName}: ${this.formatToolRequest(toolName, input)}`)
+        return gate(toolName, input, context)
       },
     }
 
@@ -158,7 +164,7 @@ export class ClaudeCodeChannel {
         }
       }
     } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error)
+      const msg = errorMessage(error)
       log.error('claude-code', `Query failed: ${msg}`)
       throw error
     }
@@ -170,23 +176,6 @@ export class ClaudeCodeChannel {
       costUsd: totalCost,
       durationMs: Date.now() - startTime,
     }
-  }
-
-  /**
-   * Handle tool permission requests and AskUserQuestion with local model
-   */
-  private async handleToolRequest(
-    toolName: string,
-    input: Record<string, unknown>,
-    originalTask: string,
-  ): Promise<PermissionResult> {
-    // Handle AskUserQuestion - Claude is asking for clarification
-    if (toolName === 'AskUserQuestion') {
-      return this.handleAskUserQuestion(input, originalTask)
-    }
-
-    // Handle tool permission requests
-    return this.handlePermissionRequest(toolName, input, originalTask)
   }
 
   /**
@@ -216,38 +205,11 @@ export class ClaudeCodeChannel {
       const answer = await this.answerQuestionWithLocalModel(originalTask, q)
       answers[q.question] = answer
       this.emit(`[local] ${answer}`)
-      this.conversationLog.push(`Q: ${q.question}`, `A: ${answer}`)
     }
 
     return {
       behavior: 'allow',
       updatedInput: { questions, answers },
-    }
-  }
-
-  /**
-   * Use local model to decide on tool permission requests
-   */
-  private async handlePermissionRequest(
-    toolName: string,
-    input: Record<string, unknown>,
-    originalTask: string,
-  ): Promise<PermissionResult> {
-    // Format the permission request for display
-    const requestSummary = this.formatToolRequest(toolName, input)
-    this.emit(`[cc:permission] ${toolName}: ${requestSummary}`)
-
-    // Ask local model if this should be allowed
-    const decision = await this.decidePermissionWithLocalModel(originalTask, toolName, input)
-
-    if (decision.allow) {
-      this.emit(`[local] Approved: ${decision.reason}`)
-      this.conversationLog.push(`Approved ${toolName}: ${decision.reason}`)
-      return { behavior: 'allow', updatedInput: input }
-    } else {
-      this.emit(`[local] Denied: ${decision.reason}`)
-      this.conversationLog.push(`Denied ${toolName}: ${decision.reason}`)
-      return { behavior: 'deny', message: decision.reason }
     }
   }
 
@@ -309,74 +271,6 @@ export class ClaudeCodeChannel {
   }
 
   /**
-   * Ask local model to decide on a permission request
-   */
-  private async decidePermissionWithLocalModel(
-    originalTask: string,
-    toolName: string,
-    input: Record<string, unknown>,
-  ): Promise<{ allow: boolean; reason: string }> {
-    const recentContext = this.conversationLog.slice(-10).join('\n')
-    const inputSummary = this.formatToolRequest(toolName, input)
-
-    const systemPrompt = [
-      'You are a security supervisor for Claude Code.',
-      'You must decide whether to ALLOW or DENY a tool request.',
-      '',
-      'Guidelines:',
-      '- ALLOW if the action is reasonable for the task and not destructive',
-      '- ALLOW reading files, running safe commands (ls, cat, grep, git status, npm test, etc.)',
-      "- ALLOW writing/editing files if it's part of the task",
-      '- DENY destructive commands (rm -rf, drop database, etc.) unless explicitly requested',
-      '- DENY accessing sensitive files (/etc/passwd, .env with secrets, ssh keys) unless needed',
-      '- DENY network requests to unknown hosts unless part of the task',
-      '- When in doubt, ALLOW - Claude Code is generally safe',
-      '',
-      'Respond in this exact format:',
-      'ALLOW: <brief reason>',
-      'or',
-      'DENY: <brief reason>',
-    ].join('\n')
-
-    const userPrompt = [
-      `Original task: ${originalTask}`,
-      '',
-      'Recent activity:',
-      recentContext,
-      '',
-      `Tool: ${toolName}`,
-      `Request: ${inputSummary}`,
-      '',
-      'Your decision (ALLOW or DENY):',
-    ].join('\n')
-
-    try {
-      const response = await this.localProvider.chat({
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt },
-        ],
-        temperature: 0.1,
-        max_tokens: 100,
-      })
-
-      const content = response.content.trim().toUpperCase()
-
-      if (content.startsWith('DENY')) {
-        const reason = response.content.replace(/^DENY:?\s*/i, '').trim() || 'Request denied'
-        return { allow: false, reason }
-      }
-
-      // Default to allow
-      const reason = response.content.replace(/^ALLOW:?\s*/i, '').trim() || 'Request approved'
-      return { allow: true, reason }
-    } catch (error) {
-      log.warn('claude-code', `Local model failed to decide, allowing by default: ${error}`)
-      return { allow: true, reason: 'Approved (local model unavailable)' }
-    }
-  }
-
-  /**
    * Format tool input for display
    */
   private formatToolRequest(toolName: string, input: Record<string, unknown>): string {
@@ -413,7 +307,6 @@ export class ClaudeCodeChannel {
     if (typeof content === 'string') {
       if (content.trim()) {
         this.emit(`[cc] ${content}`)
-        this.conversationLog.push(`Claude: ${content}`)
       }
       return
     }
@@ -421,7 +314,6 @@ export class ClaudeCodeChannel {
     for (const block of content) {
       if (block.type === 'text' && block.text) {
         this.emit(`[cc] ${block.text}`)
-        this.conversationLog.push(`Claude: ${block.text}`)
       } else if (block.type === 'tool_use' && block.name) {
         this.logToolUse(block.name, block.input as Record<string, unknown>)
       }
@@ -434,14 +326,12 @@ export class ClaudeCodeChannel {
   private logToolUse(name: string, input: Record<string, unknown>): void {
     const summary = this.formatToolRequest(name, input)
     this.emit(`[cc:${name.toLowerCase()}] ${summary}`)
-    this.conversationLog.push(`${name}: ${summary}`)
   }
 }
 
 export function createClaudeCodeChannel(
   localProvider: LLMProvider,
   config: ClaudeCodeConfig,
-  emit?: (line: string) => void,
 ): ClaudeCodeChannel {
-  return new ClaudeCodeChannel(localProvider, config, emit)
+  return new ClaudeCodeChannel(localProvider, config)
 }

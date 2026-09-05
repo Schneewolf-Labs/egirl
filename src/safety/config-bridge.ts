@@ -32,10 +32,6 @@ export function buildSafetyConfig(config: RuntimeConfig): SafetyConfig {
       enabled: safety.auditLog.enabled,
       path: safety.auditLog.path,
     },
-    confirmation: {
-      enabled: safety.confirmation.enabled,
-      tools: safety.confirmation.tools,
-    },
     permissionRules: compilePermissionRules(
       safety.permissionRules.allow,
       safety.permissionRules.deny,

@@ -1,5 +1,6 @@
 import { readFile } from 'fs/promises'
 import { isAbsolute, resolve } from 'path'
+import { errorMessage } from '../../util/errors'
 import type { Tool, ToolResult } from '../types'
 
 export const readTool: Tool = {
@@ -52,7 +53,7 @@ export const readTool: Tool = {
         output: content,
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
+      const message = errorMessage(error)
       return {
         success: false,
         output: `Failed to read file: ${message}`,

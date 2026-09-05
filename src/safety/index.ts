@@ -38,10 +38,6 @@ export interface SafetyConfig {
     enabled: boolean
     path?: string
   }
-  confirmation: {
-    enabled: boolean
-    tools: string[]
-  }
   /** Pattern-based permission rules — evaluated before other checks. First match wins. */
   permissionRules: PermissionRule[]
 }
@@ -75,10 +71,6 @@ export function getDefaultSafetyConfig(): SafetyConfig {
     // egirl is a single-user local-first agent — the operator trusts the agent
     // to execute commands autonomously. Enable via egirl.toml if you want
     // interactive approval before execute_command/write_file/edit_file.
-    confirmation: {
-      enabled: false,
-      tools: ['execute_command', 'write_file', 'edit_file'],
-    },
     permissionRules: [],
   }
 }
@@ -128,15 +120,6 @@ export function checkToolCall(
     if (filePath) {
       const sensitive = isSensitivePath(filePath, cwd, config.sensitiveFiles.patterns)
       if (sensitive) return { allowed: false, reason: sensitive }
-    }
-  }
-
-  // Confirmation mode
-  if (config.confirmation.enabled && config.confirmation.tools.includes(toolName)) {
-    return {
-      allowed: false,
-      reason: `Tool "${toolName}" requires confirmation (safety.confirmation.enabled is on)`,
-      needsConfirmation: true,
     }
   }
 

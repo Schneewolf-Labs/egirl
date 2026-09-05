@@ -3,7 +3,6 @@ import {
   buildToolsSection,
   formatToolCall,
   formatToolResponse,
-  formatToolResponses,
   hasToolCalls,
   parseToolCalls,
 } from '../../src/tools/format'
@@ -116,19 +115,6 @@ describe('formatToolResponse', () => {
   test('wraps output in tool_response tags', () => {
     const result = formatToolResponse('file contents here')
     expect(result).toBe('<tool_response>\nfile contents here\n</tool_response>')
-  })
-})
-
-describe('formatToolResponses', () => {
-  test('formats multiple responses', () => {
-    const results = new Map([
-      ['call_0', { output: 'result 1' }],
-      ['call_1', { output: 'result 2' }],
-    ])
-
-    const result = formatToolResponses(results)
-    expect(result).toContain('<tool_response>\nresult 1\n</tool_response>')
-    expect(result).toContain('<tool_response>\nresult 2\n</tool_response>')
   })
 })
 

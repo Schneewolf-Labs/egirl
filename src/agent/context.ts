@@ -215,7 +215,3 @@ export function createAgentContext(
 export function addMessage(context: AgentContext, message: ChatMessage): void {
   context.messages.push(message)
 }
-
-export function getMessagesWithSystem(context: AgentContext): ChatMessage[] {
-  return [{ role: 'system', content: context.systemPrompt }, ...context.messages]
-}

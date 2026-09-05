@@ -91,10 +91,6 @@ enabled = true
 enabled = true
 path = "{workspace}/audit.log"
 
-[safety.confirmation]
-enabled = false
-# tools = ["execute_command", "write_file", "edit_file"]
-
 [tasks]
 max_concurrent_tasks = 4                 # the real concurrency knob: concurrent background
                                          # tasks each drive a local-model call, which is what

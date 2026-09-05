@@ -1,3 +1,4 @@
+import { errorMessage } from '../util/errors'
 /**
  * Web Push: how an agent reaches a phone that is not looking at the console.
  *
@@ -10,7 +11,8 @@
  * Notifications carry no content by design — see the note in vapid.ts.
  */
 
-import { Database } from 'bun:sqlite'
+import type { Database } from 'bun:sqlite'
+import { openDatabase } from '../util/db'
 import { log } from '../util/logger'
 import { subscriptionId, type VapidKeys, vapidAuthHeader } from './vapid'
 
@@ -26,7 +28,7 @@ export class PushStore {
   private db: Database
 
   constructor(path: string) {
-    this.db = new Database(path, { create: true })
+    this.db = openDatabase(path)
     this.db.run(`CREATE TABLE IF NOT EXISTS push_subscriptions (
       endpoint TEXT PRIMARY KEY,
       p256dh TEXT,
@@ -132,7 +134,7 @@ export function createPushNotifier(
               log.warn('push', `Push to ${subscriptionId(sub.endpoint)} failed: HTTP ${res.status}`)
             }
           } catch (e) {
-            const msg = e instanceof Error ? e.message : String(e)
+            const msg = errorMessage(e)
             log.warn('push', `Push to ${subscriptionId(sub.endpoint)} failed: ${msg}`)
           }
         }),

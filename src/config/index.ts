@@ -385,10 +385,6 @@ export function loadConfig(options: LoadConfigOptions = {}): RuntimeConfig {
           ? expandPath(toml.safety.audit_log.path, workspacePath)
           : undefined,
       },
-      confirmation: {
-        enabled: toml.safety?.confirmation?.enabled ?? false,
-        tools: toml.safety?.confirmation?.tools ?? ['execute_command', 'write_file', 'edit_file'],
-      },
       permissionRules: {
         allow: toml.safety?.permission_rules?.allow ?? [],
         deny: toml.safety?.permission_rules?.deny ?? [],
@@ -402,11 +398,6 @@ export function loadConfig(options: LoadConfigOptions = {}): RuntimeConfig {
       autoExtract: toml.memory?.auto_extract ?? true,
       extractionMinMessages: toml.memory?.extraction_min_messages ?? 2,
       extractionMaxPerTurn: toml.memory?.extraction_max_per_turn ?? 5,
-    },
-    energy: {
-      enabled: toml.energy?.enabled ?? true,
-      maxEnergy: toml.energy?.max_energy ?? 20,
-      regenPerHour: toml.energy?.regen_per_hour ?? 10,
     },
     tasks: {
       enabled: toml.tasks?.enabled ?? true,
@@ -638,17 +629,4 @@ export function loadConfig(options: LoadConfigOptions = {}): RuntimeConfig {
   }
 
   return config
-}
-
-let _config: RuntimeConfig | null = null
-
-export function getConfig(): RuntimeConfig {
-  if (!_config) {
-    _config = loadConfig()
-  }
-  return _config
-}
-
-export function setConfig(config: RuntimeConfig): void {
-  _config = config
 }

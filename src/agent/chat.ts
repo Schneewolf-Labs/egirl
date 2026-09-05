@@ -8,6 +8,7 @@ import type {
   ToolDefinition,
 } from '../providers/types'
 import { ContextSizeError } from '../providers/types'
+import { errorMessage } from '../util/errors'
 import { log } from '../util/logger'
 import { formatSummaryMessage } from './context-summarizer'
 import { fitToContextWindow } from './context-window'
@@ -96,7 +97,7 @@ export async function chatWithRetry(args: {
       if (error instanceof ContextSizeError) throw error
       if (signal?.aborted) throw error
 
-      const errorMsg = error instanceof Error ? error.message : String(error)
+      const errorMsg = errorMessage(error)
 
       // A text-only endpoint rejects the whole request when any message carries an image
       // ("image input is not supported ... you may need to provide the mmproj"). Retrying the
@@ -238,17 +239,16 @@ export async function chatWithContextWindow(args: {
     return { send, droppedMessages, wasTrimmed: fit.wasTrimmed || rollover !== undefined, rollover }
   }
 
-  const prepared = await prepare(contextLength)
-
-  log.debug(
-    'agent',
-    `Sending ${prepared.send.length} messages to ${provider.name} (budget: ${contextLength}t)`,
-  )
-
-  try {
+  /** Fit to the window and send; the shape of the result is what the loop adopts. */
+  async function send(windowLength: number) {
+    const { send: fitted, ...prepared } = await prepare(windowLength)
+    log.debug(
+      'agent',
+      `Sending ${fitted.length} messages to ${provider.name} (budget: ${windowLength}t)`,
+    )
     const response = await chatWithRetry({
       provider,
-      messages: prepared.send,
+      messages: fitted,
       tools,
       onToken: args.onToken,
       onThinkingToken: args.onThinkingToken,
@@ -256,39 +256,19 @@ export async function chatWithContextWindow(args: {
       signal: args.signal,
       cacheSlot: args.cacheSlot,
     })
-    return {
-      response,
-      droppedMessages: prepared.droppedMessages,
-      wasTrimmed: prepared.wasTrimmed,
-      rollover: prepared.rollover,
-    }
+    return { response, ...prepared }
+  }
+
+  try {
+    return await send(contextLength)
   } catch (error) {
     if (!(error instanceof ContextSizeError)) throw error
-
+    // Same fit and hoist as above — this retry path would otherwise reintroduce the inline
+    // system message whenever the server's real n_ctx differs from the configured one.
     log.warn(
       'agent',
       `Server n_ctx=${error.contextSize} differs from config (${contextLength}). Retrimming.`,
     )
-
-    // Same fit and hoist as above — this retry path would otherwise reintroduce the inline
-    // system message whenever the server's real n_ctx differs from the configured one.
-    const refit = await prepare(error.contextSize)
-
-    const response = await chatWithRetry({
-      provider,
-      messages: refit.send,
-      tools,
-      onToken: args.onToken,
-      onThinkingToken: args.onThinkingToken,
-      thinking: args.thinking,
-      signal: args.signal,
-      cacheSlot: args.cacheSlot,
-    })
-    return {
-      response,
-      droppedMessages: refit.droppedMessages,
-      wasTrimmed: refit.wasTrimmed,
-      rollover: refit.rollover,
-    }
+    return send(error.contextSize)
   }
 }

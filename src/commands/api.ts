@@ -1,8 +1,6 @@
 import { join } from 'node:path'
-import { type AgentFactory, type AgentLoop, createAgentLoop } from '../agent'
-import { SessionMutex } from '../agent/session-mutex'
+import type { AgentLoop } from '../agent'
 import { startAPIServer } from '../api'
-import { createAppServices } from '../bootstrap'
 import { createMatrixOutbound } from '../channels/matrix'
 import type { OutboundChannel } from '../channels/types'
 import type { RuntimeConfig } from '../config'
@@ -10,11 +8,9 @@ import { createPushNotifier, generateVapidKeys, PushStore } from '../push'
 import { createReplyBroker } from '../report/broker'
 import { ConsoleInbox } from '../report/console-channel'
 import { registerReportTool } from '../report/register'
-import { gatherStandup } from '../standup'
-import { createTaskRunner, taskRunnerEnabled, taskRunnerOffReason } from '../tasks'
-import { createTaskTools } from '../tools/builtin/tasks'
+import { taskRunnerOffReason } from '../tasks'
 import { applyLogLevel } from '../util/args'
-import { log } from '../util/logger'
+import { createBackgroundTasks, createCommandRuntime, onShutdown } from './runtime'
 
 export async function runAPI(config: RuntimeConfig, args: string[]): Promise<void> {
   applyLogLevel(args)
@@ -26,25 +22,8 @@ export async function runAPI(config: RuntimeConfig, args: string[]): Promise<voi
     process.exit(1)
   }
 
-  const { providers, memory, conversations, taskStore, toolExecutor, skills, processRegistry } =
-    await createAppServices(config)
-
-  const standup = await gatherStandup(config.workspace.path)
-  const sessionMutex = new SessionMutex()
-
-  const agentFactory: AgentFactory = (sessionId: string) =>
-    createAgentLoop({
-      config,
-      toolExecutor,
-      localProvider: providers.local,
-      auxProvider: providers.auxiliary,
-      sessionId,
-      memory,
-      conversationStore: conversations,
-      skills,
-      additionalContext: standup.context || undefined,
-      sessionMutex,
-    })
+  const rt = await createCommandRuntime(config)
+  const { memory, conversations, taskStore, toolExecutor, processRegistry, agentFactory } = rt
 
   const agents = new Map<string, AgentLoop>()
 
@@ -71,59 +50,27 @@ export async function runAPI(config: RuntimeConfig, args: string[]): Promise<voi
   )
 
   // Background tasks are optional but naturally pair with the API —
-  // POST /tasks doesn't do much without a runner.
-  let taskRunner: ReturnType<typeof createTaskRunner> | undefined
-  if (taskRunnerEnabled(config, !!taskStore) && taskStore) {
-    taskRunner = createTaskRunner({
-      config,
-      tasksConfig: config.tasks,
-      store: taskStore,
-      // A parked task is the one thing worth interrupting someone for: the agent has stopped
-      // and nothing moves until a human answers.
-      onAwaitingInput: (task) => {
-        void push.notify(`task "${task.name}" is awaiting input`)
-      },
-      toolExecutor,
-      localProvider: providers.local,
-      auxProvider: providers.auxiliary,
-      memory,
-      // Task notifications for api-channel tasks land in the console inbox as dismissable
-      // notices — without a sender here they were warn-logged and never seen. A task created
-      // from the room reports back to the room.
-      outbound: new Map<string, OutboundChannel>([
-        ['api', { send: consoleInbox.notice }],
-        ...(matrix ? [['matrix', matrix] as const] : []),
-      ]),
-      conversationStore: conversations,
-      sessionMutex,
-    })
-
-    const taskTools = createTaskTools(taskStore, taskRunner, config.tasks.maxActiveTasks, () => ({
-      channel: 'api',
-      channelTarget: 'api:default',
-    }))
-    toolExecutor.registerAll([
-      taskTools.taskAddTool,
-      taskTools.taskProposeTool,
-      taskTools.taskListTool,
-      taskTools.taskPauseTool,
-      taskTools.taskResumeTool,
-      taskTools.taskCancelTool,
-      taskTools.taskRunNowTool,
-      taskTools.taskHistoryTool,
-    ])
-
-    taskRunner.start()
-  } else {
-    // Say WHY, naming the flag. A bare silence here means a populated [tasks] section that
-    // simply never runs, which is exactly what happened in practice.
-    const why = taskRunnerOffReason(config, !!taskStore)
-    if (config.source.tasksConfiguredButGated) {
-      log.warn('tasks', `[tasks] is configured but INERT: ${why}`)
-    } else if (why) {
-      log.info('tasks', `Background tasks off: ${why}`)
-    }
-  }
+  // POST /tasks doesn't do much without a runner. No discovery or heartbeat here: the API has
+  // no chat surface for them to report into.
+  const tasks = createBackgroundTasks(rt, {
+    // Task notifications for api-channel tasks land in the console inbox as dismissable
+    // notices — without a sender here they were warn-logged and never seen. A task created
+    // from the room reports back to the room.
+    outbound: new Map<string, OutboundChannel>([
+      ['api', { send: consoleInbox.notice }],
+      ...(matrix ? [['matrix', matrix] as const] : []),
+    ]),
+    channel: 'api',
+    channelTarget: 'api:default',
+    // A parked task is the one thing worth interrupting someone for: the agent has stopped
+    // and nothing moves until a human answers.
+    onAwaitingInput: (task) => {
+      void push.notify(`task "${task.name}" is awaiting input`)
+    },
+    schedule: false,
+  })
+  const taskRunner = tasks?.taskRunner
+  taskRunner?.start()
 
   const server = startAPIServer(config.channels.api, {
     consoleInbox,
@@ -141,17 +88,12 @@ export async function runAPI(config: RuntimeConfig, args: string[]): Promise<voi
     ...(conversations ? { conversationStore: conversations } : {}),
   })
 
-  const shutdown = async () => {
-    log.info('main', 'Shutting down...')
+  onShutdown(async () => {
     taskRunner?.stop()
     server.stop()
     await matrix?.stop()
     await processRegistry.shutdownAll()
     taskStore?.close()
     conversations?.close()
-    process.exit(0)
-  }
-
-  process.on('SIGINT', shutdown)
-  process.on('SIGTERM', shutdown)
+  })
 }

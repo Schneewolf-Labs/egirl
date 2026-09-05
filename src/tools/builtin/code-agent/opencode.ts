@@ -1,5 +1,6 @@
 import { spawn } from 'child_process'
 import { sanitizedEnv } from '../../../util/env'
+import { errorMessage } from '../../../util/errors'
 import { log } from '../../../util/logger'
 import { DEFAULT_TIMEOUT_MS } from './shared'
 import type { CodeAgentBackend, CodeAgentConfig } from './types'
@@ -239,7 +240,7 @@ export const runOpencodeCodeAgent: CodeAgentBackend = async (config, task, worki
         output: `Code agent timed out after ${(timeoutMs / 1000).toFixed(0)}s`,
       }
     }
-    const msg = error instanceof Error ? error.message : String(error)
+    const msg = errorMessage(error)
     log.error('code-agent', `opencode task failed: ${msg}`)
     return { success: false, output: `Code agent error: ${msg}` }
   } finally {

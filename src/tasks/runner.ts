@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { isAbsolute, resolve } from 'node:path'
 import { AgentLoop } from '../agent/loop'
+import { subscribeAll } from '../agent/session-events'
 import type { SessionMutex } from '../agent/session-mutex'
 import type { AgentLoopDeps } from '../agent/types'
 import type { RuntimeConfig } from '../config'
@@ -11,6 +12,7 @@ import { retrieveForContext } from '../memory/retrieval'
 import type { LLMProvider } from '../providers/types'
 import { gatherStandup } from '../standup'
 import type { ToolExecutor } from '../tools'
+import { errorMessage } from '../util/errors'
 import { log } from '../util/logger'
 import { parseScheduleExpression } from './cron'
 import { classifyError, getRetryPolicy } from './error-classify'
@@ -83,6 +85,7 @@ export class TaskRunner {
   private runningCount = 0
   private runningTasks: Map<string, { controller: AbortController }> = new Map()
   private lastInteractionAt: number = Date.now()
+  private unsubscribeBus: (() => void) | undefined
 
   constructor(deps: TaskRunnerDeps) {
     this.deps = deps
@@ -106,6 +109,11 @@ export class TaskRunner {
         log.info('tasks', `Re-armed ${task.name} (${task.id}): active with no nextRunAt`)
       }
     }
+    // Presence, for discovery's idle check: any run that is not a task's own is a human talking
+    // to the agent on some channel.
+    this.unsubscribeBus = subscribeAll((sessionId, event) => {
+      if (event.t === 'run_start' && !sessionId.startsWith('task:')) this.recordInteraction()
+    })
     const { tickIntervalMs } = this.deps.tasksConfig
     this.tickTimer = setInterval(() => this.tick(), tickIntervalMs)
     log.info('tasks', `Task runner started (tick=${tickIntervalMs}ms)`)
@@ -114,6 +122,8 @@ export class TaskRunner {
   stop(): void {
     if (this.tickTimer) clearInterval(this.tickTimer)
     this.tickTimer = undefined
+    this.unsubscribeBus?.()
+    this.unsubscribeBus = undefined
 
     for (const [, entry] of this.runningTasks) {
       entry.controller.abort()
@@ -311,7 +321,7 @@ export class TaskRunner {
 
       return { ...run, status: 'success', result, completedAt: Date.now() }
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : String(err)
+      const errorMsg = errorMessage(err)
 
       // An unbounded run reaching its wall-clock time budget is a scheduled checkpoint boundary,
       // not a failure. It was warned to wrap up (the loop's deadline nudge), its work is already
@@ -433,7 +443,7 @@ export class TaskRunner {
     const standup = await gatherStandup(cwd)
 
     const contextParts: string[] = []
-    if (standup.context) contextParts.push(standup.context)
+    if (standup) contextParts.push(standup)
 
     // Pinned task state. Lives in the system prompt (via additionalContext), so it is present
     // every turn and survives compaction — unlike notes the agent reads with a tool call, whose

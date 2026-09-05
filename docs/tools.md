@@ -1,6 +1,6 @@
 # Built-in Tools Reference
 
-egirl ships with ~50 built-in tools across 8 categories that the agent can invoke during conversations. Tools are registered in the `ToolExecutor` at startup and described in the system prompt so the model knows how to use them. Rarely-used tool schemas are lazy-loaded via a `tool_search` meta-tool to keep the base system prompt small — see `src/tools/deferred-loader.ts`.
+egirl ships with ~50 built-in tools across 8 categories that the agent can invoke during conversations. Tools are registered in the `ToolExecutor` at startup and described in the system prompt so the model knows how to use them.
 
 | Category | Count | Tools |
 |----------|-------|-------|
@@ -13,7 +13,7 @@ egirl ships with ~50 built-in tools across 8 categories that the agent can invok
 | Tasks | 8 | `task_add`, `task_propose`, `task_list`, `task_pause`, `task_resume`, `task_cancel`, `task_run_now`, `task_history` |
 | Delegation | 1 | `code_agent` — drive the configured code agent (the primary tool) |
 | Peers | 2 | `peer_message`, `peer_list` — agent-to-agent messaging with other egirl instances |
-| Other | 4 | `screenshot`, `web_research`, `web_search`, `tool_search` |
+| Other | 3 | `screenshot`, `web_research`, `web_search` |
 
 ## Tool Architecture
 

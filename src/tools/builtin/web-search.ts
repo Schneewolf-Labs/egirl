@@ -1,3 +1,4 @@
+import { errorMessage } from '../../util/errors'
 import type { Tool, ToolResult } from '../types'
 
 const DEFAULT_TIMEOUT = 15000
@@ -145,7 +146,7 @@ export function createWebSearchTool(config: WebSearchConfig): Tool {
 
         return { success: true, output }
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error)
+        const message = errorMessage(error)
 
         if (message.includes('abort')) {
           return {

@@ -33,23 +33,21 @@ describe('gatherStandup', () => {
     await mkdir(noGitDir, { recursive: true })
 
     const report = await gatherStandup(noGitDir)
-    expect(report.isGitRepo).toBe(false)
-    expect(report.context).toBe('')
+    expect(report).toBe('')
 
     await rm(noGitDir, { recursive: true, force: true })
   })
 
   test('produces standup for clean repo', async () => {
     const report = await gatherStandup(testDir)
-    expect(report.isGitRepo).toBe(true)
-    expect(report.context).toContain('Workspace Standup')
-    expect(report.context).toContain('Branch')
+    expect(report).toContain('Workspace Standup')
+    expect(report).toContain('Branch')
     // git init creates 'main' or 'master' depending on system config
-    expect(report.context.includes('master') || report.context.includes('main')).toBe(true)
-    expect(report.context).toContain('clean')
-    expect(report.context).toContain('Recent commits')
-    expect(report.context).toContain('Add feature module')
-    expect(report.context).toContain('Initial commit')
+    expect(report.includes('master') || report.includes('main')).toBe(true)
+    expect(report).toContain('clean')
+    expect(report).toContain('Recent commits')
+    expect(report).toContain('Add feature module')
+    expect(report).toContain('Initial commit')
   })
 
   test('shows modified files in standup', async () => {
@@ -57,10 +55,10 @@ describe('gatherStandup', () => {
     await writeFile(join(testDir, 'untracked.txt'), 'new\n')
 
     const report = await gatherStandup(testDir)
-    expect(report.context).toContain('1 modified')
-    expect(report.context).toContain('1 untracked')
-    expect(report.context).toContain('hello.txt')
-    expect(report.context).toContain('untracked.txt')
+    expect(report).toContain('1 modified')
+    expect(report).toContain('1 untracked')
+    expect(report).toContain('hello.txt')
+    expect(report).toContain('untracked.txt')
 
     exec('git checkout -- hello.txt')
     exec('rm untracked.txt')
@@ -71,15 +69,15 @@ describe('gatherStandup', () => {
     exec('git stash')
 
     const report = await gatherStandup(testDir)
-    expect(report.context).toContain('Stashes')
-    expect(report.context).toContain('1')
+    expect(report).toContain('Stashes')
+    expect(report).toContain('1')
 
     exec('git stash drop')
   })
 
   test('shows last commit time', async () => {
     const report = await gatherStandup(testDir)
-    expect(report.context).toContain('Last commit')
-    expect(report.context).toContain('ago')
+    expect(report).toContain('Last commit')
+    expect(report).toContain('ago')
   })
 })

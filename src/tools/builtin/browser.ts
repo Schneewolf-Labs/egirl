@@ -1,4 +1,5 @@
 import type { BrowserManager, PageSnapshot } from '../../browser'
+import { errorMessage } from '../../util/errors'
 import type { Tool, ToolResult } from '../types'
 
 function formatSnapshot(snap: PageSnapshot): string {
@@ -49,7 +50,7 @@ export function createBrowserTools(manager: BrowserManager): {
         const snap = await manager.navigate(url)
         return { success: true, output: formatSnapshot(snap) }
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error)
+        const message = errorMessage(error)
         return { success: false, output: `Navigation failed: ${message}` }
       }
     },
@@ -84,7 +85,7 @@ export function createBrowserTools(manager: BrowserManager): {
         const snap = await manager.click(target)
         return { success: true, output: formatSnapshot(snap) }
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error)
+        const message = errorMessage(error)
         return { success: false, output: `Click failed: ${message}` }
       }
     },
@@ -123,7 +124,7 @@ export function createBrowserTools(manager: BrowserManager): {
         const snap = await manager.fill(target, value)
         return { success: true, output: formatSnapshot(snap) }
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error)
+        const message = errorMessage(error)
         return { success: false, output: `Fill failed: ${message}` }
       }
     },
@@ -145,7 +146,7 @@ export function createBrowserTools(manager: BrowserManager): {
         const snap = await manager.snapshot()
         return { success: true, output: formatSnapshot(snap) }
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error)
+        const message = errorMessage(error)
         return { success: false, output: `Snapshot failed: ${message}` }
       }
     },
@@ -167,7 +168,7 @@ export function createBrowserTools(manager: BrowserManager): {
         const dataUrl = await manager.screenshot()
         return { success: true, output: dataUrl, isImage: true }
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error)
+        const message = errorMessage(error)
         return { success: false, output: `Screenshot failed: ${message}` }
       }
     },
@@ -201,7 +202,7 @@ export function createBrowserTools(manager: BrowserManager): {
         const snap = await manager.selectOption(target, value)
         return { success: true, output: formatSnapshot(snap) }
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error)
+        const message = errorMessage(error)
         return { success: false, output: `Select failed: ${message}` }
       }
     },
@@ -235,7 +236,7 @@ export function createBrowserTools(manager: BrowserManager): {
         const snap = checked ? await manager.check(target) : await manager.uncheck(target)
         return { success: true, output: formatSnapshot(snap) }
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error)
+        const message = errorMessage(error)
         return { success: false, output: `Check failed: ${message}` }
       }
     },
@@ -264,7 +265,7 @@ export function createBrowserTools(manager: BrowserManager): {
         const snap = await manager.hover(target)
         return { success: true, output: formatSnapshot(snap) }
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error)
+        const message = errorMessage(error)
         return { success: false, output: `Hover failed: ${message}` }
       }
     },
@@ -299,7 +300,7 @@ export function createBrowserTools(manager: BrowserManager): {
         const snap = await manager.waitFor(target, timeout)
         return { success: true, output: formatSnapshot(snap) }
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error)
+        const message = errorMessage(error)
         return { success: false, output: `Wait failed: ${message}` }
       }
     },
@@ -330,7 +331,7 @@ export function createBrowserTools(manager: BrowserManager): {
         const output = typeof result === 'string' ? result : JSON.stringify(result, null, 2)
         return { success: true, output: output ?? 'undefined' }
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error)
+        const message = errorMessage(error)
         return { success: false, output: `Eval failed: ${message}` }
       }
     },
@@ -352,7 +353,7 @@ export function createBrowserTools(manager: BrowserManager): {
         await manager.close()
         return { success: true, output: 'Browser closed' }
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error)
+        const message = errorMessage(error)
         return { success: false, output: `Close failed: ${message}` }
       }
     },

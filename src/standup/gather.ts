@@ -1,39 +1,4 @@
-import { spawn } from 'child_process'
-
-/**
- * Run a git command and return stdout, or undefined on failure.
- */
-function runGit(args: string[], cwd: string, timeout = 10000): Promise<string | undefined> {
-  return new Promise((resolve) => {
-    let stdout = ''
-    let killed = false
-
-    const proc = spawn('git', args, { cwd, env: { ...process.env, GIT_TERMINAL_PROMPT: '0' } })
-
-    const timer = setTimeout(() => {
-      killed = true
-      proc.kill('SIGTERM')
-    }, timeout)
-
-    proc.stdout.on('data', (d) => {
-      stdout += d.toString()
-    })
-
-    proc.on('error', () => {
-      clearTimeout(timer)
-      resolve(undefined)
-    })
-
-    proc.on('close', (code) => {
-      clearTimeout(timer)
-      if (killed || code !== 0) {
-        resolve(undefined)
-        return
-      }
-      resolve(stdout)
-    })
-  })
-}
+import { gitStdout } from '../util/git'
 
 export interface GitBranchInfo {
   current: string
@@ -43,13 +8,13 @@ export interface GitBranchInfo {
 }
 
 export async function gatherBranch(cwd: string): Promise<GitBranchInfo | undefined> {
-  const branch = await runGit(['rev-parse', '--abbrev-ref', 'HEAD'], cwd)
+  const branch = await gitStdout(['rev-parse', '--abbrev-ref', 'HEAD'], cwd)
   if (!branch) return undefined
 
   const current = branch.trim()
 
   // Get tracking branch info
-  const tracking = await runGit(
+  const tracking = await gitStdout(
     ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}'],
     cwd,
   )
@@ -58,7 +23,7 @@ export async function gatherBranch(cwd: string): Promise<GitBranchInfo | undefin
   let behind = 0
 
   if (tracking) {
-    const counts = await runGit(
+    const counts = await gitStdout(
       ['rev-list', '--left-right', '--count', `HEAD...${tracking.trim()}`],
       cwd,
     )
@@ -84,7 +49,7 @@ export interface FileStatus {
 }
 
 export async function gatherStatus(cwd: string): Promise<FileStatus | undefined> {
-  const output = await runGit(['status', '--porcelain=v1'], cwd)
+  const output = await gitStdout(['status', '--porcelain=v1'], cwd)
   if (output === undefined) return undefined
 
   const staged: string[] = []
@@ -115,7 +80,7 @@ export interface RecentCommit {
 }
 
 export async function gatherRecentCommits(cwd: string, count = 10): Promise<RecentCommit[]> {
-  const output = await runGit(['log', `--format=%h\t%ad\t%s`, '--date=short', `-n${count}`], cwd)
+  const output = await gitStdout(['log', `--format=%h\t%ad\t%s`, '--date=short', `-n${count}`], cwd)
   if (!output) return []
 
   return output
@@ -129,16 +94,16 @@ export async function gatherRecentCommits(cwd: string, count = 10): Promise<Rece
 }
 
 export async function gatherStashCount(cwd: string): Promise<number> {
-  const output = await runGit(['stash', 'list'], cwd)
+  const output = await gitStdout(['stash', 'list'], cwd)
   if (!output?.trim()) return 0
   return output.trim().split('\n').length
 }
 
 export async function gatherLastCommitAge(cwd: string): Promise<string | undefined> {
-  const output = await runGit(['log', '-1', '--format=%ar'], cwd)
+  const output = await gitStdout(['log', '-1', '--format=%ar'], cwd)
   return output?.trim() || undefined
 }
 
 export function isGitRepo(cwd: string): Promise<boolean> {
-  return runGit(['rev-parse', '--git-dir'], cwd).then((r) => r !== undefined)
+  return gitStdout(['rev-parse', '--git-dir'], cwd).then((r) => r !== undefined)
 }

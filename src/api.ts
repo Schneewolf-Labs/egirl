@@ -11,10 +11,6 @@ import {
   subscribe,
 } from './agent/session-events'
 import type { RuntimeConfig } from './config'
-import type { ChatMessage, ThinkingConfig } from './providers/types'
-
-const THINKING_LEVELS: readonly ThinkingConfig['level'][] = ['off', 'low', 'medium', 'high']
-
 import type { SessionInfo } from './conversation'
 import type { MemoryCategory, MemoryManager } from './memory'
 import {
@@ -23,9 +19,11 @@ import {
   PEER_PROTOCOL,
   peerSessionId,
 } from './peers/protocol'
+import type { ChatMessage, ThinkingConfig } from './providers/types'
 import type { PushNotifier, PushStore } from './push'
 import { renderManifest, renderServiceWorker } from './push/assets'
 import type { ConsoleInbox } from './report/console-channel'
+import { isThinkingLevel, THINKING_LEVELS } from './session/commands'
 import { readLedger } from './skills/ledger'
 import { lintSkill } from './skills/linter'
 import { loadSkillsFromDirectories } from './skills/loader'
@@ -34,6 +32,7 @@ import type { Task, TaskRunner, TaskStore } from './tasks'
 import { WORKING_MEMORY_MAX_CHARS } from './tools/builtin/working-memory'
 import { traceStore } from './tracking/traces'
 import { getTheme } from './ui/theme'
+import { errorMessage } from './util/errors'
 import { log } from './util/logger'
 import { ansiToHex, renderChatPage } from './web-ui'
 
@@ -101,10 +100,6 @@ async function readJson(req: Request): Promise<Record<string, unknown>> {
   } catch {
     return {}
   }
-}
-
-function isThinkingLevel(value: string): value is ThinkingConfig['level'] {
-  return (THINKING_LEVELS as readonly string[]).includes(value)
 }
 
 /** The session's own thinking level, or null when it follows config. */
@@ -216,6 +211,8 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
     return { done, position }
   }
 
+  const selfName = deps.selfName ?? 'egirl'
+
   const server = Bun.serve({
     hostname: host,
     port,
@@ -283,7 +280,7 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
             ].join('; ')
             return new Response(
               renderChatPage({
-                name: deps.selfName ?? 'egirl',
+                name: selfName,
                 theme: getTheme(),
                 hasToken: Boolean(bearerToken),
                 nonce,
@@ -354,14 +351,14 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
         if (method === 'GET' && path === '/manifest.webmanifest') {
           return new Response(
             renderManifest({
-              name: deps.selfName ?? 'egirl',
+              name: selfName,
               primary: ansiToHex(getTheme().colors.primary),
             }),
             { headers: { 'content-type': 'application/manifest+json' } },
           )
         }
         if (method === 'GET' && path === '/sw.js') {
-          return new Response(renderServiceWorker({ name: deps.selfName ?? 'egirl' }), {
+          return new Response(renderServiceWorker({ name: selfName }), {
             headers: {
               'content-type': 'text/javascript',
               // The worker controls the whole origin, so it must not be served from a cache
@@ -479,7 +476,7 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
                   })
                 }
               } catch (e) {
-                if (!ended) send({ t: 'error', v: e instanceof Error ? e.message : String(e) })
+                if (!ended) send({ t: 'error', v: errorMessage(e) })
               } finally {
                 unsubscribe?.()
               }
@@ -510,7 +507,7 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
         if (method === 'GET' && path === '/info') {
           const cfg = deps.config
           return json({
-            name: deps.selfName ?? 'egirl',
+            name: selfName,
             instance: cfg?.source.instance ?? null,
             persona: cfg?.source.persona ?? null,
             profile: cfg?.source.profile ?? null,
@@ -559,7 +556,7 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
           return json({
             service: 'egirl',
             protocol: PEER_PROTOCOL,
-            name: deps.selfName ?? 'egirl',
+            name: selfName,
           })
         }
 
@@ -670,14 +667,14 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
                   reachable: false,
                   remote_name: null,
                   protocol: null,
-                  error: e instanceof Error ? e.message : String(e),
+                  error: errorMessage(e),
                 }
               } finally {
                 clearTimeout(timer)
               }
             }),
           )
-          return json({ self: deps.selfName ?? 'egirl', peers: probed })
+          return json({ self: selfName, peers: probed })
         }
 
         if (method === 'POST' && path === '/peer/message') {
@@ -699,7 +696,7 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
           if (instanceBusy()) {
             return json({
               protocol: PEER_PROTOCOL,
-              from: deps.selfName ?? 'egirl',
+              from: selfName,
               busy: true,
               content: `${deps.selfName ?? 'this agent'} is mid-task and can't respond right now — retry shortly.`,
               session_id: peerSessionId(from),
@@ -712,7 +709,7 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
           ).done
           return json({
             protocol: PEER_PROTOCOL,
-            from: deps.selfName ?? 'egirl',
+            from: selfName,
             content: response.content,
             session_id: sessionId,
             turns: response.turns,
@@ -981,33 +978,6 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
           })
         }
 
-        // A task's full detail plus its recent runs — what the console expands to when you click a
-        // task. Reading run history used to mean opening tasks.db; this is the same data the
-        // task_history tool gives the agent.
-        if (method === 'GET' && path.match(/^\/tasks\/[^/]+\/history$/)) {
-          if (!deps.taskStore) return err('tasks disabled', 503)
-          const id = path.split('/')[2] as string
-          const task = deps.taskStore.get(id)
-          if (!task) return err('task not found', 404)
-          const running = new Set(deps.taskRunner?.getRunningTaskIds() ?? [])
-          return json({
-            task: {
-              ...(taskToJson(task) as Record<string, JSONValue>),
-              running: running.has(task.id),
-            },
-            runs: deps.taskStore.getRecentRuns(id, 8).map((r) => ({
-              id: r.id,
-              status: r.status,
-              started_at: r.startedAt,
-              completed_at: r.completedAt ?? null,
-              result: r.result ?? null,
-              error: r.error ?? null,
-              error_kind: r.errorKind ?? null,
-              tokens_used: r.tokensUsed,
-            })),
-          })
-        }
-
         if (method === 'POST' && path === '/tasks') {
           if (!deps.taskStore || !deps.taskRunner) {
             return err(`tasks disabled: ${deps.taskOffReason ?? 'no task runner'}`, 503)
@@ -1035,49 +1005,16 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
           return json(taskToJson(task))
         }
 
-        // Lifecycle over HTTP — the same operations the task_* tools give the agent, for the
-        // human. Retiring a task used to mean editing tasks.db by hand.
-        if (method === 'POST' && path.match(/^\/tasks\/[^/]+\/pause$/)) {
-          if (!deps.taskStore) return err('tasks disabled', 503)
-          const id = path.split('/')[2] as string
-          const task = deps.taskStore.get(id)
-          if (!task) return err('task not found', 404)
-          deps.taskStore.update(id, { status: 'paused' }, 'paused via API')
-          return json({ ok: true, id, status: 'paused' })
-        }
-
-        if (method === 'POST' && path.match(/^\/tasks\/[^/]+\/resume$/)) {
-          if (!deps.taskStore) return err('tasks disabled', 503)
-          const id = path.split('/')[2] as string
-          const task = deps.taskStore.get(id)
-          if (!task) return err('task not found', 404)
-          deps.taskStore.update(
-            id,
-            { status: 'active', consecutiveFailures: 0, lastErrorKind: undefined },
-            'resumed via API',
-          )
-          deps.taskRunner?.activateTask(id)
-          return json({ ok: true, id, status: 'active' })
-        }
-
-        if (method === 'DELETE' && path.match(/^\/tasks\/[^/]+$/)) {
-          if (!deps.taskStore) return err('tasks disabled', 503)
-          const id = path.split('/')[2] as string
-          const task = deps.taskStore.get(id)
-          if (!task) return err('task not found', 404)
-          // A running instance is aborted first so the delete doesn't leave an orphaned run
-          // writing results for a task that no longer exists.
-          const aborted = deps.taskRunner?.abortTask(id) ?? false
-          deps.taskStore.delete(id)
-          return json({ ok: true, id, aborted_running: aborted })
-        }
-
-        if (method === 'POST' && path.match(/^\/tasks\/[^/]+\/run$/)) {
+        // Per-task routes: detail with run history, lifecycle (the same operations the task_*
+        // tools give the agent, for the human -- retiring a task used to mean editing tasks.db
+        // by hand) and run-now.
+        const taskRoute = path.match(/^\/tasks\/([^/]+)(?:\/(history|pause|resume|run))?$/)
+        const taskAction = taskRoute ? `${method} ${taskRoute[2] ?? ''}`.trim() : ''
+        if (taskRoute && taskAction === 'POST run') {
           if (!deps.taskRunner) {
             return err(`tasks disabled: ${deps.taskOffReason ?? 'no task runner'}`, 503)
           }
-          const id = path.split('/')[2] as string
-          const run = await deps.taskRunner.runNow(id)
+          const run = await deps.taskRunner.runNow(taskRoute[1] as string)
           if (!run) return err('task not found', 404)
           return json({
             status: run.status,
@@ -1085,10 +1022,57 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
             error: run.error ?? null,
           })
         }
+        if (
+          taskRoute &&
+          ['GET history', 'POST pause', 'POST resume', 'DELETE'].includes(taskAction)
+        ) {
+          if (!deps.taskStore) return err('tasks disabled', 503)
+          const id = taskRoute[1] as string
+          const task = deps.taskStore.get(id)
+          if (!task) return err('task not found', 404)
+
+          if (taskAction === 'GET history') {
+            const running = new Set(deps.taskRunner?.getRunningTaskIds() ?? [])
+            return json({
+              task: {
+                ...(taskToJson(task) as Record<string, JSONValue>),
+                running: running.has(task.id),
+              },
+              runs: deps.taskStore.getRecentRuns(id, 8).map((r) => ({
+                id: r.id,
+                status: r.status,
+                started_at: r.startedAt,
+                completed_at: r.completedAt ?? null,
+                result: r.result ?? null,
+                error: r.error ?? null,
+                error_kind: r.errorKind ?? null,
+                tokens_used: r.tokensUsed,
+              })),
+            })
+          }
+          if (taskAction === 'POST pause') {
+            deps.taskStore.update(id, { status: 'paused' }, 'paused via API')
+            return json({ ok: true, id, status: 'paused' })
+          }
+          if (taskAction === 'POST resume') {
+            deps.taskStore.update(
+              id,
+              { status: 'active', consecutiveFailures: 0, lastErrorKind: undefined },
+              'resumed via API',
+            )
+            deps.taskRunner?.activateTask(id)
+            return json({ ok: true, id, status: 'active' })
+          }
+          // DELETE: a running instance is aborted first so the delete doesn't leave an orphaned
+          // run writing results for a task that no longer exists.
+          const aborted = deps.taskRunner?.abortTask(id) ?? false
+          deps.taskStore.delete(id)
+          return json({ ok: true, id, aborted_running: aborted })
+        }
 
         return err('not found', 404)
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error)
+        const message = errorMessage(error)
         log.error('api', `Handler error: ${message}`, error)
         return err(message, 500)
       }

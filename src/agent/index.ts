@@ -3,7 +3,6 @@ export {
   addMessage,
   buildSystemPrompt,
   createAgentContext,
-  getMessagesWithSystem,
   type SystemPromptOptions,
 } from './context'
 export { formatSummaryMessage, summarizeMessages } from './context-summarizer'

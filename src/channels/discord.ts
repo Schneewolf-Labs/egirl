@@ -3,7 +3,6 @@ import {
   Client,
   Events,
   GatewayIntentBits,
-  type Interaction,
   type Message,
   type MessageReaction,
   type PartialMessageReaction,
@@ -43,7 +42,20 @@ export interface ReactionEvent {
 }
 
 export type ReactionHandler = (event: ReactionEvent) => void | Promise<void>
-export type InteractionHandler = (interaction: Interaction) => void | Promise<void>
+
+/**
+ * Whether a message's channel is in a configured list. A thread counts through its parent;
+ * a DM matches only the given marker (or never, when there is none).
+ */
+function channelListed(message: Message, list: string[], dmMarker: string | undefined): boolean {
+  if (message.channel.type === ChannelType.DM)
+    return dmMarker !== undefined && list.includes(dmMarker)
+  if (list.includes(message.channel.id)) return true
+  if ('parentId' in message.channel && message.channel.parentId) {
+    return list.includes(message.channel.parentId)
+  }
+  return false
+}
 
 export class DiscordChannel implements ChatChannel {
   readonly name = 'discord'
@@ -53,7 +65,6 @@ export class DiscordChannel implements ChatChannel {
   private config: DiscordConfig
   private ready = false
   private reactionHandlers: ReactionHandler[] = []
-  private interactionHandlers: InteractionHandler[] = []
   private messageQueue: Array<() => Promise<void>> = []
   private processing = false
   private batcher: MessageBatcher | null = null
@@ -104,11 +115,6 @@ export class DiscordChannel implements ChatChannel {
     this.reactionHandlers.push(handler)
   }
 
-  /** Register a handler called when a Discord interaction occurs (slash commands, buttons, etc.) */
-  onInteraction(handler: InteractionHandler): void {
-    this.interactionHandlers.push(handler)
-  }
-
   private setupEventHandlers(): void {
     this.client.once(Events.ClientReady, (client) => {
       this.ready = true
@@ -127,10 +133,6 @@ export class DiscordChannel implements ChatChannel {
 
     this.client.on(Events.MessageReactionAdd, async (reaction, user) => {
       await this.handleReaction(reaction, user)
-    })
-
-    this.client.on(Events.InteractionCreate, async (interaction) => {
-      await this.handleInteraction(interaction)
     })
 
     this.client.on(Events.Error, (error) => {
@@ -169,18 +171,6 @@ export class DiscordChannel implements ChatChannel {
         await handler(event)
       } catch (error) {
         log.error('discord', 'Reaction handler error:', error)
-      }
-    }
-  }
-
-  private async handleInteraction(interaction: Interaction): Promise<void> {
-    log.debug('discord', `Interaction ${interaction.type} from ${interaction.user.tag}`)
-
-    for (const handler of this.interactionHandlers) {
-      try {
-        await handler(interaction)
-      } catch (error) {
-        log.error('discord', 'Interaction handler error:', error)
       }
     }
   }
@@ -345,39 +335,12 @@ export class DiscordChannel implements ChatChannel {
   }
 
   private isChannelAllowed(message: Message): boolean {
-    const { allowedChannels } = this.config
-
-    // Check for DM
-    if (message.channel.type === ChannelType.DM) {
-      return allowedChannels.includes('dm')
-    }
-
-    // Check specific channel ID
-    if (allowedChannels.includes(message.channel.id)) return true
-
-    // Check parent channel for threads
-    if ('parentId' in message.channel && message.channel.parentId) {
-      return allowedChannels.includes(message.channel.parentId)
-    }
-
-    return false
+    return channelListed(message, this.config.allowedChannels, 'dm')
   }
 
+  /** DMs are never passive. */
   private isPassiveChannel(message: Message): boolean {
-    const { passiveChannels } = this.config
-    if (passiveChannels.length === 0) return false
-
-    // DMs are never passive
-    if (message.channel.type === ChannelType.DM) return false
-
-    if (passiveChannels.includes(message.channel.id)) return true
-
-    // Check parent channel for threads
-    if ('parentId' in message.channel && message.channel.parentId) {
-      return passiveChannels.includes(message.channel.parentId)
-    }
-
-    return false
+    return channelListed(message, this.config.passiveChannels, undefined)
   }
 
   /**
@@ -467,10 +430,6 @@ export class DiscordChannel implements ChatChannel {
     this.batcher?.clear()
     this.client.destroy()
     this.ready = false
-  }
-
-  isReady(): boolean {
-    return this.ready
   }
 }
 

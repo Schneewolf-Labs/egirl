@@ -3,7 +3,6 @@ import { log } from '../util/logger'
 import type { EmbeddingInput, EmbeddingProvider } from './embeddings/index'
 import { createMemoryFiles, type MemoryFiles } from './files'
 import {
-  type ContentType,
   createMemoryIndexer,
   type MemoryCategory,
   type MemoryIndexer,
@@ -27,7 +26,7 @@ export {
   Qwen3VLEmbeddings,
 } from './embeddings/index'
 export { type ExtractionResult, extractMemories } from './extractor'
-export { createMemoryFiles, type MemoryEntry, MemoryFiles } from './files'
+export { createMemoryFiles, MemoryFiles } from './files'
 export { collectGarbage, type GCConfig, type GCResult } from './gc'
 export {
   type ContentType,
@@ -100,70 +99,12 @@ export class MemoryManager {
   }
 
   /**
-   * Store an image memory
-   */
-  async setImage(key: string, imageData: string, description?: string): Promise<void> {
-    // Store the image file
-    const imagePath = await this.files.storeImage(imageData, key)
-
-    // Generate embedding if multimodal embeddings available
-    let embedding: Float32Array | undefined
-    if (this.embeddings?.supportsImages) {
-      try {
-        const input: EmbeddingInput = description
-          ? { type: 'multimodal', text: description, image: imageData }
-          : { type: 'image', image: imageData }
-        embedding = await this.embeddings.embed(input)
-      } catch (error) {
-        log.warn('memory', `Failed to generate image embedding for ${key}:`, error)
-      }
-    }
-
-    const contentType: ContentType = description ? 'multimodal' : 'image'
-    this.indexer.set(key, description ?? `[Image: ${key}]`, {
-      contentType,
-      imagePath,
-      embedding,
-    })
-
-    await this.files.appendToDailyLog(`SET_IMAGE ${key}: ${imagePath}`)
-    log.debug('memory', `Set image memory: ${key}`)
-  }
-
-  /**
-   * Store a multimodal memory (text + image)
-   */
-  async setMultimodal(key: string, text: string, imageData: string): Promise<void> {
-    const imagePath = await this.files.storeImage(imageData, key)
-
-    let embedding: Float32Array | undefined
-    if (this.embeddings?.supportsImages) {
-      try {
-        const input: EmbeddingInput = { type: 'multimodal', text, image: imageData }
-        embedding = await this.embeddings.embed(input)
-      } catch (error) {
-        log.warn('memory', `Failed to generate multimodal embedding for ${key}:`, error)
-      }
-    }
-
-    this.indexer.set(key, text, {
-      contentType: 'multimodal',
-      imagePath,
-      embedding,
-    })
-
-    await this.files.appendToDailyLog(`SET_MULTIMODAL ${key}: ${text.slice(0, 50)}...`)
-    log.debug('memory', `Set multimodal memory: ${key}`)
-  }
-
-  /**
    * Get a memory by key
    */
   get(key: string): {
     value: string
     category: MemoryCategory
     source: MemorySource
-    imagePath?: string
     createdAt: number
     updatedAt: number
   } | null {
@@ -174,31 +115,8 @@ export class MemoryManager {
       value: memory.value,
       category: memory.category,
       source: memory.source,
-      imagePath: memory.imagePath,
       createdAt: memory.createdAt,
       updatedAt: memory.updatedAt,
-    }
-  }
-
-  /**
-   * Get a memory with its image data
-   */
-  async getWithImage(key: string): Promise<{ value: string; imageData?: string } | null> {
-    const memory = this.indexer.get(key)
-    if (!memory) return null
-
-    let imageData: string | undefined
-    if (memory.imagePath) {
-      try {
-        imageData = await this.files.readImage(memory.imagePath)
-      } catch (error) {
-        log.warn('memory', `Failed to read image for ${key}:`, error)
-      }
-    }
-
-    return {
-      value: memory.value,
-      imageData,
     }
   }
 
@@ -216,15 +134,6 @@ export class MemoryManager {
    */
   async searchSemantic(query: string, limit = 10): Promise<SearchResult[]> {
     const results = await this.search.searchSemantic(query, { limit })
-    this.trackAccess(results)
-    return results
-  }
-
-  /**
-   * Search memories by image similarity
-   */
-  async searchByImage(imageData: string, limit = 10): Promise<SearchResult[]> {
-    const results = await this.search.searchByImage(imageData, { limit })
     this.trackAccess(results)
     return results
   }
@@ -251,20 +160,6 @@ export class MemoryManager {
   private trackAccess(results: SearchResult[]): void {
     if (results.length === 0) return
     this.indexer.recordAccess(results.map((r) => r.memory.key))
-  }
-
-  /**
-   * Get all image memories
-   */
-  getImages(limit = 100): Array<{ key: string; value: string; imagePath?: string }> {
-    const memories = this.indexer.getByContentType('image', limit)
-    const multimodal = this.indexer.getByContentType('multimodal', limit)
-
-    return [...memories, ...multimodal].map((m) => ({
-      key: m.key,
-      value: m.value,
-      imagePath: m.imagePath,
-    }))
   }
 
   /**
@@ -353,13 +248,6 @@ export class MemoryManager {
       return results[0].memory.key
     }
     return undefined
-  }
-
-  /**
-   * Check if multimodal embeddings are available
-   */
-  hasMultimodalEmbeddings(): boolean {
-    return this.embeddings?.supportsImages ?? false
   }
 
   /**

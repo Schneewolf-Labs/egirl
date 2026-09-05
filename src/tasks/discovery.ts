@@ -29,8 +29,6 @@ Rules:
 - Each proposal needs a clear reason why it's useful
 - If nothing is worth proposing, just say "No useful work to propose" and stop`
 
-const _MAX_PROPOSALS_PER_RUN = 3
-
 export interface DiscoveryDeps {
   config: RuntimeConfig
   tasksConfig: TasksConfig
@@ -107,7 +105,7 @@ export class Discovery {
 
       // Proactive memory retrieval
       const contextParts: string[] = []
-      if (standup.context) contextParts.push(standup.context)
+      if (standup) contextParts.push(standup)
       contextParts.push(tasksSummary)
 
       if (this.deps.memory) {

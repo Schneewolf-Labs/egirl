@@ -1,6 +1,7 @@
 import { readFile, unlink } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { errorMessage } from '../../util/errors'
 import { log } from '../../util/logger'
 import type { Tool, ToolResult } from '../types'
 
@@ -173,7 +174,7 @@ export const screenshotTool: Tool = {
         isImage: true,
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
+      const message = errorMessage(error)
       return {
         success: false,
         output: `Screenshot failed: ${message}`,
