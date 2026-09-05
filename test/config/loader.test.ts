@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { mkdtempSync, rmSync, writeFileSync } from 'fs'
 import { homedir, tmpdir } from 'os'
-import { join } from 'path'
+import { join, sep } from 'path'
 
 describe('Config loading', () => {
   let tmpDir: string
@@ -9,13 +9,13 @@ describe('Config loading', () => {
   const originalEnv = { ...process.env }
 
   beforeEach(() => {
-    tmpDir = mkdtempSync(join(tmpdir(), 'egirl-config-test-'))
+    tmpDir = mkdtempSync(join(tmpdir(), 'egirl-config-test-')).replace(/\\/g, '/')
     delete process.env.DISCORD_TOKEN
   })
 
   afterEach(() => {
-    rmSync(tmpDir, { recursive: true, force: true })
     process.chdir(originalCwd)
+    rmSync(tmpDir, { recursive: true, force: true })
     Object.assign(process.env, originalEnv)
   })
 
@@ -92,10 +92,10 @@ dirs = ["{workspace}/skills"]
     const config = loadConfig()
 
     expect(config.channels.claudeCode?.permissionMode).toBe('bypassPermissions')
-    expect(config.channels.claudeCode?.workingDir.endsWith('/claude')).toBe(true)
+    expect(config.channels.claudeCode?.workingDir.endsWith(`${sep}claude`)).toBe(true)
     expect(config.channels.codeAgent?.provider).toBe('codex')
     expect(config.channels.codeAgent?.permissionMode).toBe('default')
-    expect(config.channels.codeAgent?.workingDir.endsWith('/codex')).toBe(true)
+    expect(config.channels.codeAgent?.workingDir.endsWith(`${sep}codex`)).toBe(true)
     expect(config.source.codeAgentUsesClaudeCodeFallback).toBe(false)
   })
 
@@ -128,7 +128,7 @@ dirs = ["{workspace}/skills"]
     expect(config.channels.claudeCode?.permissionMode).toBe('acceptEdits')
     expect(config.channels.codeAgent?.provider).toBe('claude')
     expect(config.channels.codeAgent?.permissionMode).toBe('acceptEdits')
-    expect(config.channels.codeAgent?.workingDir.endsWith('/bridge')).toBe(true)
+    expect(config.channels.codeAgent?.workingDir.endsWith(`${sep}bridge`)).toBe(true)
     expect(config.source.codeAgentUsesClaudeCodeFallback).toBe(true)
   })
 
@@ -179,7 +179,7 @@ dirs = ["{workspace}/skills"]
     expect(config.source.instance).toBe('kira-remote')
     expect(config.source.profile).toBe('remote')
     expect(config.source.persona).toBe('kira')
-    expect(config.workspace.path.endsWith('/personas/kira')).toBe(true)
+    expect(config.workspace.path.endsWith(join('personas', 'kira'))).toBe(true)
     expect(config.theme).toBe('midnight')
     expect(config.local.endpoint).toBe('http://192.168.8.218:8080')
     expect(config.local.model).toBe('remote-model')
@@ -220,7 +220,7 @@ dirs = ["{workspace}/skills"]
     const config = loadConfig()
 
     expect(config.source.instance).toBe('ops')
-    expect(config.workspace.path.endsWith('/ops')).toBe(true)
+    expect(config.workspace.path.endsWith(`${sep}ops`)).toBe(true)
     expect(config.local.model).toBe('ops-model')
   })
 

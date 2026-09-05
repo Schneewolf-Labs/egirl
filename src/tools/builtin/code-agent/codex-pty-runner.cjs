@@ -17,7 +17,7 @@ try {
 }
 
 // Overridable so the flush behaviour below can be tested without a real codex install.
-const CODEX_BIN = process.env.EGIRL_CODEX_BIN || 'codex'
+const CODEX_BIN = process.env.EGIRL_CODEX_BIN || (process.platform === 'win32' ? 'codex.exe' : 'codex')
 
 const proc = pty.spawn(CODEX_BIN, args, {
   name: 'xterm-256color',
@@ -58,6 +58,8 @@ function shutdown(code) {
   rl.close()
   process.stdin.pause()
   process.exitCode = code
+  // ConPTY can keep native handles alive after onExit. Flush queued output before exiting.
+  process.stdout.write('', () => process.exit(code))
   const forced = setTimeout(() => process.exit(code), 5000)
   if (typeof forced.unref === 'function') forced.unref()
 }

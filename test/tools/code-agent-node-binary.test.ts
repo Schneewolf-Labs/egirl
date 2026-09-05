@@ -12,6 +12,9 @@
  */
 
 import { describe, expect, test } from 'bun:test'
+import { mkdtempSync, rmSync, writeFileSync } from 'fs'
+import { tmpdir } from 'os'
+import { delimiter, join } from 'path'
 import { isRealNode, resolveNodeBinary } from '../../src/tools/builtin/code-agent/node-binary'
 
 describe('resolveNodeBinary', () => {
@@ -21,13 +24,18 @@ describe('resolveNodeBinary', () => {
   })
 
   test('walks PATH in order and returns the first real node', () => {
-    const asked: string[] = []
-    const found = resolveNodeBinary({ PATH: '/nope:/usr/bin:/also-nope' }, (bin) => {
-      asked.push(bin)
-      return bin === '/usr/bin/node'
-    })
-    // Only existing paths are probed, so this asserts the real one wins when present.
-    if (found !== undefined) expect(found).toBe('/usr/bin/node')
+    const dir = mkdtempSync(join(tmpdir(), 'egirl-node-'))
+    const candidate = join(dir, process.platform === 'win32' ? 'node.exe' : 'node')
+    writeFileSync(candidate, '')
+    try {
+      const env = { PATH: [join(dir, 'missing'), dir].join(delimiter) }
+      expect(resolveNodeBinary(env, (bin) => bin === candidate)).toBe(candidate)
+      if (process.platform === 'win32') {
+        expect(resolveNodeBinary({ Path: env.PATH }, (bin) => bin === candidate)).toBe(candidate)
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 
   test('an explicit override is used when it is really node', () => {

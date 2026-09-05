@@ -20,7 +20,7 @@ import { existsSync, statSync } from 'fs'
 
 // Absolute paths, and ~-relative ones. Trailing punctuation is stripped: a path at the end of a
 // sentence usually collects a comma or full stop.
-const PATH_RE = /(?:^|[\s"'`(])((?:~|\/)[\w.~\-/]+)/g
+const PATH_RE = /(?:^|[\s"'`(])((?:~|\/|[A-Za-z]:[\\/]|\\\\)[\w.~\-\\/]+)/g
 
 export function inferWorkingDir(task: string, home: string): string | undefined {
   const seen = new Set<string>()

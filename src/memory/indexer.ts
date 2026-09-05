@@ -181,7 +181,7 @@ export class MemoryIndexer {
       key = this.resolveKeyCollision(key, sessionId)
     }
 
-    const stmt = this.db.prepare(`
+    const stmt = this.db.query(`
       INSERT INTO memories (key, value, content_type, category, source, session_id, embedding, importance, confidence, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(key) DO UPDATE SET
@@ -391,7 +391,7 @@ export class MemoryIndexer {
   recordAccess(keys: string[]): void {
     if (keys.length === 0) return
     const now = Date.now()
-    const stmt = this.db.prepare(`
+    const stmt = this.db.query(`
       UPDATE memories SET last_accessed_at = ?, access_count = access_count + 1
       WHERE key = ?
     `)

@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { isAbsolute, join, resolve } from 'node:path'
+import { isAbsolute, join, relative, resolve, sep } from 'node:path'
 import type { Tool, ToolResult } from '../tools/types'
 import { log } from '../util/logger'
 
@@ -92,7 +92,8 @@ export function rollbackEntry(
   const target = entry.path
   const contained = allowedRoots.some((root) => {
     const r = resolve(root)
-    return resolve(target) === r || resolve(target).startsWith(`${r}/`)
+    const rel = relative(r, resolve(target))
+    return !isAbsolute(rel) && rel !== '..' && !rel.startsWith(`..${sep}`)
   })
   if (!contained) return { ok: false, error: `path ${target} is outside the allowed skill roots` }
 
@@ -141,7 +142,12 @@ export function withSkillLedger(tool: Tool, skillsDirs: string[], ledgerDir: str
       if (typeof rawPath === 'string' && rawPath.trim()) {
         abs = isAbsolute(rawPath) ? rawPath : resolve(cwd, rawPath)
       }
-      const inSkills = abs !== undefined && roots.some((r) => abs === r || abs.startsWith(`${r}/`))
+      const inSkills =
+        abs !== undefined &&
+        roots.some((r) => {
+          const rel = relative(r, abs)
+          return !isAbsolute(rel) && rel !== '..' && !rel.startsWith(`..${sep}`)
+        })
       if (!inSkills || abs === undefined) return tool.execute(params, cwd)
 
       const before = existsSync(abs) ? readFileSync(abs, 'utf8') : null

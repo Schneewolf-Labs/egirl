@@ -17,15 +17,18 @@
 import { describe, expect, test } from 'bun:test'
 import { spawn } from 'child_process'
 import { join } from 'path'
+import { nodeBinary } from '../../src/tools/builtin/code-agent/node-binary'
 
 const RUNNER = join(import.meta.dir, '../../src/tools/builtin/code-agent/codex-pty-runner.cjs')
+const NODE = nodeBinary()
+if (!NODE) throw new Error('The PTY integration tests require real Node.js')
 
 type RunnerResult = { code: number | null; events: Array<Record<string, unknown>>; raw: string }
 
 function runRunner(bin: string, args: string[], timeoutMs = 15000): Promise<RunnerResult> {
   return new Promise((resolve) => {
     const encoded = Buffer.from(JSON.stringify(args)).toString('base64')
-    const proc = spawn('node', [RUNNER, process.cwd(), encoded], {
+    const proc = spawn(NODE, [RUNNER, process.cwd(), encoded], {
       cwd: process.cwd(),
       env: { ...process.env, EGIRL_CODEX_BIN: bin, TERM: 'xterm-256color', NO_COLOR: '1' },
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -59,7 +62,7 @@ function runRunner(bin: string, args: string[], timeoutMs = 15000): Promise<Runn
 
 describe('codex pty runner', () => {
   test('output from a fast-exiting child reaches the parent', async () => {
-    const result = await runRunner('echo', ['transcript-line'])
+    const result = await runRunner(NODE, ['-e', 'console.log("transcript-line")'])
 
     const data = result.events.filter((e) => e.type === 'data')
     expect(data.length).toBeGreaterThan(0)
@@ -67,7 +70,7 @@ describe('codex pty runner', () => {
   })
 
   test('the exit event is delivered, not dropped', async () => {
-    const result = await runRunner('echo', ['done'])
+    const result = await runRunner(NODE, ['-e', 'console.log("done")'])
 
     const exit = result.events.find((e) => e.type === 'exit')
     expect(exit).toBeDefined()
@@ -76,7 +79,10 @@ describe('codex pty runner', () => {
 
   test('a failing child still delivers its output and exit code', async () => {
     // The case that was silently swallowed: the child says why it failed, then exits immediately.
-    const result = await runRunner('sh', ['-c', 'echo "usage error: unknown flag" >&2; exit 2'])
+    const result = await runRunner(NODE, [
+      '-e',
+      'console.error("usage error: unknown flag"); process.exitCode = 2',
+    ])
 
     const text = result.events
       .filter((e) => e.type === 'data')
@@ -91,7 +97,7 @@ describe('codex pty runner', () => {
 
   test('the process still exits rather than hanging on the drain backstop', async () => {
     const started = Date.now()
-    const result = await runRunner('echo', ['quick'])
+    const result = await runRunner(NODE, ['-e', 'console.log("quick")'])
     // The unref'd 5s backstop must not become the exit path for a normal run.
     expect(Date.now() - started).toBeLessThan(5000)
     expect(result.code).toBe(0)

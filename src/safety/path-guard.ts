@@ -1,5 +1,5 @@
 import { realpathSync } from 'fs'
-import { isAbsolute, normalize, resolve } from 'path'
+import { normalize, resolve } from 'path'
 
 const DEFAULT_SENSITIVE_PATTERNS: RegExp[] = [
   // Environment / dotenv
@@ -67,6 +67,11 @@ function safeRealpath(filePath: string): string {
   }
 }
 
+function comparisonPath(filePath: string): string {
+  const path = safeRealpath(filePath)
+  return process.platform === 'win32' ? path.replace(/\\/g, '/').toLowerCase() : path
+}
+
 export function isPathAllowed(
   filePath: string,
   cwd: string,
@@ -74,12 +79,12 @@ export function isPathAllowed(
 ): string | undefined {
   if (allowedPaths.length === 0) return undefined
 
-  const resolved = isAbsolute(filePath) ? filePath : resolve(cwd, filePath)
-  const fullPath = safeRealpath(resolved)
+  const fullPath = comparisonPath(resolve(cwd, filePath))
 
   for (const allowed of allowedPaths) {
-    const normalizedAllowed = safeRealpath(normalize(allowed))
-    if (fullPath === normalizedAllowed || fullPath.startsWith(`${normalizedAllowed}/`)) {
+    const normalizedAllowed = comparisonPath(resolve(cwd, allowed))
+    const prefix = normalizedAllowed.endsWith('/') ? normalizedAllowed : `${normalizedAllowed}/`
+    if (fullPath === normalizedAllowed || fullPath.startsWith(prefix)) {
       return undefined
     }
   }
@@ -92,8 +97,7 @@ export function isSensitivePath(
   cwd: string,
   patterns: RegExp[],
 ): string | undefined {
-  const resolved = isAbsolute(filePath) ? filePath : resolve(cwd, filePath)
-  const fullPath = safeRealpath(resolved)
+  const fullPath = comparisonPath(resolve(cwd, filePath))
 
   for (const pattern of patterns) {
     if (pattern.test(fullPath)) {

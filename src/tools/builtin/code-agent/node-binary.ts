@@ -1,6 +1,6 @@
 import { spawnSync } from 'child_process'
 import { existsSync } from 'fs'
-import { join } from 'path'
+import { delimiter, join } from 'path'
 
 /**
  * Find a real Node.js binary for the codex PTY runner.
@@ -41,9 +41,10 @@ export function resolveNodeBinary(
   const explicit = env.EGIRL_NODE_BIN
   if (explicit) return probe(explicit) ? explicit : undefined
 
-  for (const dir of (env.PATH ?? '').split(':')) {
+  const path = env.PATH ?? (process.platform === 'win32' ? env.Path : undefined) ?? ''
+  for (const dir of path.split(delimiter)) {
     if (!dir) continue
-    const candidate = join(dir, 'node')
+    const candidate = join(dir, process.platform === 'win32' ? 'node.exe' : 'node')
     if (existsSync(candidate) && probe(candidate)) return candidate
   }
   return undefined

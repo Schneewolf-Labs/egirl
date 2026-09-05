@@ -7,7 +7,7 @@ interface ParsedSkill {
   content: string
 }
 
-const FRONTMATTER_REGEX = /^---\n([\s\S]*?)\n---\n([\s\S]*)$/
+const FRONTMATTER_REGEX = /^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/
 
 export function parseSkillMarkdown(markdown: string): ParsedSkill {
   const match = markdown.match(FRONTMATTER_REGEX)

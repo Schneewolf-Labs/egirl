@@ -34,11 +34,14 @@ function codexArgs(config: CodeAgentConfig, task: string, workingDir: string): s
   return args
 }
 
-function codexChoicePrompt(screen: string): string | undefined {
+export function codexChoicePrompt(screen: string): string | undefined {
+  const latestPrompt = screen.lastIndexOf('›')
+  if (latestPrompt >= 0 && !/^›\s*\d+\./.test(screen.slice(latestPrompt))) return undefined
   const compact = screen.replace(/\s+/g, '').toLowerCase()
   const lower = screen.toLowerCase()
 
   if (compact.includes('doyoutrustthecontentsofthisdirectory?')) {
+    if (!lower.includes('press enter to continue')) return undefined
     return [
       'Codex asks whether to trust the working directory.',
       '',
@@ -191,11 +194,13 @@ export const runCodexCodeAgent: CodeAgentBackend = (config, task, workingDir) =>
     let promptHandledAt = 0
     let lastPromptSignature = ''
     let stopSent = false
+    let completionTimer: ReturnType<typeof setTimeout> | undefined
 
     const finish = (result: ToolResult): void => {
       if (settled) return
       settled = true
       clearTimeout(timer)
+      clearTimeout(completionTimer)
       resolvePromise(result)
     }
 
@@ -245,6 +250,7 @@ export const runCodexCodeAgent: CodeAgentBackend = (config, task, workingDir) =>
     })
 
     const handleCodexData = (data: string): void => {
+      clearTimeout(completionTimer)
       rawOutput += data
       const screen = stripAnsi(rawOutput).slice(-5000)
       const now = Date.now()
@@ -259,7 +265,7 @@ export const runCodexCodeAgent: CodeAgentBackend = (config, task, workingDir) =>
       ) {
         handlingPrompt = true
         chooseCodexOption(config, screen, task, workingDir)
-          .then((decision) => {
+          .then(async (decision) => {
             promptHandledAt = Date.now()
             lastPromptSignature = promptSignature
             if (decision.needsUser) {
@@ -277,7 +283,12 @@ export const runCodexCodeAgent: CodeAgentBackend = (config, task, workingDir) =>
               })
               return
             }
-            proc.stdin.write(`${JSON.stringify({ type: 'input', data: `${decision.choice}\r` })}\n`)
+            // ConPTY may deliver the prompt before its input handler is ready.
+            if (process.platform === 'win32') await new Promise((r) => setTimeout(r, 250))
+            if (settled) return
+            proc.stdin.write(`${JSON.stringify({ type: 'input', data: decision.choice })}\n`)
+            if (process.platform === 'win32') await new Promise((r) => setTimeout(r, 50))
+            if (!settled) proc.stdin.write(`${JSON.stringify({ type: 'input', data: '\r' })}\n`)
           })
           .finally(() => {
             handlingPrompt = false
@@ -299,6 +310,17 @@ export const runCodexCodeAgent: CodeAgentBackend = (config, task, workingDir) =>
         promptIndex < statusIndex &&
         statusIndex - promptIndex < 200
       const completedAfterWork = workingIndex >= 0 && completionIndex > workingIndex
+
+      if (process.platform === 'win32') {
+        if (!stopSent && codexTranscriptLooksComplete(screen) && promptIndex > completionIndex) {
+          completionTimer = setTimeout(() => {
+            if (settled) return
+            stopSent = true
+            proc.stdin.write(`${JSON.stringify({ type: 'kill' })}\n`)
+          }, 500)
+        }
+        return
+      }
 
       if (
         !stopSent &&

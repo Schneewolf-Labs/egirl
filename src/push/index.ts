@@ -27,6 +27,10 @@ export interface PushSubscription {
 export class PushStore {
   private db: Database
 
+  close(): void {
+    this.db.close()
+  }
+
   constructor(path: string) {
     this.db = openDatabase(path)
     this.db.run(`CREATE TABLE IF NOT EXISTS push_subscriptions (

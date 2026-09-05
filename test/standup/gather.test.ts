@@ -79,7 +79,7 @@ describe('standup gather', () => {
     expect(status).toBeDefined()
     expect(status?.untracked).toContain('new-file.txt')
 
-    exec('rm new-file.txt')
+    await rm(join(testDir, 'new-file.txt'))
   })
 
   test('gatherStatus detects staged files', async () => {
