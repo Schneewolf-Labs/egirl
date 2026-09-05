@@ -1,5 +1,6 @@
 import { type ClaudeCodeConfig, createClaudeCodeChannel, type TaskResult } from '../channels'
 import type { RuntimeConfig } from '../config'
+import { createPermissionSupervisor } from '../permissions/supervisor'
 import { createProviderRegistry } from '../providers'
 import { applyLogLevel } from '../util/args'
 import { errorMessage } from '../util/errors'
@@ -28,6 +29,10 @@ export async function runClaudeCode(config: RuntimeConfig, args: string[]): Prom
     claudeModel: config.channels.claudeCode?.model,
     workingDir: config.channels.claudeCode?.workingDir ?? process.cwd(),
     maxTurns: config.channels.claudeCode?.maxTurns,
+    permissionSupervisor: createPermissionSupervisor({
+      config: config.permissionSupervisor,
+      localProvider: providers.local,
+    }),
   }
 
   const channel = createClaudeCodeChannel(providers.local, ccConfig)

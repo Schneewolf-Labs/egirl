@@ -53,47 +53,7 @@ Resumes a previous Claude Code session, optionally with a follow-up prompt.
 
 ## How Permission Handling Works
 
-When Claude Code wants to use a tool (read a file, run a command, edit code), it sends a permission request. The local model evaluates whether the request is safe:
-
-### Permission Decision Flow
-
-```
-Claude Code: "I want to run: npm test"
-                    │
-                    ▼
-        ┌───────────────────────┐
-        │ Local Model Evaluates │
-        │                       │
-        │ System: You are a     │
-        │ security supervisor.  │
-        │ ALLOW or DENY?        │
-        │                       │
-        │ Context:              │
-        │ - Original task       │
-        │ - Recent activity     │
-        │ - Tool + input        │
-        └───────────┬───────────┘
-                    │
-              ┌─────┴─────┐
-              │           │
-         ALLOW: safe   DENY: risky
-         for task      or destructive
-```
-
-### Default Guidelines
-
-The local model follows these rules:
-
-**ALLOW:**
-- Reading files
-- Safe commands: `ls`, `cat`, `grep`, `git status`, `npm test`, etc.
-- Writing/editing files that are part of the task
-- When in doubt — Claude Code is generally safe
-
-**DENY:**
-- Destructive commands: `rm -rf`, `drop database`, etc. (unless explicitly requested)
-- Accessing sensitive files: `/etc/passwd`, `.env` with secrets, SSH keys (unless needed)
-- Network requests to unknown hosts (unless part of the task)
+When Claude Code wants to use a tool (read a file, run a command, edit code), it sends a permission request. The bridge routes it through the same permission supervisor the `code_agent` tool uses (`src/permissions/supervisor.ts`): rules first, then the local model, with `ask_user` halting the run for your approval. The policy, rule lists and confidence threshold live under `[permission_supervisor]` in `egirl.toml` — see [configuration.md](configuration.md#permission_supervisor). With `permission_mode = "bypassPermissions"` the SDK never asks and the supervisor is not consulted.
 
 ### Question Handling
 

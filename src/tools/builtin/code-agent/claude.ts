@@ -3,23 +3,23 @@ import {
   type Options as ClaudeAgentOptions,
   query,
 } from '@anthropic-ai/claude-agent-sdk'
+import type { PermissionSupervisor } from '../../../permissions/supervisor'
 import { log } from '../../../util/logger'
 import type { ToolResult } from '../../types'
 import { DEFAULT_TIMEOUT_MS } from './shared'
-import type { CodeAgentBackend, CodeAgentConfig } from './types'
+import type { CodeAgentBackend } from './types'
 
 /**
  * Build the SDK permission callback. The Claude permission engine decides
  * which tool calls are worth gating; this routes each gated call to egirl's
  * local-model supervisor, which can accept, reject, or re-steer it.
  */
-function buildCanUseTool(
-  config: CodeAgentConfig,
+export function buildCanUseTool(
+  supervisor: PermissionSupervisor | undefined,
   task: string,
   workingDir: string,
   onEscalate: (reason: string) => void,
 ): CanUseTool {
-  const supervisor = config.permissionSupervisor
   return async (toolName, input, { signal, blockedPath, decisionReason }) => {
     if (signal.aborted) {
       return { behavior: 'deny', message: 'Aborted', interrupt: true }
@@ -94,7 +94,7 @@ export const runClaudeCodeAgent: CodeAgentBackend = async (config, task, working
         // Run in a gating mode so the SDK routes tool calls through canUseTool;
         // never bypass, or the supervisor would never be consulted.
         permissionMode: isBypass ? 'default' : config.permissionMode,
-        canUseTool: buildCanUseTool(config, task, workingDir, (reason) => {
+        canUseTool: buildCanUseTool(config.permissionSupervisor, task, workingDir, (reason) => {
           escalation = reason
         }),
         model: config.model,
