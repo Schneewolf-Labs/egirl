@@ -276,6 +276,7 @@ Optional. Controls conversation persistence and compaction.
 | `max_messages` | number | `1000` | Cap messages per session |
 | `compact_on_startup` | bool | `true` | Run compaction when egirl starts |
 | `context_compaction` | bool | `true` | Summarize interior messages when context fills instead of dropping |
+| `context_rollover` | bool | `false` | When context fills, roll over to a fresh window seeded with a mechanical handoff record (operator inputs, pending tool results) instead of summarizing. Adds the `new_context` and `context_remaining` tools. Unbounded task runs use it regardless. |
 
 ### `[recovery]`
 

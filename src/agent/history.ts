@@ -3,6 +3,7 @@ import type { ChatMessage } from '../providers/types'
 import { hasStrandedToolCall, stripStrandedToolCalls } from '../tools/format'
 import { log } from '../util/logger'
 import type { AgentContext } from './context'
+import { isRolloverRecord } from './handoff'
 import { isRecallMessage } from './recall'
 
 /**
@@ -50,12 +51,24 @@ export class ConversationHistory {
   hydrate(context: AgentContext): void {
     if (!this.store) return
 
-    const history = this.store.loadMessages(this.sessionId)
+    const stored = this.store.loadMessages(this.sessionId)
+    // The transcript is append-only; a rollover record marks where the live window starts.
+    // Everything before it stays searchable but is not reloaded into context.
+    let windowStart = -1
+    for (let i = stored.length - 1; i >= 0; i--) {
+      const m = stored[i]
+      if (m && isRolloverRecord(m)) {
+        windowStart = i
+        break
+      }
+    }
+    const history = windowStart > 0 ? stored.slice(windowStart) : stored
     if (history.length > 0) {
       context.messages = history
       this.persistedIndex = history.length
       this.extractionWatermark = history.length
-      log.info('agent', `Loaded ${history.length} messages for session ${this.sessionId}`)
+      const retired = windowStart > 0 ? ` (${windowStart} before the last rollover left out)` : ''
+      log.info('agent', `Loaded ${history.length} messages for session ${this.sessionId}${retired}`)
     }
 
     const summary = this.store.loadSummary(this.sessionId)
@@ -127,6 +140,25 @@ export class ConversationHistory {
     this.persistedIndex -= removedBeforePersisted
     this.extractionWatermark -= removedBeforeExtraction
     return kept
+  }
+
+  /**
+   * Context rollover: persist everything still pending, append the handoff record to the
+   * transcript (append-only — nothing is deleted), and align the watermarks with the fresh
+   * window, which is exactly `[record]`. The retired messages' extraction is the rollover's
+   * memory flush, so the extractor watermark moves past them too.
+   */
+  rollover(messages: ChatMessage[], record: ChatMessage): void {
+    this.persistNew(messages)
+    if (this.store) {
+      try {
+        this.store.appendMessages(this.sessionId, [record])
+      } catch (error) {
+        log.warn('agent', 'Failed to persist rollover record:', error)
+      }
+    }
+    this.persistedIndex = 1
+    this.extractionWatermark = 1
   }
 
   /** Slice messages not yet seen by the extractor and advance the watermark. */

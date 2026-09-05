@@ -490,6 +490,9 @@ export class TaskRunner {
     const response = await agent.run(task.prompt, {
       maxTurns: task.maxTurns ?? 10,
       unbounded: task.unbounded,
+      // An unbounded run is the autonomy loop proper: its state lives in NOTES/work by
+      // contract, so its context is disposable — recycle it from notes rather than summarize.
+      ...(task.unbounded && { contextRollover: true }),
       // consolidationInterval falls through to the instance config default in the loop.
       signal,
       // Deadline drives the loop's wrap-up warning so the agent winds down before the hard

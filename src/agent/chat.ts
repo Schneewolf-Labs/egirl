@@ -11,6 +11,7 @@ import { ContextSizeError } from '../providers/types'
 import { log } from '../util/logger'
 import { formatSummaryMessage } from './context-summarizer'
 import { fitToContextWindow } from './context-window'
+import { buildHandoffRecord } from './handoff'
 import { pruneMalformedCallPairs, toolsWithRequiredParams } from './history-hygiene'
 
 const IMAGE_STRIPPED_MARKER =
@@ -154,7 +155,18 @@ export async function chatWithContextWindow(args: {
   thinking?: ThinkingConfig
   signal?: AbortSignal
   cacheSlot?: number
-}): Promise<{ response: ChatResponse; droppedMessages: ChatMessage[]; wasTrimmed: boolean }> {
+  /**
+   * Context rollover instead of drop-and-summarize: when fitting would drop messages, the
+   * whole history is replaced by one handoff record (see ./handoff.ts) and the request is
+   * sent on that fresh window. The record comes back as `rollover` for the loop to adopt.
+   */
+  rollover?: { maxChars?: number }
+}): Promise<{
+  response: ChatResponse
+  droppedMessages: ChatMessage[]
+  wasTrimmed: boolean
+  rollover?: ChatMessage
+}> {
   const { provider, systemPrompt, messages, conversationSummary, tools, contextLength, tokenizer } =
     args
 
@@ -177,39 +189,66 @@ export async function chatWithContextWindow(args: {
   // per-request; the conversation store keeps the full record.
   const hygienic = pruneMalformedCallPairs(messages, toolsWithRequiredParams(tools))
 
-  const fitResult = await fitToContextWindow(
-    effectiveSystemPrompt,
-    hygienic,
-    tools,
-    { contextLength },
-    tokenizer,
-  )
+  /** Fit the history to a window, rolling over instead of dropping when configured. */
+  async function prepare(windowLength: number): Promise<{
+    send: ChatMessage[]
+    droppedMessages: ChatMessage[]
+    wasTrimmed: boolean
+    rollover?: ChatMessage
+  }> {
+    let fit = await fitToContextWindow(
+      effectiveSystemPrompt,
+      hygienic,
+      tools,
+      { contextLength: windowLength },
+      tokenizer,
+    )
+    let droppedMessages = fit.droppedMessages
+    let rollover: ChatMessage | undefined
+    if (fit.wasTrimmed && args.rollover) {
+      // Fitting would have dropped the middle and summarized it. Retire the whole window
+      // instead: the record is built from the unfitted history (it needs the real tool
+      // results, not the truncated ones) and refit only to guard against a pathological size.
+      rollover = buildHandoffRecord(messages, { reason: 'auto', maxChars: args.rollover.maxChars })
+      droppedMessages = messages
+      fit = await fitToContextWindow(
+        effectiveSystemPrompt,
+        [rollover],
+        tools,
+        { contextLength: windowLength },
+        tokenizer,
+      )
+    }
 
-  // Defensive: hoist any stray system message out of the history instead of sending it inline.
-  // Anything that appends one mid-conversation would otherwise resurrect the bug above, and a
-  // 400 from a Jinja template is a very indirect way to discover that.
-  const strays = fitResult.messages.filter((m) => m.role === 'system')
-  const history = fitResult.messages.filter((m) => m.role !== 'system')
-  if (strays.length) {
-    log.warn('agent', `Hoisted ${strays.length} inline system message(s) into the system prompt`)
+    // Defensive: hoist any stray system message out of the history instead of sending it
+    // inline. Anything that appends one mid-conversation would otherwise resurrect the bug
+    // above, and a 400 from a Jinja template is a very indirect way to discover that.
+    const strays = fit.messages.filter((m) => m.role === 'system')
+    const history = fit.messages.filter((m) => m.role !== 'system')
+    if (strays.length) {
+      log.warn('agent', `Hoisted ${strays.length} inline system message(s) into the system prompt`)
+    }
+    const send: ChatMessage[] = [
+      {
+        role: 'system',
+        content: [effectiveSystemPrompt, ...strays.map((m) => String(m.content))].join('\n\n'),
+      },
+      ...history,
+    ]
+    return { send, droppedMessages, wasTrimmed: fit.wasTrimmed || rollover !== undefined, rollover }
   }
-  const fittedMessages: ChatMessage[] = [
-    {
-      role: 'system',
-      content: [effectiveSystemPrompt, ...strays.map((m) => String(m.content))].join('\n\n'),
-    },
-    ...history,
-  ]
+
+  const prepared = await prepare(contextLength)
 
   log.debug(
     'agent',
-    `Sending ${fittedMessages.length} messages to ${provider.name} (budget: ${contextLength}t)`,
+    `Sending ${prepared.send.length} messages to ${provider.name} (budget: ${contextLength}t)`,
   )
 
   try {
     const response = await chatWithRetry({
       provider,
-      messages: fittedMessages,
+      messages: prepared.send,
       tools,
       onToken: args.onToken,
       onThinkingToken: args.onThinkingToken,
@@ -219,8 +258,9 @@ export async function chatWithContextWindow(args: {
     })
     return {
       response,
-      droppedMessages: fitResult.droppedMessages,
-      wasTrimmed: fitResult.wasTrimmed,
+      droppedMessages: prepared.droppedMessages,
+      wasTrimmed: prepared.wasTrimmed,
+      rollover: prepared.rollover,
     }
   } catch (error) {
     if (!(error instanceof ContextSizeError)) throw error
@@ -230,28 +270,13 @@ export async function chatWithContextWindow(args: {
       `Server n_ctx=${error.contextSize} differs from config (${contextLength}). Retrimming.`,
     )
 
-    const refitResult = await fitToContextWindow(
-      effectiveSystemPrompt,
-      hygienic,
-      tools,
-      { contextLength: error.contextSize },
-      tokenizer,
-    )
-
-    // Same hoist as above — this retry path would otherwise reintroduce the inline system
-    // message whenever the server's real n_ctx differs from the configured one.
-    const retryStrays = refitResult.messages.filter((m) => m.role === 'system')
-    const retryMessages: ChatMessage[] = [
-      {
-        role: 'system',
-        content: [effectiveSystemPrompt, ...retryStrays.map((m) => String(m.content))].join('\n\n'),
-      },
-      ...refitResult.messages.filter((m) => m.role !== 'system'),
-    ]
+    // Same fit and hoist as above — this retry path would otherwise reintroduce the inline
+    // system message whenever the server's real n_ctx differs from the configured one.
+    const refit = await prepare(error.contextSize)
 
     const response = await chatWithRetry({
       provider,
-      messages: retryMessages,
+      messages: refit.send,
       tools,
       onToken: args.onToken,
       onThinkingToken: args.onThinkingToken,
@@ -261,8 +286,9 @@ export async function chatWithContextWindow(args: {
     })
     return {
       response,
-      droppedMessages: refitResult.droppedMessages,
-      wasTrimmed: refitResult.wasTrimmed,
+      droppedMessages: refit.droppedMessages,
+      wasTrimmed: refit.wasTrimmed,
+      rollover: refit.rollover,
     }
   }
 }

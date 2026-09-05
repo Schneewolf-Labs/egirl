@@ -27,6 +27,13 @@ export interface AgentLoopOptions {
    */
   consolidationInterval?: number
   /**
+   * When the context fills, roll over to a fresh window seeded with a mechanical handoff
+   * record instead of summarizing the dropped messages. Overrides the config default
+   * (`conversation.context_rollover`) for this run; unbounded tasks turn it on. See
+   * src/agent/handoff.ts and docs/autonomy-loop.md ("recycle from NOTES").
+   */
+  contextRollover?: boolean
+  /**
    * Run without a normal turn cap. `maxTurns` is ignored in favour of a far-off safety
    * ceiling; the run ends on a mechanical failure, a semantic report, or its own conclusion.
    * For long autonomous tasks. See docs/autonomy-loop.md.

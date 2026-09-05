@@ -229,6 +229,7 @@ const defaultToml: EgirlConfig = {
     max_messages: 1000,
     compact_on_startup: true,
     context_compaction: true,
+    context_rollover: false,
     consolidation_interval: 0,
   },
   skills: {
@@ -351,6 +352,7 @@ export function loadConfig(options: LoadConfigOptions = {}): RuntimeConfig {
       maxMessages: toml.conversation?.max_messages ?? 1000,
       compactOnStartup: toml.conversation?.compact_on_startup ?? true,
       contextCompaction: toml.conversation?.context_compaction ?? true,
+      contextRollover: toml.conversation?.context_rollover ?? false,
       consolidationInterval: toml.conversation?.consolidation_interval ?? 0,
     },
     recovery: {

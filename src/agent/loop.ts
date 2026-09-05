@@ -23,6 +23,7 @@ import {
   type SystemPromptOptions,
 } from './context'
 import { type AgentEventHandler, publishingEvents } from './events'
+import { buildHandoffRecord } from './handoff'
 import { ConversationHistory } from './history'
 import {
   checkpointNudge,
@@ -35,6 +36,7 @@ import {
 } from './nudges'
 import { injectRecalledMemory } from './recall'
 import { attemptRecovery, resolveRecoveryCaps } from './recovery'
+import { createRolloverTools, performRollover, type RolloverRequest } from './rollover'
 import { createRunState } from './run-state'
 import { endRun, publish, startRun } from './session-events'
 import type { SessionMutex } from './session-mutex'
@@ -237,6 +239,22 @@ export class AgentLoop {
     // Turns between consolidation breaks (0 = off). Per-run option wins over config default.
     const consolidationInterval =
       options.consolidationInterval ?? this.config.conversation.consolidationInterval ?? 0
+    // Context rollover replaces drop-and-summarize compaction: when the window fills it is
+    // recycled from a mechanical handoff record (see ./handoff.ts). The model also gets two
+    // loop-intrinsic tools to watch its window and roll over on its own terms.
+    const rolloverEnabled =
+      options.contextRollover ?? this.config.conversation.contextRollover ?? false
+    let rolloverRequest: RolloverRequest | undefined
+    const intrinsicTools = rolloverEnabled
+      ? createRolloverTools({
+          contextLength: this.config.local.contextLength,
+          lastInputTokens: () => state.lastInputTokens,
+          requestRollover: (request) => {
+            rolloverRequest = request
+          },
+        })
+      : undefined
+    const intrinsicDefs = [...(intrinsicTools?.values() ?? [])].map((t) => t.definition)
     // Wall-clock wrap-up: warn once as the hard deadline (a task timeout) nears, so the agent
     // winds down and checkpoints on its own instead of being killed mid-inference.
     const deadline = options.deadline
@@ -273,15 +291,25 @@ export class AgentLoop {
         // trigger fires when the window is filling and compaction is imminent — which is exactly
         // the moment durable capture matters most. The context trigger is rate-limited to one
         // per interval window so a sustained-high context does not nag every turn.
-        if (consolidationInterval > 0) {
-          const onInterval = state.turns > 1 && (state.turns - 1) % consolidationInterval === 0
+        //
+        // With rollover on and no interval, the context trigger still fires — once per window
+        // (a rollover re-arms it): the checkpoint is what makes the reset lossless.
+        if (consolidationInterval > 0 || rolloverEnabled) {
+          const onInterval =
+            consolidationInterval > 0 &&
+            state.turns > 1 &&
+            (state.turns - 1) % consolidationInterval === 0
           const utilization = state.lastInputTokens / Math.max(1, this.config.local.contextLength)
+          const minGap = consolidationInterval > 0 ? consolidationInterval : Infinity
           const contextPressed =
             utilization >= CONTEXT_BREAK_THRESHOLD &&
-            state.turns - state.lastContextBreakTurn >= consolidationInterval
+            state.turns - state.lastContextBreakTurn >= minGap
           if (onInterval || contextPressed) {
             if (contextPressed) state.lastContextBreakTurn = state.turns
-            addMessage(this.context, { role: 'user', content: checkpointNudge(contextPressed) })
+            addMessage(this.context, {
+              role: 'user',
+              content: checkpointNudge(contextPressed, rolloverEnabled),
+            })
           }
         }
 
@@ -297,7 +325,7 @@ export class AgentLoop {
           addMessage(this.context, { role: 'user', content: wrapupNudge(minsLeft) })
         }
 
-        const tools = isPlanning ? [] : this.toolExecutor.getDefinitions()
+        const tools = isPlanning ? [] : [...this.toolExecutor.getDefinitions(), ...intrinsicDefs]
 
         let response: ChatResponse
         const inferenceStart = Date.now()
@@ -315,10 +343,15 @@ export class AgentLoop {
             thinking,
             signal,
             cacheSlot: this.cacheSlot(),
+            rollover: rolloverEnabled ? {} : undefined,
           })
           response = result.response
 
-          if (result.wasTrimmed && this.config.conversation.contextCompaction) {
+          if (result.rollover) {
+            // The model already answered on the fresh window; make the live context match it.
+            this.rollOver(result.rollover, result.droppedMessages)
+            state.lastContextBreakTurn = -Infinity
+          } else if (result.wasTrimmed && this.config.conversation.contextCompaction) {
             this.scheduleCompaction(result.droppedMessages)
           }
         } catch (error) {
@@ -406,6 +439,7 @@ export class AgentLoop {
               response,
               context: this.context,
               executor: this.toolExecutor,
+              intrinsic: intrinsicTools,
               seenToolCalls,
               events,
               signal,
@@ -414,6 +448,19 @@ export class AgentLoop {
           if (toolOutcome.awaitingInput) state.awaitingInput = true
 
           state.toolsRan = true
+
+          // new_context: the rollover the model asked for, applied atomically now that the
+          // whole batch has run — the batch's results ride into the fresh window as the
+          // pending observation, so nothing is answered twice or not at all.
+          if (rolloverRequest) {
+            const record = buildHandoffRecord(this.context.messages, {
+              reason: 'requested',
+              handoff: rolloverRequest.handoff,
+            })
+            rolloverRequest = undefined
+            this.rollOver(record, this.context.messages)
+            state.lastContextBreakTurn = -Infinity
+          }
 
           if (signal?.aborted) {
             log.info('agent', 'Agent run aborted after tool execution')
@@ -570,6 +617,18 @@ export class AgentLoop {
     }
 
     return '[Agent reached maximum turns without producing a final response]'
+  }
+
+  private rollOver(record: ChatMessage, dropped: ChatMessage[]): void {
+    performRollover({
+      context: this.context,
+      history: this.history,
+      record,
+      dropped,
+      provider: this.auxProvider,
+      memory: this.memory,
+      conversationStore: this.conversationStore,
+    })
   }
 
   private scheduleCompaction(droppedMessages: ChatMessage[]): void {

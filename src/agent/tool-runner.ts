@@ -1,5 +1,5 @@
 import type { ChatResponse, ToolCall } from '../providers/types'
-import type { ToolExecutor, ToolResult } from '../tools'
+import type { Tool, ToolExecutor, ToolResult } from '../tools'
 import { log } from '../util/logger'
 import { type AgentContext, addMessage } from './context'
 import { truncateToolResultSync } from './context-window'
@@ -19,11 +19,13 @@ export async function runToolCalls(args: {
   response: ChatResponse
   context: AgentContext
   executor: ToolExecutor
+  /** Loop-intrinsic tools (context rollover), run inline instead of through the executor. */
+  intrinsic?: Map<string, Tool>
   seenToolCalls: Set<string>
   events?: AgentEventHandler
   signal?: AbortSignal
 }): Promise<{ awaitingInput: boolean }> {
-  const { response, context, executor, seenToolCalls, events, signal } = args
+  const { response, context, executor, intrinsic, seenToolCalls, events, signal } = args
   const calls = response.tool_calls ?? []
 
   const duplicateNames: string[] = []
@@ -47,6 +49,7 @@ export async function runToolCalls(args: {
     toolCalls: calls,
     context,
     executor,
+    intrinsic,
     events,
     signal,
   })
@@ -96,10 +99,11 @@ async function executeToolsWithHooks(args: {
   toolCalls: ToolCall[]
   context: AgentContext
   executor: ToolExecutor
+  intrinsic?: Map<string, Tool>
   events?: AgentEventHandler
   signal?: AbortSignal
 }): Promise<Map<string, ToolResult>> {
-  const { toolCalls, context, executor, events, signal } = args
+  const { toolCalls, context, executor, intrinsic, events, signal } = args
 
   // Don't start new tools after the run is aborted — emit skip results so
   // tool messages stay paired with their tool_calls in history.
@@ -107,6 +111,28 @@ async function executeToolsWithHooks(args: {
     success: false,
     output: 'Skipped: agent run was cancelled',
   })
+
+  // Intrinsic tools only touch the loop's own state, so they bypass the executor (and its
+  // safety/energy path) and the hooks. Results are reassembled in call order at the end.
+  const intrinsicResults = new Map<string, ToolResult>()
+  const external: ToolCall[] = []
+  for (const call of toolCalls) {
+    const tool = intrinsic?.get(call.name)
+    if (!tool) {
+      external.push(call)
+      continue
+    }
+    intrinsicResults.set(call.id, await tool.execute(call.arguments, context.workspaceDir))
+  }
+  if (intrinsicResults.size > 0) {
+    const externalResults = await executeToolsWithHooks({ ...args, toolCalls: external })
+    return new Map(
+      toolCalls.map((call) => [
+        call.id,
+        intrinsicResults.get(call.id) ?? externalResults.get(call.id) ?? skippedResult(),
+      ]),
+    )
+  }
 
   if (!events?.onBeforeToolExec && !events?.onAfterToolExec) {
     if (signal?.aborted) {
