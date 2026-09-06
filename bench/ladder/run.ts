@@ -88,6 +88,7 @@ function resetFixture() {
 function runAgent(
   prompt: string,
   timeoutMs: number,
+  maxTurns: number,
   transcriptPath: string,
 ): Promise<{
   ok: boolean
@@ -100,7 +101,19 @@ function runAgent(
     const started = Date.now()
     const child = spawn(
       'bun',
-      ['run', 'src/index.ts', 'cli', '-m', prompt, '--json', '--quiet', '--transcript', transcriptPath],
+      [
+        'run',
+        'src/index.ts',
+        'cli',
+        '-m',
+        prompt,
+        '--json',
+        '--quiet',
+        '--transcript',
+        transcriptPath,
+        '--max-turns',
+        String(maxTurns),
+      ],
       {
         cwd: ROOT,
         stdio: ['ignore', 'pipe', 'pipe'],
@@ -157,6 +170,10 @@ async function main() {
     process.exit(2)
   }
   const timeoutMs = Number(arg('timeout', '900000'))
+  // The one-shot default of 10 turns is a chat cap, not a task cap: B1.1 under the native tool
+  // shape reads, edits and re-runs the tests in 9-11 turns and was being cut off with the fix
+  // already made. 24 matches render_sft.py's budget, so a run that finishes here is a row.
+  const maxTurns = Number(arg('max-turns', '24'))
   const levels = arg('levels')?.split(',').map(Number)
   const tasksPath = arg('tasks', join(HERE, 'tasks.json'))!
   const all: Task[] = JSON.parse(readFileSync(tasksPath, 'utf8')).tasks
@@ -186,7 +203,7 @@ async function main() {
     }
     const prompt = t.prompt.replace('{dir}', FIXTURE)
     const transcript = join(transcriptDir, `${t.id}.jsonl`)
-    const run = await runAgent(prompt, timeoutMs, transcript)
+    const run = await runAgent(prompt, timeoutMs, maxTurns, transcript)
     const v = verify(fillLadder(t.verify))
     // Capture what the agent actually left behind before the next task wipes it. Failures are
     // the interesting cases — for diagnosis now, and as training material later — and a reset

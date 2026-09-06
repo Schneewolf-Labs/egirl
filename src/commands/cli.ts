@@ -27,6 +27,12 @@ export async function runCLI(config: RuntimeConfig, args: string[]): Promise<voi
   // bench timeout still leaves the turns it completed.
   const transcriptIndex = args.indexOf('--transcript')
   const transcriptPath = transcriptIndex !== -1 ? args[transcriptIndex + 1] : undefined
+  // --max-turns <n> lifts the one-shot turn cap. The default of 10 is right for a chat reply
+  // and wrong for a bench task: an operator that reads, edits, and re-runs the tests on its own
+  // hits it with the fix already in place and gets told to stop and summarise, which passes the
+  // task but leaves a trajectory that ends in a nudge rather than a report.
+  const maxTurnsIndex = args.indexOf('--max-turns')
+  const maxTurns = maxTurnsIndex !== -1 ? Number(args[maxTurnsIndex + 1]) : undefined
 
   const rt = await createCommandRuntime(config)
   const { conversations, taskStore, processRegistry, mcpConnections } = rt
@@ -100,7 +106,10 @@ export async function runCLI(config: RuntimeConfig, args: string[]): Promise<voi
 
     const t0 = Date.now()
     try {
-      const response = await agent.run(singleMessage, events ? { events } : undefined)
+      const response = await agent.run(singleMessage, {
+        ...(events && { events }),
+        ...(maxTurns && { maxTurns }),
+      })
 
       if (asJson) {
         // Exactly one JSON object on stdout, nothing else — logs go to stderr, so a caller can
