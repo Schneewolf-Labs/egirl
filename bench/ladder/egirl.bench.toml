@@ -1,0 +1,53 @@
+# Hermetic config for bench runs. Selected with EGIRL_CONFIG=bench/ladder/egirl.bench.toml,
+# which bench/ladder/run.ts does by default.
+#
+# A one-shot task run under the live config lands in the operator's workspace: its turns go into
+# her conversations.db, her audit log and traces, memory extraction files facts about a fixture
+# repo, and the next run recalls the last run's tasks as prior context. None of that is the
+# model being measured. This config gives every run the stock persona files, a workspace the
+# runner wipes at start, no persistence, no memory extraction, no background tasks, no MCP
+# servers and no messaging channels — so what the transcript shows is the model's own behaviour
+# on the task and nothing carried in from outside it.
+
+theme = "egirl"
+
+[thinking]
+level = "off"
+
+[workspace]
+# Wiped by the runner at the start of every ladder run. Nothing here is worth keeping.
+path = "~/.egirl/bench"
+
+[local]
+# Endpoint and model come from EGIRL_LOCAL_ENDPOINT / EGIRL_LOCAL_MODEL; these are placeholders.
+endpoint = "http://127.0.0.1:8177"
+model = "bench"
+context_length = 32768
+max_concurrent = 1
+tool_format = "auto"
+stale_stream_timeout_ms = 120000
+
+[channels.code_agent]
+provider = "codex"
+permission_mode = "default"
+
+[conversation]
+enabled = false
+compact_on_startup = false
+
+[memory]
+proactive_retrieval = false
+auto_extract = false
+
+[safety]
+enabled = false
+
+[tasks]
+enabled = false
+
+[tools]
+code_agent = true
+tasks = false
+
+[skills]
+dirs = []

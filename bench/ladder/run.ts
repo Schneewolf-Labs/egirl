@@ -28,11 +28,16 @@
  */
 
 import { execSync, spawn } from 'node:child_process'
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 
 const HERE = dirname(new URL(import.meta.url).pathname)
 const ROOT = join(HERE, '..', '..')
+// Every task runs under the hermetic bench config unless the caller points EGIRL_CONFIG
+// elsewhere. Its workspace is wiped at the start of each ladder run; see egirl.bench.toml.
+const BENCH_CONFIG = process.env.EGIRL_CONFIG ?? join(HERE, 'egirl.bench.toml')
+const BENCH_WORKSPACE = join(homedir(), '.egirl', 'bench')
 // --repo points the ladder at any resettable git repo; the built-in fixture is the default.
 // Generated tasks run against a throwaway clone, never a working tree.
 function repoArg(): string {
@@ -74,7 +79,11 @@ function resetFixture() {
   }
 }
 
-function runAgent(prompt: string, timeoutMs: number): Promise<{
+function runAgent(
+  prompt: string,
+  timeoutMs: number,
+  transcriptPath: string,
+): Promise<{
   ok: boolean
   toolCalls: { name: string }[]
   turns: number
@@ -83,15 +92,23 @@ function runAgent(prompt: string, timeoutMs: number): Promise<{
 }> {
   return new Promise((resolve) => {
     const started = Date.now()
-    const child = spawn('bun', ['run', 'src/index.ts', 'cli', '-m', prompt, '--json', '--quiet'], {
-      cwd: ROOT,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      // Pin sampling, as the tool bench does. Without this the same task flips between runs —
-      // two passes over the same ten tasks gave 8/10 and 9/10, and disagreed on which episodes
-      // counted as escalation trajectories. When the output is training data rather than a
-      // score, that means the dataset itself is partly a sample of noise.
-      env: { ...process.env, EGIRL_LOCAL_TEMPERATURE: process.env.EGIRL_LOCAL_TEMPERATURE ?? '0' },
-    })
+    const child = spawn(
+      'bun',
+      ['run', 'src/index.ts', 'cli', '-m', prompt, '--json', '--quiet', '--transcript', transcriptPath],
+      {
+        cwd: ROOT,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        env: {
+          ...process.env,
+          EGIRL_CONFIG: BENCH_CONFIG,
+          // Pin sampling, as the tool bench does. Without this the same task flips between runs —
+          // two passes over the same ten tasks gave 8/10 and 9/10, and disagreed on which
+          // episodes counted as escalation trajectories. When the output is training data rather
+          // than a score, that means the dataset itself is partly a sample of noise.
+          EGIRL_LOCAL_TEMPERATURE: process.env.EGIRL_LOCAL_TEMPERATURE ?? '0',
+        },
+      },
+    )
     let out = ''
     child.stdout.on('data', (d) => (out += d))
     child.stderr.on('data', () => {})
@@ -139,6 +156,15 @@ async function main() {
   const all: Task[] = JSON.parse(readFileSync(tasksPath, 'utf8')).tasks
   const tasks = levels ? all.filter((t) => levels.includes(t.level)) : all
 
+  // Fresh bench workspace: the previous run's memory.db and audit log would otherwise carry
+  // into this one. Only done for the stock bench config — a caller-supplied EGIRL_CONFIG owns
+  // its own workspace and we do not know what else lives there.
+  if (!process.env.EGIRL_CONFIG) rmSync(BENCH_WORKSPACE, { recursive: true, force: true })
+  // One JSONL transcript per task: every model round trip as the provider saw it. This is the
+  // raw material for training data, where the results JSON is only the scorecard.
+  const transcriptDir = join(HERE, 'transcripts', label)
+  mkdirSync(transcriptDir, { recursive: true })
+
   const results = []
   for (const t of tasks) {
     resetFixture()
@@ -153,7 +179,8 @@ async function main() {
       }
     }
     const prompt = t.prompt.replace('{dir}', FIXTURE)
-    const run = await runAgent(prompt, timeoutMs)
+    const transcript = join(transcriptDir, `${t.id}.jsonl`)
+    const run = await runAgent(prompt, timeoutMs, transcript)
     const v = verify(t.verify)
     // Capture what the agent actually left behind before the next task wipes it. Failures are
     // the interesting cases — for diagnosis now, and as training material later — and a reset
@@ -196,6 +223,7 @@ async function main() {
       verify_detail: v.detail,
       response: run.response.slice(0, 4000),
       diff: diff.slice(0, 40000),
+      transcript,
     }
     results.push(row)
     console.error(

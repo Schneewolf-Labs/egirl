@@ -1,7 +1,26 @@
-import type { ToolCall } from '../providers/types'
+import type {
+  ChatMessage,
+  ChatResponse,
+  ThinkingConfig,
+  ToolCall,
+  ToolDefinition,
+} from '../providers/types'
 import type { ToolResult } from '../tools/types'
 import { publish } from './session-events'
 import type { BudgetLevel, BudgetStatus } from './token-budget'
+
+/**
+ * One round trip to the model, as the provider saw it: the fitted message array, the tool
+ * definitions, the thinking config, and the raw response. This is the unit a training example
+ * is cut from, so it is captured here rather than reconstructed from persisted history (which
+ * drops ephemeral recovery turns and never records what fitting trimmed).
+ */
+export interface ModelTurn {
+  messages: ChatMessage[]
+  tools: ToolDefinition[]
+  thinking?: ThinkingConfig
+  response: ChatResponse
+}
 
 /**
  * The caller's handler, with the streaming events also published on the session bus. Only the
@@ -67,6 +86,8 @@ export interface AgentEventHandler {
   onToken?(token: string): void
   /** Called when the full response is complete */
   onResponseComplete?(): void
+  /** Called after every model round trip with exactly what was sent and what came back */
+  onModelTurn?(turn: ModelTurn): void
   /** Called when an error occurs during agent processing */
   onError?(error: Error): void
   /** Called before a single tool is executed. Return false to skip execution */
