@@ -167,6 +167,8 @@ export async function chatWithContextWindow(args: {
   droppedMessages: ChatMessage[]
   wasTrimmed: boolean
   rollover?: ChatMessage
+  /** The exact array handed to the provider: fitted, hygiene-pruned, system prompt hoisted. */
+  sentMessages: ChatMessage[]
 }> {
   const { provider, systemPrompt, messages, conversationSummary, tools, contextLength, tokenizer } =
     args
@@ -256,7 +258,7 @@ export async function chatWithContextWindow(args: {
       signal: args.signal,
       cacheSlot: args.cacheSlot,
     })
-    return { response, ...prepared }
+    return { response, ...prepared, sentMessages: fitted }
   }
 
   try {

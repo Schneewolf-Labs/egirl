@@ -341,6 +341,7 @@ export class AgentLoop {
             rollover: rolloverEnabled ? {} : undefined,
           })
           response = result.response
+          events?.onModelTurn?.({ messages: result.sentMessages, tools, thinking, response })
 
           if (result.rollover) {
             // The model already answered on the fresh window; make the live context match it.
@@ -597,6 +598,12 @@ export class AgentLoop {
         onThinkingToken: events?.onThinkingToken,
         thinking,
         signal,
+      })
+      events?.onModelTurn?.({
+        messages: result.sentMessages,
+        tools: [],
+        thinking,
+        response: result.response,
       })
 
       totalUsage.input_tokens += result.response.usage.input_tokens

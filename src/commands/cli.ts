@@ -1,3 +1,5 @@
+import { appendFileSync, writeFileSync } from 'node:fs'
+import type { AgentEventHandler, ModelTurn } from '../agent/events'
 import { createCLIChannel } from '../channels'
 import type { OutboundChannel } from '../channels/types'
 import type { RuntimeConfig } from '../config'
@@ -18,6 +20,13 @@ export async function runCLI(config: RuntimeConfig, args: string[]): Promise<voi
   // tools were called, with what arguments, or whether they succeeded. Those are the things
   // worth measuring about an operator model.
   const asJson = args.includes('--json')
+  // --transcript <path> dumps every model round trip of a single-message run as JSONL: the
+  // fitted message array the provider saw, the tool definitions, the thinking config, and the
+  // raw response. --json says what egirl did; this says what the model was shown when it did
+  // it, which is the record a training example is cut from. Appended live so a run killed by a
+  // bench timeout still leaves the turns it completed.
+  const transcriptIndex = args.indexOf('--transcript')
+  const transcriptPath = transcriptIndex !== -1 ? args[transcriptIndex + 1] : undefined
 
   const rt = await createCommandRuntime(config)
   const { conversations, taskStore, processRegistry, mcpConnections } = rt
@@ -52,8 +61,19 @@ export async function runCLI(config: RuntimeConfig, args: string[]): Promise<voi
     }> = []
     const startedAt = new Map<string, number>()
 
-    const events = asJson
+    if (transcriptPath) writeFileSync(transcriptPath, '')
+    let turnIndex = 0
+    const transcriptEvents: AgentEventHandler | undefined = transcriptPath
       ? {
+          onModelTurn(turn: ModelTurn) {
+            appendFileSync(transcriptPath, `${JSON.stringify({ turn: turnIndex++, ...turn })}\n`)
+          },
+        }
+      : undefined
+
+    const events: AgentEventHandler | undefined = asJson
+      ? {
+          ...transcriptEvents,
           onToolCallStart(calls: { id?: string; name: string; arguments?: unknown }[]) {
             for (const call of calls) {
               startedAt.set(call.id ?? call.name, Date.now())
@@ -76,7 +96,7 @@ export async function runCLI(config: RuntimeConfig, args: string[]): Promise<voi
             }
           },
         }
-      : undefined
+      : transcriptEvents
 
     const t0 = Date.now()
     try {
