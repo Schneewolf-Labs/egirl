@@ -30,13 +30,7 @@ export {
   createToolExecutor,
   ToolExecutor,
 } from './executor'
-export {
-  buildToolsSection,
-  formatToolCall,
-  formatToolResponse,
-  hasToolCalls,
-  parseToolCalls,
-} from './format'
+export { hasToolCalls, parseToolCalls } from './format'
 export {
   createProcessRegistry,
   type ProcessRegistry,
