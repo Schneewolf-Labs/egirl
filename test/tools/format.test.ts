@@ -88,6 +88,48 @@ describe('parseToolCalls', () => {
     expect(result.toolCalls[0].name).toBe('read_file')
   })
 
+  test('repairs a dropped opening brace on the arguments object', () => {
+    // B0-9B, verbatim: the `{` after "arguments": is missing, so the object is one level short.
+    const content = `<tool_call>
+{"name":"read_file","arguments":"path":"/home/nbeerbower/Projects/dummy/buchbinder/dedupe.py"}
+</tool_call>
+<tool_call>
+{"name":"glob_files","arguments":"pattern":"**/test*dedupe*.py"}
+</tool_call>`
+
+    const result = parseToolCalls(content)
+    expect(result.toolCalls).toHaveLength(2)
+    expect(result.toolCalls[0].name).toBe('read_file')
+    expect(result.toolCalls[0].arguments).toEqual({
+      path: '/home/nbeerbower/Projects/dummy/buchbinder/dedupe.py',
+    })
+    expect(result.toolCalls[1].arguments).toEqual({ pattern: '**/test*dedupe*.py' })
+    expect(result.content).toBe('')
+  })
+
+  test('repairs a call collapsed to NAME{...}', () => {
+    // B1-9B, verbatim: no wrapper object, no "name" key, the identifier glued to the arguments.
+    const content = `<tool_call>
+read_file{"path":"/home/nbeerbower/Projects/dummy/buchbinder/dedupe.py"}
+</tool_call>`
+
+    const result = parseToolCalls(content)
+    expect(result.toolCalls).toHaveLength(1)
+    expect(result.toolCalls[0].name).toBe('read_file')
+    expect(result.toolCalls[0].arguments).toEqual({
+      path: '/home/nbeerbower/Projects/dummy/buchbinder/dedupe.py',
+    })
+    expect(result.content).toBe('')
+  })
+
+  test('does not turn prose followed by an object into a call', () => {
+    const content = `<tool_call>
+here is the config {"path": "x"}
+</tool_call>`
+
+    expect(parseToolCalls(content).toolCalls).toHaveLength(0)
+  })
+
   test('assigns sequential call IDs', () => {
     const content = `<tool_call>
 {"name": "a", "arguments": {}}

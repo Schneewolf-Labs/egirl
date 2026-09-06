@@ -150,6 +150,22 @@ const BRACE_DUP_RE = /\{\s*"\{"(?!\s*:)/g
  */
 const BARE_NAME_RE = /\{\s*"([a-zA-Z_][a-zA-Z0-9_]*)"\s*,\s*(?="arguments"\s*:)/g
 
+/**
+ * The opening brace of the arguments object dropped -- `"arguments":"path":"x"}` for
+ * `"arguments":{"path":"x"}}`. B0-9B produced this on 3 of 5 runs of the same task, identically
+ * through every reissue nudge, so the turn ended with the action discarded. Anchored on the
+ * "arguments" key followed directly by a quoted key; a legitimate string-valued arguments
+ * field parses on the first attempt and never reaches this.
+ */
+const ARGS_BRACE_RE = /"arguments"\s*:\s*(?="[a-zA-Z_][a-zA-Z0-9_]*"\s*:)/
+
+/**
+ * The whole call collapsed to NAME{...} -- `read_file{"path":"x"}` with no wrapper object and
+ * no "name" key. B1-9B's failure mode on the same task (2 of 5 runs). Only a chunk that is
+ * exactly one identifier glued to one object qualifies, so prose can never become a call.
+ */
+const NAME_PREFIX_RE = /^\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*(\{[\s\S]*\})\s*$/
+
 function parseCallObject(jsonStr: string): Record<string, unknown> | undefined {
   const attempt = (text: string): Record<string, unknown> | undefined => {
     try {
@@ -183,7 +199,12 @@ function parseCallObject(jsonStr: string): Record<string, unknown> | undefined {
   if (braceResult) return braceResult
 
   const bareNameFixed = jsonStr.replace(BARE_NAME_RE, '{"name":"$1",')
-  return bareNameFixed === jsonStr ? undefined : attempt(bareNameFixed)
+  const bareNameResult = bareNameFixed === jsonStr ? undefined : attempt(bareNameFixed)
+  if (bareNameResult) return bareNameResult
+
+  // Re-open the arguments object and close it again before the call's own closing brace.
+  const argsOpened = jsonStr.replace(ARGS_BRACE_RE, '"arguments":{')
+  return argsOpened === jsonStr ? undefined : attempt(argsOpened.replace(/\}\s*$/, '}}'))
 }
 
 export function parseJsonToolCalls(content: string): {
@@ -209,6 +230,14 @@ export function parseJsonToolCalls(content: string): {
         .replace(BRACE_DUP_RE, '{"')
         .replace(BARE_NAME_RE, '{"name":"$1",')
       if (repaired !== chunk) candidates = jsonObjects(repaired)
+    }
+    if (!candidates.some((o) => parseCallObject(o))) {
+      // NAME{...}: the object extracts cleanly but carries no name, so it would only ever be
+      // an orphan. Wrap it as the documented form and let the normal path take it.
+      const prefixed = chunk.match(NAME_PREFIX_RE)
+      if (prefixed?.[1] && prefixed[2]) {
+        candidates = [`{"name":"${prefixed[1]}","arguments":${prefixed[2]}}`]
+      }
     }
     const chunkCalls: Omit<ToolCall, 'id'>[] = []
     const orphanObjects: Record<string, unknown>[] = []
