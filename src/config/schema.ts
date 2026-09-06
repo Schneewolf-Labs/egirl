@@ -80,21 +80,21 @@ const baseProperties = {
      */
     cache_slots: Type.Number({ default: 1 }),
     /**
-     * Tool-calling dialect the local model speaks: "auto" asks in Qwen3 form and accepts
-     * either on the way back, "qwen3"/"qwen35"/"laguna"/"deepseek" pin the model's native
-     * syntax for both directions. Pinning matters when a model has a strong trained prior —
-     * Laguna emits <arg_key>/<arg_value> regardless of what the prompt asks for, and DeepSeek
-     * v4 falls back to its full-width <｜DSML｜tool_call> token under load.
+     * Which tool-call syntaxes to recognise when the server leaves a call as text in the
+     * response instead of parsing it. Tools are sent as `tools` and rendered by the model's
+     * own chat template; with --jinja llama.cpp parses the calls too, and this is not
+     * consulted. "auto" accepts every syntax below; "qwen3"/"qwen35"/"laguna"/"deepseek"
+     * pin one model's form (DeepSeek v4 falls back to its full-width <｜DSML｜tool_call>
+     * token under load, and only that dialect normalises it).
      */
     tool_format: Type.String({ default: 'auto' }),
     /**
-     * Prepend Qwen3's `/think` or `/no_think` soft-switch to the first user message. That
-     * convention is specific to the Qwen3 chat template: on any other model the token is read
-     * as text the user typed, and the model will react to it -- DeepSeek v4 reported being
-     * asked "/think hey this is nick". Defaults on, because it is load-bearing for the Qwen3
-     * models this was built against; turn it off for anything else.
+     * No longer read. Thinking is switched through the template's own `enable_thinking`
+     * variable, which every model's template either honours or ignores; the `/think` text
+     * prefix this used to control was read as user input by anything but Qwen3. Still accepted
+     * so an existing config keeps loading.
      */
-    thinking_directive: Type.Boolean({ default: true }),
+    thinking_directive: Type.Optional(Type.Boolean()),
     max_concurrent: Type.Number({ default: 2 }),
     /**
      * Abort a stream after this long with no new token. 90s aborted legitimate work on a
@@ -532,7 +532,6 @@ export interface RuntimeConfig {
     cacheSlots: number
     toolFormat: string
     /** Whether to prepend Qwen3's /think soft-switch. Off for non-Qwen models. */
-    thinkingDirective: boolean
     staleStreamTimeoutMs: number
     /** Sampling temperature. Undefined lets llama.cpp use its own default (0.8). */
     temperature?: number

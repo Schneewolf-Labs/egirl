@@ -1,11 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import {
-  buildToolsSection,
-  formatToolCall,
-  formatToolResponse,
-  hasToolCalls,
-  parseToolCalls,
-} from '../../src/tools/format'
+import { hasToolCalls, parseToolCalls } from '../../src/tools/format'
 
 describe('parseToolCalls', () => {
   test('parses single tool call', () => {
@@ -141,47 +135,6 @@ here is the config {"path": "x"}
     const result = parseToolCalls(content)
     expect(result.toolCalls[0].id).toBe('call_0')
     expect(result.toolCalls[1].id).toBe('call_1')
-  })
-})
-
-describe('formatToolCall', () => {
-  test('formats tool call correctly', () => {
-    const result = formatToolCall('read_file', { path: '/etc/hosts' })
-    expect(result).toBe(
-      '<tool_call>\n{"name":"read_file","arguments":{"path":"/etc/hosts"}}\n</tool_call>',
-    )
-  })
-})
-
-describe('formatToolResponse', () => {
-  test('wraps output in tool_response tags', () => {
-    const result = formatToolResponse('file contents here')
-    expect(result).toBe('<tool_response>\nfile contents here\n</tool_response>')
-  })
-})
-
-describe('buildToolsSection', () => {
-  test('returns empty string for no tools', () => {
-    expect(buildToolsSection([])).toBe('')
-    expect(buildToolsSection(undefined)).toBe('')
-  })
-
-  test('formats tools section correctly', () => {
-    const tools = [
-      {
-        name: 'read_file',
-        description: 'Read a file',
-        parameters: { type: 'object', properties: { path: { type: 'string' } } },
-      },
-    ]
-
-    const result = buildToolsSection(tools)
-
-    expect(result).toContain('# Tools')
-    expect(result).toContain('<tools>')
-    expect(result).toContain('</tools>')
-    expect(result).toContain('"name":"read_file"')
-    expect(result).toContain('<tool_call>')
   })
 })
 

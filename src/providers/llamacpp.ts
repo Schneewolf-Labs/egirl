@@ -1,18 +1,10 @@
 import { isRepetitionDominated } from '../agent/repetition-guard'
-import { buildToolsSection, parseToolCalls } from '../tools/format'
+import { parseToolCalls } from '../tools/format'
 import { log } from '../util/logger'
-import { formatMessagesForQwen3 } from './qwen3-format'
+import { toApiMessages } from './chat-format'
 import { withReasoningFloor } from './reasoning-floors'
-import type {
-  ChatMessage,
-  ChatRequest,
-  ChatResponse,
-  ContentPart,
-  LLMProvider,
-  ThinkingConfig,
-  ToolDefinition,
-} from './types'
-import { ContextSizeError, getTextContent } from './types'
+import type { ChatRequest, ChatResponse, LLMProvider, ToolCall, ToolDefinition } from './types'
+import { ContextSizeError } from './types'
 
 /**
  * Extract `<think>...</think>` blocks from Qwen3 response content.
@@ -31,8 +23,44 @@ function extractThinkingTags(content: string): { content: string; thinking: stri
   }
 }
 
-type FormattedContent = string | ContentPart[]
-type FormattedMessage = { role: string; content: FormattedContent }
+/** A tool call as the server streams it: arguments arrive as JSON text, in fragments. */
+interface WireToolCall {
+  id?: string
+  name: string
+  arguments: string
+}
+
+/**
+ * Turn the server's parsed tool calls into egirl's. The server already matched the model's
+ * output against the tool grammar, so the arguments are JSON; a call whose arguments still do
+ * not parse is rendered back into markup so the loop's stranded-call recovery handles it the
+ * same way it handles a call the server never recognized.
+ */
+function resolveWireToolCalls(
+  calls: WireToolCall[],
+  content: string,
+): { content: string; toolCalls: ToolCall[] } {
+  const toolCalls: ToolCall[] = []
+  let stranded = content
+  calls.forEach((call, i) => {
+    let args: unknown
+    try {
+      args = call.arguments.trim() === '' ? {} : JSON.parse(call.arguments)
+    } catch {
+      args = undefined
+    }
+    if (args && typeof args === 'object' && !Array.isArray(args)) {
+      toolCalls.push({
+        id: call.id || `call_${i}`,
+        name: call.name,
+        arguments: args as Record<string, unknown>,
+      })
+      return
+    }
+    stranded += `\n<tool_call>\n{"name": ${JSON.stringify(call.name)}, "arguments": ${call.arguments}}\n</tool_call>`
+  })
+  return { content: stranded, toolCalls }
+}
 
 export interface LlamaCppCapabilities {
   multimodal: boolean
@@ -90,7 +118,6 @@ export class LlamaCppProvider implements LLMProvider {
   private defaultTemperature: number | undefined
   // Bearer token for a llama.cpp server started with --api-key. Empty for the usual open local
   // server; set when the operator model is shared (e.g. a keyed endpoint also serving a peer).
-  private readonly thinkingDirective: boolean
   private apiKey: string | undefined
 
   constructor(
@@ -100,9 +127,7 @@ export class LlamaCppProvider implements LLMProvider {
     maxConcurrent?: number,
     defaultTemperature?: number,
     apiKey?: string,
-    thinkingDirective = true,
   ) {
-    this.thinkingDirective = thinkingDirective
     this.endpoint = endpoint.replace(/\/$/, '')
     this.name = `llamacpp/${model}`
     this.defaultTemperature = defaultTemperature
@@ -165,11 +190,13 @@ export class LlamaCppProvider implements LLMProvider {
   }
 
   private async chatInner(req: ChatRequest): Promise<ChatResponse> {
-    // Embed tool definitions in the system prompt in Qwen3 native format.
-    // We do NOT send tools via the API tools param — llama.cpp would parse
-    // <tool_call> XML server-side and return structured tool_calls instead of
-    // raw content, breaking our parseToolCalls() extraction.
-    const messages = this.formatMessages(req.messages, req.thinking, req.tools)
+    // Tools go in the request as `tools`, and the server's chat template renders them in
+    // whatever syntax this model was trained on. With --jinja the server also parses the
+    // calls back out and constrains their arguments to the tool's schema, so a call arrives
+    // as structured `tool_calls`; a server that only renders (no parser for the template)
+    // leaves the markup in `content`, where parseToolCalls still finds it.
+    const messages = toApiMessages(req.messages)
+    const tools = req.tools?.length ? req.tools.map(toApiTool) : undefined
 
     // Always stream, even when the caller wants no live tokens (a background task passes no
     // onToken). Streaming is the ONLY path that carries the stale-stream timeout — with its
@@ -198,6 +225,9 @@ export class LlamaCppProvider implements LLMProvider {
       signal: req.signal,
       body: JSON.stringify({
         messages,
+        // An agent turn routinely issues several calls at once; without this the server's
+        // tool grammar stops the model after one.
+        ...(tools && { tools, parallel_tool_calls: true }),
         temperature: req.temperature ?? this.defaultTemperature,
         max_tokens: req.max_tokens,
         stream: shouldStream,
@@ -257,15 +287,13 @@ export class LlamaCppProvider implements LLMProvider {
       if (response.status === 400 && /template|user query/i.test(errorText)) {
         const roles = messages.map((m) => m.role)
         // Describe every user turn precisely. "0 acceptable" has at least three causes that
-        // look identical in a count -- a tool_response wrapper, content that is not a string,
-        // and no user turn at all -- and guessing between them from the outside does not work.
+        // look identical in a count -- an empty turn, content that is not a string, and no
+        // user turn at all -- and guessing between them from the outside does not work.
         const userTurns = messages
           .filter((m) => m.role === 'user')
           .map((m) => {
             if (typeof m.content !== 'string') return `non-string(${typeof m.content})`
-            const c = m.content.trim()
-            const wrapped = c.startsWith('<tool_response>') && c.endsWith('</tool_response>')
-            return `${wrapped ? 'tool_response' : 'query'}:${JSON.stringify(c.slice(0, 60))}`
+            return `query:${JSON.stringify(m.content.trim().slice(0, 60))}`
           })
         log.error(
           'llamacpp',
@@ -284,12 +312,15 @@ export class LlamaCppProvider implements LLMProvider {
     let usage = { prompt_tokens: 0, completion_tokens: 0 }
     let model = this.name
     let finish_reason: string | undefined
+    // Calls the server parsed out of the generation itself. Empty when the server only
+    // renders the template and leaves the markup in `content`.
+    let wireToolCalls: WireToolCall[] = []
 
     if (shouldStream && response.body) {
       const result = await this.readStream(
         response.body,
         req.onToken ?? (() => {}),
-        (req.tools?.length ?? 0) > 0,
+        tools !== undefined,
         req.onThinkingToken,
       )
       content = result.content
@@ -297,16 +328,27 @@ export class LlamaCppProvider implements LLMProvider {
       usage = result.usage
       model = result.model ?? this.name
       finish_reason = result.finish_reason
+      wireToolCalls = result.toolCalls
     } else {
       const data = (await response.json()) as {
         choices: Array<{
-          message: { content: string; reasoning_content?: string; reasoning?: string }
+          message: {
+            content: string | null
+            reasoning_content?: string
+            reasoning?: string
+            tool_calls?: Array<{ id?: string; function?: { name?: string; arguments?: string } }>
+          }
           finish_reason?: string
         }>
         usage: { prompt_tokens: number; completion_tokens: number }
         model: string
       }
       content = data.choices[0]?.message?.content ?? ''
+      wireToolCalls = (data.choices[0]?.message?.tool_calls ?? []).map((tc) => ({
+        id: tc.id,
+        name: tc.function?.name ?? '',
+        arguments: tc.function?.arguments ?? '',
+      }))
       // llama.cpp calls this reasoning_content; vLLM calls the identical field reasoning.
       reasoning =
         data.choices[0]?.message?.reasoning_content ?? data.choices[0]?.message?.reasoning ?? ''
@@ -332,8 +374,17 @@ export class LlamaCppProvider implements LLMProvider {
     // Extract thinking blocks before parsing tool calls
     const { content: withoutThinking, thinking } = extractThinkingTags(content)
 
-    // Parse tool calls from response
-    const { content: cleanContent, toolCalls } = parseToolCalls(withoutThinking)
+    // Server-parsed calls first, then anything left as markup in the content. Both can be
+    // present at once: a server whose parser stops at the first call, or a model that wrote
+    // one call in the grammar and a second one free-hand after it.
+    const structured = resolveWireToolCalls(wireToolCalls, withoutThinking)
+    const parsed = parseToolCalls(structured.content)
+    const cleanContent = parsed.content
+    const toolCalls = [...structured.toolCalls, ...parsed.toolCalls].map((tc, i) => ({
+      ...tc,
+      // Ids must be unique within the turn: the tool runner keys results on them.
+      id: tc.id || `call_${i}`,
+    }))
 
     if (toolCalls.length > 0) {
       log.debug(
@@ -372,12 +423,16 @@ export class LlamaCppProvider implements LLMProvider {
     usage: { prompt_tokens: number; completion_tokens: number }
     model?: string
     finish_reason?: string
+    toolCalls: WireToolCall[]
   }> {
     const decoder = new TextDecoder()
     const reader = body.getReader()
 
     let fullContent = ''
     let fullReasoning = ''
+    // Streamed tool calls arrive as fragments keyed by index: the first carries the id and
+    // name, the rest append to the arguments string.
+    const toolCalls: WireToolCall[] = []
     let buffer = ''
     let inToolCall = false
     let inThink = false
@@ -439,7 +494,16 @@ export class LlamaCppProvider implements LLMProvider {
           try {
             const parsed = JSON.parse(data) as {
               choices?: Array<{
-                delta?: { content?: string; reasoning_content?: string; reasoning?: string }
+                delta?: {
+                  content?: string | null
+                  reasoning_content?: string
+                  reasoning?: string
+                  tool_calls?: Array<{
+                    index?: number
+                    id?: string
+                    function?: { name?: string; arguments?: string }
+                  }>
+                }
                 finish_reason?: string | null
               }>
               usage?: { prompt_tokens: number; completion_tokens: number }
@@ -450,6 +514,21 @@ export class LlamaCppProvider implements LLMProvider {
             if (parsed.model) model = parsed.model
             const chunkFinish = parsed.choices?.[0]?.finish_reason
             if (chunkFinish) finish_reason = chunkFinish
+
+            for (const delta of parsed.choices?.[0]?.delta?.tool_calls ?? []) {
+              // A fragment without an index (some servers omit it) starts a new call when it
+              // carries an id and otherwise continues the current one.
+              const index =
+                delta.index ?? (delta.id ? toolCalls.length : Math.max(toolCalls.length - 1, 0))
+              const call = toolCalls[index] ?? { name: '', arguments: '' }
+              if (delta.id) call.id = delta.id
+              if (delta.function?.name) call.name += delta.function.name
+              if (delta.function?.arguments) call.arguments += delta.function.arguments
+              toolCalls[index] = call
+              // The model is producing a call, which is progress even though no content token
+              // shows for it.
+              resetStaleTimer()
+            }
 
             // Servers running `--reasoning-format deepseek` strip `<think>` out of the content
             // and stream it here instead. Those deltas are still the model working, so they have
@@ -564,7 +643,14 @@ export class LlamaCppProvider implements LLMProvider {
       onToken(buffer)
     }
 
-    return { content: fullContent, reasoning: fullReasoning, usage, model, finish_reason }
+    return {
+      content: fullContent,
+      reasoning: fullReasoning,
+      usage,
+      model,
+      finish_reason,
+      toolCalls: toolCalls.filter((c) => c.name !== ''),
+    }
   }
 
   /**
@@ -578,43 +664,6 @@ export class LlamaCppProvider implements LLMProvider {
     }
     return 0
   }
-
-  private formatMessages(
-    messages: ChatMessage[],
-    thinking?: ThinkingConfig,
-    tools?: ToolDefinition[],
-  ): FormattedMessage[] {
-    // Inject Qwen3 tool definitions into the system prompt so the model sees them
-    // in the native <tools> format without llama.cpp intercepting them server-side.
-    let msgsToFormat = messages
-    if (tools?.length) {
-      const toolsSection = buildToolsSection(tools)
-      msgsToFormat = messages.map((msg, idx) => {
-        if (idx === 0 && msg.role === 'system') {
-          return { ...msg, content: getTextContent(msg.content) + toolsSection }
-        }
-        return msg
-      })
-    }
-
-    const formatted = formatMessagesForQwen3(msgsToFormat)
-
-    // Qwen3 uses /think and /no_think tags to control thinking mode. This is a property of
-    // that chat template, not of thinking in general: any other model reads the token as text
-    // the user typed and answers it. DeepSeek v4 duly reported being asked "/think hey this is
-    // nick" -- the directive has to be opt-out per model.
-    if (thinking && this.thinkingDirective) {
-      const directive = thinking.level !== 'off' ? '/think' : '/no_think'
-      for (const msg of formatted) {
-        if (msg.role === 'user' && typeof msg.content === 'string') {
-          msg.content = `${directive}\n${msg.content}`
-          break
-        }
-      }
-    }
-
-    return formatted
-  }
 }
 
 export function createLlamaCppProvider(
@@ -624,7 +673,6 @@ export function createLlamaCppProvider(
   maxConcurrent?: number,
   defaultTemperature?: number,
   apiKey?: string,
-  thinkingDirective = true,
 ): LLMProvider {
   return new LlamaCppProvider(
     endpoint,
@@ -633,6 +681,12 @@ export function createLlamaCppProvider(
     maxConcurrent,
     defaultTemperature,
     apiKey,
-    thinkingDirective,
   )
+}
+
+function toApiTool(tool: ToolDefinition): object {
+  return {
+    type: 'function',
+    function: { name: tool.name, description: tool.description, parameters: tool.parameters },
+  }
 }

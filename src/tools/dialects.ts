@@ -1,33 +1,22 @@
 import type { ToolCall } from '../providers/types'
-import type { ToolDefinition } from './types'
 
 /**
- * Tool-calling dialects.
+ * Tool-call dialects: the syntaxes a model's text can carry a call in.
  *
- * A local model emits tool calls in whatever syntax it was trained on, and the syntax we
- * ASK for has to match the syntax we PARSE — otherwise the model answers correctly in its
- * own dialect and the loop throws the calls away. (Laguna did exactly that: four correct
- * tool calls on its first turn, zero parsed, run over after one turn.)
+ * The chat template renders tool definitions and past calls in the model's own syntax, and a
+ * llama.cpp server with --jinja parses the model's calls the same way. These parsers are the
+ * fallback for what that leaves as text — a server that renders but does not parse, or a call
+ * the model wrote free-hand outside the grammar. A local model then emits whatever syntax it
+ * was trained on (Laguna answered four correct calls in arg_key/arg_value form and a JSON-only
+ * parser threw them all away), so every dialect here accepts the others on the way back.
  *
- * So rendering and parsing live together in one object per dialect, chosen by
- * `[local] tool_format` in egirl.toml. Adding a model family means adding a dialect here,
- * not patching a regex.
+ * Chosen by `[local] tool_format` in egirl.toml. Adding a model family means adding a dialect
+ * here, not patching a regex.
  */
 export interface ToolDialect {
   name: string
-  /** tool definitions block appended to the system prompt */
-  buildToolsSection(tools: ToolDefinition[] | undefined): string
   /** pull tool calls out of assistant output, returning the text with them removed */
   parseToolCalls(content: string): { content: string; toolCalls: ToolCall[] }
-  /** render one tool result back to the model */
-  formatToolResponse(output: string): string
-}
-
-function toolSignature(tool: ToolDefinition): object {
-  return {
-    type: 'function',
-    function: { name: tool.name, description: tool.description, parameters: tool.parameters },
-  }
 }
 
 /** Values arrive as text. Numbers/bools/objects should reach tools as themselves. */
@@ -327,61 +316,23 @@ function withIds(parsed: { content: string; toolCalls: Omit<ToolCall, 'id'>[] })
   }
 }
 
-const QWEN3_INSTRUCTION = `# Tools
-
-You may call one or more functions to assist with the user query.
-
-You are provided with function signatures within <tools></tools> XML tags:
-<tools>
-{definitions}
-</tools>
-
-For each function call, return a json object with function name and arguments within <tool_call></tool_call> XML tags:
-<tool_call>
-{"name": "<function-name>", "arguments": <args-json-object>}
-</tool_call>`
-
+/** JSON inside <tool_call>: the Qwen3 chat template's form. */
 export const qwen3Dialect: ToolDialect = {
   name: 'qwen3',
-  buildToolsSection(tools) {
-    if (!tools || tools.length === 0) return ''
-    const definitions = tools.map((t) => JSON.stringify(toolSignature(t))).join('\n')
-    return `\n\n${QWEN3_INSTRUCTION.replace('{definitions}', definitions)}`
-  },
   parseToolCalls(content) {
     return withIds(parseJsonToolCalls(content))
-  },
-  formatToolResponse(output) {
-    return `<tool_response>\n${output}\n</tool_response>`
   },
 }
 
-/** Mirrors Laguna's chat template: <available_tools> for signatures, arg_key/arg_value calls. */
+/** Laguna's template: <tool_call>name<arg_key>k</arg_key><arg_value>v</arg_value></tool_call>. */
 export const lagunaDialect: ToolDialect = {
   name: 'laguna',
-  buildToolsSection(tools) {
-    if (!tools || tools.length === 0) return ''
-    const definitions = tools.map((t) => JSON.stringify(toolSignature(t))).join('\n')
-    return [
-      '\n\n### Tools\n',
-      'You may call functions to assist with the user query.\n',
-      'All available function signatures are listed below:\n',
-      '<available_tools>\n',
-      `${definitions}\n`,
-      '</available_tools>\n\n',
-      'For each function call, emit:\n',
-      '<tool_call>function_name<arg_key>argument_name</arg_key><arg_value>value</arg_value></tool_call>',
-    ].join('')
-  },
   parseToolCalls(content) {
-    // Accept the JSON form too: asking for one dialect does not stop a model reaching
-    // for the other, and a parsed call is always better than a stranded one.
+    // Accept the JSON form too: a model trained on one dialect still sometimes reaches for
+    // the other, and a parsed call is always better than a stranded one.
     const kv = parseKeyValueToolCalls(content)
     if (kv.toolCalls.length > 0) return withIds(kv)
     return withIds(parseJsonToolCalls(content))
-  },
-  formatToolResponse(output) {
-    return `<tool_response>${output}</tool_response>`
   },
 }
 
@@ -425,43 +376,9 @@ function parseFunctionParamToolCalls(content: string): {
   return { content: cleaned.trim(), toolCalls: calls }
 }
 
-const QWEN35_INSTRUCTION = `# Tools
-
-You have access to the following functions:
-
-<tools>
-{definitions}
-</tools>
-
-If you choose to call a function ONLY reply in the following format with NO suffix:
-
-<tool_call>
-<function=example_function_name>
-<parameter=example_parameter_1>
-value_1
-</parameter>
-</function>
-</tool_call>
-
-<IMPORTANT>
-Reminder:
-- Function calls MUST follow the specified format: an inner <function=...></function> block must be nested within <tool_call></tool_call> XML tags
-- Required parameters MUST be specified
-- You may provide optional reasoning for your function call in natural language BEFORE the function call, but NOT after
-</IMPORTANT>`
-
-/**
- * Qwen3.5-MoE (e.g. via sabrewing's qwen35 engine). The instruction block is the model's own,
- * copied from its chat template — asking in a foreign dialect makes it fall back to the syntax
- * it was trained on, which the other parsers do not recognize.
- */
+/** Qwen3.5 (e.g. via sabrewing's qwen35 engine): the <function=>/<parameter=> form above. */
 export const qwen35Dialect: ToolDialect = {
   name: 'qwen35',
-  buildToolsSection(tools) {
-    if (!tools || tools.length === 0) return ''
-    const definitions = tools.map((t) => JSON.stringify(toolSignature(t))).join('\n')
-    return `\n\n${QWEN35_INSTRUCTION.replace('{definitions}', definitions)}`
-  },
   parseToolCalls(content) {
     const native = parseFunctionParamToolCalls(content)
     if (native.toolCalls.length > 0) return withIds(native)
@@ -470,22 +387,17 @@ export const qwen35Dialect: ToolDialect = {
     if (json.toolCalls.length > 0) return withIds(json)
     return withIds(parseKeyValueToolCalls(content))
   },
-  formatToolResponse(output) {
-    return `<tool_response>\n${output}\n</tool_response>`
-  },
 }
 
 /**
  * DeepSeek v4 ("DSML" — DeepSeek Markup Language) emits its own tool-call opener,
- * `<｜DSML｜tool_call>`, with full-width vertical bars (U+FF5C), instead of the ASCII
- * `<tool_call>` it is ASKED for. On a clean turn it complies with the ASCII form; under load
- * (long context, heavy reasoning) it falls back to this native token, and often DOUBLES the
- * opener — `<｜DSML｜tool_call>\n<｜DSML｜tool_call>\n{json}` — for a single call.
+ * `<｜DSML｜tool_call>`, with full-width vertical bars (U+FF5C). Under load (long context,
+ * heavy reasoning) it often DOUBLES the opener — `<｜DSML｜tool_call>\n<｜DSML｜tool_call>\n{json}`
+ * — for a single call, which a server-side parser then leaves in the content as text.
  *
- * So we ask in Qwen3 form (which it understands) and, on the way back, rewrite the native
- * opener to ASCII and collapse a doubled opener before the shared JSON parser runs. That
- * parser already tolerates the flattened args and dropped closer DeepSeek also produces, so
- * no new extraction logic is needed — only token normalization.
+ * On the way back, rewrite the native opener to ASCII and collapse a doubled opener before the
+ * shared JSON parser runs. That parser already tolerates the flattened args and dropped closer
+ * DeepSeek also produces, so no new extraction logic is needed — only token normalization.
  */
 const DSML_OPEN_RE = /<｜DSML｜tool_call>/g
 // Two (or more) openers separated by nothing but whitespace are the doubled-opener quirk for
@@ -498,23 +410,19 @@ function normalizeDsmlToolCalls(content: string): string {
 }
 
 /**
- * DeepSeek v4. Ask in Qwen3 form; on the way back normalize the native DSML opener to ASCII,
- * then run the same fallback chain as `auto` — DeepSeek emits clean `<tool_call>` JSON when it
- * complies, and its native token once normalized is just more of the same.
+ * DeepSeek v4: normalize the native DSML opener to ASCII, then run the same fallback chain as
+ * `auto` — its native token once normalized is just more of the same.
  */
 export const deepseekDialect: ToolDialect = {
   name: 'deepseek',
-  buildToolsSection: qwen3Dialect.buildToolsSection,
   parseToolCalls(content) {
     return autoDialect.parseToolCalls(normalizeDsmlToolCalls(content))
   },
-  formatToolResponse: qwen3Dialect.formatToolResponse,
 }
 
-/** Ask in Qwen3 form (widely understood), accept either on the way back. */
+/** Accept every syntax above. */
 export const autoDialect: ToolDialect = {
   name: 'auto',
-  buildToolsSection: qwen3Dialect.buildToolsSection,
   parseToolCalls(content) {
     const json = parseJsonToolCalls(content)
     if (json.toolCalls.length > 0) return withIds(json)
@@ -522,7 +430,6 @@ export const autoDialect: ToolDialect = {
     if (kv.toolCalls.length > 0) return withIds(kv)
     return withIds(parseFunctionParamToolCalls(content))
   },
-  formatToolResponse: qwen3Dialect.formatToolResponse,
 }
 
 const DIALECTS: Record<string, ToolDialect> = {

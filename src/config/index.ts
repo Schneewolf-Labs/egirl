@@ -228,7 +228,6 @@ const defaultToml: EgirlConfig = {
     max_concurrent: 2,
     cache_slots: 1,
     tool_format: 'auto',
-    thinking_directive: true,
   },
   conversation: {
     enabled: true,
@@ -313,8 +312,6 @@ export function loadConfig(options: LoadConfigOptions = {}): RuntimeConfig {
       maxConcurrent: toml.local?.max_concurrent ?? defaultToml.local.max_concurrent,
       cacheSlots: toml.local?.cache_slots ?? defaultToml.local.cache_slots ?? 1,
       toolFormat: toml.local?.tool_format ?? defaultToml.local.tool_format ?? 'auto',
-      thinkingDirective:
-        toml.local?.thinking_directive ?? defaultToml.local.thinking_directive ?? true,
       staleStreamTimeoutMs: toml.local?.stale_stream_timeout_ms ?? 300_000,
       // Secret prefers .env; toml is a fallback for a fully-local setup.
       ...((process.env.EGIRL_LOCAL_API_KEY ?? toml.local?.api_key) && {
