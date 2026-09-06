@@ -15,25 +15,49 @@ const MAX_TOOL_RESULT_TOKENS = 8000
  * assistant/tool messages to the context. Detects repeated identical
  * calls and injects a loop warning so the model changes course.
  */
+/**
+ * Tells a loop apart from a re-check.
+ *
+ * The old rule warned on any call whose name and arguments had been seen anywhere in the run,
+ * so "run the tests, edit, run the tests again" always drew a loop warning on the second run:
+ * a third of otherwise clean bench trajectories carried that nudge, for doing exactly what a
+ * careful engineer does after an edit. A loop is the same call again with nothing in between,
+ * or the same call a third time; one repeat later in the run is verification.
+ */
+export class RepeatDetector {
+  private counts = new Map<string, number>()
+  private lastBatch = new Set<string>()
+
+  /** Names of the calls in this batch that look like a loop. Records the batch. */
+  repeats(calls: { name: string; arguments: unknown }[]): string[] {
+    const names: string[] = []
+    const batch = new Set<string>()
+    for (const call of calls) {
+      const key = `${call.name}:${JSON.stringify(call.arguments)}`
+      const seen = this.counts.get(key) ?? 0
+      if (this.lastBatch.has(key) || seen >= 2) names.push(call.name)
+      this.counts.set(key, seen + 1)
+      batch.add(key)
+    }
+    this.lastBatch = batch
+    return names
+  }
+}
+
 export async function runToolCalls(args: {
   response: ChatResponse
   context: AgentContext
   executor: ToolExecutor
   /** Loop-intrinsic tools (context rollover), run inline instead of through the executor. */
   intrinsic?: Map<string, Tool>
-  seenToolCalls: Set<string>
+  seenToolCalls: RepeatDetector
   events?: AgentEventHandler
   signal?: AbortSignal
 }): Promise<{ awaitingInput: boolean }> {
   const { response, context, executor, intrinsic, seenToolCalls, events, signal } = args
   const calls = response.tool_calls ?? []
 
-  const duplicateNames: string[] = []
-  for (const call of calls) {
-    const key = `${call.name}:${JSON.stringify(call.arguments)}`
-    if (seenToolCalls.has(key)) duplicateNames.push(call.name)
-    seenToolCalls.add(key)
-  }
+  const duplicateNames = seenToolCalls.repeats(calls)
 
   addMessage(context, {
     role: 'assistant',
