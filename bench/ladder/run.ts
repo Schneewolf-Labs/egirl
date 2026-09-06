@@ -173,7 +173,13 @@ function verify(cmd: string): { passed: boolean; detail: string } {
   } catch (e) {
     const err = e as { stderr?: Buffer; stdout?: Buffer }
     const text = `${err.stderr?.toString() ?? ''}${err.stdout?.toString() ?? ''}`.trim()
-    return { passed: false, detail: text.split('\n').slice(-2).join(' ').slice(0, 200) }
+    const lines = text.split('\n')
+    // Name the failing tests, not just the count: pytest's last two lines are the -x banner and
+    // the summary, which says "1 failed" without saying which, and whether the same test fails
+    // across runs is the first thing worth knowing about a failure.
+    const named = lines.filter((l) => /^(FAILED|ERROR) |^error:|^\s*✗|^\(fail\)/.test(l)).slice(0, 4)
+    const tail = lines.slice(-2).join(' ')
+    return { passed: false, detail: [...named, tail].join(' ; ').slice(0, 600) }
   }
 }
 
