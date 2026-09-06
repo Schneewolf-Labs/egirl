@@ -9,7 +9,7 @@
    "blank_lines": 2,
    "setup": "python3 {ladder}/blank.py --repo . --file src/wald/api/search.py --function search",
    "prompt": "In the Python project at {dir}, the function `search` in `src/wald/api/search.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
-   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider"
+   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider --deselect tests/test_web.py::test_home_is_fine_with_an_empty_hub"
   },
   {
    "id": "gen_src_wald_api_wiki_list_pages",
@@ -19,7 +19,7 @@
    "blank_lines": 4,
    "setup": "python3 {ladder}/blank.py --repo . --file src/wald/api/wiki.py --function list_pages",
    "prompt": "In the Python project at {dir}, the function `list_pages` in `src/wald/api/wiki.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
-   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider"
+   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider --deselect tests/test_web.py::test_home_is_fine_with_an_empty_hub"
   },
   {
    "id": "gen_src_wald_config_get_settings",
@@ -29,7 +29,7 @@
    "blank_lines": 1,
    "setup": "python3 {ladder}/blank.py --repo . --file src/wald/config.py --function get_settings",
    "prompt": "In the Python project at {dir}, the function `get_settings` in `src/wald/config.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
-   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider"
+   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider --deselect tests/test_web.py::test_home_is_fine_with_an_empty_hub"
   },
   {
    "id": "gen_src_wald_config_has_llm",
@@ -39,7 +39,7 @@
    "blank_lines": 1,
    "setup": "python3 {ladder}/blank.py --repo . --file src/wald/config.py --function has_llm",
    "prompt": "In the Python project at {dir}, the function `has_llm` in `src/wald/config.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
-   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider"
+   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider --deselect tests/test_web.py::test_home_is_fine_with_an_empty_hub"
   },
   {
    "id": "gen_src_wald_config_has_embeddings",
@@ -49,7 +49,7 @@
    "blank_lines": 1,
    "setup": "python3 {ladder}/blank.py --repo . --file src/wald/config.py --function has_embeddings",
    "prompt": "In the Python project at {dir}, the function `has_embeddings` in `src/wald/config.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
-   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider"
+   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider --deselect tests/test_web.py::test_home_is_fine_with_an_empty_hub"
   },
   {
    "id": "gen_src_wald_db_init_schema",
@@ -59,7 +59,7 @@
    "blank_lines": 26,
    "setup": "python3 {ladder}/blank.py --repo . --file src/wald/db.py --function init_schema",
    "prompt": "In the Python project at {dir}, the function `init_schema` in `src/wald/db.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
-   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider"
+   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider --deselect tests/test_web.py::test_home_is_fine_with_an_empty_hub"
   },
   {
    "id": "gen_src_wald_db_check_embedding_dim",
@@ -69,7 +69,7 @@
    "blank_lines": 21,
    "setup": "python3 {ladder}/blank.py --repo . --file src/wald/db.py --function check_embedding_dim",
    "prompt": "In the Python project at {dir}, the function `check_embedding_dim` in `src/wald/db.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
-   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider"
+   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider --deselect tests/test_web.py::test_home_is_fine_with_an_empty_hub"
   },
   {
    "id": "gen_src_wald_main_create_app",
@@ -79,7 +79,7 @@
    "blank_lines": 24,
    "setup": "python3 {ladder}/blank.py --repo . --file src/wald/main.py --function create_app",
    "prompt": "In the Python project at {dir}, the function `create_app` in `src/wald/main.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
-   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider"
+   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider --deselect tests/test_web.py::test_home_is_fine_with_an_empty_hub"
   },
   {
    "id": "gen_src_wald_main_health",
@@ -89,7 +89,7 @@
    "blank_lines": 6,
    "setup": "python3 {ladder}/blank.py --repo . --file src/wald/main.py --function health",
    "prompt": "In the Python project at {dir}, the function `health` in `src/wald/main.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
-   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider"
+   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider --deselect tests/test_web.py::test_home_is_fine_with_an_empty_hub"
   },
   {
    "id": "gen_src_wald_mcp_auth_caller_or",
@@ -99,7 +99,7 @@
    "blank_lines": 8,
    "setup": "python3 {ladder}/blank.py --repo . --file src/wald/mcp/auth.py --function caller_or",
    "prompt": "In the Python project at {dir}, the function `caller_or` in `src/wald/mcp/auth.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
-   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider"
+   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider --deselect tests/test_web.py::test_home_is_fine_with_an_empty_hub"
   },
   {
    "id": "gen_src_wald_services_a2a_resolve_agent",
@@ -109,7 +109,7 @@
    "blank_lines": 5,
    "setup": "python3 {ladder}/blank.py --repo . --file src/wald/services/a2a.py --function resolve_agent",
    "prompt": "In the Python project at {dir}, the function `resolve_agent` in `src/wald/services/a2a.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
-   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider"
+   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider --deselect tests/test_web.py::test_home_is_fine_with_an_empty_hub"
   },
   {
    "id": "gen_src_wald_services_a2a_find_agents_by_capability",
@@ -119,7 +119,7 @@
    "blank_lines": 2,
    "setup": "python3 {ladder}/blank.py --repo . --file src/wald/services/a2a.py --function find_agents_by_capability",
    "prompt": "In the Python project at {dir}, the function `find_agents_by_capability` in `src/wald/services/a2a.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
-   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider"
+   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider --deselect tests/test_web.py::test_home_is_fine_with_an_empty_hub"
   },
   {
    "id": "gen_src_wald_services_a2a_send_message",
@@ -129,7 +129,7 @@
    "blank_lines": 11,
    "setup": "python3 {ladder}/blank.py --repo . --file src/wald/services/a2a.py --function send_message",
    "prompt": "In the Python project at {dir}, the function `send_message` in `src/wald/services/a2a.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
-   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider"
+   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider --deselect tests/test_web.py::test_home_is_fine_with_an_empty_hub"
   },
   {
    "id": "gen_src_wald_services_a2a_inbox",
@@ -139,7 +139,7 @@
    "blank_lines": 5,
    "setup": "python3 {ladder}/blank.py --repo . --file src/wald/services/a2a.py --function inbox",
    "prompt": "In the Python project at {dir}, the function `inbox` in `src/wald/services/a2a.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
-   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider"
+   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider --deselect tests/test_web.py::test_home_is_fine_with_an_empty_hub"
   },
   {
    "id": "gen_src_wald_services_a2a_thread",
@@ -149,7 +149,7 @@
    "blank_lines": 6,
    "setup": "python3 {ladder}/blank.py --repo . --file src/wald/services/a2a.py --function thread",
    "prompt": "In the Python project at {dir}, the function `thread` in `src/wald/services/a2a.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
-   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider"
+   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider --deselect tests/test_web.py::test_home_is_fine_with_an_empty_hub"
   },
   {
    "id": "gen_src_wald_services_a2a_mark_delivered",
@@ -159,7 +159,7 @@
    "blank_lines": 3,
    "setup": "python3 {ladder}/blank.py --repo . --file src/wald/services/a2a.py --function mark_delivered",
    "prompt": "In the Python project at {dir}, the function `mark_delivered` in `src/wald/services/a2a.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
-   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider"
+   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider --deselect tests/test_web.py::test_home_is_fine_with_an_empty_hub"
   },
   {
    "id": "gen_src_wald_services_a2a_mark_read",
@@ -169,7 +169,7 @@
    "blank_lines": 10,
    "setup": "python3 {ladder}/blank.py --repo . --file src/wald/services/a2a.py --function mark_read",
    "prompt": "In the Python project at {dir}, the function `mark_read` in `src/wald/services/a2a.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
-   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider"
+   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider --deselect tests/test_web.py::test_home_is_fine_with_an_empty_hub"
   },
   {
    "id": "gen_src_wald_services_a2a_register",
@@ -179,7 +179,7 @@
    "blank_lines": 9,
    "setup": "python3 {ladder}/blank.py --repo . --file src/wald/services/a2a.py --function register",
    "prompt": "In the Python project at {dir}, the function `register` in `src/wald/services/a2a.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
-   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider"
+   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider --deselect tests/test_web.py::test_home_is_fine_with_an_empty_hub"
   },
   {
    "id": "gen_src_wald_services_authz_parse_grant",
@@ -189,7 +189,7 @@
    "blank_lines": 10,
    "setup": "python3 {ladder}/blank.py --repo . --file src/wald/services/authz.py --function parse_grant",
    "prompt": "In the Python project at {dir}, the function `parse_grant` in `src/wald/services/authz.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
-   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider"
+   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider --deselect tests/test_web.py::test_home_is_fine_with_an_empty_hub"
   },
   {
    "id": "gen_src_wald_services_authz_allows",
@@ -199,7 +199,7 @@
    "blank_lines": 6,
    "setup": "python3 {ladder}/blank.py --repo . --file src/wald/services/authz.py --function allows",
    "prompt": "In the Python project at {dir}, the function `allows` in `src/wald/services/authz.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
-   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider"
+   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider --deselect tests/test_web.py::test_home_is_fine_with_an_empty_hub"
   },
   {
    "id": "gen_src_wald_services_authz_unrestricted",
@@ -209,7 +209,7 @@
    "blank_lines": 1,
    "setup": "python3 {ladder}/blank.py --repo . --file src/wald/services/authz.py --function unrestricted",
    "prompt": "In the Python project at {dir}, the function `unrestricted` in `src/wald/services/authz.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
-   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider"
+   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider --deselect tests/test_web.py::test_home_is_fine_with_an_empty_hub"
   },
   {
    "id": "gen_src_wald_services_background__get_executor",
@@ -219,7 +219,7 @@
    "blank_lines": 4,
    "setup": "python3 {ladder}/blank.py --repo . --file src/wald/services/background.py --function _get_executor",
    "prompt": "In the Python project at {dir}, the function `_get_executor` in `src/wald/services/background.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
-   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider"
+   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider --deselect tests/test_web.py::test_home_is_fine_with_an_empty_hub"
   },
   {
    "id": "gen_src_wald_services_background__reindex",
@@ -229,7 +229,7 @@
    "blank_lines": 12,
    "setup": "python3 {ladder}/blank.py --repo . --file src/wald/services/background.py --function _reindex",
    "prompt": "In the Python project at {dir}, the function `_reindex` in `src/wald/services/background.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
-   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider"
+   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider --deselect tests/test_web.py::test_home_is_fine_with_an_empty_hub"
   },
   {
    "id": "gen_src_wald_services_background_schedule",
@@ -239,7 +239,7 @@
    "blank_lines": 3,
    "setup": "python3 {ladder}/blank.py --repo . --file src/wald/services/background.py --function schedule",
    "prompt": "In the Python project at {dir}, the function `schedule` in `src/wald/services/background.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
-   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider"
+   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider --deselect tests/test_web.py::test_home_is_fine_with_an_empty_hub"
   },
   {
    "id": "gen_src_wald_services_background_finish_write",
@@ -249,7 +249,7 @@
    "blank_lines": 7,
    "setup": "python3 {ladder}/blank.py --repo . --file src/wald/services/background.py --function finish_write",
    "prompt": "In the Python project at {dir}, the function `finish_write` in `src/wald/services/background.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
-   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider"
+   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider --deselect tests/test_web.py::test_home_is_fine_with_an_empty_hub"
   },
   {
    "id": "gen_src_wald_services_background_drain",
@@ -259,7 +259,7 @@
    "blank_lines": 4,
    "setup": "python3 {ladder}/blank.py --repo . --file src/wald/services/background.py --function drain",
    "prompt": "In the Python project at {dir}, the function `drain` in `src/wald/services/background.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
-   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider"
+   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider --deselect tests/test_web.py::test_home_is_fine_with_an_empty_hub"
   },
   {
    "id": "gen_src_wald_services_embeddings_get_embedding_provider",
@@ -269,7 +269,7 @@
    "blank_lines": 11,
    "setup": "python3 {ladder}/blank.py --repo . --file src/wald/services/embeddings.py --function get_embedding_provider",
    "prompt": "In the Python project at {dir}, the function `get_embedding_provider` in `src/wald/services/embeddings.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
-   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider"
+   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider --deselect tests/test_web.py::test_home_is_fine_with_an_empty_hub"
   },
   {
    "id": "gen_src_wald_services_embeddings_embed",
@@ -279,7 +279,7 @@
    "blank_lines": 1,
    "setup": "python3 {ladder}/blank.py --repo . --file src/wald/services/embeddings.py --function embed",
    "prompt": "In the Python project at {dir}, the function `embed` in `src/wald/services/embeddings.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
-   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider"
+   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider --deselect tests/test_web.py::test_home_is_fine_with_an_empty_hub"
   },
   {
    "id": "gen_src_wald_services_embeddings__embed_one",
@@ -289,7 +289,7 @@
    "blank_lines": 6,
    "setup": "python3 {ladder}/blank.py --repo . --file src/wald/services/embeddings.py --function _embed_one",
    "prompt": "In the Python project at {dir}, the function `_embed_one` in `src/wald/services/embeddings.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
-   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider"
+   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider --deselect tests/test_web.py::test_home_is_fine_with_an_empty_hub"
   },
   {
    "id": "gen_src_wald_services_embeddings_embed",
@@ -299,7 +299,7 @@
    "blank_lines": 9,
    "setup": "python3 {ladder}/blank.py --repo . --file src/wald/services/embeddings.py --function embed",
    "prompt": "In the Python project at {dir}, the function `embed` in `src/wald/services/embeddings.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
-   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider"
+   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider --deselect tests/test_web.py::test_home_is_fine_with_an_empty_hub"
   },
   {
    "id": "gen_src_wald_services_embeddings_embed",
@@ -309,7 +309,7 @@
    "blank_lines": 15,
    "setup": "python3 {ladder}/blank.py --repo . --file src/wald/services/embeddings.py --function embed",
    "prompt": "In the Python project at {dir}, the function `embed` in `src/wald/services/embeddings.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
-   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider"
+   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider --deselect tests/test_web.py::test_home_is_fine_with_an_empty_hub"
   },
   {
    "id": "gen_src_wald_services_embeddings_embed",
@@ -319,7 +319,7 @@
    "blank_lines": 10,
    "setup": "python3 {ladder}/blank.py --repo . --file src/wald/services/embeddings.py --function embed",
    "prompt": "In the Python project at {dir}, the function `embed` in `src/wald/services/embeddings.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
-   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider"
+   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider --deselect tests/test_web.py::test_home_is_fine_with_an_empty_hub"
   },
   {
    "id": "gen_src_wald_services_ingest__chunk",
@@ -329,7 +329,7 @@
    "blank_lines": 5,
    "setup": "python3 {ladder}/blank.py --repo . --file src/wald/services/ingest.py --function _chunk",
    "prompt": "In the Python project at {dir}, the function `_chunk` in `src/wald/services/ingest.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
-   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider"
+   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider --deselect tests/test_web.py::test_home_is_fine_with_an_empty_hub"
   },
   {
    "id": "gen_src_wald_services_ingest__reindex",
@@ -339,7 +339,7 @@
    "blank_lines": 21,
    "setup": "python3 {ladder}/blank.py --repo . --file src/wald/services/ingest.py --function _reindex",
    "prompt": "In the Python project at {dir}, the function `_reindex` in `src/wald/services/ingest.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
-   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider"
+   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider --deselect tests/test_web.py::test_home_is_fine_with_an_empty_hub"
   },
   {
    "id": "gen_src_wald_services_ingest_index_wiki_page",
@@ -349,7 +349,7 @@
    "blank_lines": 1,
    "setup": "python3 {ladder}/blank.py --repo . --file src/wald/services/ingest.py --function index_wiki_page",
    "prompt": "In the Python project at {dir}, the function `index_wiki_page` in `src/wald/services/ingest.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
-   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider"
+   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider --deselect tests/test_web.py::test_home_is_fine_with_an_empty_hub"
   },
   {
    "id": "gen_src_wald_services_ingest_index_resource",
@@ -359,7 +359,7 @@
    "blank_lines": 2,
    "setup": "python3 {ladder}/blank.py --repo . --file src/wald/services/ingest.py --function index_resource",
    "prompt": "In the Python project at {dir}, the function `index_resource` in `src/wald/services/ingest.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
-   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider"
+   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider --deselect tests/test_web.py::test_home_is_fine_with_an_empty_hub"
   },
   {
    "id": "gen_src_wald_services_ingest_index_agent",
@@ -369,7 +369,7 @@
    "blank_lines": 2,
    "setup": "python3 {ladder}/blank.py --repo . --file src/wald/services/ingest.py --function index_agent",
    "prompt": "In the Python project at {dir}, the function `index_agent` in `src/wald/services/ingest.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
-   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider"
+   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider --deselect tests/test_web.py::test_home_is_fine_with_an_empty_hub"
   },
   {
    "id": "gen_src_wald_services_rag__format_context",
@@ -379,7 +379,7 @@
    "blank_lines": 5,
    "setup": "python3 {ladder}/blank.py --repo . --file src/wald/services/rag.py --function _format_context",
    "prompt": "In the Python project at {dir}, the function `_format_context` in `src/wald/services/rag.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
-   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider"
+   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider --deselect tests/test_web.py::test_home_is_fine_with_an_empty_hub"
   },
   {
    "id": "gen_src_wald_services_rag_ask",
@@ -389,7 +389,7 @@
    "blank_lines": 29,
    "setup": "python3 {ladder}/blank.py --repo . --file src/wald/services/rag.py --function ask",
    "prompt": "In the Python project at {dir}, the function `ask` in `src/wald/services/rag.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
-   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider"
+   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider --deselect tests/test_web.py::test_home_is_fine_with_an_empty_hub"
   },
   {
    "id": "gen_src_wald_services_search__tsquery_terms",
@@ -399,7 +399,7 @@
    "blank_lines": 1,
    "setup": "python3 {ladder}/blank.py --repo . --file src/wald/services/search.py --function _tsquery_terms",
    "prompt": "In the Python project at {dir}, the function `_tsquery_terms` in `src/wald/services/search.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
-   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider"
+   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider --deselect tests/test_web.py::test_home_is_fine_with_an_empty_hub"
   },
   {
    "id": "gen_src_wald_services_search__semantic_ranking",
@@ -409,7 +409,7 @@
    "blank_lines": 3,
    "setup": "python3 {ladder}/blank.py --repo . --file src/wald/services/search.py --function _semantic_ranking",
    "prompt": "In the Python project at {dir}, the function `_semantic_ranking` in `src/wald/services/search.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
-   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider"
+   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider --deselect tests/test_web.py::test_home_is_fine_with_an_empty_hub"
   },
   {
    "id": "gen_src_wald_services_search__lexical_ranking",
@@ -419,7 +419,7 @@
    "blank_lines": 15,
    "setup": "python3 {ladder}/blank.py --repo . --file src/wald/services/search.py --function _lexical_ranking",
    "prompt": "In the Python project at {dir}, the function `_lexical_ranking` in `src/wald/services/search.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
-   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider"
+   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider --deselect tests/test_web.py::test_home_is_fine_with_an_empty_hub"
   },
   {
    "id": "gen_src_wald_services_search__visible",
@@ -429,7 +429,7 @@
    "blank_lines": 31,
    "setup": "python3 {ladder}/blank.py --repo . --file src/wald/services/search.py --function _visible",
    "prompt": "In the Python project at {dir}, the function `_visible` in `src/wald/services/search.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
-   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider"
+   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider --deselect tests/test_web.py::test_home_is_fine_with_an_empty_hub"
   },
   {
    "id": "gen_src_wald_services_search_search",
@@ -439,7 +439,7 @@
    "blank_lines": 40,
    "setup": "python3 {ladder}/blank.py --repo . --file src/wald/services/search.py --function search",
    "prompt": "In the Python project at {dir}, the function `search` in `src/wald/services/search.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
-   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider"
+   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider --deselect tests/test_web.py::test_home_is_fine_with_an_empty_hub"
   },
   {
    "id": "gen_src_wald_services_search_allowed",
@@ -449,7 +449,7 @@
    "blank_lines": 5,
    "setup": "python3 {ladder}/blank.py --repo . --file src/wald/services/search.py --function allowed",
    "prompt": "In the Python project at {dir}, the function `allowed` in `src/wald/services/search.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
-   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider"
+   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider --deselect tests/test_web.py::test_home_is_fine_with_an_empty_hub"
   },
   {
    "id": "gen_src_wald_services_seed_parse_frontmatter",
@@ -459,7 +459,7 @@
    "blank_lines": 14,
    "setup": "python3 {ladder}/blank.py --repo . --file src/wald/services/seed.py --function parse_frontmatter",
    "prompt": "In the Python project at {dir}, the function `parse_frontmatter` in `src/wald/services/seed.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
-   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider"
+   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider --deselect tests/test_web.py::test_home_is_fine_with_an_empty_hub"
   },
   {
    "id": "gen_src_wald_services_seed__load_toml",
@@ -469,7 +469,7 @@
    "blank_lines": 4,
    "setup": "python3 {ladder}/blank.py --repo . --file src/wald/services/seed.py --function _load_toml",
    "prompt": "In the Python project at {dir}, the function `_load_toml` in `src/wald/services/seed.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
-   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider"
+   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider --deselect tests/test_web.py::test_home_is_fine_with_an_empty_hub"
   },
   {
    "id": "gen_src_wald_services_seed__entries",
@@ -479,7 +479,7 @@
    "blank_lines": 7,
    "setup": "python3 {ladder}/blank.py --repo . --file src/wald/services/seed.py --function _entries",
    "prompt": "In the Python project at {dir}, the function `_entries` in `src/wald/services/seed.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
-   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider"
+   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider --deselect tests/test_web.py::test_home_is_fine_with_an_empty_hub"
   },
   {
    "id": "gen_src_wald_services_seed__check_fields",
@@ -489,7 +489,7 @@
    "blank_lines": 3,
    "setup": "python3 {ladder}/blank.py --repo . --file src/wald/services/seed.py --function _check_fields",
    "prompt": "In the Python project at {dir}, the function `_check_fields` in `src/wald/services/seed.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
-   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider"
+   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider --deselect tests/test_web.py::test_home_is_fine_with_an_empty_hub"
   },
   {
    "id": "gen_src_wald_services_seed__check_grants",
@@ -499,7 +499,7 @@
    "blank_lines": 5,
    "setup": "python3 {ladder}/blank.py --repo . --file src/wald/services/seed.py --function _check_grants",
    "prompt": "In the Python project at {dir}, the function `_check_grants` in `src/wald/services/seed.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
-   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider"
+   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider --deselect tests/test_web.py::test_home_is_fine_with_an_empty_hub"
   },
   {
    "id": "gen_src_wald_services_seed__changed",
@@ -509,7 +509,7 @@
    "blank_lines": 1,
    "setup": "python3 {ladder}/blank.py --repo . --file src/wald/services/seed.py --function _changed",
    "prompt": "In the Python project at {dir}, the function `_changed` in `src/wald/services/seed.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
-   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider"
+   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider --deselect tests/test_web.py::test_home_is_fine_with_an_empty_hub"
   },
   {
    "id": "gen_src_wald_services_seed__seed_wiki",
@@ -519,7 +519,7 @@
    "blank_lines": 54,
    "setup": "python3 {ladder}/blank.py --repo . --file src/wald/services/seed.py --function _seed_wiki",
    "prompt": "In the Python project at {dir}, the function `_seed_wiki` in `src/wald/services/seed.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
-   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider"
+   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider --deselect tests/test_web.py::test_home_is_fine_with_an_empty_hub"
   },
   {
    "id": "gen_src_wald_services_seed__seed_simple",
@@ -529,7 +529,7 @@
    "blank_lines": 29,
    "setup": "python3 {ladder}/blank.py --repo . --file src/wald/services/seed.py --function _seed_simple",
    "prompt": "In the Python project at {dir}, the function `_seed_simple` in `src/wald/services/seed.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
-   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider"
+   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider --deselect tests/test_web.py::test_home_is_fine_with_an_empty_hub"
   },
   {
    "id": "gen_src_wald_services_seed_seed",
@@ -539,7 +539,7 @@
    "blank_lines": 34,
    "setup": "python3 {ladder}/blank.py --repo . --file src/wald/services/seed.py --function seed",
    "prompt": "In the Python project at {dir}, the function `seed` in `src/wald/services/seed.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
-   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider"
+   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider --deselect tests/test_web.py::test_home_is_fine_with_an_empty_hub"
   },
   {
    "id": "gen_src_wald_services_seed_seed_cli",
@@ -549,7 +549,7 @@
    "blank_lines": 45,
    "setup": "python3 {ladder}/blank.py --repo . --file src/wald/services/seed.py --function seed_cli",
    "prompt": "In the Python project at {dir}, the function `seed_cli` in `src/wald/services/seed.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
-   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider"
+   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider --deselect tests/test_web.py::test_home_is_fine_with_an_empty_hub"
   },
   {
    "id": "gen_src_wald_services_seed_summary",
@@ -559,7 +559,7 @@
    "blank_lines": 4,
    "setup": "python3 {ladder}/blank.py --repo . --file src/wald/services/seed.py --function summary",
    "prompt": "In the Python project at {dir}, the function `summary` in `src/wald/services/seed.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
-   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider"
+   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider --deselect tests/test_web.py::test_home_is_fine_with_an_empty_hub"
   },
   {
    "id": "gen_src_wald_services_tokens_hash_token",
@@ -569,7 +569,7 @@
    "blank_lines": 1,
    "setup": "python3 {ladder}/blank.py --repo . --file src/wald/services/tokens.py --function hash_token",
    "prompt": "In the Python project at {dir}, the function `hash_token` in `src/wald/services/tokens.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
-   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider"
+   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider --deselect tests/test_web.py::test_home_is_fine_with_an_empty_hub"
   },
   {
    "id": "gen_src_wald_services_tokens_issue",
@@ -579,7 +579,7 @@
    "blank_lines": 3,
    "setup": "python3 {ladder}/blank.py --repo . --file src/wald/services/tokens.py --function issue",
    "prompt": "In the Python project at {dir}, the function `issue` in `src/wald/services/tokens.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
-   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider"
+   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider --deselect tests/test_web.py::test_home_is_fine_with_an_empty_hub"
   },
   {
    "id": "gen_src_wald_services_tokens_revoke",
@@ -589,7 +589,7 @@
    "blank_lines": 1,
    "setup": "python3 {ladder}/blank.py --repo . --file src/wald/services/tokens.py --function revoke",
    "prompt": "In the Python project at {dir}, the function `revoke` in `src/wald/services/tokens.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
-   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider"
+   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider --deselect tests/test_web.py::test_home_is_fine_with_an_empty_hub"
   },
   {
    "id": "gen_src_wald_services_tokens_resolve",
@@ -599,7 +599,7 @@
    "blank_lines": 13,
    "setup": "python3 {ladder}/blank.py --repo . --file src/wald/services/tokens.py --function resolve",
    "prompt": "In the Python project at {dir}, the function `resolve` in `src/wald/services/tokens.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
-   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider"
+   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider --deselect tests/test_web.py::test_home_is_fine_with_an_empty_hub"
   },
   {
    "id": "gen_src_wald_services_tokens_token_cli",
@@ -609,7 +609,7 @@
    "blank_lines": 27,
    "setup": "python3 {ladder}/blank.py --repo . --file src/wald/services/tokens.py --function token_cli",
    "prompt": "In the Python project at {dir}, the function `token_cli` in `src/wald/services/tokens.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
-   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider"
+   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider --deselect tests/test_web.py::test_home_is_fine_with_an_empty_hub"
   },
   {
    "id": "gen_src_wald_services_wiki_upsert_page",
@@ -619,7 +619,7 @@
    "blank_lines": 40,
    "setup": "python3 {ladder}/blank.py --repo . --file src/wald/services/wiki.py --function upsert_page",
    "prompt": "In the Python project at {dir}, the function `upsert_page` in `src/wald/services/wiki.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
-   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider"
+   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider --deselect tests/test_web.py::test_home_is_fine_with_an_empty_hub"
   },
   {
    "id": "gen_src_wald_web__renderer",
@@ -629,7 +629,7 @@
    "blank_lines": 4,
    "setup": "python3 {ladder}/blank.py --repo . --file src/wald/web.py --function _renderer",
    "prompt": "In the Python project at {dir}, the function `_renderer` in `src/wald/web.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
-   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider"
+   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider --deselect tests/test_web.py::test_home_is_fine_with_an_empty_hub"
   },
   {
    "id": "gen_src_wald_web_render_markdown",
@@ -639,7 +639,7 @@
    "blank_lines": 2,
    "setup": "python3 {ladder}/blank.py --repo . --file src/wald/web.py --function render_markdown",
    "prompt": "In the Python project at {dir}, the function `render_markdown` in `src/wald/web.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
-   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider"
+   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider --deselect tests/test_web.py::test_home_is_fine_with_an_empty_hub"
   },
   {
    "id": "gen_src_wald_web_plain_text",
@@ -649,7 +649,7 @@
    "blank_lines": 4,
    "setup": "python3 {ladder}/blank.py --repo . --file src/wald/web.py --function plain_text",
    "prompt": "In the Python project at {dir}, the function `plain_text` in `src/wald/web.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
-   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider"
+   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider --deselect tests/test_web.py::test_home_is_fine_with_an_empty_hub"
   },
   {
    "id": "gen_src_wald_web__counts",
@@ -659,7 +659,7 @@
    "blank_lines": 5,
    "setup": "python3 {ladder}/blank.py --repo . --file src/wald/web.py --function _counts",
    "prompt": "In the Python project at {dir}, the function `_counts` in `src/wald/web.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
-   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider"
+   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider --deselect tests/test_web.py::test_home_is_fine_with_an_empty_hub"
   },
   {
    "id": "gen_src_wald_web__group",
@@ -669,7 +669,7 @@
    "blank_lines": 4,
    "setup": "python3 {ladder}/blank.py --repo . --file src/wald/web.py --function _group",
    "prompt": "In the Python project at {dir}, the function `_group` in `src/wald/web.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
-   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider"
+   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider --deselect tests/test_web.py::test_home_is_fine_with_an_empty_hub"
   },
   {
    "id": "gen_src_wald_web_home",
@@ -679,7 +679,7 @@
    "blank_lines": 13,
    "setup": "python3 {ladder}/blank.py --repo . --file src/wald/web.py --function home",
    "prompt": "In the Python project at {dir}, the function `home` in `src/wald/web.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
-   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider"
+   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider --deselect tests/test_web.py::test_home_is_fine_with_an_empty_hub"
   },
   {
    "id": "gen_src_wald_web_search",
@@ -689,7 +689,7 @@
    "blank_lines": 19,
    "setup": "python3 {ladder}/blank.py --repo . --file src/wald/web.py --function search",
    "prompt": "In the Python project at {dir}, the function `search` in `src/wald/web.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
-   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider"
+   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider --deselect tests/test_web.py::test_home_is_fine_with_an_empty_hub"
   },
   {
    "id": "gen_src_wald_web_wiki_page",
@@ -699,7 +699,7 @@
    "blank_lines": 8,
    "setup": "python3 {ladder}/blank.py --repo . --file src/wald/web.py --function wiki_page",
    "prompt": "In the Python project at {dir}, the function `wiki_page` in `src/wald/web.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
-   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider"
+   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider --deselect tests/test_web.py::test_home_is_fine_with_an_empty_hub"
   },
   {
    "id": "gen_src_wald_web_resource_page",
@@ -709,7 +709,7 @@
    "blank_lines": 8,
    "setup": "python3 {ladder}/blank.py --repo . --file src/wald/web.py --function resource_page",
    "prompt": "In the Python project at {dir}, the function `resource_page` in `src/wald/web.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
-   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider"
+   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider --deselect tests/test_web.py::test_home_is_fine_with_an_empty_hub"
   },
   {
    "id": "gen_src_wald_web_agent_page",
@@ -719,7 +719,7 @@
    "blank_lines": 9,
    "setup": "python3 {ladder}/blank.py --repo . --file src/wald/web.py --function agent_page",
    "prompt": "In the Python project at {dir}, the function `agent_page` in `src/wald/web.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
-   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider"
+   "verify": "uv run --extra dev pytest -q -x -p no:cacheprovider --deselect tests/test_web.py::test_home_is_fine_with_an_empty_hub"
   }
  ]
 }
