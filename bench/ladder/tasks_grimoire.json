@@ -7,7 +7,7 @@
    "source_file": "grimoire/callbacks.py",
    "function": "on_train_begin",
    "blank_lines": 1,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/callbacks.py --function on_train_begin",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/callbacks.py --function on_train_begin",
    "prompt": "In the Python project at {dir}, the function `on_train_begin` in `grimoire/callbacks.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -17,7 +17,7 @@
    "source_file": "grimoire/callbacks.py",
    "function": "on_train_end",
    "blank_lines": 1,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/callbacks.py --function on_train_end",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/callbacks.py --function on_train_end",
    "prompt": "In the Python project at {dir}, the function `on_train_end` in `grimoire/callbacks.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -27,7 +27,7 @@
    "source_file": "grimoire/callbacks.py",
    "function": "on_epoch_begin",
    "blank_lines": 1,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/callbacks.py --function on_epoch_begin",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/callbacks.py --function on_epoch_begin",
    "prompt": "In the Python project at {dir}, the function `on_epoch_begin` in `grimoire/callbacks.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -37,7 +37,7 @@
    "source_file": "grimoire/callbacks.py",
    "function": "on_epoch_end",
    "blank_lines": 1,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/callbacks.py --function on_epoch_end",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/callbacks.py --function on_epoch_end",
    "prompt": "In the Python project at {dir}, the function `on_epoch_end` in `grimoire/callbacks.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -47,7 +47,7 @@
    "source_file": "grimoire/callbacks.py",
    "function": "on_step_end",
    "blank_lines": 1,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/callbacks.py --function on_step_end",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/callbacks.py --function on_step_end",
    "prompt": "In the Python project at {dir}, the function `on_step_end` in `grimoire/callbacks.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -57,7 +57,7 @@
    "source_file": "grimoire/callbacks.py",
    "function": "on_log",
    "blank_lines": 1,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/callbacks.py --function on_log",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/callbacks.py --function on_log",
    "prompt": "In the Python project at {dir}, the function `on_log` in `grimoire/callbacks.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -67,7 +67,7 @@
    "source_file": "grimoire/data/cache.py",
    "function": "cache_reference_log_probs",
    "blank_lines": 65,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/data/cache.py --function cache_reference_log_probs",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/data/cache.py --function cache_reference_log_probs",
    "prompt": "In the Python project at {dir}, the function `cache_reference_log_probs` in `grimoire/data/cache.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -77,7 +77,7 @@
    "source_file": "grimoire/data/cache.py",
    "function": "_forward_logps",
    "blank_lines": 4,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/data/cache.py --function _forward_logps",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/data/cache.py --function _forward_logps",
    "prompt": "In the Python project at {dir}, the function `_forward_logps` in `grimoire/data/cache.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -87,7 +87,7 @@
    "source_file": "grimoire/data/cache.py",
    "function": "_add_columns",
    "blank_lines": 10,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/data/cache.py --function _add_columns",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/data/cache.py --function _add_columns",
    "prompt": "In the Python project at {dir}, the function `_add_columns` in `grimoire/data/cache.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -97,7 +97,7 @@
    "source_file": "grimoire/data/common.py",
    "function": "encode_prompt_response",
    "blank_lines": 24,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/data/common.py --function encode_prompt_response",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/data/common.py --function encode_prompt_response",
    "prompt": "In the Python project at {dir}, the function `encode_prompt_response` in `grimoire/data/common.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -107,7 +107,7 @@
    "source_file": "grimoire/data/grpo.py",
    "function": "tokenize_grpo",
    "blank_lines": 11,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/data/grpo.py --function tokenize_grpo",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/data/grpo.py --function tokenize_grpo",
    "prompt": "In the Python project at {dir}, the function `tokenize_grpo` in `grimoire/data/grpo.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -117,7 +117,7 @@
    "source_file": "grimoire/data/kto.py",
    "function": "tokenize_kto",
    "blank_lines": 9,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/data/kto.py --function tokenize_kto",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/data/kto.py --function tokenize_kto",
    "prompt": "In the Python project at {dir}, the function `tokenize_kto` in `grimoire/data/kto.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -127,7 +127,7 @@
    "source_file": "grimoire/data/preference.py",
    "function": "tokenize_preference",
    "blank_lines": 19,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/data/preference.py --function tokenize_preference",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/data/preference.py --function tokenize_preference",
    "prompt": "In the Python project at {dir}, the function `tokenize_preference` in `grimoire/data/preference.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -137,7 +137,7 @@
    "source_file": "grimoire/data/sft.py",
    "function": "tokenize_sft",
    "blank_lines": 18,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/data/sft.py --function tokenize_sft",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/data/sft.py --function tokenize_sft",
    "prompt": "In the Python project at {dir}, the function `tokenize_sft` in `grimoire/data/sft.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -147,7 +147,7 @@
    "source_file": "grimoire/losses/cpo.py",
    "function": "create_collator",
    "blank_lines": 2,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/losses/cpo.py --function create_collator",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/losses/cpo.py --function create_collator",
    "prompt": "In the Python project at {dir}, the function `create_collator` in `grimoire/losses/cpo.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -157,7 +157,7 @@
    "source_file": "grimoire/losses/cpo.py",
    "function": "_train_forward",
    "blank_lines": 48,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/losses/cpo.py --function _train_forward",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/losses/cpo.py --function _train_forward",
    "prompt": "In the Python project at {dir}, the function `_train_forward` in `grimoire/losses/cpo.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -167,7 +167,7 @@
    "source_file": "grimoire/losses/cpo.py",
    "function": "_eval_forward",
    "blank_lines": 1,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/losses/cpo.py --function _eval_forward",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/losses/cpo.py --function _eval_forward",
    "prompt": "In the Python project at {dir}, the function `_eval_forward` in `grimoire/losses/cpo.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -177,7 +177,7 @@
    "source_file": "grimoire/losses/cpo.py",
    "function": "_concatenate",
    "blank_lines": 1,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/losses/cpo.py --function _concatenate",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/losses/cpo.py --function _concatenate",
    "prompt": "In the Python project at {dir}, the function `_concatenate` in `grimoire/losses/cpo.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -187,7 +187,7 @@
    "source_file": "grimoire/losses/dpo.py",
    "function": "create_collator",
    "blank_lines": 2,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/losses/dpo.py --function create_collator",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/losses/dpo.py --function create_collator",
    "prompt": "In the Python project at {dir}, the function `create_collator` in `grimoire/losses/dpo.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -197,7 +197,7 @@
    "source_file": "grimoire/losses/dpo.py",
    "function": "_avg_logps",
    "blank_lines": 5,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/losses/dpo.py --function _avg_logps",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/losses/dpo.py --function _avg_logps",
    "prompt": "In the Python project at {dir}, the function `_avg_logps` in `grimoire/losses/dpo.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -207,7 +207,7 @@
    "source_file": "grimoire/losses/dpo.py",
    "function": "_train_forward",
    "blank_lines": 52,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/losses/dpo.py --function _train_forward",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/losses/dpo.py --function _train_forward",
    "prompt": "In the Python project at {dir}, the function `_train_forward` in `grimoire/losses/dpo.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -217,7 +217,7 @@
    "source_file": "grimoire/losses/dpo.py",
    "function": "_eval_forward",
    "blank_lines": 1,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/losses/dpo.py --function _eval_forward",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/losses/dpo.py --function _eval_forward",
    "prompt": "In the Python project at {dir}, the function `_eval_forward` in `grimoire/losses/dpo.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -227,7 +227,7 @@
    "source_file": "grimoire/losses/dpo.py",
    "function": "_concatenate",
    "blank_lines": 1,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/losses/dpo.py --function _concatenate",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/losses/dpo.py --function _concatenate",
    "prompt": "In the Python project at {dir}, the function `_concatenate` in `grimoire/losses/dpo.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -237,7 +237,7 @@
    "source_file": "grimoire/losses/grpo.py",
    "function": "rollout",
    "blank_lines": 44,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/losses/grpo.py --function rollout",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/losses/grpo.py --function rollout",
    "prompt": "In the Python project at {dir}, the function `rollout` in `grimoire/losses/grpo.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -247,7 +247,7 @@
    "source_file": "grimoire/losses/grpo.py",
    "function": "_compute_advantages",
    "blank_lines": 6,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/losses/grpo.py --function _compute_advantages",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/losses/grpo.py --function _compute_advantages",
    "prompt": "In the Python project at {dir}, the function `_compute_advantages` in `grimoire/losses/grpo.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -257,7 +257,7 @@
    "source_file": "grimoire/losses/ipo.py",
    "function": "create_collator",
    "blank_lines": 2,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/losses/ipo.py --function create_collator",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/losses/ipo.py --function create_collator",
    "prompt": "In the Python project at {dir}, the function `create_collator` in `grimoire/losses/ipo.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -267,7 +267,7 @@
    "source_file": "grimoire/losses/ipo.py",
    "function": "_avg_logps",
    "blank_lines": 5,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/losses/ipo.py --function _avg_logps",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/losses/ipo.py --function _avg_logps",
    "prompt": "In the Python project at {dir}, the function `_avg_logps` in `grimoire/losses/ipo.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -277,7 +277,7 @@
    "source_file": "grimoire/losses/ipo.py",
    "function": "_train_forward",
    "blank_lines": 48,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/losses/ipo.py --function _train_forward",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/losses/ipo.py --function _train_forward",
    "prompt": "In the Python project at {dir}, the function `_train_forward` in `grimoire/losses/ipo.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -287,7 +287,7 @@
    "source_file": "grimoire/losses/ipo.py",
    "function": "_eval_forward",
    "blank_lines": 1,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/losses/ipo.py --function _eval_forward",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/losses/ipo.py --function _eval_forward",
    "prompt": "In the Python project at {dir}, the function `_eval_forward` in `grimoire/losses/ipo.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -297,7 +297,7 @@
    "source_file": "grimoire/losses/ipo.py",
    "function": "_concatenate",
    "blank_lines": 1,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/losses/ipo.py --function _concatenate",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/losses/ipo.py --function _concatenate",
    "prompt": "In the Python project at {dir}, the function `_concatenate` in `grimoire/losses/ipo.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -307,7 +307,7 @@
    "source_file": "grimoire/losses/kto.py",
    "function": "create_collator",
    "blank_lines": 2,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/losses/kto.py --function create_collator",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/losses/kto.py --function create_collator",
    "prompt": "In the Python project at {dir}, the function `create_collator` in `grimoire/losses/kto.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -317,7 +317,7 @@
    "source_file": "grimoire/losses/kto.py",
    "function": "_avg_logps",
    "blank_lines": 5,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/losses/kto.py --function _avg_logps",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/losses/kto.py --function _avg_logps",
    "prompt": "In the Python project at {dir}, the function `_avg_logps` in `grimoire/losses/kto.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -327,7 +327,7 @@
    "source_file": "grimoire/losses/kto.py",
    "function": "_train_forward",
    "blank_lines": 66,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/losses/kto.py --function _train_forward",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/losses/kto.py --function _train_forward",
    "prompt": "In the Python project at {dir}, the function `_train_forward` in `grimoire/losses/kto.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -337,7 +337,7 @@
    "source_file": "grimoire/losses/kto.py",
    "function": "_eval_forward",
    "blank_lines": 1,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/losses/kto.py --function _eval_forward",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/losses/kto.py --function _eval_forward",
    "prompt": "In the Python project at {dir}, the function `_eval_forward` in `grimoire/losses/kto.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -347,7 +347,7 @@
    "source_file": "grimoire/losses/online.py",
    "function": "create_collator",
    "blank_lines": 2,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/losses/online.py --function create_collator",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/losses/online.py --function create_collator",
    "prompt": "In the Python project at {dir}, the function `create_collator` in `grimoire/losses/online.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -357,7 +357,7 @@
    "source_file": "grimoire/losses/online.py",
    "function": "_avg_logps",
    "blank_lines": 5,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/losses/online.py --function _avg_logps",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/losses/online.py --function _avg_logps",
    "prompt": "In the Python project at {dir}, the function `_avg_logps` in `grimoire/losses/online.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -367,7 +367,7 @@
    "source_file": "grimoire/losses/online.py",
    "function": "_generate_and_score",
    "blank_lines": 69,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/losses/online.py --function _generate_and_score",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/losses/online.py --function _generate_and_score",
    "prompt": "In the Python project at {dir}, the function `_generate_and_score` in `grimoire/losses/online.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -377,7 +377,7 @@
    "source_file": "grimoire/losses/online.py",
    "function": "_completion_mask",
    "blank_lines": 14,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/losses/online.py --function _completion_mask",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/losses/online.py --function _completion_mask",
    "prompt": "In the Python project at {dir}, the function `_completion_mask` in `grimoire/losses/online.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -387,7 +387,7 @@
    "source_file": "grimoire/losses/online.py",
    "function": "_reference_logps",
    "blank_lines": 19,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/losses/online.py --function _reference_logps",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/losses/online.py --function _reference_logps",
    "prompt": "In the Python project at {dir}, the function `_reference_logps` in `grimoire/losses/online.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -397,7 +397,7 @@
    "source_file": "grimoire/losses/online_dpo.py",
    "function": "rollout",
    "blank_lines": 44,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/losses/online_dpo.py --function rollout",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/losses/online_dpo.py --function rollout",
    "prompt": "In the Python project at {dir}, the function `rollout` in `grimoire/losses/online_dpo.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -407,7 +407,7 @@
    "source_file": "grimoire/losses/orpo.py",
    "function": "create_collator",
    "blank_lines": 2,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/losses/orpo.py --function create_collator",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/losses/orpo.py --function create_collator",
    "prompt": "In the Python project at {dir}, the function `create_collator` in `grimoire/losses/orpo.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -417,7 +417,7 @@
    "source_file": "grimoire/losses/orpo.py",
    "function": "_train_forward",
    "blank_lines": 44,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/losses/orpo.py --function _train_forward",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/losses/orpo.py --function _train_forward",
    "prompt": "In the Python project at {dir}, the function `_train_forward` in `grimoire/losses/orpo.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -427,7 +427,7 @@
    "source_file": "grimoire/losses/orpo.py",
    "function": "_eval_forward",
    "blank_lines": 1,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/losses/orpo.py --function _eval_forward",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/losses/orpo.py --function _eval_forward",
    "prompt": "In the Python project at {dir}, the function `_eval_forward` in `grimoire/losses/orpo.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -437,7 +437,7 @@
    "source_file": "grimoire/losses/orpo.py",
    "function": "_concatenate",
    "blank_lines": 1,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/losses/orpo.py --function _concatenate",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/losses/orpo.py --function _concatenate",
    "prompt": "In the Python project at {dir}, the function `_concatenate` in `grimoire/losses/orpo.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -447,7 +447,7 @@
    "source_file": "grimoire/losses/raft.py",
    "function": "rollout",
    "blank_lines": 36,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/losses/raft.py --function rollout",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/losses/raft.py --function rollout",
    "prompt": "In the Python project at {dir}, the function `rollout` in `grimoire/losses/raft.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -457,7 +457,7 @@
    "source_file": "grimoire/losses/reward.py",
    "function": "create_collator",
    "blank_lines": 1,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/losses/reward.py --function create_collator",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/losses/reward.py --function create_collator",
    "prompt": "In the Python project at {dir}, the function `create_collator` in `grimoire/losses/reward.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -467,7 +467,7 @@
    "source_file": "grimoire/losses/rloo.py",
    "function": "_compute_advantages",
    "blank_lines": 3,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/losses/rloo.py --function _compute_advantages",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/losses/rloo.py --function _compute_advantages",
    "prompt": "In the Python project at {dir}, the function `_compute_advantages` in `grimoire/losses/rloo.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -477,7 +477,7 @@
    "source_file": "grimoire/losses/sft.py",
    "function": "create_collator",
    "blank_lines": 1,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/losses/sft.py --function create_collator",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/losses/sft.py --function create_collator",
    "prompt": "In the Python project at {dir}, the function `create_collator` in `grimoire/losses/sft.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -487,7 +487,7 @@
    "source_file": "grimoire/losses/simpo.py",
    "function": "create_collator",
    "blank_lines": 2,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/losses/simpo.py --function create_collator",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/losses/simpo.py --function create_collator",
    "prompt": "In the Python project at {dir}, the function `create_collator` in `grimoire/losses/simpo.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -497,7 +497,7 @@
    "source_file": "grimoire/losses/simpo.py",
    "function": "_train_forward",
    "blank_lines": 31,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/losses/simpo.py --function _train_forward",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/losses/simpo.py --function _train_forward",
    "prompt": "In the Python project at {dir}, the function `_train_forward` in `grimoire/losses/simpo.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -507,7 +507,7 @@
    "source_file": "grimoire/losses/simpo.py",
    "function": "_eval_forward",
    "blank_lines": 1,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/losses/simpo.py --function _eval_forward",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/losses/simpo.py --function _eval_forward",
    "prompt": "In the Python project at {dir}, the function `_eval_forward` in `grimoire/losses/simpo.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -517,7 +517,7 @@
    "source_file": "grimoire/losses/simpo.py",
    "function": "_concatenate",
    "blank_lines": 1,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/losses/simpo.py --function _concatenate",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/losses/simpo.py --function _concatenate",
    "prompt": "In the Python project at {dir}, the function `_concatenate` in `grimoire/losses/simpo.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -527,7 +527,7 @@
    "source_file": "grimoire/losses/utils.py",
    "function": "_disable_grad_checkpointing",
    "blank_lines": 10,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/losses/utils.py --function _disable_grad_checkpointing",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/losses/utils.py --function _disable_grad_checkpointing",
    "prompt": "In the Python project at {dir}, the function `_disable_grad_checkpointing` in `grimoire/losses/utils.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -537,7 +537,7 @@
    "source_file": "grimoire/losses/utils.py",
    "function": "_log1mexp",
    "blank_lines": 5,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/losses/utils.py --function _log1mexp",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/losses/utils.py --function _log1mexp",
    "prompt": "In the Python project at {dir}, the function `_log1mexp` in `grimoire/losses/utils.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -547,7 +547,7 @@
    "source_file": "grimoire/losses/utils.py",
    "function": "_per_token_logps",
    "blank_lines": 8,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/losses/utils.py --function _per_token_logps",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/losses/utils.py --function _per_token_logps",
    "prompt": "In the Python project at {dir}, the function `_per_token_logps` in `grimoire/losses/utils.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -557,7 +557,7 @@
    "source_file": "grimoire/losses/utils.py",
    "function": "per_token_logps_from_logits",
    "blank_lines": 8,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/losses/utils.py --function per_token_logps_from_logits",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/losses/utils.py --function per_token_logps_from_logits",
    "prompt": "In the Python project at {dir}, the function `per_token_logps_from_logits` in `grimoire/losses/utils.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -567,7 +567,7 @@
    "source_file": "grimoire/losses/utils.py",
    "function": "masked_avg_logps",
    "blank_lines": 1,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/losses/utils.py --function masked_avg_logps",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/losses/utils.py --function masked_avg_logps",
    "prompt": "In the Python project at {dir}, the function `masked_avg_logps` in `grimoire/losses/utils.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -577,7 +577,7 @@
    "source_file": "grimoire/losses/utils.py",
    "function": "_iter_wrappers",
    "blank_lines": 11,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/losses/utils.py --function _iter_wrappers",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/losses/utils.py --function _iter_wrappers",
    "prompt": "In the Python project at {dir}, the function `_iter_wrappers` in `grimoire/losses/utils.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -587,7 +587,7 @@
    "source_file": "grimoire/losses/utils.py",
    "function": "_unwrap_model",
    "blank_lines": 3,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/losses/utils.py --function _unwrap_model",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/losses/utils.py --function _unwrap_model",
    "prompt": "In the Python project at {dir}, the function `_unwrap_model` in `grimoire/losses/utils.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -597,7 +597,7 @@
    "source_file": "grimoire/losses/utils.py",
    "function": "_params_are_sharded",
    "blank_lines": 7,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/losses/utils.py --function _params_are_sharded",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/losses/utils.py --function _params_are_sharded",
    "prompt": "In the Python project at {dir}, the function `_params_are_sharded` in `grimoire/losses/utils.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -607,7 +607,7 @@
    "source_file": "grimoire/losses/utils.py",
    "function": "_fused_logits_kwarg",
    "blank_lines": 10,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/losses/utils.py --function _fused_logits_kwarg",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/losses/utils.py --function _fused_logits_kwarg",
    "prompt": "In the Python project at {dir}, the function `_fused_logits_kwarg` in `grimoire/losses/utils.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -617,7 +617,7 @@
    "source_file": "grimoire/losses/utils.py",
    "function": "_detect_fused_logits_kwarg",
    "blank_lines": 14,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/losses/utils.py --function _detect_fused_logits_kwarg",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/losses/utils.py --function _detect_fused_logits_kwarg",
    "prompt": "In the Python project at {dir}, the function `_detect_fused_logits_kwarg` in `grimoire/losses/utils.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -627,7 +627,7 @@
    "source_file": "grimoire/losses/utils.py",
    "function": "_logit_transform",
    "blank_lines": 21,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/losses/utils.py --function _logit_transform",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/losses/utils.py --function _logit_transform",
    "prompt": "In the Python project at {dir}, the function `_logit_transform` in `grimoire/losses/utils.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -637,7 +637,7 @@
    "source_file": "grimoire/losses/utils.py",
    "function": "_head_logits",
    "blank_lines": 12,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/losses/utils.py --function _head_logits",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/losses/utils.py --function _head_logits",
    "prompt": "In the Python project at {dir}, the function `_head_logits` in `grimoire/losses/utils.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -647,7 +647,7 @@
    "source_file": "grimoire/losses/utils.py",
    "function": "fused_per_token_logps",
    "blank_lines": 39,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/losses/utils.py --function fused_per_token_logps",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/losses/utils.py --function fused_per_token_logps",
    "prompt": "In the Python project at {dir}, the function `fused_per_token_logps` in `grimoire/losses/utils.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -657,7 +657,7 @@
    "source_file": "grimoire/losses/utils.py",
    "function": "_fused_parity_ok",
    "blank_lines": 19,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/losses/utils.py --function _fused_parity_ok",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/losses/utils.py --function _fused_parity_ok",
    "prompt": "In the Python project at {dir}, the function `_fused_parity_ok` in `grimoire/losses/utils.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -667,7 +667,7 @@
    "source_file": "grimoire/losses/utils.py",
    "function": "forward_per_token_logps",
    "blank_lines": 33,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/losses/utils.py --function forward_per_token_logps",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/losses/utils.py --function forward_per_token_logps",
    "prompt": "In the Python project at {dir}, the function `forward_per_token_logps` in `grimoire/losses/utils.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -677,7 +677,7 @@
    "source_file": "grimoire/losses/utils.py",
    "function": "_add_weak",
    "blank_lines": 4,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/losses/utils.py --function _add_weak",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/losses/utils.py --function _add_weak",
    "prompt": "In the Python project at {dir}, the function `_add_weak` in `grimoire/losses/utils.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -687,7 +687,7 @@
    "source_file": "grimoire/losses/utils.py",
    "function": "pad_dim1",
    "blank_lines": 3,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/losses/utils.py --function pad_dim1",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/losses/utils.py --function pad_dim1",
    "prompt": "In the Python project at {dir}, the function `pad_dim1` in `grimoire/losses/utils.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -697,7 +697,7 @@
    "source_file": "grimoire/losses/utils.py",
    "function": "concatenate_preference",
    "blank_lines": 18,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/losses/utils.py --function concatenate_preference",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/losses/utils.py --function concatenate_preference",
    "prompt": "In the Python project at {dir}, the function `concatenate_preference` in `grimoire/losses/utils.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -707,7 +707,7 @@
    "source_file": "grimoire/losses/utils.py",
    "function": "transform",
    "blank_lines": 7,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/losses/utils.py --function transform",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/losses/utils.py --function transform",
    "prompt": "In the Python project at {dir}, the function `transform` in `grimoire/losses/utils.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -717,7 +717,7 @@
    "source_file": "grimoire/losses/utils.py",
    "function": "compute_chunk",
    "blank_lines": 7,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/losses/utils.py --function compute_chunk",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/losses/utils.py --function compute_chunk",
    "prompt": "In the Python project at {dir}, the function `compute_chunk` in `grimoire/losses/utils.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -727,7 +727,7 @@
    "source_file": "grimoire/registry.py",
    "function": "_resolve",
    "blank_lines": 4,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/registry.py --function _resolve",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/registry.py --function _resolve",
    "prompt": "In the Python project at {dir}, the function `_resolve` in `grimoire/registry.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -737,7 +737,7 @@
    "source_file": "grimoire/registry.py",
    "function": "get_loss_class",
    "blank_lines": 2,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/registry.py --function get_loss_class",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/registry.py --function get_loss_class",
    "prompt": "In the Python project at {dir}, the function `get_loss_class` in `grimoire/registry.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -747,7 +747,7 @@
    "source_file": "grimoire/registry.py",
    "function": "get_tokenize_fn",
    "blank_lines": 2,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/registry.py --function get_tokenize_fn",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/registry.py --function get_tokenize_fn",
    "prompt": "In the Python project at {dir}, the function `get_tokenize_fn` in `grimoire/registry.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -757,7 +757,7 @@
    "source_file": "grimoire/registry.py",
    "function": "_err",
    "blank_lines": 3,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/registry.py --function _err",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/registry.py --function _err",
    "prompt": "In the Python project at {dir}, the function `_err` in `grimoire/registry.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -767,7 +767,7 @@
    "source_file": "grimoire/train.py",
    "function": "load_yaml",
    "blank_lines": 12,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/train.py --function load_yaml",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/train.py --function load_yaml",
    "prompt": "In the Python project at {dir}, the function `load_yaml` in `grimoire/train.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -777,7 +777,7 @@
    "source_file": "grimoire/train.py",
    "function": "_resolve_dtype",
    "blank_lines": 4,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/train.py --function _resolve_dtype",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/train.py --function _resolve_dtype",
    "prompt": "In the Python project at {dir}, the function `_resolve_dtype` in `grimoire/train.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -787,7 +787,7 @@
    "source_file": "grimoire/train.py",
    "function": "_convert_dtypes_in_kwargs",
    "blank_lines": 4,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/train.py --function _convert_dtypes_in_kwargs",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/train.py --function _convert_dtypes_in_kwargs",
    "prompt": "In the Python project at {dir}, the function `_convert_dtypes_in_kwargs` in `grimoire/train.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -797,7 +797,7 @@
    "source_file": "grimoire/train.py",
    "function": "load_dataset_from_spec",
    "blank_lines": 19,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/train.py --function load_dataset_from_spec",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/train.py --function load_dataset_from_spec",
    "prompt": "In the Python project at {dir}, the function `load_dataset_from_spec` in `grimoire/train.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -807,7 +807,7 @@
    "source_file": "grimoire/train.py",
    "function": "build_peft_config",
    "blank_lines": 11,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/train.py --function build_peft_config",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/train.py --function build_peft_config",
    "prompt": "In the Python project at {dir}, the function `build_peft_config` in `grimoire/train.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -817,7 +817,7 @@
    "source_file": "grimoire/train.py",
    "function": "build_training_config",
    "blank_lines": 2,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/train.py --function build_training_config",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/train.py --function build_training_config",
    "prompt": "In the Python project at {dir}, the function `build_training_config` in `grimoire/train.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -827,7 +827,7 @@
    "source_file": "grimoire/train.py",
    "function": "_parse_overrides",
    "blank_lines": 15,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/train.py --function _parse_overrides",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/train.py --function _parse_overrides",
    "prompt": "In the Python project at {dir}, the function `_parse_overrides` in `grimoire/train.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -837,7 +837,7 @@
    "source_file": "grimoire/train.py",
    "function": "_deep_merge",
    "blank_lines": 7,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/train.py --function _deep_merge",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/train.py --function _deep_merge",
    "prompt": "In the Python project at {dir}, the function `_deep_merge` in `grimoire/train.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -847,7 +847,7 @@
    "source_file": "grimoire/trainer.py",
    "function": "_newton_schulz_5",
    "blank_lines": 12,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/trainer.py --function _newton_schulz_5",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/trainer.py --function _newton_schulz_5",
    "prompt": "In the Python project at {dir}, the function `_newton_schulz_5` in `grimoire/trainer.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -857,7 +857,7 @@
    "source_file": "grimoire/trainer.py",
    "function": "_create_scheduler",
    "blank_lines": 53,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/trainer.py --function _create_scheduler",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/trainer.py --function _create_scheduler",
    "prompt": "In the Python project at {dir}, the function `_create_scheduler` in `grimoire/trainer.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -867,7 +867,7 @@
    "source_file": "grimoire/trainer.py",
    "function": "_fmt",
    "blank_lines": 3,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/trainer.py --function _fmt",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/trainer.py --function _fmt",
    "prompt": "In the Python project at {dir}, the function `_fmt` in `grimoire/trainer.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -877,7 +877,7 @@
    "source_file": "grimoire/trainer.py",
    "function": "step",
    "blank_lines": 53,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/trainer.py --function step",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/trainer.py --function step",
    "prompt": "In the Python project at {dir}, the function `step` in `grimoire/trainer.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -887,7 +887,7 @@
    "source_file": "grimoire/trainer.py",
    "function": "zero_grad",
    "blank_lines": 3,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/trainer.py --function zero_grad",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/trainer.py --function zero_grad",
    "prompt": "In the Python project at {dir}, the function `zero_grad` in `grimoire/trainer.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -897,7 +897,7 @@
    "source_file": "grimoire/trainer.py",
    "function": "state_dict",
    "blank_lines": 4,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/trainer.py --function state_dict",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/trainer.py --function state_dict",
    "prompt": "In the Python project at {dir}, the function `state_dict` in `grimoire/trainer.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -907,7 +907,7 @@
    "source_file": "grimoire/trainer.py",
    "function": "load_state_dict",
    "blank_lines": 5,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/trainer.py --function load_state_dict",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/trainer.py --function load_state_dict",
    "prompt": "In the Python project at {dir}, the function `load_state_dict` in `grimoire/trainer.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -917,7 +917,7 @@
    "source_file": "grimoire/trainer.py",
    "function": "_warmup_then",
    "blank_lines": 3,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/trainer.py --function _warmup_then",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/trainer.py --function _warmup_then",
    "prompt": "In the Python project at {dir}, the function `_warmup_then` in `grimoire/trainer.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -927,7 +927,7 @@
    "source_file": "grimoire/trainer.py",
    "function": "_rms",
    "blank_lines": 1,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/trainer.py --function _rms",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/trainer.py --function _rms",
    "prompt": "In the Python project at {dir}, the function `_rms` in `grimoire/trainer.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -937,7 +937,7 @@
    "source_file": "grimoire/trainer.py",
    "function": "_decay_rate",
    "blank_lines": 1,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/trainer.py --function _decay_rate",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/trainer.py --function _decay_rate",
    "prompt": "In the Python project at {dir}, the function `_decay_rate` in `grimoire/trainer.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -947,7 +947,7 @@
    "source_file": "grimoire/trainer.py",
    "function": "step",
    "blank_lines": 90,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/trainer.py --function step",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/trainer.py --function step",
    "prompt": "In the Python project at {dir}, the function `step` in `grimoire/trainer.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -957,7 +957,7 @@
    "source_file": "grimoire/trainer.py",
    "function": "train",
    "blank_lines": 163,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/trainer.py --function train",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/trainer.py --function train",
    "prompt": "In the Python project at {dir}, the function `train` in `grimoire/trainer.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -967,7 +967,7 @@
    "source_file": "grimoire/trainer.py",
    "function": "evaluate",
    "blank_lines": 81,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/trainer.py --function evaluate",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/trainer.py --function evaluate",
    "prompt": "In the Python project at {dir}, the function `evaluate` in `grimoire/trainer.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -977,7 +977,7 @@
    "source_file": "grimoire/trainer.py",
    "function": "request_stop",
    "blank_lines": 2,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/trainer.py --function request_stop",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/trainer.py --function request_stop",
    "prompt": "In the Python project at {dir}, the function `request_stop` in `grimoire/trainer.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -987,7 +987,7 @@
    "source_file": "grimoire/trainer.py",
    "function": "stopped_early",
    "blank_lines": 1,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/trainer.py --function stopped_early",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/trainer.py --function stopped_early",
    "prompt": "In the Python project at {dir}, the function `stopped_early` in `grimoire/trainer.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -997,7 +997,7 @@
    "source_file": "grimoire/trainer.py",
    "function": "save_model",
    "blank_lines": 14,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/trainer.py --function save_model",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/trainer.py --function save_model",
    "prompt": "In the Python project at {dir}, the function `save_model` in `grimoire/trainer.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -1007,7 +1007,7 @@
    "source_file": "grimoire/trainer.py",
    "function": "_fix_nested_state_dict_keys",
    "blank_lines": 45,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/trainer.py --function _fix_nested_state_dict_keys",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/trainer.py --function _fix_nested_state_dict_keys",
    "prompt": "In the Python project at {dir}, the function `_fix_nested_state_dict_keys` in `grimoire/trainer.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -1017,7 +1017,7 @@
    "source_file": "grimoire/trainer.py",
    "function": "_register_neftune_hook",
    "blank_lines": 11,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/trainer.py --function _register_neftune_hook",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/trainer.py --function _register_neftune_hook",
    "prompt": "In the Python project at {dir}, the function `_register_neftune_hook` in `grimoire/trainer.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -1027,7 +1027,7 @@
    "source_file": "grimoire/trainer.py",
    "function": "_check_rollout_compat",
    "blank_lines": 9,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/trainer.py --function _check_rollout_compat",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/trainer.py --function _check_rollout_compat",
    "prompt": "In the Python project at {dir}, the function `_check_rollout_compat` in `grimoire/trainer.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -1037,7 +1037,7 @@
    "source_file": "grimoire/trainer.py",
    "function": "_validate_token_ids",
    "blank_lines": 26,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/trainer.py --function _validate_token_ids",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/trainer.py --function _validate_token_ids",
    "prompt": "In the Python project at {dir}, the function `_validate_token_ids` in `grimoire/trainer.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -1047,7 +1047,7 @@
    "source_file": "grimoire/trainer.py",
    "function": "_create_optimizer",
    "blank_lines": 44,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/trainer.py --function _create_optimizer",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/trainer.py --function _create_optimizer",
    "prompt": "In the Python project at {dir}, the function `_create_optimizer` in `grimoire/trainer.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -1057,7 +1057,7 @@
    "source_file": "grimoire/trainer.py",
    "function": "_create_muon_optimizer",
    "blank_lines": 31,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/trainer.py --function _create_muon_optimizer",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/trainer.py --function _create_muon_optimizer",
    "prompt": "In the Python project at {dir}, the function `_create_muon_optimizer` in `grimoire/trainer.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -1067,7 +1067,7 @@
    "source_file": "grimoire/trainer.py",
    "function": "_save_checkpoint",
    "blank_lines": 7,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/trainer.py --function _save_checkpoint",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/trainer.py --function _save_checkpoint",
    "prompt": "In the Python project at {dir}, the function `_save_checkpoint` in `grimoire/trainer.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -1077,7 +1077,7 @@
    "source_file": "grimoire/trainer.py",
    "function": "_rotate_checkpoints",
    "blank_lines": 8,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/trainer.py --function _rotate_checkpoints",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/trainer.py --function _rotate_checkpoints",
    "prompt": "In the Python project at {dir}, the function `_rotate_checkpoints` in `grimoire/trainer.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -1087,7 +1087,7 @@
    "source_file": "grimoire/trainer.py",
    "function": "_log_metrics",
    "blank_lines": 5,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/trainer.py --function _log_metrics",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/trainer.py --function _log_metrics",
    "prompt": "In the Python project at {dir}, the function `_log_metrics` in `grimoire/trainer.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -1097,7 +1097,7 @@
    "source_file": "grimoire/trainer.py",
    "function": "_log_info",
    "blank_lines": 2,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/trainer.py --function _log_info",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/trainer.py --function _log_info",
    "prompt": "In the Python project at {dir}, the function `_log_info` in `grimoire/trainer.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -1107,7 +1107,7 @@
    "source_file": "grimoire/trainer.py",
    "function": "_fire",
    "blank_lines": 4,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/trainer.py --function _fire",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/trainer.py --function _fire",
    "prompt": "In the Python project at {dir}, the function `_fire` in `grimoire/trainer.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -1117,7 +1117,7 @@
    "source_file": "grimoire/trainer.py",
    "function": "lr_lambda",
    "blank_lines": 1,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/trainer.py --function lr_lambda",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/trainer.py --function lr_lambda",
    "prompt": "In the Python project at {dir}, the function `lr_lambda` in `grimoire/trainer.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -1127,7 +1127,7 @@
    "source_file": "grimoire/trainer.py",
    "function": "neftune_forward_hook",
    "blank_lines": 5,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/trainer.py --function neftune_forward_hook",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/trainer.py --function neftune_forward_hook",
    "prompt": "In the Python project at {dir}, the function `neftune_forward_hook` in `grimoire/trainer.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -1137,7 +1137,7 @@
    "source_file": "grimoire/trainer.py",
    "function": "lr_lambda",
    "blank_lines": 1,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/trainer.py --function lr_lambda",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/trainer.py --function lr_lambda",
    "prompt": "In the Python project at {dir}, the function `lr_lambda` in `grimoire/trainer.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -1147,7 +1147,7 @@
    "source_file": "grimoire/trainer.py",
    "function": "lr_lambda",
    "blank_lines": 8,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/trainer.py --function lr_lambda",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/trainer.py --function lr_lambda",
    "prompt": "In the Python project at {dir}, the function `lr_lambda` in `grimoire/trainer.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   },
@@ -1157,7 +1157,7 @@
    "source_file": "grimoire/trainer.py",
    "function": "lr_lambda",
    "blank_lines": 15,
-   "setup": "python3 /home/nbeerbower/Projects/egirl/bench/ladder/blank.py --repo . --file grimoire/trainer.py --function lr_lambda",
+   "setup": "python3 {ladder}/blank.py --repo . --file grimoire/trainer.py --function lr_lambda",
    "prompt": "In the Python project at {dir}, the function `lr_lambda` in `grimoire/trainer.py` has been removed \u2014 its body now raises NotImplementedError. Implement it so the existing test suite passes. Do not modify the tests.",
    "verify": "python3 -m pytest tests -q"
   }

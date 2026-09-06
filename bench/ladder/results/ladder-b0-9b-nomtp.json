@@ -1,0 +1,219 @@
+{
+ "label": "ladder-b0-9b-nomtp",
+ "passed": 5,
+ "total": 10,
+ "quad": {
+  "self_passed": 4,
+  "escalated_passed": 1,
+  "self_failed": 5,
+  "escalated_failed": 0
+ },
+ "results": [
+  {
+   "id": "gen_buchbinder_cleaning_clean_paragraph",
+   "level": 1,
+   "passed": true,
+   "strategy": "self",
+   "delegated": false,
+   "tool_calls": 8,
+   "tools": [
+    "read_file",
+    "glob_files",
+    "execute_command",
+    "read_file",
+    "read_file",
+    "execute_command",
+    "edit_file",
+    "execute_command"
+   ],
+   "turns": 7,
+   "elapsed_ms": 14661,
+   "agent_ok": true,
+   "verify_detail": "",
+   "response": "All 15 tests pass. `clean_paragraph` now handles whitespace collapse, stripping, and ftfy-based unicode repair. The existing tests don't directly call it — they use pre-cleaned paragraphs — but the pipeline tests confirm `clean_gutenberg` still works end-to-end.",
+   "diff": "diff --git a/buchbinder/cleaning.py b/buchbinder/cleaning.py\nindex 3d1d5a0..d06ac50 100644\n--- a/buchbinder/cleaning.py\n+++ b/buchbinder/cleaning.py\n@@ -18,9 +18,14 @@ _PG_END_RE = re.compile(\n \n \n def clean_paragraph(text: str) -> str:\n+    \"\"\"Clean a single paragraph: whitespace collapse + unicode repair.\"\"\"\n+    # Collapse internal whitespace (including newlines) to single spaces\n+    text = re.sub(r\"\\s+\", \" \", text)\n+    # Strip leading/trailing\n+    text = text.strip()\n+    # Unicode repair (ftfy handles mojibake, crazy quotes, etc.)\n     text = ftfy.fix_text(text)\n-    text = text.replace(\"\\xa0\", \" \")\n-    return re.sub(r\"\\s+\", \" \", text).strip()\n+    return text\n \n \n def clean_gutenberg(raw: str) -> str:\n"
+  },
+  {
+   "id": "gen_buchbinder_cleaning__bracket_block",
+   "level": 2,
+   "passed": true,
+   "strategy": "escalated",
+   "delegated": true,
+   "tool_calls": 1,
+   "tools": [
+    "code_agent"
+   ],
+   "turns": 2,
+   "elapsed_ms": 51468,
+   "agent_ok": true,
+   "verify_detail": "",
+   "response": "All tests pass. The function removes illustration, transcriber, music, copyright, and frontispiece blocks while preserving enclosed chapter-like headings and adding paragraph boundaries around them.",
+   "diff": "diff --git a/buchbinder/cleaning.py b/buchbinder/cleaning.py\nindex 3d1d5a0..ead32cd 100644\n--- a/buchbinder/cleaning.py\n+++ b/buchbinder/cleaning.py\n@@ -37,6 +37,10 @@ def clean_gutenberg(raw: str) -> str:\n     # may span lines. Illustrated editions sometimes wrap the real chapter\n     # heading inside the block, so keep inner text that looks like one.\n     def _bracket_block(m):\n+        inner = re.sub(r\"^\\[(?:\\w+[':s]*)*:?\\s*|\\]$\", \"\", m.group(0))\n+        if re.search(r\"\\b(chapter|part|book|canto|act)\\b[\\s.]*[ivxlcdm0-9]\",\n+                     inner, re.I):\n+            return \"\\n\\n\" + inner.strip() + \"\\n\\n\"\n         return \"\"\n     raw = re.sub(\n         r\"\\[(?:Illustration|Transcriber|Music|Copyright|Frontispiece)\"\n"
+  },
+  {
+   "id": "gen_buchbinder_dedupe_shingle_fp",
+   "level": 2,
+   "passed": true,
+   "strategy": "self",
+   "delegated": false,
+   "tool_calls": 10,
+   "tools": [
+    "read_file",
+    "glob_files",
+    "execute_command",
+    "read_file",
+    "read_file",
+    "execute_command",
+    "execute_command",
+    "edit_file",
+    "execute_command",
+    "execute_command"
+   ],
+   "turns": 9,
+   "elapsed_ms": 15271,
+   "agent_ok": true,
+   "verify_detail": "",
+   "response": "All 15 tests pass. The `shingle_fp` function now computes 8-gram shingle fingerprints using SHA-256, deduplicates within a text, and returns the unique fingerprint list.",
+   "diff": "diff --git a/buchbinder/dedupe.py b/buchbinder/dedupe.py\nindex 95c5538..94283e1 100644\n--- a/buchbinder/dedupe.py\n+++ b/buchbinder/dedupe.py\n@@ -15,13 +15,17 @@ def shingle_fp(text: str, k: int = 8, n: int = 12) -> list[str]:\n     bytes of SHA-256(shingle), hex-encoded. Duplicate shingles within the\n     same text are collapsed (set semantics), so the result is the unique\n     shingle set for that passage.\"\"\"\n-    words = text.split()\n-    shingles = set()\n+    import hashlib\n+    words = text.strip().split()\n+    seen = set()\n+    fps = []\n     for i in range(len(words) - k + 1):\n-        s = \" \".join(words[i:i + k])\n-        h = hashlib.sha256(s.encode()).hexdigest()[:2 * n]\n-        shingles.add(h)\n-    return sorted(shingles)\n+        shingle = \" \".join(words[i:i+k])\n+        if shingle not in seen:\n+            seen.add(shingle)\n+            digest = hashlib.sha256(shingle.encode(\"utf-8\")).digest()\n+            fps.append(digest[:n].hex())\n+    return fps\n \n \n def is_dup(fps: list[str], seen_count: int) -> bool:\n"
+  },
+  {
+   "id": "gen_buchbinder_dedupe_is_dup",
+   "level": 1,
+   "passed": false,
+   "strategy": "self",
+   "delegated": false,
+   "tool_calls": 2,
+   "tools": [
+    "execute_command",
+    "execute_command"
+   ],
+   "turns": 6,
+   "elapsed_ms": 7078,
+   "agent_ok": true,
+   "verify_detail": "FAILED tests/test_pipeline.py::test_shingles - NotImplementedError: implement... 1 failed, 14 passed in 0.07s",
+   "response": "[a tool call failed to parse and was dropped]",
+   "diff": "diff --git a/buchbinder/dedupe.py b/buchbinder/dedupe.py\nindex 95c5538..bfd23fa 100644\n--- a/buchbinder/dedupe.py\n+++ b/buchbinder/dedupe.py\n@@ -29,4 +29,4 @@ def is_dup(fps: list[str], seen_count: int) -> bool:\n \n     Majority overlap: if more than half the shingles are already in the\n     corpus, this passage is a near-duplicate.\"\"\"\n-    return seen_count > len(fps) / 2\n+    raise NotImplementedError(\"implement is_dup\")\n"
+  },
+  {
+   "id": "gen_buchbinder_gates_is_scene_marker",
+   "level": 2,
+   "passed": false,
+   "strategy": "self",
+   "delegated": false,
+   "tool_calls": 2,
+   "tools": [
+    "execute_command",
+    "execute_command"
+   ],
+   "turns": 6,
+   "elapsed_ms": 7098,
+   "agent_ok": true,
+   "verify_detail": "FAILED tests/test_pipeline.py::test_scene_split_and_chunk - NotImplementedErr... 3 failed, 12 passed in 0.08s",
+   "response": "[a tool call failed to parse and was dropped]",
+   "diff": "diff --git a/buchbinder/gates.py b/buchbinder/gates.py\nindex 086ed89..1a7b30d 100644\n--- a/buchbinder/gates.py\n+++ b/buchbinder/gates.py\n@@ -57,10 +57,7 @@ CHAPTER_HEADING = re.compile(\n \n \n def is_scene_marker(paragraph: str) -> bool:\n-    p = paragraph.strip()\n-    if len(p) <= 30 and SCENE_BREAK.match(p) and not any(c.isalnum() for c in p):\n-        return True\n-    return bool(NUMERIC_MARKER.match(p))\n+    raise NotImplementedError(\"implement is_scene_marker\")\n \n # Copyright-page phrasing that identifies boilerplate even without a label.\n HARD_BOILERPLATE = re.compile(\n"
+  },
+  {
+   "id": "gen_buchbinder_gates_caps_heavy",
+   "level": 2,
+   "passed": false,
+   "strategy": "self",
+   "delegated": false,
+   "tool_calls": 2,
+   "tools": [
+    "execute_command",
+    "execute_command"
+   ],
+   "turns": 6,
+   "elapsed_ms": 7109,
+   "agent_ok": true,
+   "verify_detail": "FAILED tests/test_pipeline.py::test_caps_edges - NotImplementedError: impleme... 3 failed, 12 passed in 0.07s",
+   "response": "[a tool call failed to parse and was dropped]",
+   "diff": "diff --git a/buchbinder/gates.py b/buchbinder/gates.py\nindex 086ed89..8bb5ac4 100644\n--- a/buchbinder/gates.py\n+++ b/buchbinder/gates.py\n@@ -117,13 +117,7 @@ def caps_heavy(p: str) -> bool:\n     \"\"\"Short SHOUTING paragraph — printer colophons, running titles,\n     engraver credits. Only trust this at section edges (mid-text it could\n     be a telegram or sign).\"\"\"\n-    p = p.strip()\n-    if len(p) > 120:\n-        return False\n-    alpha = [c for c in p if c.isalpha()]\n-    if len(alpha) < 3:\n-        return False\n-    return sum(1 for c in alpha if c.isupper()) / len(alpha) > 0.85\n+    raise NotImplementedError(\"implement caps_heavy\")\n \n \n STOPWORDS = frozenset(\n"
+  },
+  {
+   "id": "gen_buchbinder_gates_looks_english",
+   "level": 2,
+   "passed": true,
+   "strategy": "self",
+   "delegated": false,
+   "tool_calls": 8,
+   "tools": [
+    "execute_command",
+    "execute_command",
+    "execute_command",
+    "execute_command",
+    "execute_command",
+    "execute_command",
+    "edit_file",
+    "execute_command"
+   ],
+   "turns": 10,
+   "elapsed_ms": 19158,
+   "agent_ok": true,
+   "verify_detail": "",
+   "response": "All 10 pipeline tests pass. `looks_english` now checks for \"the\" and \"and\" as word-boundary matches (case-insensitive) and returns `True` for English prose, `False` otherwise.",
+   "diff": "diff --git a/buchbinder/gates.py b/buchbinder/gates.py\nindex 086ed89..9156579 100644\n--- a/buchbinder/gates.py\n+++ b/buchbinder/gates.py\n@@ -136,7 +136,9 @@ TERMINAL = ('.', '!', '?', '\"', '”', '’', \"'\", '…', '—', ':', ')')\n def looks_english(text: str) -> bool:\n     \"\"\"Heuristic: English prose contains common function words. Checks for\n     'the' and 'and' as word-boundary matches (case-insensitive).\"\"\"\n-    return bool(re.search(r'\\bthe\\b', text, re.I)) and bool(re.search(r'\\band\\b', text, re.I))\n+    import re\n+    words = re.findall(r\"\\b\\w+\\b\", text.lower())\n+    return \"the\" in words and \"and\" in words\n \n \n def prose_stats(paragraphs):\n"
+  },
+  {
+   "id": "gen_buchbinder_metrics_words",
+   "level": 1,
+   "passed": false,
+   "strategy": "self",
+   "delegated": false,
+   "tool_calls": 2,
+   "tools": [
+    "execute_command",
+    "execute_command"
+   ],
+   "turns": 6,
+   "elapsed_ms": 7480,
+   "agent_ok": true,
+   "verify_detail": "FAILED tests/test_pipeline.py::test_gate_accepts_prose - NotImplementedError:... 3 failed, 12 passed in 0.09s",
+   "response": "[a tool call failed to parse and was dropped]",
+   "diff": "diff --git a/buchbinder/metrics.py b/buchbinder/metrics.py\nindex dd51acb..347efaa 100644\n--- a/buchbinder/metrics.py\n+++ b/buchbinder/metrics.py\n@@ -66,7 +66,7 @@ def sentences(text: str) -> list[str]:\n \n \n def words(text: str) -> list[str]:\n-    return _WORD_RE.findall(text)\n+    raise NotImplementedError(\"implement words\")\n \n \n def content_words(text: str, lang: str = \"en\") -> list[str]:\n"
+  },
+  {
+   "id": "gen_buchbinder_metrics_content_words",
+   "level": 1,
+   "passed": true,
+   "strategy": "self",
+   "delegated": false,
+   "tool_calls": 9,
+   "tools": [
+    "read_file",
+    "glob_files",
+    "execute_command",
+    "read_file",
+    "read_file",
+    "execute_command",
+    "execute_command",
+    "edit_file",
+    "execute_command"
+   ],
+   "turns": 8,
+   "elapsed_ms": 12640,
+   "agent_ok": true,
+   "verify_detail": "",
+   "response": "All 15 tests pass. The `content_words` function now filters out function words and returns content words, which is what the existing tests expect.",
+   "diff": "diff --git a/buchbinder/metrics.py b/buchbinder/metrics.py\nindex dd51acb..b805fd1 100644\n--- a/buchbinder/metrics.py\n+++ b/buchbinder/metrics.py\n@@ -70,8 +70,8 @@ def words(text: str) -> list[str]:\n \n \n def content_words(text: str, lang: str = \"en\") -> list[str]:\n-    fw = FUNCTION_WORDS_DE if lang == \"de\" else FUNCTION_WORDS_EN\n-    return [w.lower() for w in words(text) if w.lower() not in fw]\n+    lex = FUNCTION_WORDS_EN if lang == \"en\" else FUNCTION_WORDS_DE\n+    return [w for w in words(text) if w not in lex]\n \n \n # ---------------------------------------------------------------------------\n"
+  },
+  {
+   "id": "gen_buchbinder_metrics_type_token_ratio",
+   "level": 2,
+   "passed": false,
+   "strategy": "self",
+   "delegated": false,
+   "tool_calls": 2,
+   "tools": [
+    "execute_command",
+    "execute_command"
+   ],
+   "turns": 6,
+   "elapsed_ms": 6930,
+   "agent_ok": true,
+   "verify_detail": "FAILED tests/test_pipeline.py::test_gate_accepts_prose - NotImplementedError:... 3 failed, 12 passed in 0.07s",
+   "response": "[a tool call failed to parse and was dropped]",
+   "diff": "diff --git a/buchbinder/metrics.py b/buchbinder/metrics.py\nindex dd51acb..3b5aeca 100644\n--- a/buchbinder/metrics.py\n+++ b/buchbinder/metrics.py\n@@ -162,10 +162,7 @@ def edit_ratio(a: str, b: str) -> float:\n \n \n def type_token_ratio(text: str, lang: str = \"en\") -> float:\n-    cw = content_words(text, lang)\n-    if not cw:\n-        return 0.0\n-    return len(set(cw)) / len(cw)\n+    raise NotImplementedError(\"implement type_token_ratio\")\n \n \n # ---------------------------------------------------------------------------\n"
+  }
+ ]
+}

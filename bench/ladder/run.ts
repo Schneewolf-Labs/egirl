@@ -59,6 +59,12 @@ interface Task {
   setup?: string
 }
 
+/** Task files refer to helper scripts next to this runner as `{ladder}/…` rather than pinning
+ *  the checkout they were generated from. */
+function fillLadder(cmd: string): string {
+  return cmd.replaceAll('{ladder}', HERE)
+}
+
 function arg(name: string, fallback?: string): string | undefined {
   const i = process.argv.indexOf(`--${name}`)
   return i !== -1 ? process.argv[i + 1] : fallback
@@ -172,7 +178,7 @@ async function main() {
     // be handed to the agent as already-working code, and pass without the model doing anything.
     if (t.setup) {
       try {
-        execSync(t.setup, { cwd: FIXTURE, stdio: 'pipe', shell: '/bin/bash' })
+        execSync(fillLadder(t.setup), { cwd: FIXTURE, stdio: 'pipe', shell: '/bin/bash' })
       } catch (e) {
         console.error(`L${t.level} ${t.id.padEnd(24)} SKIP  setup failed: ${(e as Error).message.split('\n')[0]}`)
         continue
@@ -181,7 +187,7 @@ async function main() {
     const prompt = t.prompt.replace('{dir}', FIXTURE)
     const transcript = join(transcriptDir, `${t.id}.jsonl`)
     const run = await runAgent(prompt, timeoutMs, transcript)
-    const v = verify(t.verify)
+    const v = verify(fillLadder(t.verify))
     // Capture what the agent actually left behind before the next task wipes it. Failures are
     // the interesting cases — for diagnosis now, and as training material later — and a reset
     // that happens before anyone looks at the diff destroys the only record of what went wrong.
