@@ -96,6 +96,7 @@ function runAgent(
   turns: number
   elapsed: number
   response: string
+  stderr: string
 }> {
   return new Promise((resolve) => {
     const started = Date.now()
@@ -130,7 +131,12 @@ function runAgent(
     )
     let out = ''
     child.stdout.on('data', (d) => (out += d))
-    child.stderr.on('data', () => {})
+    // Keep the end of stderr: a run that times out with no tool calls and no transcript has
+    // left nothing else to diagnose from, and egirl logs why it stalled there.
+    let err = ''
+    child.stderr.on('data', (d) => {
+      err = (err + d).slice(-2000)
+    })
     const timer = setTimeout(() => child.kill('SIGKILL'), timeoutMs)
     child.on('close', () => {
       clearTimeout(timer)
@@ -143,9 +149,17 @@ function runAgent(
           turns: p.turns ?? 0,
           elapsed: Date.now() - started,
           response: p.response ?? '',
+          stderr: err,
         })
       } catch {
-        resolve({ ok: false, toolCalls: [], turns: 0, elapsed: Date.now() - started, response: '' })
+        resolve({
+          ok: false,
+          toolCalls: [],
+          turns: 0,
+          elapsed: Date.now() - started,
+          response: '',
+          stderr: err,
+        })
       }
     })
   })
@@ -247,6 +261,8 @@ async function main() {
       response: run.response.slice(0, 4000),
       diff: diff.slice(0, 40000),
       transcript,
+      // Only worth keeping when something went wrong; a pass has its transcript.
+      ...(v.passed ? {} : { stderr: run.stderr }),
     }
     results.push(row)
     console.error(
