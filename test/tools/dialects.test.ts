@@ -7,18 +7,6 @@ import {
   toolDialect,
 } from '../../src/tools/dialects'
 
-const TOOLS = [
-  {
-    name: 'read_file',
-    description: 'Read a file',
-    parameters: {
-      type: 'object' as const,
-      properties: { path: { type: 'string' }, limit: { type: 'number' } },
-      required: ['path'],
-    },
-  },
-]
-
 afterEach(() => {
   setToolDialect('auto')
 })
@@ -28,21 +16,6 @@ describe('qwen35 dialect', () => {
     expect(dialectNames()).toContain('qwen35')
     expect(setToolDialect('qwen35').name).toBe('qwen35')
     expect(toolDialect().name).toBe('qwen35')
-  })
-
-  test('asks in the model native format, not JSON-in-tool_call', () => {
-    const section = qwen35Dialect.buildToolsSection(TOOLS)
-    // the <function=>/<parameter=> shape is what Qwen3.5 was trained on
-    expect(section).toContain('<function=example_function_name>')
-    expect(section).toContain('<parameter=example_parameter_1>')
-    expect(section).toContain('"name":"read_file"')
-    // and must NOT teach the qwen3 JSON call form
-    expect(section).not.toContain('return a json object with function name')
-  })
-
-  test('no tools means no section', () => {
-    expect(qwen35Dialect.buildToolsSection(undefined)).toBe('')
-    expect(qwen35Dialect.buildToolsSection([])).toBe('')
   })
 
   test('parses a native call and coerces argument types', () => {
@@ -100,10 +73,6 @@ line four
     const r = qwen35Dialect.parseToolCalls('Just answering normally.')
     expect(r.toolCalls).toHaveLength(0)
     expect(r.content).toBe('Just answering normally.')
-  })
-
-  test('tool results are wrapped in tool_response', () => {
-    expect(qwen35Dialect.formatToolResponse('ok')).toBe('<tool_response>\nok\n</tool_response>')
   })
 })
 

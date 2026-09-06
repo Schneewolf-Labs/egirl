@@ -1,42 +1,19 @@
 import type { ToolCall } from '../providers/types'
 import { toolDialect } from './dialects'
-import type { ToolDefinition } from './types'
 
 /**
- * Qwen3 tool calling format utilities.
+ * Tool calls that come back as text.
  *
- * This module handles formatting for the native Qwen3 chat template:
- * - Tool definitions wrapped in <tools></tools> in system prompt
- * - Tool calls wrapped in <tool_call></tool_call>
- * - Tool responses wrapped in <tool_response></tool_response>
+ * Tools are sent to the server as `tools` and rendered by the model's chat template, and a
+ * llama.cpp server running with --jinja parses the calls out of the generation itself. What
+ * remains here is the fallback for a server that renders but does not parse, and for the
+ * odd call a model writes free-hand outside the grammar: find the markup in the assistant's
+ * text, in whichever dialect it used, and turn it into calls.
  */
-
-/**
- * Tool-call formatting, delegated to the configured dialect (see ./dialects.ts).
- * Rendering and parsing must agree, so both come from the same dialect object rather
- * than being hardcoded to one model family.
- */
-export function buildToolsSection(tools: ToolDefinition[] | undefined): string {
-  return toolDialect().buildToolsSection(tools)
-}
 
 /** Parse tool calls from assistant response content. */
 export function parseToolCalls(content: string): { content: string; toolCalls: ToolCall[] } {
   return toolDialect().parseToolCalls(content)
-}
-
-/**
- * Format a single tool response
- */
-export function formatToolResponse(output: string): string {
-  return toolDialect().formatToolResponse(output)
-}
-
-/**
- * Format a tool call for the assistant message
- */
-export function formatToolCall(name: string, args: Record<string, unknown>): string {
-  return `<tool_call>\n${JSON.stringify({ name, arguments: args })}\n</tool_call>`
 }
 
 /**

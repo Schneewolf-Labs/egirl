@@ -83,7 +83,7 @@ The loop runs for up to `maxTurns` iterations to prevent infinite tool-calling l
 
 ### 3. Provider generates a response
 
-There is one provider: `LlamaCppProvider` (`src/providers/llamacpp.ts`). It speaks the llama.cpp OpenAI-compatible HTTP API, parses Qwen3 `<tool_call>` XML tags (`src/providers/qwen3-format.ts`), and uses llama.cpp's `/tokenize` endpoint for accurate token counting (`src/providers/llamacpp-tokenizer.ts`). Stale-stream detection kills hung requests.
+There is one provider: `LlamaCppProvider` (`src/providers/llamacpp.ts`). It speaks the llama.cpp OpenAI-compatible HTTP API with native `tools` (`src/providers/chat-format.ts` shapes the messages; the server's chat template renders the model's own tool syntax), falls back to parsing tool-call text (`src/tools/dialects.ts`), and uses llama.cpp's `/tokenize` endpoint for accurate token counting (`src/providers/llamacpp-tokenizer.ts`). Stale-stream detection kills hung requests.
 
 ```typescript
 interface LLMProvider {

@@ -2,9 +2,9 @@ import type { RuntimeConfig } from '../config'
 import { createLlamaCppProvider } from './llamacpp'
 import type { LLMProvider } from './types'
 
+export { type ApiMessage, toApiMessages } from './chat-format'
 export { createLlamaCppProvider } from './llamacpp'
 export { createLlamaCppTokenizer } from './llamacpp-tokenizer'
-export { formatMessagesForQwen3 } from './qwen3-format'
 export {
   type ChatMessage,
   type ChatRequest,
@@ -44,7 +44,6 @@ export function createProviderRegistry(config: RuntimeConfig): ProviderRegistry 
     config.local.maxConcurrent,
     config.local.temperature,
     config.local.apiKey,
-    config.local.thinkingDirective,
   )
 
   const auxiliary = config.local.auxiliary
