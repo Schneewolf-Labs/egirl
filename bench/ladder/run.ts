@@ -28,7 +28,7 @@
  */
 
 import { execSync, spawn } from 'node:child_process'
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 
@@ -38,6 +38,8 @@ const ROOT = join(HERE, '..', '..')
 // elsewhere. Its workspace is wiped at the start of each ladder run; see egirl.bench.toml.
 const BENCH_CONFIG = process.env.EGIRL_CONFIG ?? join(HERE, 'egirl.bench.toml')
 const BENCH_WORKSPACE = join(homedir(), '.egirl', 'bench')
+// Time allowed for egirl to boot and write an (empty) transcript file; see the stall guard.
+const STARTUP_MS = 60_000
 // --repo points the ladder at any resettable git repo; the built-in fixture is the default.
 // Generated tasks run against a throwaway clone, never a working tree.
 function repoArg(): string {
@@ -97,6 +99,7 @@ function runAgent(
   elapsed: number
   response: string
   stderr: string
+  stalled?: boolean
 }> {
   return new Promise((resolve) => {
     const started = Date.now()
@@ -129,6 +132,19 @@ function runAgent(
         },
       },
     )
+    // Startup-stall guard. Roughly one run in twenty-five never reaches its first model turn:
+    // the JS thread idles while a Bun pool thread spins at 100% with a module file half-loaded
+    // (seen live: `Bun Pool 7` at 337s CPU, main thread in ep_poll, fd open on
+    // zod/v4/locales/ru.js). egirl creates the transcript file as soon as the runtime is up, so
+    // a run with no transcript after STARTUP_MS is that hang, not a slow model; kill it and let
+    // the caller retry rather than burn the whole task timeout.
+    let stalled = false
+    const startupTimer = setTimeout(() => {
+      if (!existsSync(transcriptPath)) {
+        stalled = true
+        child.kill('SIGKILL')
+      }
+    }, STARTUP_MS)
     let out = ''
     child.stdout.on('data', (d) => (out += d))
     // Keep the end of stderr: a run that times out with no tool calls and no transcript has
@@ -140,6 +156,11 @@ function runAgent(
     const timer = setTimeout(() => child.kill('SIGKILL'), timeoutMs)
     child.on('close', () => {
       clearTimeout(timer)
+      clearTimeout(startupTimer)
+      if (stalled) {
+        resolve({ ok: false, toolCalls: [], turns: 0, elapsed: Date.now() - started, response: '', stderr: err, stalled: true })
+        return
+      }
       const line = out.trim().split('\n').filter(Boolean).pop()
       try {
         const p = JSON.parse(line ?? '')
@@ -223,7 +244,13 @@ async function main() {
     }
     const prompt = t.prompt.replace('{dir}', FIXTURE)
     const transcript = join(transcriptDir, `${t.id}.jsonl`)
-    const run = await runAgent(prompt, timeoutMs, maxTurns, transcript)
+    let run = await runAgent(prompt, timeoutMs, maxTurns, transcript)
+    if (run.stalled) {
+      console.error(`L${t.level} ${t.id.padEnd(24)} STALL  no transcript after ${STARTUP_MS / 1000}s, retrying once`)
+      resetFixture()
+      if (t.setup) execSync(fillLadder(t.setup), { cwd: FIXTURE, stdio: 'pipe', shell: '/bin/bash' })
+      run = await runAgent(prompt, timeoutMs, maxTurns, transcript)
+    }
     const v = verify(fillLadder(t.verify))
     // Capture what the agent actually left behind before the next task wipes it. Failures are
     // the interesting cases — for diagnosis now, and as training material later — and a reset
