@@ -20,7 +20,20 @@ export async function runCLI(config: RuntimeConfig, args: string[]): Promise<voi
   const asJson = args.includes('--json')
 
   const rt = await createCommandRuntime(config)
-  const { conversations, taskStore, processRegistry } = rt
+  const { conversations, taskStore, processRegistry, mcpConnections } = rt
+
+  // Single-message mode must actually exit once the answer is out. Anything with a live
+  // handle -- an MCP streamable-http session, a lingering child -- keeps the event loop alive
+  // otherwise, and `egirl cli -m ... --json` hangs until whoever spawned it gives up.
+  const exitAfterOneShot = async (code: number): Promise<never> => {
+    await Promise.all(mcpConnections.map((conn) => conn.close()))
+    await processRegistry.shutdownAll()
+    taskStore?.close()
+    conversations?.close()
+    // Drain stdout before exiting so a piped JSON line is never truncated.
+    await new Promise<void>((resolve) => process.stdout.write('', () => resolve()))
+    process.exit(code)
+  }
 
   // Create agent loop with conversation persistence and memory
   const agent = rt.agentFactory(singleMessage ? crypto.randomUUID() : 'cli:default')
@@ -103,9 +116,9 @@ export async function runCLI(config: RuntimeConfig, args: string[]): Promise<voi
       } else {
         console.error(`Error: ${message}`)
       }
-      process.exit(1)
+      await exitAfterOneShot(1)
     }
-    return
+    await exitAfterOneShot(0)
   }
 
   // Interactive CLI mode
