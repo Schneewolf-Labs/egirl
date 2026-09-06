@@ -169,7 +169,7 @@ See [architecture.md](architecture.md) for the full breakdown. Key points:
 
 - `src/index.ts` — entry point; parses the command and dispatches
 - `src/bootstrap.ts` — shared `AppServices` factory
-- `src/commands/` — command runners (cli, discord, xmpp, telegram, api, claude-code, serve, status)
+- `src/commands/` — command runners (cli, discord, xmpp, telegram, api, claude-code, serve, status, update)
 - `src/agent/` — conversation loop, context management, summarization
 - `src/api.ts` — minimal HTTP API (Bun.serve)
 - `src/browser/` — Playwright browser automation

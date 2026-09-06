@@ -8,6 +8,7 @@ import { runInit } from './commands/init'
 import { runNew } from './commands/new'
 import { runServe } from './commands/serve'
 import { showStatus } from './commands/status'
+import { runUpdate } from './commands/update'
 import { findConfigFile, loadConfig, type RuntimeConfig } from './config'
 import { loadInstanceEnv } from './config/env-files'
 import { BOLD, colors, DIM, RESET } from './ui/theme'
@@ -74,6 +75,19 @@ async function main() {
 
   if (command === 'help' || command === '--help' || command === '-h') {
     showHelp()
+    return
+  }
+
+  // Also before loadConfig: an update that ships a config schema change must still be
+  // installable by the binary that predates it.
+  if (command === 'update' || command === 'upgrade') {
+    try {
+      await runUpdate(commandArgs)
+    } catch (error) {
+      const c = colors()
+      console.error(`${c.error}error${RESET} ${errorMessage(error)}`)
+      process.exit(1)
+    }
     return
   }
 
@@ -162,6 +176,7 @@ ${c.primary}Commands${RESET}
   ${c.accent}serve${RESET}          Discord + XMPP + Telegram + Matrix + background task runner in one process
   ${c.accent}claude-code${RESET}    Bridge to Claude Code with local model supervision ${DIM}(alias: cc)${RESET}
   ${c.accent}status${RESET}         Show current configuration and status
+  ${c.accent}update${RESET}         Pull the latest egirl and reinstall deps if needed ${DIM}(alias: upgrade, --check to preview)${RESET}
   ${c.accent}help${RESET}           Show this help message
 
 ${c.primary}Options${RESET} ${DIM}(all commands)${RESET}
