@@ -122,6 +122,7 @@ bun run src/index.ts serve                # Discord/XMPP/Telegram/Matrix + backg
 bun run src/index.ts claude-code          # Direct Claude Code bridge (alias: cc)
 bun run src/index.ts cc -m "fix the tests"
 bun run src/index.ts status               # Show config + connection status
+bun run src/index.ts update               # Pull latest + bun install (alias: upgrade; --check to preview)
 bun run src/index.ts help
 ```
 
