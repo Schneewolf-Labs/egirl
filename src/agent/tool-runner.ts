@@ -22,7 +22,8 @@ const MAX_TOOL_RESULT_TOKENS = 8000
  * so "run the tests, edit, run the tests again" always drew a loop warning on the second run:
  * a third of otherwise clean bench trajectories carried that nudge, for doing exactly what a
  * careful engineer does after an edit. A loop is the same call again with nothing in between,
- * or the same call a third time; one repeat later in the run is verification.
+ * or the same call for the fifth time; running the tests three or four times over a run is
+ * iteration, and the harder tasks in the ladder take exactly that.
  */
 export class RepeatDetector {
   private counts = new Map<string, number>()
@@ -35,7 +36,7 @@ export class RepeatDetector {
     for (const call of calls) {
       const key = `${call.name}:${JSON.stringify(call.arguments)}`
       const seen = this.counts.get(key) ?? 0
-      if (this.lastBatch.has(key) || seen >= 2) names.push(call.name)
+      if (this.lastBatch.has(key) || seen >= 4) names.push(call.name)
       this.counts.set(key, seen + 1)
       batch.add(key)
     }

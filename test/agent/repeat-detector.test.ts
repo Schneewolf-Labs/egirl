@@ -18,12 +18,12 @@ describe('RepeatDetector', () => {
     expect(d.repeats([run])).toEqual(['execute_command'])
   })
 
-  test('a third occurrence is a loop even with other calls between', () => {
+  test('iterating a few times is not a loop, a fifth run is', () => {
     const d = new RepeatDetector()
-    d.repeats([run])
-    d.repeats([edit])
-    d.repeats([run])
-    d.repeats([edit])
+    for (let i = 0; i < 4; i++) {
+      expect(d.repeats([run])).toEqual([])
+      d.repeats([edit])
+    }
     expect(d.repeats([run])).toEqual(['execute_command'])
   })
 
