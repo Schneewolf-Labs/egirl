@@ -50,6 +50,13 @@ function expandPath(path: string, workspaceDir?: string): string {
 }
 
 export function findConfigFile(): string | null {
+  // EGIRL_CONFIG names the config file outright, bypassing the search below. The bench harness
+  // uses it to run one-shot tasks against a hermetic config rather than the live persona's:
+  // without it every ladder task lands in the operator's conversations.db, memory.db and audit
+  // log, and the next run recalls the last one's tasks as prior context.
+  const explicit = process.env.EGIRL_CONFIG
+  if (explicit) return resolve(explicit)
+
   const candidates = [
     resolve(process.cwd(), 'egirl.toml'),
     resolve(homedir(), '.egirl', 'egirl.toml'),

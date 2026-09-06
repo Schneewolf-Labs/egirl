@@ -50,3 +50,6 @@ __pycache__/
 *.pyo
 .Python
 *.egg-info/
+
+# Ladder transcripts: full prompts and tool output per task, large and private training material
+bench/ladder/transcripts/
