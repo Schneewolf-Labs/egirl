@@ -166,7 +166,7 @@ def main():
             "prompt": (
                 f"In the Python project at {{dir}}, the function `{fn['name']}` in `{fn['file']}` "
                 f"has been removed — its body now raises NotImplementedError. Implement it so the "
-                f"existing test suite passes. Do not modify the tests."
+                f"existing test suite passes; run `{args.test_cmd}` to check. Do not modify the tests."
             ),
             "verify": args.test_cmd,
         })
