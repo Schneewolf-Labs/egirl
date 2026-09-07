@@ -49,7 +49,7 @@ import type { SessionMutex } from './session-mutex'
 import { isReasoningLooping, SpiralDetector, turnSignature } from './spiral-guard'
 import { type ContextStatus, computeContextStatus } from './status'
 import { reportTokenBudget, TokenBudgetTracker } from './token-budget'
-import { runToolCalls } from './tool-runner'
+import { RepeatDetector, runToolCalls } from './tool-runner'
 import type { AgentLoopDeps, AgentLoopOptions, AgentResponse } from './types'
 
 /**
@@ -229,7 +229,7 @@ export class AgentLoop {
 
     let lastThinking: string | undefined
     let isPlanning = !!planningMode
-    const seenToolCalls = new Set<string>()
+    const seenToolCalls = new RepeatDetector()
     const spiral = new SpiralDetector()
     // Turns between consolidation breaks (0 = off). Per-run option wins over config default.
     const consolidationInterval =

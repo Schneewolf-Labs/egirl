@@ -28,7 +28,7 @@
  */
 
 import { execSync, spawn } from 'node:child_process'
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 
@@ -38,6 +38,8 @@ const ROOT = join(HERE, '..', '..')
 // elsewhere. Its workspace is wiped at the start of each ladder run; see egirl.bench.toml.
 const BENCH_CONFIG = process.env.EGIRL_CONFIG ?? join(HERE, 'egirl.bench.toml')
 const BENCH_WORKSPACE = join(homedir(), '.egirl', 'bench')
+// Time allowed for egirl to boot and write an (empty) transcript file; see the stall guard.
+const STARTUP_MS = 60_000
 // --repo points the ladder at any resettable git repo; the built-in fixture is the default.
 // Generated tasks run against a throwaway clone, never a working tree.
 function repoArg(): string {
@@ -88,6 +90,7 @@ function resetFixture() {
 function runAgent(
   prompt: string,
   timeoutMs: number,
+  maxTurns: number,
   transcriptPath: string,
 ): Promise<{
   ok: boolean
@@ -95,12 +98,26 @@ function runAgent(
   turns: number
   elapsed: number
   response: string
+  stderr: string
+  stalled?: boolean
 }> {
   return new Promise((resolve) => {
     const started = Date.now()
     const child = spawn(
       'bun',
-      ['run', 'src/index.ts', 'cli', '-m', prompt, '--json', '--quiet', '--transcript', transcriptPath],
+      [
+        'run',
+        'src/index.ts',
+        'cli',
+        '-m',
+        prompt,
+        '--json',
+        '--quiet',
+        '--transcript',
+        transcriptPath,
+        '--max-turns',
+        String(maxTurns),
+      ],
       {
         cwd: ROOT,
         stdio: ['ignore', 'pipe', 'pipe'],
@@ -115,12 +132,35 @@ function runAgent(
         },
       },
     )
+    // Startup-stall guard. Roughly one run in twenty-five never reaches its first model turn:
+    // the JS thread idles while a Bun pool thread spins at 100% with a module file half-loaded
+    // (seen live: `Bun Pool 7` at 337s CPU, main thread in ep_poll, fd open on
+    // zod/v4/locales/ru.js). egirl creates the transcript file as soon as the runtime is up, so
+    // a run with no transcript after STARTUP_MS is that hang, not a slow model; kill it and let
+    // the caller retry rather than burn the whole task timeout.
+    let stalled = false
+    const startupTimer = setTimeout(() => {
+      if (!existsSync(transcriptPath)) {
+        stalled = true
+        child.kill('SIGKILL')
+      }
+    }, STARTUP_MS)
     let out = ''
     child.stdout.on('data', (d) => (out += d))
-    child.stderr.on('data', () => {})
+    // Keep the end of stderr: a run that times out with no tool calls and no transcript has
+    // left nothing else to diagnose from, and egirl logs why it stalled there.
+    let err = ''
+    child.stderr.on('data', (d) => {
+      err = (err + d).slice(-2000)
+    })
     const timer = setTimeout(() => child.kill('SIGKILL'), timeoutMs)
     child.on('close', () => {
       clearTimeout(timer)
+      clearTimeout(startupTimer)
+      if (stalled) {
+        resolve({ ok: false, toolCalls: [], turns: 0, elapsed: Date.now() - started, response: '', stderr: err, stalled: true })
+        return
+      }
       const line = out.trim().split('\n').filter(Boolean).pop()
       try {
         const p = JSON.parse(line ?? '')
@@ -130,9 +170,17 @@ function runAgent(
           turns: p.turns ?? 0,
           elapsed: Date.now() - started,
           response: p.response ?? '',
+          stderr: err,
         })
       } catch {
-        resolve({ ok: false, toolCalls: [], turns: 0, elapsed: Date.now() - started, response: '' })
+        resolve({
+          ok: false,
+          toolCalls: [],
+          turns: 0,
+          elapsed: Date.now() - started,
+          response: '',
+          stderr: err,
+        })
       }
     })
   })
@@ -146,7 +194,13 @@ function verify(cmd: string): { passed: boolean; detail: string } {
   } catch (e) {
     const err = e as { stderr?: Buffer; stdout?: Buffer }
     const text = `${err.stderr?.toString() ?? ''}${err.stdout?.toString() ?? ''}`.trim()
-    return { passed: false, detail: text.split('\n').slice(-2).join(' ').slice(0, 200) }
+    const lines = text.split('\n')
+    // Name the failing tests, not just the count: pytest's last two lines are the -x banner and
+    // the summary, which says "1 failed" without saying which, and whether the same test fails
+    // across runs is the first thing worth knowing about a failure.
+    const named = lines.filter((l) => /^(FAILED|ERROR) |^error:|^\s*✗|^\(fail\)/.test(l)).slice(0, 4)
+    const tail = lines.slice(-2).join(' ')
+    return { passed: false, detail: [...named, tail].join(' ; ').slice(0, 600) }
   }
 }
 
@@ -157,6 +211,10 @@ async function main() {
     process.exit(2)
   }
   const timeoutMs = Number(arg('timeout', '900000'))
+  // The one-shot default of 10 turns is a chat cap, not a task cap: B1.1 under the native tool
+  // shape reads, edits and re-runs the tests in 9-11 turns and was being cut off with the fix
+  // already made. 24 matches render_sft.py's budget, so a run that finishes here is a row.
+  const maxTurns = Number(arg('max-turns', '24'))
   const levels = arg('levels')?.split(',').map(Number)
   const tasksPath = arg('tasks', join(HERE, 'tasks.json'))!
   const all: Task[] = JSON.parse(readFileSync(tasksPath, 'utf8')).tasks
@@ -186,7 +244,13 @@ async function main() {
     }
     const prompt = t.prompt.replace('{dir}', FIXTURE)
     const transcript = join(transcriptDir, `${t.id}.jsonl`)
-    const run = await runAgent(prompt, timeoutMs, transcript)
+    let run = await runAgent(prompt, timeoutMs, maxTurns, transcript)
+    if (run.stalled) {
+      console.error(`L${t.level} ${t.id.padEnd(24)} STALL  no transcript after ${STARTUP_MS / 1000}s, retrying once`)
+      resetFixture()
+      if (t.setup) execSync(fillLadder(t.setup), { cwd: FIXTURE, stdio: 'pipe', shell: '/bin/bash' })
+      run = await runAgent(prompt, timeoutMs, maxTurns, transcript)
+    }
     const v = verify(fillLadder(t.verify))
     // Capture what the agent actually left behind before the next task wipes it. Failures are
     // the interesting cases — for diagnosis now, and as training material later — and a reset
@@ -230,6 +294,8 @@ async function main() {
       response: run.response.slice(0, 4000),
       diff: diff.slice(0, 40000),
       transcript,
+      // Only worth keeping when something went wrong; a pass has its transcript.
+      ...(v.passed ? {} : { stderr: run.stderr }),
     }
     results.push(row)
     console.error(

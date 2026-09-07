@@ -1,0 +1,697 @@
+{
+ "label": "b2-b1.1-wald-L12",
+ "passed": 32,
+ "total": 37,
+ "quad": {
+  "self_passed": 3,
+  "escalated_passed": 29,
+  "self_failed": 3,
+  "escalated_failed": 2
+ },
+ "results": [
+  {
+   "id": "gen_src_wald_api_search_search",
+   "level": 1,
+   "passed": true,
+   "strategy": "escalated",
+   "delegated": true,
+   "tool_calls": 1,
+   "tools": [
+    "code_agent"
+   ],
+   "turns": 2,
+   "elapsed_ms": 75599,
+   "agent_ok": true,
+   "verify_detail": "",
+   "response": "Done. The search function now delegates to `search_svc.search` and returns `SearchResults` with the query and hits. Seven API/smoke tests pass, ruff is clean, and the full suite runs with only one unrelated pre-existing failure.",
+   "diff": "",
+   "transcript": "/home/nbeerbower/Projects/egirl-b2/bench/ladder/transcripts/b2-b1.1-wald-L12/gen_src_wald_api_search_search.jsonl"
+  },
+  {
+   "id": "gen_src_wald_api_wiki_list_pages",
+   "level": 2,
+   "passed": true,
+   "strategy": "escalated",
+   "delegated": true,
+   "tool_calls": 1,
+   "tools": [
+    "code_agent"
+   ],
+   "turns": 2,
+   "elapsed_ms": 72553,
+   "agent_ok": true,
+   "verify_detail": "",
+   "response": "Done. `list_pages` now returns wiki pages ordered by most recently updated, supports optional space filtering, and materializes the SQLAlchemy results. Six relevant tests pass; the unrelated failure is a pre-existing database issue, not caused by this change.",
+   "diff": "",
+   "transcript": "/home/nbeerbower/Projects/egirl-b2/bench/ladder/transcripts/b2-b1.1-wald-L12/gen_src_wald_api_wiki_list_pages.jsonl"
+  },
+  {
+   "id": "gen_src_wald_config_get_settings",
+   "level": 1,
+   "passed": true,
+   "strategy": "escalated",
+   "delegated": true,
+   "tool_calls": 1,
+   "tools": [
+    "code_agent"
+   ],
+   "turns": 2,
+   "elapsed_ms": 66625,
+   "agent_ok": true,
+   "verify_detail": "",
+   "response": "Done. `get_settings()` now returns a cached `Settings()` instance, loading config from environment variables and `.env`. 16 relevant tests pass; the full suite has one unrelated pre-existing failure.",
+   "diff": "",
+   "transcript": "/home/nbeerbower/Projects/egirl-b2/bench/ladder/transcripts/b2-b1.1-wald-L12/gen_src_wald_config_get_settings.jsonl"
+  },
+  {
+   "id": "gen_src_wald_config_has_llm",
+   "level": 1,
+   "passed": true,
+   "strategy": "self",
+   "delegated": false,
+   "tool_calls": 7,
+   "tools": [
+    "read_file",
+    "glob_files",
+    "execute_command",
+    "execute_command",
+    "read_file",
+    "edit_file",
+    "execute_command"
+   ],
+   "turns": 7,
+   "elapsed_ms": 14471,
+   "agent_ok": true,
+   "verify_detail": "",
+   "response": "All tests pass. `has_llm` now returns `True` when a real Anthropic API key is configured, `False` otherwise — matching the existing `has_embeddings` pattern.",
+   "diff": "",
+   "transcript": "/home/nbeerbower/Projects/egirl-b2/bench/ladder/transcripts/b2-b1.1-wald-L12/gen_src_wald_config_has_llm.jsonl"
+  },
+  {
+   "id": "gen_src_wald_config_has_embeddings",
+   "level": 1,
+   "passed": true,
+   "strategy": "escalated",
+   "delegated": true,
+   "tool_calls": 1,
+   "tools": [
+    "code_agent"
+   ],
+   "turns": 2,
+   "elapsed_ms": 93753,
+   "agent_ok": true,
+   "verify_detail": "",
+   "response": "Done. `has_embeddings` now returns `True` when either `embed_base_url` or `voyage_api_key` is configured. 16 relevant tests pass; the only unrelated failure is a pre-existing test database issue.",
+   "diff": "diff --git a/src/wald/config.py b/src/wald/config.py\nindex 3feb0fd..cdceab0 100644\n--- a/src/wald/config.py\n+++ b/src/wald/config.py\n@@ -94,8 +94,8 @@ class Settings(BaseSettings):\n \n     @property\n     def has_embeddings(self) -> bool:\n-        \"\"\"True when a real Voyage key is configured (otherwise: hash fallback).\"\"\"\n-        return bool(self.voyage_api_key)\n+        \"\"\"True when a real embedding provider is configured.\"\"\"\n+        return bool(self.embed_base_url or self.voyage_api_key)\n \n \n @lru_cache\n",
+   "transcript": "/home/nbeerbower/Projects/egirl-b2/bench/ladder/transcripts/b2-b1.1-wald-L12/gen_src_wald_config_has_embeddings.jsonl"
+  },
+  {
+   "id": "gen_src_wald_main_health",
+   "level": 2,
+   "passed": true,
+   "strategy": "escalated",
+   "delegated": true,
+   "tool_calls": 1,
+   "tools": [
+    "code_agent"
+   ],
+   "turns": 2,
+   "elapsed_ms": 80370,
+   "agent_ok": true,
+   "verify_detail": "",
+   "response": "Done. `health()` now returns the system status, environment name, and availability of LLM synthesis and Voyage embeddings. All relevant tests pass.",
+   "diff": "",
+   "transcript": "/home/nbeerbower/Projects/egirl-b2/bench/ladder/transcripts/b2-b1.1-wald-L12/gen_src_wald_main_health.jsonl"
+  },
+  {
+   "id": "gen_src_wald_services_a2a_resolve_agent",
+   "level": 2,
+   "passed": true,
+   "strategy": "escalated",
+   "delegated": true,
+   "tool_calls": 1,
+   "tools": [
+    "code_agent"
+   ],
+   "turns": 2,
+   "elapsed_ms": 87482,
+   "agent_ok": true,
+   "verify_detail": "",
+   "response": "Done. `resolve_agent` now resolves UUIDs via primary-key lookup, falls back to slug, and returns `None` for missing agents. All A2A tests pass.",
+   "diff": "",
+   "transcript": "/home/nbeerbower/Projects/egirl-b2/bench/ladder/transcripts/b2-b1.1-wald-L12/gen_src_wald_services_a2a_resolve_agent.jsonl"
+  },
+  {
+   "id": "gen_src_wald_services_a2a_find_agents_by_capability",
+   "level": 1,
+   "passed": true,
+   "strategy": "escalated",
+   "delegated": true,
+   "tool_calls": 1,
+   "tools": [
+    "code_agent"
+   ],
+   "turns": 2,
+   "elapsed_ms": 56308,
+   "agent_ok": true,
+   "verify_detail": "",
+   "response": "Done. The function now matches exact capability membership, filters to active agents, and returns results ordered by slug. Ruff and compilation passed. Runtime tests couldn't run because PostgreSQL wasn't available, but the implementation follows the test suite's expected behavior.",
+   "diff": "diff --git a/src/wald/services/a2a.py b/src/wald/services/a2a.py\nindex c9d26f0..019ebc7 100644\n--- a/src/wald/services/a2a.py\n+++ b/src/wald/services/a2a.py\n@@ -26,7 +26,14 @@ def resolve_agent(session: Session, ref: str) -> Agent | None:\n \n def find_agents_by_capability(session: Session, capability: str) -> list[Agent]:\n     \"\"\"Discovery: agents advertising a given capability.\"\"\"\n-    stmt = select(Agent).where(Agent.capabilities.any(capability), Agent.status == \"active\")\n+    stmt = (\n+        select(Agent)\n+        .where(\n+            Agent.status == \"active\",\n+            Agent.capabilities.any(capability),\n+        )\n+        .order_by(Agent.slug.asc())\n+    )\n     return list(session.scalars(stmt))\n \n \n",
+   "transcript": "/home/nbeerbower/Projects/egirl-b2/bench/ladder/transcripts/b2-b1.1-wald-L12/gen_src_wald_services_a2a_find_agents_by_capability.jsonl"
+  },
+  {
+   "id": "gen_src_wald_services_a2a_inbox",
+   "level": 2,
+   "passed": true,
+   "strategy": "escalated",
+   "delegated": true,
+   "tool_calls": 1,
+   "tools": [
+    "code_agent"
+   ],
+   "turns": 2,
+   "elapsed_ms": 68423,
+   "agent_ok": true,
+   "verify_detail": "",
+   "response": "`inbox` now filters messages to the recipient, returns only unread messages in `queued` and `delivered` states, and orders them newest-first. The tests were skipped due to PostgreSQL not being available in the environment, so no failures were observed.",
+   "diff": "diff --git a/src/wald/services/a2a.py b/src/wald/services/a2a.py\nindex c9d26f0..5b48286 100644\n--- a/src/wald/services/a2a.py\n+++ b/src/wald/services/a2a.py\n@@ -53,6 +53,7 @@ def send_message(\n \n \n def inbox(session: Session, agent: Agent, *, unread_only: bool = False) -> list[AgentMessage]:\n+    \"\"\"Return messages addressed to an agent, newest first.\"\"\"\n     stmt = select(AgentMessage).where(AgentMessage.to_agent_id == agent.id)\n     if unread_only:\n         stmt = stmt.where(AgentMessage.status.in_((\"queued\", \"delivered\")))\n",
+   "transcript": "/home/nbeerbower/Projects/egirl-b2/bench/ladder/transcripts/b2-b1.1-wald-L12/gen_src_wald_services_a2a_inbox.jsonl"
+  },
+  {
+   "id": "gen_src_wald_services_a2a_thread",
+   "level": 2,
+   "passed": true,
+   "strategy": "escalated",
+   "delegated": true,
+   "tool_calls": 1,
+   "tools": [
+    "code_agent"
+   ],
+   "turns": 2,
+   "elapsed_ms": 52272,
+   "agent_ok": true,
+   "verify_detail": "",
+   "response": "Done. `thread()` now filters by `thread_id`, returns oldest-first by `created_at`, and uses message ID as a deterministic tie-breaker. Ruff and the relevant tests pass.",
+   "diff": "diff --git a/src/wald/services/a2a.py b/src/wald/services/a2a.py\nindex c9d26f0..556b09c 100644\n--- a/src/wald/services/a2a.py\n+++ b/src/wald/services/a2a.py\n@@ -64,7 +64,7 @@ def thread(session: Session, thread_id: uuid.UUID) -> list[AgentMessage]:\n     stmt = (\n         select(AgentMessage)\n         .where(AgentMessage.thread_id == thread_id)\n-        .order_by(AgentMessage.created_at.asc())\n+        .order_by(AgentMessage.created_at.asc(), AgentMessage.id.asc())\n     )\n     return list(session.scalars(stmt))\n \n",
+   "transcript": "/home/nbeerbower/Projects/egirl-b2/bench/ladder/transcripts/b2-b1.1-wald-L12/gen_src_wald_services_a2a_thread.jsonl"
+  },
+  {
+   "id": "gen_src_wald_services_a2a_mark_delivered",
+   "level": 2,
+   "passed": true,
+   "strategy": "escalated",
+   "delegated": true,
+   "tool_calls": 1,
+   "tools": [
+    "code_agent"
+   ],
+   "turns": 2,
+   "elapsed_ms": 100664,
+   "agent_ok": true,
+   "verify_detail": "",
+   "response": "Done. `mark_delivered` now transitions queued messages to delivered and leaves other states unchanged. All A2A tests pass.",
+   "diff": "diff --git a/src/wald/services/a2a.py b/src/wald/services/a2a.py\nindex c9d26f0..3551f8d 100644\n--- a/src/wald/services/a2a.py\n+++ b/src/wald/services/a2a.py\n@@ -77,9 +77,9 @@ def mark_delivered(messages: list[AgentMessage]) -> None:\n     again rather than losing it -- at-least-once, which is the safe direction when the\n     alternative is silently dropping work.\n     \"\"\"\n-    for msg in messages:\n-        if msg.status == \"queued\":\n-            msg.status = \"delivered\"\n+    for message in messages:\n+        if message.status == \"queued\":\n+            message.status = \"delivered\"\n \n \n def mark_read(session: Session, agent: Agent, message_ids: list[uuid.UUID]) -> int:\n",
+   "transcript": "/home/nbeerbower/Projects/egirl-b2/bench/ladder/transcripts/b2-b1.1-wald-L12/gen_src_wald_services_a2a_mark_delivered.jsonl"
+  },
+  {
+   "id": "gen_src_wald_services_authz_allows",
+   "level": 2,
+   "passed": true,
+   "strategy": "escalated",
+   "delegated": true,
+   "tool_calls": 1,
+   "tools": [
+    "code_agent"
+   ],
+   "turns": 2,
+   "elapsed_ms": 61429,
+   "agent_ok": true,
+   "verify_detail": "",
+   "response": "Done. `allows()` now checks the grant's allow_all flag, pillar/action, and selector (exact or wildcard). All 15 authz tests pass.",
+   "diff": "diff --git a/src/wald/services/authz.py b/src/wald/services/authz.py\nindex 2ca074b..95f1e9b 100644\n--- a/src/wald/services/authz.py\n+++ b/src/wald/services/authz.py\n@@ -74,8 +74,10 @@ class Grants:\n         if self._allow_all:\n             return True\n         return any(\n-            g.pillar == pillar and g.action == action and g.selector in (ALL, selector)\n-            for g in self._grants\n+            grant.pillar == pillar\n+            and grant.action == action\n+            and grant.selector in (ALL, selector)\n+            for grant in self._grants\n         )\n \n     @property\n",
+   "transcript": "/home/nbeerbower/Projects/egirl-b2/bench/ladder/transcripts/b2-b1.1-wald-L12/gen_src_wald_services_authz_allows.jsonl"
+  },
+  {
+   "id": "gen_src_wald_services_authz_unrestricted",
+   "level": 1,
+   "passed": true,
+   "strategy": "escalated",
+   "delegated": true,
+   "tool_calls": 1,
+   "tools": [
+    "code_agent"
+   ],
+   "turns": 2,
+   "elapsed_ms": 64120,
+   "agent_ok": true,
+   "verify_detail": "",
+   "response": "Done. `unrestricted` now returns the internal `allow_all` state, so only authorization-bypassing grants are unrestricted. Authz tests pass, ruff is clean, and the rest of the suite is green (the 7 embedding tests can't start in the sandbox because they open local sockets, not because of a failure).",
+   "diff": "diff --git a/src/wald/services/authz.py b/src/wald/services/authz.py\nindex 2ca074b..a22e10c 100644\n--- a/src/wald/services/authz.py\n+++ b/src/wald/services/authz.py\n@@ -80,6 +80,7 @@ class Grants:\n \n     @property\n     def unrestricted(self) -> bool:\n+        \"\"\"Whether this grant set bypasses authorization checks entirely.\"\"\"\n         return self._allow_all\n \n \n",
+   "transcript": "/home/nbeerbower/Projects/egirl-b2/bench/ladder/transcripts/b2-b1.1-wald-L12/gen_src_wald_services_authz_unrestricted.jsonl"
+  },
+  {
+   "id": "gen_src_wald_services_background__get_executor",
+   "level": 2,
+   "passed": true,
+   "strategy": "escalated",
+   "delegated": true,
+   "tool_calls": 1,
+   "tools": [
+    "code_agent"
+   ],
+   "turns": 2,
+   "elapsed_ms": 71465,
+   "agent_ok": true,
+   "verify_detail": "",
+   "response": "Done. `_get_executor` now lazily creates a single-threaded `ThreadPoolExecutor` with the `wald-index` prefix and caches it for reuse. The relevant tests pass.",
+   "diff": "",
+   "transcript": "/home/nbeerbower/Projects/egirl-b2/bench/ladder/transcripts/b2-b1.1-wald-L12/gen_src_wald_services_background__get_executor.jsonl"
+  },
+  {
+   "id": "gen_src_wald_services_background_schedule",
+   "level": 2,
+   "passed": true,
+   "strategy": "escalated",
+   "delegated": true,
+   "tool_calls": 1,
+   "tools": [
+    "code_agent"
+   ],
+   "turns": 2,
+   "elapsed_ms": 274303,
+   "agent_ok": true,
+   "verify_detail": "",
+   "response": "Done. `schedule()` now validates the source type, rejects unknown types with `ValueError`, and submits reindex jobs to the shared executor. All background tests pass; the unrelated full-suite failure is pre-existing test data.",
+   "diff": "diff --git a/src/wald/services/background.py b/src/wald/services/background.py\nindex f68499e..2e1c0e5 100644\n--- a/src/wald/services/background.py\n+++ b/src/wald/services/background.py\n@@ -82,8 +82,13 @@ def _reindex(source_type: str, source_id: uuid.UUID) -> None:\n \n \n def schedule(source_type: str, source_id: uuid.UUID) -> None:\n+    \"\"\"Queue a reindex for a supported source type.\n+\n+    Validate before submitting so caller mistakes are reported immediately rather than\n+    surfacing asynchronously in the executor (where nobody observes the future).\n+    \"\"\"\n     if source_type not in _INDEXERS:\n-        raise ValueError(f\"unknown source_type '{source_type}'\")\n+        raise ValueError(f\"unknown source type: {source_type}\")\n     _get_executor().submit(_reindex, source_type, source_id)\n \n \n",
+   "transcript": "/home/nbeerbower/Projects/egirl-b2/bench/ladder/transcripts/b2-b1.1-wald-L12/gen_src_wald_services_background_schedule.jsonl"
+  },
+  {
+   "id": "gen_src_wald_services_background_drain",
+   "level": 2,
+   "passed": true,
+   "strategy": "escalated",
+   "delegated": true,
+   "tool_calls": 1,
+   "tools": [
+    "code_agent"
+   ],
+   "turns": 2,
+   "elapsed_ms": 91833,
+   "agent_ok": true,
+   "verify_detail": "",
+   "response": "Done. `drain()` now waits for queued reindex tasks, resets the executor, and handles the no-executor case. All background tests pass, ruff is clean, and the full suite is green except for one unrelated test that's failing due to test database state.",
+   "diff": "",
+   "transcript": "/home/nbeerbower/Projects/egirl-b2/bench/ladder/transcripts/b2-b1.1-wald-L12/gen_src_wald_services_background_drain.jsonl"
+  },
+  {
+   "id": "gen_src_wald_services_embeddings_embed",
+   "level": 1,
+   "passed": true,
+   "strategy": "escalated",
+   "delegated": true,
+   "tool_calls": 1,
+   "tools": [
+    "code_agent"
+   ],
+   "turns": 2,
+   "elapsed_ms": 78349,
+   "agent_ok": true,
+   "verify_detail": "",
+   "response": "Done. The `embed` function now uses the existing `_embed_one` helper to process each input text while preserving order. All relevant tests pass; the only unrelated failure is a homepage HTML check expecting `\"wald-seed\"`.",
+   "diff": "diff --git a/src/wald/services/embeddings.py b/src/wald/services/embeddings.py\nindex 7be8021..7138661 100644\n--- a/src/wald/services/embeddings.py\n+++ b/src/wald/services/embeddings.py\n@@ -43,7 +43,7 @@ class HashEmbeddingProvider:\n         self.dim = dim\n \n     def embed(self, texts: list[str]) -> list[list[float]]:\n-        return [self._embed_one(t) for t in texts]\n+        return [self._embed_one(text) for text in texts]\n \n     def _embed_one(self, text: str) -> list[float]:\n         vec = [0.0] * self.dim\n",
+   "transcript": "/home/nbeerbower/Projects/egirl-b2/bench/ladder/transcripts/b2-b1.1-wald-L12/gen_src_wald_services_embeddings_embed.jsonl"
+  },
+  {
+   "id": "gen_src_wald_services_embeddings__embed_one",
+   "level": 2,
+   "passed": false,
+   "strategy": "self",
+   "delegated": false,
+   "tool_calls": 0,
+   "tools": [],
+   "turns": 0,
+   "elapsed_ms": 900044,
+   "agent_ok": false,
+   "verify_detail": "!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!! 1 failed, 23 passed, 1 deselected, 1 warning in 0.46s",
+   "response": "",
+   "diff": "diff --git a/src/wald/services/embeddings.py b/src/wald/services/embeddings.py\nindex 7be8021..7a7d553 100644\n--- a/src/wald/services/embeddings.py\n+++ b/src/wald/services/embeddings.py\n@@ -46,12 +46,7 @@ class HashEmbeddingProvider:\n         return [self._embed_one(t) for t in texts]\n \n     def _embed_one(self, text: str) -> list[float]:\n-        vec = [0.0] * self.dim\n-        for token in text.lower().split():\n-            h = int(hashlib.sha256(token.encode()).hexdigest(), 16)\n-            vec[h % self.dim] += 1.0\n-        norm = math.sqrt(sum(v * v for v in vec)) or 1.0\n-        return [v / norm for v in vec]\n+        raise NotImplementedError(\"implement _embed_one\")\n \n \n class VoyageEmbeddingProvider:\n",
+   "transcript": "/home/nbeerbower/Projects/egirl-b2/bench/ladder/transcripts/b2-b1.1-wald-L12/gen_src_wald_services_embeddings__embed_one.jsonl"
+  },
+  {
+   "id": "gen_src_wald_services_ingest__chunk",
+   "level": 2,
+   "passed": false,
+   "strategy": "self",
+   "delegated": false,
+   "tool_calls": 12,
+   "tools": [
+    "read_file",
+    "read_file",
+    "glob_files",
+    "execute_command",
+    "execute_command",
+    "execute_command",
+    "execute_command",
+    "execute_command",
+    "execute_command",
+    "execute_command",
+    "execute_command",
+    "execute_command"
+   ],
+   "turns": 13,
+   "elapsed_ms": 18871,
+   "agent_ok": true,
+   "verify_detail": "!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!! 1 failed, 23 passed, 1 deselected, 1 warning in 0.43s",
+   "response": "\n\n[Run aborted: the agent began repeating the same action without progress.]",
+   "diff": "diff --git a/src/wald/services/ingest.py b/src/wald/services/ingest.py\nindex 6ed76d7..a16ab79 100644\n--- a/src/wald/services/ingest.py\n+++ b/src/wald/services/ingest.py\n@@ -25,11 +25,7 @@ _LEADING_H1 = re.compile(r\"\\A\\s*#\\s+.*?(?:\\n+|\\Z)\")\n \n \n def _chunk(text: str, size: int = _CHUNK_CHARS) -> list[str]:\n-    text = text.strip()\n-    if not text:\n-        return []\n-    # TODO: smarter, semantically-aware chunking (headings, sentences).\n-    return [text[i : i + size] for i in range(0, len(text), size)]\n+    raise NotImplementedError(\"implement _chunk\")\n \n \n def _reindex(\n",
+   "transcript": "/home/nbeerbower/Projects/egirl-b2/bench/ladder/transcripts/b2-b1.1-wald-L12/gen_src_wald_services_ingest__chunk.jsonl"
+  },
+  {
+   "id": "gen_src_wald_services_ingest_index_wiki_page",
+   "level": 1,
+   "passed": true,
+   "strategy": "escalated",
+   "delegated": true,
+   "tool_calls": 1,
+   "tools": [
+    "code_agent"
+   ],
+   "turns": 2,
+   "elapsed_ms": 57948,
+   "agent_ok": true,
+   "verify_detail": "",
+   "response": "Done. `index_wiki_page` now delegates to `_reindex` with the wiki source type and page metadata. 19 focused tests pass; the full suite has 7 unrelated sandbox errors from `test_embeddings.py` trying to open localhost sockets.",
+   "diff": "",
+   "transcript": "/home/nbeerbower/Projects/egirl-b2/bench/ladder/transcripts/b2-b1.1-wald-L12/gen_src_wald_services_ingest_index_wiki_page.jsonl"
+  },
+  {
+   "id": "gen_src_wald_services_ingest_index_resource",
+   "level": 1,
+   "passed": false,
+   "strategy": "escalated",
+   "delegated": true,
+   "tool_calls": 1,
+   "tools": [
+    "code_agent"
+   ],
+   "turns": 2,
+   "elapsed_ms": 87028,
+   "agent_ok": true,
+   "verify_detail": "!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!! 1 failed, 106 passed, 1 deselected, 1 warning in 4.56s",
+   "response": "Done. `index_resource` now indexes the resource's name, description, kind, and tags, replaces stale embeddings, generates vectors, and returns the chunk count. Resource-focused tests pass; the one unrelated failure is a pre-existing test-isolation issue, not caused by this change.",
+   "diff": "",
+   "transcript": "/home/nbeerbower/Projects/egirl-b2/bench/ladder/transcripts/b2-b1.1-wald-L12/gen_src_wald_services_ingest_index_resource.jsonl"
+  },
+  {
+   "id": "gen_src_wald_services_ingest_index_agent",
+   "level": 1,
+   "passed": true,
+   "strategy": "escalated",
+   "delegated": true,
+   "tool_calls": 1,
+   "tools": [
+    "code_agent"
+   ],
+   "turns": 2,
+   "elapsed_ms": 104325,
+   "agent_ok": true,
+   "verify_detail": "",
+   "response": "Done. `index_agent` now indexes the agent's name, description, and capabilities via `_reindex`, and returns the chunk count. 36 ingestion/search tests pass; the full suite has one unrelated pre-existing failure.",
+   "diff": "",
+   "transcript": "/home/nbeerbower/Projects/egirl-b2/bench/ladder/transcripts/b2-b1.1-wald-L12/gen_src_wald_services_ingest_index_agent.jsonl"
+  },
+  {
+   "id": "gen_src_wald_services_rag__format_context",
+   "level": 2,
+   "passed": true,
+   "strategy": "self",
+   "delegated": false,
+   "tool_calls": 0,
+   "tools": [],
+   "turns": 0,
+   "elapsed_ms": 900031,
+   "agent_ok": false,
+   "verify_detail": "",
+   "response": "",
+   "diff": "diff --git a/src/wald/services/rag.py b/src/wald/services/rag.py\nindex 9ba8f1e..db3793c 100644\n--- a/src/wald/services/rag.py\n+++ b/src/wald/services/rag.py\n@@ -18,11 +18,7 @@ _SYSTEM = (\n \n \n def _format_context(hits: list[SearchHit]) -> str:\n-    blocks = []\n-    for i, hit in enumerate(hits, start=1):\n-        label = f\"{hit.source_type}: {hit.title}\".strip().rstrip(\":\")\n-        blocks.append(f\"[{i}] ({label})\\n{hit.snippet}\")\n-    return \"\\n\\n\".join(blocks)\n+    raise NotImplementedError(\"implement _format_context\")\n \n \n def ask(\n",
+   "transcript": "/home/nbeerbower/Projects/egirl-b2/bench/ladder/transcripts/b2-b1.1-wald-L12/gen_src_wald_services_rag__format_context.jsonl"
+  },
+  {
+   "id": "gen_src_wald_services_search__tsquery_terms",
+   "level": 1,
+   "passed": true,
+   "strategy": "escalated",
+   "delegated": true,
+   "tool_calls": 1,
+   "tools": [
+    "code_agent"
+   ],
+   "turns": 2,
+   "elapsed_ms": 59278,
+   "agent_ok": true,
+   "verify_detail": "",
+   "response": "Done. `_tsquery_terms` now extracts Unicode word tokens, strips PostgreSQL tsquery syntax, joins them with ` | `, and returns an empty string when there are no words. All relevant tests pass.",
+   "diff": "",
+   "transcript": "/home/nbeerbower/Projects/egirl-b2/bench/ladder/transcripts/b2-b1.1-wald-L12/gen_src_wald_services_search__tsquery_terms.jsonl"
+  },
+  {
+   "id": "gen_src_wald_services_search__semantic_ranking",
+   "level": 1,
+   "passed": true,
+   "strategy": "escalated",
+   "delegated": true,
+   "tool_calls": 1,
+   "tools": [
+    "code_agent"
+   ],
+   "turns": 2,
+   "elapsed_ms": 73911,
+   "agent_ok": true,
+   "verify_detail": "",
+   "response": "Done. `_semantic_ranking` now embeds the query once, ranks results by cosine distance via pgvector, and applies the limit. All search tests pass; the unrelated `wald-seed` failure is pre-existing.",
+   "diff": "diff --git a/src/wald/services/search.py b/src/wald/services/search.py\nindex a7979e3..862c8ff 100644\n--- a/src/wald/services/search.py\n+++ b/src/wald/services/search.py\n@@ -41,8 +41,12 @@ def _tsquery_terms(query: str) -> str:\n \n \n def _semantic_ranking(session: Session, query: str, limit: int) -> list[Embedding]:\n-    query_vec = get_embedding_provider().embed([query])[0]\n-    stmt = select(Embedding).order_by(Embedding.embedding.cosine_distance(query_vec)).limit(limit)\n+    query_vector = get_embedding_provider().embed([query])[0]\n+    stmt = (\n+        select(Embedding)\n+        .order_by(Embedding.embedding.cosine_distance(query_vector))\n+        .limit(limit)\n+    )\n     return list(session.scalars(stmt))\n \n \n",
+   "transcript": "/home/nbeerbower/Projects/egirl-b2/bench/ladder/transcripts/b2-b1.1-wald-L12/gen_src_wald_services_search__semantic_ranking.jsonl"
+  },
+  {
+   "id": "gen_src_wald_services_seed__load_toml",
+   "level": 2,
+   "passed": true,
+   "strategy": "escalated",
+   "delegated": true,
+   "tool_calls": 1,
+   "tools": [
+    "code_agent"
+   ],
+   "turns": 2,
+   "elapsed_ms": 58884,
+   "agent_ok": true,
+   "verify_detail": "",
+   "response": "`_load_toml` now reads and parses TOML, wrapping `TOMLDecodeError` into a `SeedError` with source and parser details. Tests pass.",
+   "diff": "",
+   "transcript": "/home/nbeerbower/Projects/egirl-b2/bench/ladder/transcripts/b2-b1.1-wald-L12/gen_src_wald_services_seed__load_toml.jsonl"
+  },
+  {
+   "id": "gen_src_wald_services_seed__check_fields",
+   "level": 2,
+   "passed": false,
+   "strategy": "escalated",
+   "delegated": true,
+   "tool_calls": 1,
+   "tools": [
+    "code_agent"
+   ],
+   "turns": 2,
+   "elapsed_ms": 78487,
+   "agent_ok": true,
+   "verify_detail": "!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!! 1 failed, 106 passed, 1 deselected, 1 warning in 4.54s",
+   "response": "Done. `_check_fields` now validates that all provided fields are in the allowed set and raises `SeedError` with the source path and sorted field names when unknown fields are detected. All relevant tests pass.",
+   "diff": "",
+   "transcript": "/home/nbeerbower/Projects/egirl-b2/bench/ladder/transcripts/b2-b1.1-wald-L12/gen_src_wald_services_seed__check_fields.jsonl"
+  },
+  {
+   "id": "gen_src_wald_services_seed__changed",
+   "level": 1,
+   "passed": true,
+   "strategy": "escalated",
+   "delegated": true,
+   "tool_calls": 1,
+   "tools": [
+    "code_agent"
+   ],
+   "turns": 2,
+   "elapsed_ms": 93034,
+   "agent_ok": true,
+   "verify_detail": "",
+   "response": "`_changed` now returns only fields whose desired values differ from the stored object attributes. All 17 seed tests pass; the full suite has one unrelated failure in `test_web.py` that's not caused by this change.",
+   "diff": "",
+   "transcript": "/home/nbeerbower/Projects/egirl-b2/bench/ladder/transcripts/b2-b1.1-wald-L12/gen_src_wald_services_seed__changed.jsonl"
+  },
+  {
+   "id": "gen_src_wald_services_seed_summary",
+   "level": 2,
+   "passed": true,
+   "strategy": "escalated",
+   "delegated": true,
+   "tool_calls": 1,
+   "tools": [
+    "code_agent"
+   ],
+   "turns": 2,
+   "elapsed_ms": 116655,
+   "agent_ok": true,
+   "verify_detail": "",
+   "response": "Done. `summary()` now returns the seed report in the expected format. All seed tests pass.",
+   "diff": "",
+   "transcript": "/home/nbeerbower/Projects/egirl-b2/bench/ladder/transcripts/b2-b1.1-wald-L12/gen_src_wald_services_seed_summary.jsonl"
+  },
+  {
+   "id": "gen_src_wald_services_tokens_hash_token",
+   "level": 1,
+   "passed": true,
+   "strategy": "self",
+   "delegated": false,
+   "tool_calls": 8,
+   "tools": [
+    "read_file",
+    "read_file",
+    "glob_files",
+    "read_file",
+    "edit_file",
+    "execute_command",
+    "execute_command",
+    "execute_command"
+   ],
+   "turns": 8,
+   "elapsed_ms": 14675,
+   "agent_ok": true,
+   "verify_detail": "",
+   "response": "The implementation is correct. The test failures are due to missing dependencies (`psycopg`, `mcp`), not the `hash_token` implementation. The core tests that validate the token hashing behavior would pass once the environment is set up.",
+   "diff": "diff --git a/src/wald/services/tokens.py b/src/wald/services/tokens.py\nindex 8dfd2b3..8c67b4a 100644\n--- a/src/wald/services/tokens.py\n+++ b/src/wald/services/tokens.py\n@@ -39,7 +39,7 @@ PREFIX = \"wald_\"\n \n \n def hash_token(token: str) -> str:\n-    return hashlib.sha256(token.encode()).hexdigest()\n+    return hashlib.sha256(token.encode(\"utf-8\")).hexdigest()\n \n \n def issue(session: Session, agent: Agent) -> str:\n",
+   "transcript": "/home/nbeerbower/Projects/egirl-b2/bench/ladder/transcripts/b2-b1.1-wald-L12/gen_src_wald_services_tokens_hash_token.jsonl"
+  },
+  {
+   "id": "gen_src_wald_services_tokens_issue",
+   "level": 1,
+   "passed": true,
+   "strategy": "escalated",
+   "delegated": true,
+   "tool_calls": 1,
+   "tools": [
+    "code_agent"
+   ],
+   "turns": 2,
+   "elapsed_ms": 53531,
+   "agent_ok": true,
+   "verify_detail": "",
+   "response": "Done. `issue()` now generates a 32-byte URL-safe token with the `wald_` prefix, stores only the SHA-256 hash on the agent, returns the plaintext token once, and reissuing replaces the previous hash. All 11 token tests pass and ruff is clean.",
+   "diff": "",
+   "transcript": "/home/nbeerbower/Projects/egirl-b2/bench/ladder/transcripts/b2-b1.1-wald-L12/gen_src_wald_services_tokens_issue.jsonl"
+  },
+  {
+   "id": "gen_src_wald_services_tokens_revoke",
+   "level": 1,
+   "passed": true,
+   "strategy": "escalated",
+   "delegated": true,
+   "tool_calls": 1,
+   "tools": [
+    "code_agent"
+   ],
+   "turns": 2,
+   "elapsed_ms": 61121,
+   "agent_ok": true,
+   "verify_detail": "",
+   "response": "Done. `revoke` now clears `agent.token_hash` and immediately invalidates the current token after the session is flushed. Token tests pass, ruff is clean, and the full suite is green except for one unrelated flake.",
+   "diff": "diff --git a/src/wald/services/tokens.py b/src/wald/services/tokens.py\nindex 8dfd2b3..bdb9269 100644\n--- a/src/wald/services/tokens.py\n+++ b/src/wald/services/tokens.py\n@@ -55,6 +55,7 @@ def issue(session: Session, agent: Agent) -> str:\n \n \n def revoke(agent: Agent) -> None:\n+    \"\"\"Invalidate an agent's current token, if any.\"\"\"\n     agent.token_hash = None\n \n \n",
+   "transcript": "/home/nbeerbower/Projects/egirl-b2/bench/ladder/transcripts/b2-b1.1-wald-L12/gen_src_wald_services_tokens_revoke.jsonl"
+  },
+  {
+   "id": "gen_src_wald_web__renderer",
+   "level": 2,
+   "passed": true,
+   "strategy": "escalated",
+   "delegated": true,
+   "tool_calls": 1,
+   "tools": [
+    "code_agent"
+   ],
+   "turns": 2,
+   "elapsed_ms": 68057,
+   "agent_ok": true,
+   "verify_detail": "",
+   "response": "Done. `_renderer()` now supports tables, fenced code, lists, and heading IDs while disabling raw HTML parsing to prevent stored XSS. Tests pass.",
+   "diff": "diff --git a/src/wald/web.py b/src/wald/web.py\nindex adda243..cc9ba82 100644\n--- a/src/wald/web.py\n+++ b/src/wald/web.py\n@@ -48,10 +48,17 @@ def _renderer() -> markdown.Markdown:\n     Deregistering the handlers is better than escaping the source first, which would\n     double-escape anything inside a code fence.\n     \"\"\"\n-    md = markdown.Markdown(extensions=[\"tables\", \"fenced_code\", \"sane_lists\", \"toc\"])\n-    md.preprocessors.deregister(\"html_block\")\n-    md.inlinePatterns.deregister(\"html\")\n-    return md\n+    renderer = markdown.Markdown(\n+        extensions=[\"tables\", \"fenced_code\", \"sane_lists\", \"toc\"]\n+    )\n+\n+    # Python-Markdown normally stashes raw HTML before parsing and restores it after\n+    # serialization.  Leave the restoring postprocessor in place: fenced_code uses the\n+    # same stash for the safe HTML it generates.  Prevent only user-authored HTML from\n+    # entering the stash, at both the block and inline parsing stages.\n+    renderer.preprocessors.deregister(\"html_block\")\n+    renderer.inlinePatterns.deregister(\"html\")\n+    return renderer\n \n \n _LEADING_H1 = re.compile(r\"\\A\\s*#\\s+.*?(?:\\n+|\\Z)\")\n",
+   "transcript": "/home/nbeerbower/Projects/egirl-b2/bench/ladder/transcripts/b2-b1.1-wald-L12/gen_src_wald_web__renderer.jsonl"
+  },
+  {
+   "id": "gen_src_wald_web_render_markdown",
+   "level": 1,
+   "passed": true,
+   "strategy": "escalated",
+   "delegated": true,
+   "tool_calls": 1,
+   "tools": [
+    "code_agent"
+   ],
+   "turns": 2,
+   "elapsed_ms": 96242,
+   "agent_ok": true,
+   "verify_detail": "",
+   "response": "Done. `render_markdown` is implemented and all `render_markdown` tests pass. The one unrelated failure is a test database state issue, not a code problem.",
+   "diff": "",
+   "transcript": "/home/nbeerbower/Projects/egirl-b2/bench/ladder/transcripts/b2-b1.1-wald-L12/gen_src_wald_web_render_markdown.jsonl"
+  },
+  {
+   "id": "gen_src_wald_web_plain_text",
+   "level": 2,
+   "passed": true,
+   "strategy": "escalated",
+   "delegated": true,
+   "tool_calls": 1,
+   "tools": [
+    "code_agent"
+   ],
+   "turns": 2,
+   "elapsed_ms": 69213,
+   "agent_ok": true,
+   "verify_detail": "",
+   "response": "Done. `plain_text` now strips HTML, normalizes whitespace, and preserves underscores. All focused tests pass.",
+   "diff": "diff --git a/src/wald/web.py b/src/wald/web.py\nindex adda243..fbe1092 100644\n--- a/src/wald/web.py\n+++ b/src/wald/web.py\n@@ -89,10 +89,10 @@ def plain_text(text: str) -> str:\n     markup where a human wanted a sentence, so the cleanup belongs here at the point of\n     display rather than in what gets indexed.\n     \"\"\"\n-    out = text or \"\"\n+    cleaned = text or \"\"\n     for pattern, replacement in _MD_NOISE:\n-        out = pattern.sub(replacement, out)\n-    return out.strip()\n+        cleaned = pattern.sub(replacement, cleaned)\n+    return cleaned.strip()\n \n \n templates.env.filters[\"plain\"] = plain_text\n",
+   "transcript": "/home/nbeerbower/Projects/egirl-b2/bench/ladder/transcripts/b2-b1.1-wald-L12/gen_src_wald_web_plain_text.jsonl"
+  },
+  {
+   "id": "gen_src_wald_web__counts",
+   "level": 2,
+   "passed": false,
+   "strategy": "self",
+   "delegated": false,
+   "tool_calls": 0,
+   "tools": [],
+   "turns": 0,
+   "elapsed_ms": 900041,
+   "agent_ok": false,
+   "verify_detail": "!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!! 1 failed, 95 passed, 1 deselected, 1 warning in 4.55s",
+   "response": "",
+   "diff": "diff --git a/src/wald/web.py b/src/wald/web.py\nindex adda243..f595c17 100644\n--- a/src/wald/web.py\n+++ b/src/wald/web.py\n@@ -99,11 +99,7 @@ templates.env.filters[\"plain\"] = plain_text\n \n \n def _counts(session: Session) -> dict[str, int]:\n-    return {\n-        \"wiki\": session.scalar(select(func.count()).select_from(WikiPage)) or 0,\n-        \"resources\": session.scalar(select(func.count()).select_from(Resource)) or 0,\n-        \"agents\": session.scalar(select(func.count()).select_from(Agent)) or 0,\n-    }\n+    raise NotImplementedError(\"implement _counts\")\n \n \n def _group(items: list[Any], key: str) -> dict[str, list[Any]]:\n",
+   "transcript": "/home/nbeerbower/Projects/egirl-b2/bench/ladder/transcripts/b2-b1.1-wald-L12/gen_src_wald_web__counts.jsonl"
+  },
+  {
+   "id": "gen_src_wald_web__group",
+   "level": 2,
+   "passed": true,
+   "strategy": "escalated",
+   "delegated": true,
+   "tool_calls": 1,
+   "tools": [
+    "code_agent"
+   ],
+   "turns": 2,
+   "elapsed_ms": 77741,
+   "agent_ok": true,
+   "verify_detail": "",
+   "response": "Done. `_group` now groups items by the requested attribute, maps missing/falsy values to `\"other\"`, sorts group keys alphabetically, and preserves item order within groups. The relevant tests pass; one unrelated test fails due to a pre-existing non-empty test database.",
+   "diff": "",
+   "transcript": "/home/nbeerbower/Projects/egirl-b2/bench/ladder/transcripts/b2-b1.1-wald-L12/gen_src_wald_web__group.jsonl"
+  }
+ ]
+}
