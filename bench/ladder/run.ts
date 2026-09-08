@@ -187,6 +187,11 @@ function runAgent(
           // episodes counted as escalation trajectories. When the output is training data rather
           // than a score, that means the dataset itself is partly a sample of noise.
           EGIRL_LOCAL_TEMPERATURE: process.env.EGIRL_LOCAL_TEMPERATURE ?? '0',
+          // A delegated Codex run once did `pip install torch` to "fix" a sandbox and replaced the
+          // machine's CUDA torch with a CPU build, which broke every later grimoire verify. pip
+          // honours this: installs outside a virtualenv are refused. `uv run` and project venvs
+          // are unaffected, which is where a sandbox's dependencies belong anyway.
+          PIP_REQUIRE_VIRTUALENV: '1',
         },
       },
     )
