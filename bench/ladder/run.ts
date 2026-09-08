@@ -79,7 +79,41 @@ function arg(name: string, fallback?: string): string | undefined {
  * would either be a broken gitlink or a submodule, and neither survives a clone cleanly. The
  * fixture is just tracked files, so checkout plus clean restores it exactly.
  */
+/**
+ * Kill what a task left running in the sandbox. A model that starts a dev server or a fake
+ * peer in the background (`bun run scripts/fake-egirl.ts --port 3999 &`) outlives its run, and
+ * the next task whose tests want that port fails for a reason that has nothing to do with the
+ * model. Matched on the fixture path in the command line; the runner and its own ancestors are
+ * spared, since `--repo` puts the same path in the runner's argv.
+ */
+function killStrays() {
+  const spare = new Set<number>()
+  let pid = process.pid
+  while (pid > 1) {
+    spare.add(pid)
+    try {
+      pid = Number(execSync(`ps -o ppid= -p ${pid}`).toString().trim())
+    } catch {
+      break
+    }
+  }
+  let pids: number[] = []
+  try {
+    pids = execSync(`pgrep -f -- '${FIXTURE}'`).toString().split(/\s+/).filter(Boolean).map(Number)
+  } catch {
+    return // pgrep exits 1 when nothing matches
+  }
+  for (const p of pids) {
+    if (spare.has(p)) continue
+    try {
+      process.kill(p, 'SIGKILL')
+      console.error(`killed stray sandbox process ${p}`)
+    } catch {}
+  }
+}
+
 function resetFixture() {
+  killStrays()
   if (FIXTURE_IN_TREE) {
     execSync(`git checkout -q -- '${FIXTURE}' && git clean -fdq '${FIXTURE}'`, { cwd: ROOT })
   } else {
