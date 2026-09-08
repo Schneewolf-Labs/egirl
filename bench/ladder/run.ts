@@ -112,12 +112,36 @@ function killStrays() {
   }
 }
 
+/**
+ * The ref every task starts from. Self-work tasks `git checkout -f <commit>` in their setup and
+ * leave the sandbox detached there; a blanked-function task that follows then blanks a function
+ * in a file from years ago and its setup fails. Resolved once at launch: the current branch, or
+ * the remote's default branch if the sandbox is already detached from an earlier run.
+ */
+const FIXTURE_REF = FIXTURE_IN_TREE
+  ? undefined
+  : (() => {
+      try {
+        return execSync('git symbolic-ref --short HEAD', { cwd: FIXTURE, stdio: 'pipe' }).toString().trim()
+      } catch {
+        try {
+          return execSync('git symbolic-ref --short refs/remotes/origin/HEAD', { cwd: FIXTURE, stdio: 'pipe' })
+            .toString()
+            .trim()
+            .replace(/^origin\//, '')
+        } catch {
+          return undefined
+        }
+      }
+    })()
+
 function resetFixture() {
   killStrays()
   if (FIXTURE_IN_TREE) {
     execSync(`git checkout -q -- '${FIXTURE}' && git clean -fdq '${FIXTURE}'`, { cwd: ROOT })
   } else {
-    execSync('git checkout -q -- . && git clean -fdq', { cwd: FIXTURE })
+    const back = FIXTURE_REF ? `git checkout -q -f '${FIXTURE_REF}' && ` : ''
+    execSync(`${back}git checkout -q -- . && git clean -fdq`, { cwd: FIXTURE })
   }
 }
 
