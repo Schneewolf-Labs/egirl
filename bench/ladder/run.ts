@@ -79,11 +79,69 @@ function arg(name: string, fallback?: string): string | undefined {
  * would either be a broken gitlink or a submodule, and neither survives a clone cleanly. The
  * fixture is just tracked files, so checkout plus clean restores it exactly.
  */
+/**
+ * Kill what a task left running in the sandbox. A model that starts a dev server or a fake
+ * peer in the background (`bun run scripts/fake-egirl.ts --port 3999 &`) outlives its run, and
+ * the next task whose tests want that port fails for a reason that has nothing to do with the
+ * model. Matched on the fixture path in the command line; the runner and its own ancestors are
+ * spared, since `--repo` puts the same path in the runner's argv.
+ */
+function killStrays() {
+  const spare = new Set<number>()
+  let pid = process.pid
+  while (pid > 1) {
+    spare.add(pid)
+    try {
+      pid = Number(execSync(`ps -o ppid= -p ${pid}`).toString().trim())
+    } catch {
+      break
+    }
+  }
+  let pids: number[] = []
+  try {
+    pids = execSync(`pgrep -f -- '${FIXTURE}'`).toString().split(/\s+/).filter(Boolean).map(Number)
+  } catch {
+    return // pgrep exits 1 when nothing matches
+  }
+  for (const p of pids) {
+    if (spare.has(p)) continue
+    try {
+      process.kill(p, 'SIGKILL')
+      console.error(`killed stray sandbox process ${p}`)
+    } catch {}
+  }
+}
+
+/**
+ * The ref every task starts from. Self-work tasks `git checkout -f <commit>` in their setup and
+ * leave the sandbox detached there; a blanked-function task that follows then blanks a function
+ * in a file from years ago and its setup fails. Resolved once at launch: the current branch, or
+ * the remote's default branch if the sandbox is already detached from an earlier run.
+ */
+const FIXTURE_REF = FIXTURE_IN_TREE
+  ? undefined
+  : (() => {
+      try {
+        return execSync('git symbolic-ref --short HEAD', { cwd: FIXTURE, stdio: 'pipe' }).toString().trim()
+      } catch {
+        try {
+          return execSync('git symbolic-ref --short refs/remotes/origin/HEAD', { cwd: FIXTURE, stdio: 'pipe' })
+            .toString()
+            .trim()
+            .replace(/^origin\//, '')
+        } catch {
+          return undefined
+        }
+      }
+    })()
+
 function resetFixture() {
+  killStrays()
   if (FIXTURE_IN_TREE) {
     execSync(`git checkout -q -- '${FIXTURE}' && git clean -fdq '${FIXTURE}'`, { cwd: ROOT })
   } else {
-    execSync('git checkout -q -- . && git clean -fdq', { cwd: FIXTURE })
+    const back = FIXTURE_REF ? `git checkout -q -f '${FIXTURE_REF}' && ` : ''
+    execSync(`${back}git checkout -q -- . && git clean -fdq`, { cwd: FIXTURE })
   }
 }
 
@@ -129,6 +187,11 @@ function runAgent(
           // episodes counted as escalation trajectories. When the output is training data rather
           // than a score, that means the dataset itself is partly a sample of noise.
           EGIRL_LOCAL_TEMPERATURE: process.env.EGIRL_LOCAL_TEMPERATURE ?? '0',
+          // A delegated Codex run once did `pip install torch` to "fix" a sandbox and replaced the
+          // machine's CUDA torch with a CPU build, which broke every later grimoire verify. pip
+          // honours this: installs outside a virtualenv are refused. `uv run` and project venvs
+          // are unaffected, which is where a sandbox's dependencies belong anyway.
+          PIP_REQUIRE_VIRTUALENV: '1',
         },
       },
     )
