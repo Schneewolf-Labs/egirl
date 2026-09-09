@@ -37,7 +37,7 @@ describe('a run publishes on the session bus', () => {
         liveDuringRun = runningLoop('test:bus')
         if (n >= 2) return stubResponse({ content: 'done' })
         return stubResponse({
-          tool_calls: [{ id: 'c1', name: 'noop', arguments: {} }],
+          tool_calls: [{ id: 'c1', name: 'noop', arguments: { why: 'bus' } }],
           finish_reason: 'tool_calls',
         })
       },
@@ -61,6 +61,10 @@ describe('a run publishes on the session bus', () => {
     if (end?.t !== 'run_end') throw new Error('expected run_end')
     expect(end.v.content).toBe('done')
     expect(end.v.turns).toBe(2)
+    // A watcher sees what a tool is about to run while it runs, not only once it is done.
+    const tool = events.find((e) => e.t === 'tool')
+    if (tool?.t !== 'tool') throw new Error('expected tool')
+    expect(tool.v).toEqual([{ name: 'noop', args: '{"why":"bus"}' }])
     const toolDone = events.find((e) => e.t === 'tool_done')
     if (toolDone?.t !== 'tool_done') throw new Error('expected tool_done')
     expect(toolDone.v.name).toBe('noop')

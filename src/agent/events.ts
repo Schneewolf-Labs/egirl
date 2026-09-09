@@ -43,7 +43,10 @@ export function publishingEvents(
       caller?.onToken?.(token)
     },
     onToolCallStart(calls) {
-      publish(sessionId, { t: 'tool', v: calls.map((c) => c.name) })
+      publish(sessionId, {
+        t: 'tool',
+        v: calls.map((c) => ({ name: c.name, args: JSON.stringify(c.arguments ?? {}) })),
+      })
       caller?.onToolCallStart?.(calls)
     },
   }

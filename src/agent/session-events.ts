@@ -21,8 +21,8 @@ export type SessionEvent =
   | { t: 'inject'; v: string }
   | { t: 'reasoning'; v: string }
   | { t: 'token'; v: string }
-  /** Tool calls about to execute, by name. */
-  | { t: 'tool'; v: string[] }
+  /** Tool calls about to execute: name and the arguments as JSON, so a watcher sees what a long tool is doing while it runs. */
+  | { t: 'tool'; v: { name: string; args: string }[] }
   | {
       t: 'tool_done'
       v: { name: string; success: boolean; args: string; output: string }
