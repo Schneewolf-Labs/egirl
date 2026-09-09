@@ -42,6 +42,7 @@ llama.cpp serving a 27B on the GPU. Exact launch:
 ```bash
 llama-server -m <model>.gguf -ngl 99 -c 163840 \
   -ctk q4_0 -ctv q4_0 -np 1 -fa on --jinja \
+  --cache-reuse 256 \
   --host 0.0.0.0 --port 8080
 ```
 
@@ -53,6 +54,21 @@ endpoint = "http://<host>:8080"
 model = "qwen3-27b"
 context_length = 65536   # see "Sizing the context" below — NOT the server's -c
 ```
+
+#### `--cache-reuse`: survive mid-history edits without a full re-prefill
+
+llama.cpp caches the KV of the previous prompt per slot and reuses the longest
+matching *prefix*. Plain prefix matching is defeated by anything egirl changes in
+the middle of the conversation: under context pressure stale tool outputs and old
+recall messages are blanked in place, and compaction drops from the front.
+Without `--cache-reuse` every one of those re-prefills everything after the first
+changed token.
+
+`--cache-reuse N` lets the server KV-shift and reuse matching chunks of at least
+`N` tokens *after* a mismatch, so those edits cost only the changed span. 256 is
+a good default. Verify it is working from the `timings` line egirl logs after
+each request: `prompt_n` is how many tokens the server actually prefilled, and
+`cache_n` (newer builds) how many it reused from the cache.
 
 #### The KV-cache tradeoff: big context OR fast decode, not both
 

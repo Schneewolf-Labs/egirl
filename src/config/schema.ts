@@ -73,7 +73,7 @@ const baseProperties = {
     model: Type.String({ default: 'qwen2.5-32b-instruct' }),
     context_length: Type.Number({ default: 32768 }),
     /**
-     * KV cache slots the local server exposes (sabrewing --kv-slots). Sessions are
+     * KV cache slots the local server exposes (llama.cpp -np, sabrewing --kv-slots). Sessions are
      * pinned to a slot so the server can reuse each conversation's already-prefilled
      * prefix. 1 = every session shares slot 0, which makes concurrent conversations
      * evict each other; 0 disables slot pinning entirely.

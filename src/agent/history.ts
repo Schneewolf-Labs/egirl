@@ -99,12 +99,6 @@ export class ConversationHistory {
     }
   }
 
-  /** Adjust watermarks after a message was spliced out at the given index. */
-  noteRemovedAt(index: number): void {
-    if (index < this.persistedIndex) this.persistedIndex--
-    if (index < this.extractionWatermark) this.extractionWatermark--
-  }
-
   /**
    * Remove messages dropped by context fitting from the live message array.
    * Without this, every inference past capacity re-fits and re-summarizes

@@ -165,7 +165,12 @@ bundle_model_serving() {
 
         llama-server -m <model>.gguf -ngl 99 -c 163840 \
           -ctk q4_0 -ctv q4_0 -np 1 -fa on --jinja \
+          --cache-reuse 256 \
           --host 0.0.0.0 --port 8080
+
+    --cache-reuse lets the server reuse KV chunks after a mid-history edit
+    (blanked stale outputs, compaction) instead of re-prefilling everything past
+    the first changed token.
 
     COMPACTOR — a small aux model on CPU (-ngl 0), kept off the operator's slot.
     Handles compaction summaries + memory extraction.

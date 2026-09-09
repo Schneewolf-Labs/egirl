@@ -1,5 +1,6 @@
 import type { ChatMessage, Tokenizer, ToolDefinition } from '../providers/types'
 import { log } from '../util/logger'
+import { isRecallMessage, RECALL_PREFIX } from './recall'
 
 export interface ContextWindowConfig {
   contextLength: number
@@ -284,6 +285,39 @@ export function clearStaleToolOutputs(
   return { messages: out, clearedCount }
 }
 
+const CLEARED_RECALL_MARKER = `${RECALL_PREFIX}\n[cleared to make room]`
+
+/**
+ * Companion to `clearStaleToolOutputs` for recalled-memory messages. Recall injection leaves
+ * earlier recalls in place so the prompt prefix stays cacheable; the price is a few hundred
+ * tokens of stale reference context per turn. Under pressure, blank the ones outside the
+ * protected tail. The marker keeps the recall prefix so persistence and handoff still treat the
+ * message as recall, not as operator input. Idempotent.
+ */
+export function clearStaleRecalls(
+  messages: ChatMessage[],
+  tokenCounts: number[],
+  protectTailTokens: number = CLEAR_PROTECT_TAIL_TOKENS,
+): { messages: ChatMessage[]; clearedCount: number } {
+  let acc = 0
+  let protectStart = messages.length
+  for (let i = messages.length - 1; i >= 0; i--) {
+    acc += tokenCounts[i] ?? 0
+    if (acc >= protectTailTokens) break
+    protectStart = i
+  }
+
+  let clearedCount = 0
+  const out = messages.map((msg, i) => {
+    if (i >= protectStart || !isRecallMessage(msg)) return msg
+    if (msg.content === CLEARED_RECALL_MARKER) return msg
+    clearedCount++
+    return { ...msg, content: CLEARED_RECALL_MARKER }
+  })
+
+  return { messages: out, clearedCount }
+}
+
 // ---------------------------------------------------------------------------
 // Message grouping
 // ---------------------------------------------------------------------------
@@ -409,16 +443,18 @@ export async function fitToContextWindow(
   // The protected tail scales down with small contexts — a fixed 8k window inside a 8k
   // budget would protect everything and the pass would never reclaim a byte.
   const protectTail = Math.min(CLEAR_PROTECT_TAIL_TOKENS, Math.floor(budget * 0.25))
-  const cleared = clearStaleToolOutputs(processed, tokenCounts, protectTail)
+  const clearedTools = clearStaleToolOutputs(processed, tokenCounts, protectTail)
+  const cleared = clearStaleRecalls(clearedTools.messages, tokenCounts, protectTail)
+  const clearedCount = clearedTools.clearedCount + cleared.clearedCount
   let fitted = processed
-  if (cleared.clearedCount > 0) {
+  if (clearedCount > 0) {
     fitted = cleared.messages
     tokenCounts = await Promise.all(fitted.map((msg) => countMessageTokens(msg, tokenizer)))
     const before = totalTokens
     totalTokens = tokenCounts.reduce((sum, t) => sum + t, 0)
     log.info(
       'context-window',
-      `Cleared ${cleared.clearedCount} stale tool outputs: ~${before}t -> ~${totalTokens}t`,
+      `Cleared ${clearedTools.clearedCount} stale tool outputs and ${cleared.clearedCount} stale recalls: ~${before}t -> ~${totalTokens}t`,
     )
     if (totalTokens <= budget) {
       return { messages: fitted, droppedMessages: [], wasTrimmed: false }
