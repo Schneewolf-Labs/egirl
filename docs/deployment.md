@@ -59,10 +59,10 @@ context_length = 65536   # see "Sizing the context" below — NOT the server's -
 
 llama.cpp caches the KV of the previous prompt per slot and reuses the longest
 matching *prefix*. Plain prefix matching is defeated by anything egirl changes in
-the middle of the conversation — and it does that routinely: proactive recall
-moves its memory message next to each new user turn, stale tool outputs are
-blanked in place, and compaction drops from the front. Without `--cache-reuse`
-every one of those re-prefills everything after the first changed token.
+the middle of the conversation: under context pressure stale tool outputs and old
+recall messages are blanked in place, and compaction drops from the front.
+Without `--cache-reuse` every one of those re-prefills everything after the first
+changed token.
 
 `--cache-reuse N` lets the server KV-shift and reuse matching chunks of at least
 `N` tokens *after* a mismatch, so those edits cost only the changed span. 256 is

@@ -169,8 +169,8 @@ bundle_model_serving() {
           --host 0.0.0.0 --port 8080
 
     --cache-reuse lets the server reuse KV chunks after a mid-history edit
-    (recall injection, blanked tool outputs, compaction) instead of re-prefilling
-    everything past the first changed token.
+    (blanked stale outputs, compaction) instead of re-prefilling everything past
+    the first changed token.
 
     COMPACTOR — a small aux model on CPU (-ngl 0), kept off the operator's slot.
     Handles compaction summaries + memory extraction.

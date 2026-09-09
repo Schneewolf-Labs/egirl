@@ -18,7 +18,7 @@ interface LlamaCppTimings {
 /**
  * One line per request showing what the prefix cache did. `prompt_n` near zero on a long
  * conversation means the cache hit; `prompt_n` near the full context means something edited
- * the prefix (recall moved, tool output blanked, compaction) and the server re-prefilled.
+ * the prefix (stale outputs blanked, compaction, reload) and the server re-prefilled.
  */
 export function formatTimings(t: LlamaCppTimings): string {
   const parts: string[] = []

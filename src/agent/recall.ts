@@ -4,7 +4,6 @@ import { retrieveForContext } from '../memory/retrieval'
 import type { ChatMessage } from '../providers/types'
 import { auditMemoryOperation, sanitizeContent } from '../safety'
 import type { AgentContext } from './context'
-import type { ConversationHistory } from './history'
 
 /** Marker prefix identifying injected recalled-memory messages */
 export const RECALL_PREFIX =
@@ -21,19 +20,24 @@ export function isRecallMessage(message: ChatMessage): boolean {
 /**
  * Inject relevant memories as reference context.
  * Framed as user-role to prevent prompt injection via poisoned memories.
- * Removes the previous recall message (found by marker, so it survives
- * compaction reshuffles) and inserts the new one directly before the
- * just-added user message so the recalled context sits next to the
- * question it supports. Recall messages are never persisted.
+ *
+ * Earlier recall messages stay where they are. This used to splice the previous one out and
+ * re-insert a fresh one next to the new question, which edited the conversation mid-history on
+ * every turn — and a llama.cpp prefix cache only matches up to the first changed token, so each
+ * turn re-prefilled everything after the previous question, including a whole agentic run's
+ * worth of tool output. Leaving old recalls in place keeps the prefix byte-stable; they cost a
+ * few hundred tokens each and are blanked by the context-window reclamation pass once the
+ * conversation is under pressure (see `clearStaleRecalls`). A recall identical to the latest
+ * one is skipped outright — the model already has it one turn back.
+ * Recall messages are never persisted.
  */
 export async function injectRecalledMemory(args: {
   userMessage: string
   context: AgentContext
   memory: MemoryManager | null
   config: RuntimeConfig
-  history: ConversationHistory
 }): Promise<void> {
-  const { userMessage, context, memory, config, history } = args
+  const { userMessage, context, memory, config } = args
   if (!memory || !config.memory.proactiveRetrieval) return
 
   const recalled = await retrieveForContext(userMessage, memory, {
@@ -44,20 +48,14 @@ export async function injectRecalledMemory(args: {
   if (!recalled) return
 
   const sanitized = sanitizeContent(recalled)
-  const recallMessage: ChatMessage = {
-    role: 'user',
-    content: `${RECALL_PREFIX}\n${sanitized}`,
-  }
+  const content = `${RECALL_PREFIX}\n${sanitized}`
 
-  const previousIdx = context.messages.findIndex(isRecallMessage)
-  if (previousIdx !== -1) {
-    context.messages.splice(previousIdx, 1)
-    history.noteRemovedAt(previousIdx)
-  }
+  const latest = [...context.messages].reverse().find(isRecallMessage)
+  if (latest && latest.content === content) return
 
   // Insert before the user message added at the start of this run
   const insertAt = Math.max(context.messages.length - 1, 0)
-  context.messages.splice(insertAt, 0, recallMessage)
+  context.messages.splice(insertAt, 0, { role: 'user', content })
 
   const auditPath = config.safety.auditLog.path
   if (config.safety.auditLog.enabled && auditPath) {
