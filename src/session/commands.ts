@@ -15,6 +15,7 @@
 
 import type { AgentLoop } from '../agent'
 import type { ThinkingConfig } from '../providers/types'
+import type { Skill } from '../skills/types'
 import type { SessionController } from './controller'
 
 /** A command and what it did, or why it did nothing. */
@@ -22,12 +23,110 @@ export interface CommandResult {
   handled: boolean
   message?: string
   quit?: boolean
+  /**
+   * A custom command expands into this text, which the caller runs as a normal turn. It is
+   * the one kind of command that does reach the model: the skill's instructions plus the
+   * user's arguments, so `/draw a fox` is "please draw a fox" with the drawing skill loaded.
+   */
+  turn?: string
+}
+
+/** Who is asking, as the channel knows them. Absent on the terminal, which is the owner. */
+export interface Caller {
+  userId?: string
+  /** On the channel's allowed-users list (or the list is empty, which allows everyone). */
+  allowed: boolean
+  /** On the channel's owner list. */
+  owner: boolean
 }
 
 export interface CommandScope {
   agent: AgentLoop
   /** Terminal-only state. Absent on a chat channel. */
   session?: SessionController
+  /** Skills that may declare commands (see `egirl.command` in SKILL.md). */
+  skills?: Skill[]
+  caller?: Caller
+}
+
+export type CommandPermission = NonNullable<
+  NonNullable<NonNullable<Skill['metadata']['egirl']>['command']>['permission']
+>
+
+/** A slash command declared by a skill. */
+export interface CustomCommand {
+  name: string
+  description: string
+  args?: string
+  permission: CommandPermission
+  /** The declaring skill's name, for logs and the Discord picker. */
+  skill: string
+}
+
+const BUILTIN = new Set([
+  'think',
+  'status',
+  'context',
+  'settings',
+  'help',
+  'auto',
+  'maxturns',
+  'reasoning',
+  'queue',
+  'clear',
+  'quit',
+  'exit',
+])
+
+const slug = (s: string): string =>
+  s
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+
+/**
+ * The commands a set of skills declares. A skill whose command name collides with a built-in
+ * is dropped: the built-in vocabulary is the same on every surface and must stay that way.
+ */
+export function customCommands(skills: Skill[]): CustomCommand[] {
+  const out: CustomCommand[] = []
+  const seen = new Set<string>()
+  for (const s of skills) {
+    const c = s.metadata.egirl?.command
+    if (!c || !s.enabled) continue
+    const name = slug(c.name ?? s.name)
+    if (!name || BUILTIN.has(name) || seen.has(name)) continue
+    seen.add(name)
+    out.push({
+      name,
+      description: c.description?.trim() || s.description,
+      ...(c.args ? { args: c.args } : {}),
+      permission: c.permission ?? 'everyone',
+      skill: s.name,
+    })
+  }
+  return out
+}
+
+function permitted(cmd: CustomCommand, caller: Caller | undefined): boolean {
+  if (!caller) return true // the terminal: the owner is typing
+  if (cmd.permission === 'everyone') return true
+  if (cmd.permission === 'allowed') return caller.allowed || caller.owner
+  return caller.owner
+}
+
+/** The turn a custom command becomes. The skill body rides along so a small model cannot miss it. */
+function expandCommand(cmd: CustomCommand, skill: Skill, arg: string): string {
+  const request = arg
+    ? `Request: ${arg}`
+    : `The user gave no arguments${cmd.args ? ` (this command takes: ${cmd.args})` : ''}; ask for what you need or proceed if the skill says how.`
+  return [
+    `The user invoked /${cmd.name}. Follow the "${skill.name}" skill below for this request.`,
+    '',
+    skill.content.trim(),
+    '',
+    request,
+  ].join('\n')
 }
 
 type ThinkingLevel = ThinkingConfig['level']
@@ -127,6 +226,10 @@ function helpCommand(scope: CommandScope): CommandResult {
     '📊 /context — how full the window is',
     '⚙️ /settings — current settings',
   ]
+  for (const c of customCommands(scope.skills ?? [])) {
+    const who = c.permission === 'everyone' ? '' : ` (${c.permission})`
+    lines.push(`✨ /${c.name}${c.args ? ` <${c.args}>` : ''} — ${c.description}${who}`)
+  }
   if (scope.session) {
     lines.push(
       '🔁 /auto — continue past the turn cap without asking',
@@ -148,6 +251,19 @@ export async function handleCommand(input: string, scope: CommandScope): Promise
   const cmd = (word ?? '').toLowerCase()
   const arg = rest.join(' ')
   const { agent, session } = scope
+  if (!BUILTIN.has(cmd)) {
+    const custom = customCommands(scope.skills ?? []).find((c) => c.name === cmd)
+    if (custom) {
+      if (!permitted(custom, scope.caller)) {
+        return reply(
+          `🔒 /${custom.name} is for ${custom.permission === 'owner' ? 'the owner' : 'allowed users'}`,
+        )
+      }
+      const skill = (scope.skills ?? []).find((sk) => sk.name === custom.skill)
+      if (!skill) return reply(`⚠️ /${custom.name}: its skill is no longer loaded`)
+      return { handled: true, turn: expandCommand(custom, skill, arg) }
+    }
+  }
 
   switch (cmd) {
     case 'think':

@@ -34,7 +34,7 @@ No multi-model routing. No per-message cloud escalation. The local model solves 
 - **Background tasks** — cron-scheduled work with business-hours awareness and dependency ordering
 - **Tools that feel like hands** — file ops, shell, git, GitHub, browser (Playwright), web research, screenshots
 - **Six ways to talk to it** — interactive CLI, Discord DMs, self-hosted XMPP, Telegram, Matrix, or a minimal HTTP API (for scripts, automations, LAN access)
-- **Skills** — reusable Markdown instruction sets
+- **Skills** — reusable Markdown instruction sets; a skill can register itself as a slash command with a permission, on every surface, including Discord's command picker
 - **Safety guardrails** — command filter, path sandbox, sensitive file guard, audit log (guardrails, not a sandbox)
 - **Customizable personality** — Kira's the default, replace her with whoever
 

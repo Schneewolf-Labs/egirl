@@ -1,5 +1,6 @@
 import {
   ChannelType,
+  type ChatInputCommandInteraction,
   Client,
   Events,
   GatewayIntentBits,
@@ -13,7 +14,8 @@ import {
 import type { AgentFactory, AgentLoop } from '../agent'
 import type { LLMProvider } from '../providers/types'
 import type { ReplyBroker } from '../report/broker'
-import { isCommand } from '../session/commands'
+import { type Caller, customCommands, isCommand } from '../session/commands'
+import type { Skill } from '../skills/types'
 import { log } from '../util/logger'
 import {
   type BufferedMessage,
@@ -21,6 +23,11 @@ import {
   formatBatchForAgent,
   MessageBatcher,
 } from './discord/batch-evaluator'
+import {
+  buildApplicationCommands,
+  callerFor,
+  registerApplicationCommands,
+} from './discord-commands'
 import { deliver, runTurn } from './spine'
 import type { ChatChannel } from './types'
 
@@ -28,6 +35,7 @@ export interface DiscordConfig {
   token: string
   allowedChannels: string[] // Channel IDs or 'dm' for DMs
   allowedUsers: string[] // User IDs (empty = allow all)
+  ownerUsers: string[] // User IDs who may run owner-only commands
   passiveChannels: string[] // Channel IDs to passively monitor (respond without being tagged)
   batchWindowMs: number // Debounce window before evaluating a batch (ms)
 }
@@ -61,6 +69,8 @@ export class DiscordChannel implements ChatChannel {
   readonly name = 'discord'
   private client: Client
   private agentFactory: AgentFactory
+  /** Skills the agent was built with; the ones declaring `egirl.command` become slash commands. */
+  private readonly skills: Skill[]
   private sessions: Map<string, AgentLoop> = new Map()
   private config: DiscordConfig
   private ready = false
@@ -76,10 +86,12 @@ export class DiscordChannel implements ChatChannel {
     config: DiscordConfig,
     localProvider?: LLMProvider,
     broker?: ReplyBroker,
+    skills: Skill[] = [],
   ) {
     this.agentFactory = agentFactory
     this.config = config
     this.broker = broker
+    this.skills = skills
 
     if (config.passiveChannels.length > 0 && localProvider) {
       this.localProvider = localProvider
@@ -119,6 +131,12 @@ export class DiscordChannel implements ChatChannel {
     this.client.once(Events.ClientReady, (client) => {
       this.ready = true
       log.info('discord', `Logged in as ${client.user.tag}`)
+      // Cosmetic registration: the same vocabulary as typed text, offered with autocomplete.
+      void registerApplicationCommands(
+        client,
+        this.config.token,
+        buildApplicationCommands(customCommands(this.skills)),
+      )
       log.info('discord', `Allowed channels: ${this.config.allowedChannels.join(', ')}`)
       if (this.config.allowedUsers.length > 0) {
         log.info('discord', `Allowed users: ${this.config.allowedUsers.join(', ')}`)
@@ -129,6 +147,13 @@ export class DiscordChannel implements ChatChannel {
 
     this.client.on(Events.MessageCreate, async (message) => {
       await this.handleMessage(message)
+    })
+
+    this.client.on(Events.InteractionCreate, async (interaction) => {
+      if (!interaction.isChatInputCommand()) return
+      await this.handleSlash(interaction).catch((error) =>
+        log.error('discord', 'Slash command failed:', error),
+      )
     })
 
     this.client.on(Events.MessageReactionAdd, async (reaction, user) => {
@@ -325,6 +350,53 @@ export class DiscordChannel implements ChatChannel {
       },
       content,
       this.broker,
+      { skills: this.skills, caller: this.callerOf(message.author.id) },
+    )
+  }
+
+  private callerOf(userId: string): Caller {
+    return callerFor(userId, this.config)
+  }
+
+  /**
+   * A slash interaction is the same text a user could have typed, run through the same
+   * dispatcher on the same session. Discord wants an acknowledgement within three seconds,
+   * so the reply is deferred and the first chunk edits it; further chunks follow up.
+   */
+  private async handleSlash(interaction: ChatInputCommandInteraction): Promise<void> {
+    const args = interaction.options.getString('args') ?? ''
+    const text = `/${interaction.commandName}${args ? ` ${args}` : ''}`
+    if (
+      !this.isUserAllowed(interaction.user.id) &&
+      !this.config.ownerUsers.includes(interaction.user.id)
+    ) {
+      await interaction.reply({ content: '🔒 not for you', ephemeral: true })
+      return
+    }
+    const channelId = interaction.channelId
+    // Same session the typed form would land in (see resolveSessionKey).
+    const agent = this.getOrCreateAgent(
+      interaction.inGuild() ? `discord:channel:${channelId}` : `discord:dm:${interaction.user.id}`,
+    )
+    await interaction.deferReply()
+    let first = true
+    await runTurn(
+      agent,
+      {
+        channel: 'discord',
+        target: channelId,
+        maxLength: DISCORD_MAX_MESSAGE_LENGTH,
+        format: 'markdown',
+        send: async (chunk) => {
+          if (first) {
+            first = false
+            await interaction.editReply(chunk)
+          } else await interaction.followUp(chunk)
+        },
+      },
+      text,
+      this.broker,
+      { skills: this.skills, caller: this.callerOf(interaction.user.id) },
     )
   }
 
@@ -438,6 +510,7 @@ export function createDiscordChannel(
   config: DiscordConfig,
   localProvider?: LLMProvider,
   broker?: ReplyBroker,
+  skills: Skill[] = [],
 ): DiscordChannel {
-  return new DiscordChannel(agentFactory, config, localProvider, broker)
+  return new DiscordChannel(agentFactory, config, localProvider, broker, skills)
 }

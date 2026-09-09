@@ -154,3 +154,30 @@ describe('extractSkillDescription', () => {
     expect(desc).toBe('First line.')
   })
 })
+
+describe('egirl.command frontmatter', () => {
+  test('a skill can declare the slash command it answers to', () => {
+    const parsed = parseSkillMarkdown(`---
+egirl:
+  command:
+    name: draw
+    description: "Draw a picture from a prompt"
+    args: "what to draw"
+    permission: allowed
+---
+# Drawing
+Call niku_generate with a Danbooru-style prompt.
+`)
+    expect(parsed.metadata.egirl?.command).toEqual({
+      name: 'draw',
+      description: 'Draw a picture from a prompt',
+      args: 'what to draw',
+      permission: 'allowed',
+    })
+  })
+  test('the block is optional and its fields are optional', () => {
+    const parsed = parseSkillMarkdown('---\negirl:\n  command: {}\n---\n# X\n')
+    expect(parsed.metadata.egirl?.command).toEqual({})
+    expect(parseSkillMarkdown('# Plain\n').metadata.egirl?.command).toBeUndefined()
+  })
+})

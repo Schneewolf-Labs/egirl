@@ -174,3 +174,56 @@ describe('deliver', () => {
     expect(sent).toEqual(['(empty response)'])
   })
 })
+
+describe('custom commands through the spine', () => {
+  const skills = [
+    {
+      name: 'draw',
+      description: 'Draw',
+      content: '# Draw\nCall niku_generate.',
+      metadata: { egirl: { command: { permission: 'allowed' } } },
+      baseDir: '/s',
+      enabled: true,
+    },
+  ]
+  test("an allowed caller's /draw becomes a turn with the skill in it", async () => {
+    const { agent, prompts } = fakeAgent('here you go')
+    const sent: string[] = []
+    const surface: Surface = {
+      channel: 'test',
+      target: 't',
+      maxLength: 2000,
+      format: 'markdown',
+      send: async (c) => {
+        sent.push(c)
+      },
+    }
+    await runTurn(agent, surface, '/draw a fox', undefined, {
+      skills,
+      caller: { userId: 'u', allowed: true, owner: false },
+    })
+    expect(prompts).toHaveLength(1)
+    expect(prompts[0]).toMatch(/Call niku_generate/)
+    expect(prompts[0]).toMatch(/a fox/)
+    expect(sent).toEqual(['here you go'])
+  })
+  test('a denied caller gets the lock message and the model is never run', async () => {
+    const { agent, prompts } = fakeAgent('never')
+    const sent: string[] = []
+    const surface: Surface = {
+      channel: 'test',
+      target: 't',
+      maxLength: 2000,
+      format: 'markdown',
+      send: async (c) => {
+        sent.push(c)
+      },
+    }
+    await runTurn(agent, surface, '/draw a fox', undefined, {
+      skills,
+      caller: { userId: 'u', allowed: false, owner: false },
+    })
+    expect(prompts).toHaveLength(0)
+    expect(sent[0]).toMatch(/🔒/)
+  })
+})

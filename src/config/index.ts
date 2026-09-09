@@ -471,6 +471,7 @@ export function loadConfig(options: LoadConfigOptions = {}): RuntimeConfig {
       token: discordToken,
       allowedChannels: toml.channels.discord.allowed_channels ?? ['dm'],
       allowedUsers: toml.channels.discord.allowed_users ?? [],
+      ownerUsers: toml.channels.discord.owner_users ?? [],
       passiveChannels: toml.channels.discord.passive_channels ?? [],
       batchWindowMs: toml.channels.discord.batch_window_ms ?? 3000,
     }
