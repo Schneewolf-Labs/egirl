@@ -63,7 +63,13 @@ export async function runServe(
   const chat: Array<{ channel: ChatChannel; defaultTarget: string }> = []
   let discord: ReturnType<typeof createDiscordChannel> | undefined
   if (discordConf) {
-    discord = createDiscordChannel(agentFactory, discordConf, providers.local, replyBroker)
+    discord = createDiscordChannel(
+      agentFactory,
+      discordConf,
+      providers.local,
+      replyBroker,
+      rt.skills,
+    )
     chat.push({ channel: discord, defaultTarget: discordConf.allowedChannels[0] ?? 'dm' })
   }
   if (xmppConf) {

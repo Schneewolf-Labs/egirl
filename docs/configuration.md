@@ -65,6 +65,7 @@ Required only when running `discord` (or `serve`). The Discord token itself goes
 |-----|------|---------|-------------|
 | `allowed_channels` | string[] | `["dm"]` | Channel IDs where the bot responds. `"dm"` for direct messages, or numeric channel IDs |
 | `allowed_users` | string[] | `[]` | User IDs allowed to interact. Empty = allow all |
+| `owner_users` | string[] | `[]` | User IDs who may run commands a skill marks `permission: owner`. Not implied by `allowed_users` |
 | `passive_channels` | string[] | `[]` | Channels where the bot lurks — reads but only responds when a batch evaluator decides it's relevant |
 | `batch_window_ms` | number | `3000` | Debounce window for grouping consecutive messages before responding |
 

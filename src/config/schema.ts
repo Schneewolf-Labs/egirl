@@ -140,6 +140,8 @@ const baseProperties = {
         Type.Object({
           allowed_channels: Type.Array(Type.String(), { default: ['dm'] }),
           allowed_users: Type.Array(Type.String(), { default: [] }),
+          // Who may run commands a skill marks `permission: owner`. Not implied by allowed_users.
+          owner_users: Type.Array(Type.String(), { default: [] }),
           passive_channels: Type.Array(Type.String(), { default: [] }),
           batch_window_ms: Type.Number({ default: 3000 }),
         }),
@@ -559,6 +561,7 @@ export interface RuntimeConfig {
       token: string
       allowedChannels: string[]
       allowedUsers: string[]
+      ownerUsers: string[]
       passiveChannels: string[]
       batchWindowMs: number
     }

@@ -1,6 +1,7 @@
 import type { AgentLoop } from '../agent'
 import type { ReplyBroker } from '../report/broker'
-import { handleCommand } from '../session/commands'
+import { type Caller, handleCommand } from '../session/commands'
+import type { Skill } from '../skills/types'
 import { errorMessage } from '../util/errors'
 import { log } from '../util/logger'
 import { splitMessage } from './chunk'
@@ -61,18 +62,28 @@ export interface Surface {
  * consumes the message as its answer -- the human is replying to the agent's question, not
  * starting a new turn. Never throws: a failed turn is reported back on the same surface.
  */
+export interface TurnScope {
+  /** Skills that may declare commands; the channel passes what the agent was built with. */
+  skills?: Skill[]
+  /** Who is asking, for command permissions. Absent means the terminal, i.e. the owner. */
+  caller?: Caller
+}
+
 export async function runTurn(
   agent: AgentLoop,
   surface: Surface,
   text: string,
   broker?: ReplyBroker,
+  scope: TurnScope = {},
 ): Promise<void> {
-  const command = await handleCommand(text, { agent })
-  if (command.handled) {
+  const command = await handleCommand(text, { agent, skills: scope.skills, caller: scope.caller })
+  if (command.handled && !command.turn) {
     await deliver(surface, command.message ?? 'ok').catch(() => {})
     return
   }
-  if (broker?.tryDeliver(surface.channel, surface.target, text)) return
+  // A custom command is the one that does reach the model: as the expanded turn.
+  if (command.turn) text = command.turn
+  else if (broker?.tryDeliver(surface.channel, surface.target, text)) return
 
   const stopTyping = keepTyping(surface)
   try {

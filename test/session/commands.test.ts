@@ -186,3 +186,116 @@ describe('terminal-only commands', () => {
     expect(tty).toContain('/maxturns')
   })
 })
+
+/* ---- custom commands: a skill with an `egirl.command` block ---- */
+
+import { customCommands } from '../../src/session/commands'
+import type { Skill } from '../../src/skills/types'
+
+function skill(
+  name: string,
+  command: Record<string, unknown> | undefined,
+  content = `# ${name}\nDo the ${name} thing.`,
+): Skill {
+  return {
+    name,
+    description: `${name} skill`,
+    content,
+    metadata: command ? { egirl: { command } } : {},
+    baseDir: `/skills/${name}`,
+    enabled: true,
+  }
+}
+
+describe('custom commands from skills', () => {
+  const skills = [
+    skill('Draw', { description: 'Draw a picture', args: 'what to draw' }),
+    skill('Git Ops', { name: 'git', permission: 'owner' }),
+    skill('plain', undefined),
+    skill('Status Report', { name: 'status' }), // must not shadow the built-in
+  ]
+
+  test('the registry comes from skills that declare a command; names default to the slug', () => {
+    const cmds = customCommands(skills)
+    expect(cmds.map((c) => c.name)).toEqual(['draw', 'git'])
+    const draw = cmds.find((c) => c.name === 'draw')
+    expect(draw?.description).toBe('Draw a picture')
+    expect(draw?.args).toBe('what to draw')
+    expect(draw?.permission).toBe('everyone')
+    expect(cmds.find((c) => c.name === 'git')?.permission).toBe('owner')
+    expect(cmds.find((c) => c.name === 'git')?.description).toBe('Git Ops skill')
+  })
+
+  test('invoking one expands into a turn carrying the skill and the arguments, not a reply', async () => {
+    const r = await handleCommand('/draw a cat in a hat', { agent: fakeAgent(), skills })
+    expect(r.handled).toBe(true)
+    expect(r.message).toBeUndefined()
+    expect(r.turn).toMatch(/Do the Draw thing\./)
+    expect(r.turn).toMatch(/a cat in a hat/)
+    expect(r.turn).toMatch(/\/draw/)
+  })
+
+  test('without arguments the turn still carries the skill and says so', async () => {
+    const r = await handleCommand('/draw', { agent: fakeAgent(), skills })
+    expect(r.handled).toBe(true)
+    expect(r.turn).toMatch(/Do the Draw thing\./)
+    expect(r.turn).toMatch(/what to draw/)
+  })
+
+  test('a built-in always wins over a custom command with the same name', async () => {
+    const r = await handleCommand('/status', { agent: fakeAgent(), skills })
+    expect(r.turn).toBeUndefined()
+    expect(r.message).toMatch(/idle|running/)
+  })
+
+  test('permission: everyone / allowed / owner, decided by the caller the channel supplies', async () => {
+    const guest = { userId: 'u1', allowed: false, owner: false }
+    const member = { userId: 'u2', allowed: true, owner: false }
+    const owner = { userId: 'u3', allowed: true, owner: true }
+    const gated = [
+      skill('draw', { permission: 'allowed' }),
+      skill('git', { permission: 'owner' }),
+      skill('hi', {}),
+    ]
+    expect(
+      (await handleCommand('/hi', { agent: fakeAgent(), skills: gated, caller: guest })).turn,
+    ).toBeDefined()
+    const denied = await handleCommand('/draw x', {
+      agent: fakeAgent(),
+      skills: gated,
+      caller: guest,
+    })
+    expect(denied.handled).toBe(true)
+    expect(denied.turn).toBeUndefined()
+    expect(denied.message).toMatch(/🔒/)
+    expect(
+      (await handleCommand('/draw x', { agent: fakeAgent(), skills: gated, caller: member })).turn,
+    ).toBeDefined()
+    expect(
+      (await handleCommand('/git', { agent: fakeAgent(), skills: gated, caller: member })).message,
+    ).toMatch(/🔒/)
+    expect(
+      (await handleCommand('/git', { agent: fakeAgent(), skills: gated, caller: owner })).turn,
+    ).toBeDefined()
+  })
+
+  test('no caller means the terminal, which is the owner', async () => {
+    const r = await handleCommand('/git', {
+      agent: fakeAgent(),
+      skills: [skill('git', { permission: 'owner' })],
+    })
+    expect(r.turn).toBeDefined()
+  })
+
+  test('/help lists custom commands with their descriptions and who may use them', async () => {
+    const r = await handleCommand('/help', { agent: fakeAgent(), skills })
+    expect(r.message).toMatch(/\/draw <what to draw> — Draw a picture/)
+    expect(r.message).toMatch(/\/git — Git Ops skill \(owner\)/)
+  })
+
+  test('an unknown command is still reported when skills are present', async () => {
+    const r = await handleCommand('/nope', { agent: fakeAgent(), skills })
+    expect(r.handled).toBe(true)
+    expect(r.message).toMatch(/unknown/i)
+  })
+})

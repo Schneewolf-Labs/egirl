@@ -32,7 +32,42 @@ Instructions for handling git operations...
 | `openclaw.emoji` | string | Display emoji (used in `status` output and headings) |
 | `openclaw.homepage` | string | URL for more information |
 
-The frontmatter is optional; skills without it are content-only. An `egirl:` block is accepted by the parser for OpenClaw compatibility but not used — there's no routing layer for it to feed.
+The frontmatter is optional; skills without it are content-only.
+
+### `egirl.command`: a skill as a slash command
+
+A skill can register itself as a slash command, on every surface at once (terminal, web
+console, Discord, XMPP, Matrix, Telegram):
+
+```markdown
+---
+egirl:
+  command:
+    name: draw                      # defaults to the skill name, slugged
+    description: Draw a picture     # one line for /help and the Discord picker
+    args: what to draw              # omit if the command takes no arguments
+    permission: allowed             # everyone (default) | allowed | owner
+---
+# Drawing
+Call `niku_generate` with a Danbooru-style prompt built from the request...
+```
+
+`/draw a fox in a hat` then runs an ordinary turn whose message is the skill's instructions
+plus the request. Nothing is bypassed: the command is discoverability and a permission gate
+over natural language, and "please draw a fox" keeps working without it. Built-in commands
+(`/status`, `/think`, ...) always win over a custom name.
+
+`permission` is checked against who is asking, as the channel knows them: `allowed` means the
+channel's allowed-users list (an empty list allows everyone), `owner` means the channel's owner
+list (`owner_users` for Discord). The terminal is always the owner. A denied command is answered
+with a lock message and never reaches the model.
+
+On Discord the custom commands are also registered as application commands at login, so users
+see them with autocomplete; an interaction is handled exactly like the typed form, on the same
+session. Registration is best effort -- if it fails, typed `/draw` still works.
+
+Because an agent can write a SKILL.md (that is what `/learn` does), an agent can register its
+own commands.
 
 ## Skill Discovery
 
