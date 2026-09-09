@@ -203,3 +203,17 @@ bun run typecheck # tsc --noEmit
 ```
 
 All three must pass. Don't push code that fails any of these.
+
+### Judging an agent's work: verify the authoritative artifact, not a plausibly-named one
+
+When quantifying what a running agent (Zero, etc.) has actually accomplished, do NOT diff the
+first file whose name matches the task. An agent iterates: `winter_py.bin` was a dead early
+attempt left on disk, while the working solution lived in `faithful2.py` / `loco_decompress.c` /
+a `cbatch` result — and diffing the stale one reported "stuck at byte 3" when the decompressor
+was in fact solved and verified byte-exact across all 1372 blobs. The stale file cost two wrong
+"she's stuck" reports and a pointless model swap.
+
+Before trusting a progress metric: check the file's mtime against the agent's recent activity,
+and read what its own NOTES/checkpoints name as the current artifact — the agent records which
+file is the real one. The agent's own success record (a batch log, a checkpoint summary) is more
+authoritative than any single artifact you pick by name.
