@@ -54,3 +54,7 @@ __pycache__/
 
 # Ladder transcripts: full prompts and tool output per task, large and private training material
 bench/ladder/transcripts/
+
+# Local config backups
+*.bak
+egirl.toml.*
