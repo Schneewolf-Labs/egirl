@@ -6,6 +6,41 @@ import { withReasoningFloor } from './reasoning-floors'
 import type { ChatRequest, ChatResponse, LLMProvider, ToolCall, ToolDefinition } from './types'
 import { ContextSizeError } from './types'
 
+/** Server-side timings llama.cpp attaches to the final streamed chunk. All fields optional. */
+interface LlamaCppTimings {
+  prompt_n?: number
+  prompt_ms?: number
+  cache_n?: number
+  predicted_n?: number
+  predicted_ms?: number
+}
+
+/**
+ * One line per request showing what the prefix cache did. `prompt_n` near zero on a long
+ * conversation means the cache hit; `prompt_n` near the full context means something edited
+ * the prefix (recall moved, tool output blanked, compaction) and the server re-prefilled.
+ */
+export function formatTimings(t: LlamaCppTimings): string {
+  const parts: string[] = []
+  if (t.prompt_n !== undefined) parts.push(`prompt_n=${t.prompt_n}`)
+  if (t.cache_n !== undefined) parts.push(`cache_n=${t.cache_n}`)
+  if (t.prompt_ms !== undefined) {
+    const rate =
+      t.prompt_n && t.prompt_ms > 0
+        ? ` (${Math.round((t.prompt_n / t.prompt_ms) * 1000)} tok/s)`
+        : ''
+    parts.push(`prompt_ms=${Math.round(t.prompt_ms)}${rate}`)
+  }
+  if (t.predicted_n !== undefined) {
+    const rate =
+      t.predicted_ms && t.predicted_ms > 0
+        ? ` (${((t.predicted_n / t.predicted_ms) * 1000).toFixed(1)} tok/s)`
+        : ''
+    parts.push(`predicted_n=${t.predicted_n}${rate}`)
+  }
+  return `timings: ${parts.join(' ')}`
+}
+
 /**
  * Extract `<think>...</think>` blocks from Qwen3 response content.
  * Returns the cleaned content and extracted thinking text.
@@ -243,9 +278,10 @@ export class LlamaCppProvider implements LLMProvider {
         ...(isThinkingEnabled !== undefined && {
           chat_template_kwargs: { enable_thinking: isThinkingEnabled },
         }),
-        // Servers with per-slot prefix caching (sabrewing) reuse this conversation's
-        // already-prefilled context. Ignored by servers that don't implement it.
-        ...(req.cacheSlot !== undefined && { cache_slot: req.cacheSlot }),
+        // Servers with per-slot prefix caching reuse this conversation's already-prefilled
+        // context. sabrewing reads `cache_slot`; llama.cpp reads `id_slot` (one slot per -np).
+        // Each ignores the other's name, so both ride on the request.
+        ...(req.cacheSlot !== undefined && { cache_slot: req.cacheSlot, id_slot: req.cacheSlot }),
       }),
     })
 
@@ -448,6 +484,10 @@ export class LlamaCppProvider implements LLMProvider {
     let usage = { prompt_tokens: 0, completion_tokens: 0 }
     let model: string | undefined
     let finish_reason: string | undefined
+    // llama.cpp attaches server-side timings to the final chunk. `prompt_n` is the number of
+    // tokens the server actually prefilled this request — the direct measure of how much of the
+    // prompt the KV prefix cache served — and `cache_n` (newer builds) how many it reused.
+    let timings: LlamaCppTimings | undefined
 
     // Stale-stream detection: abort if no new content arrives within timeout
     let staleTimer: ReturnType<typeof setTimeout> | null = null
@@ -508,10 +548,12 @@ export class LlamaCppProvider implements LLMProvider {
               }>
               usage?: { prompt_tokens: number; completion_tokens: number }
               model?: string
+              timings?: LlamaCppTimings
             }
 
             if (parsed.usage) usage = parsed.usage
             if (parsed.model) model = parsed.model
+            if (parsed.timings) timings = parsed.timings
             const chunkFinish = parsed.choices?.[0]?.finish_reason
             if (chunkFinish) finish_reason = chunkFinish
 
@@ -642,6 +684,8 @@ export class LlamaCppProvider implements LLMProvider {
     if (!inToolCall && !inThink && buffer) {
       onToken(buffer)
     }
+
+    if (timings) log.info('llamacpp', formatTimings(timings))
 
     return {
       content: fullContent,
