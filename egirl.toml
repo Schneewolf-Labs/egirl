@@ -11,68 +11,10 @@ show_thinking = true                     # display thinking output in CLI
 [workspace]
 path = "~/.egirl/workspace"
 
-[local]
-endpoint = "http://localhost:8080"       # llama.cpp (Qwen3.6-27B-TIES Q6_K, GPU)
-model = "qwen3.6-27b-ties-q6k"           # for display/logging only
-context_length = 16384                   # llama-server: --parallel 4 -c 65536
-max_concurrent = 4                       # match llama-server --parallel 4; enforced by a
-                                         # semaphore in the provider
-cache_slots = 0                          # llama.cpp does its own prefix caching; slot
-                                         # pinning is a sabrewing-only feature
-tool_format = "auto"                     # auto | qwen3 | qwen35 | laguna — asks in Qwen3 form
-                                         # (this is a Qwen3-family model) and accepts any back
-stale_stream_timeout_ms = 120000         # ~1100 tok/s prefill on GPU; fail fast
-
-[local.embeddings]
-provider = "qwen3-vl"                    # Python service using transformers
-endpoint = "http://localhost:8082"
-model = "qwen3-vl-embedding-2b"
-dimensions = 2048
-multimodal = true
-
-[channels.discord]
-allowed_channels = ["dm"]                # or specific channel IDs
-allowed_users = []                       # set your Discord user ID
-
-[channels.code_agent]
-provider = "codex"                       # codex or claude
-permission_mode = "default"              # default, acceptEdits, bypassPermissions, plan
-# model = "gpt-5.5"                      # optional backend model
-# working_dir = "~/projects/myrepo"      # defaults to workspace
-# max_turns = 30                         # Claude backend only
-
-# Direct Claude Code bridge command only: bun run start cc
-# [channels.claude_code]
-# permission_mode = "bypassPermissions"
-# model = "sonnet"
-
-# XMPP bot — self-hosted chat (e.g. Prosody on localhost or a VPS).
-# Requires XMPP_USERNAME and XMPP_PASSWORD in .env.
-# [channels.xmpp]
-# service = "xmpp://localhost:5222"     # or "xmpps://chat.example.com:5223" for TLS
-# domain = "localhost"                   # inferred from service if omitted
-# resource = "egirl"
-# allowed_jids = ["you@localhost"]      # empty = allow all
-
-# Telegram bot — talk to @BotFather, put the token in .env as TELEGRAM_BOT_TOKEN.
-# Long polling, no webhook, nothing needs to be reachable from the internet.
-# [channels.telegram]
-# allowed_users = ["123456789"]          # numeric user IDs or @usernames; empty = allow all
-#                                        # (a numeric ID also lets background tasks DM you first)
-# Matrix bot — unencrypted rooms only (no E2EE support).
-# Requires MATRIX_ACCESS_TOKEN, or MATRIX_USERNAME and MATRIX_PASSWORD, in .env.
-# [channels.matrix]
-# homeserver = "https://matrix.example.com"
-# allowed_users = ["@you:example.com"]  # MXIDs; empty = allow all
-# allowed_rooms = []                     # room IDs; empty = any room the bot is in
-# auto_join = true                       # accept invites from allowed users
-
-# HTTP API — localhost by default, for scripts / mobile / automations.
-# Set EGIRL_API_TOKEN in .env to require a bearer token (recommended if exposing on LAN).
-[channels.api]
-host = "127.0.0.1"
-port = 3000
-
+# Shared base only: nothing here names a machine, a model server or a chat account. Those live
+# in egirl.d/*.toml fragments beside this file (gitignored, merged over this base in filename
+# order; see docs/configuration.md). A single-instance setup can copy egirl.example.toml into
+# egirl.d/local.toml instead of editing this file.
 [safety]
 enabled = true
 
