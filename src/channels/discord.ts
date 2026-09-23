@@ -282,8 +282,8 @@ export class DiscordChannel implements ChatChannel {
     if (!content.trim()) return
 
     // A command answers at once, ahead of whatever turn the queue is waiting on -- asking
-    // whether she is busy must not itself wait until she is not. It never runs the agent, so
-    // it cannot collide with the turn in flight.
+    // whether she is busy must not itself wait until she is not. A custom command that expands
+    // into a turn queues behind the turn in flight on the loop itself (AgentLoop.run).
     if (isCommand(content)) {
       this.processMessage(message, content).catch((error) => {
         log.error('discord', 'Command failed:', error)
