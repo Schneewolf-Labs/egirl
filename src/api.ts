@@ -164,6 +164,9 @@ function resumeParkedTask(sessionId: string, deps: APIDeps): void {
       { status: 'active', nextRunAt: Date.now() },
       'Reply received on the task session — resuming',
     )
+  } else {
+    // Not parked yet, but it may be about to: a run whose ask timed out parks when it ends.
+    deps.taskRunner?.noteReply(taskId)
   }
 }
 
@@ -1013,6 +1016,9 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
         if (taskRoute && taskAction === 'POST run') {
           if (!deps.taskRunner) {
             return err(`tasks disabled: ${deps.taskOffReason ?? 'no task runner'}`, 503)
+          }
+          if (deps.taskRunner.getRunningTaskIds().includes(taskRoute[1] as string)) {
+            return err('task is already running', 409)
           }
           const run = await deps.taskRunner.runNow(taskRoute[1] as string)
           if (!run) return err('task not found', 404)

@@ -75,11 +75,17 @@ export class AgentLoop {
   private history: ConversationHistory
   private compactor = new CompactionScheduler()
   /**
-   * The in-flight run, if any — the handle interrupt() and inject() act through. One run at
-   * a time per loop instance is already the contract everywhere (the API chains requests per
-   * session; the CLI and runner are single-run by construction), so a single slot suffices.
+   * The in-flight run, if any — the handle interrupt() and inject() act through. run() admits
+   * one run at a time per loop (see `runChain`), so a single slot suffices.
    */
   private activeRun: { controller: AbortController; pendingInjections: string[] } | null = null
+  /**
+   * Settles when the last run admitted to this loop ends. Chat transports dispatch messages
+   * without awaiting the previous turn (they must, or a reply to a parked report ask could
+   * never arrive), so without this two runs interleaved their turns in one context, and the
+   * first to finish cleared the other's activeRun. Model: formal/ChatTurns.tla.
+   */
+  private runChain: Promise<void> = Promise.resolve()
   /**
    * The session's thinking setting when it differs from config. It lives on the loop because
    * the loop is the one object every surface on a session shares -- /think from the terminal,
@@ -161,7 +167,27 @@ export class AgentLoop {
   // The mutex guards tool execution only (see `exclusive`): inference runs outside it so
   // concurrent sessions can be batched by the local server. Wrapping the whole run would
   // serialize every entry point again.
+  //
+  // Runs on one loop are serialized: a run queues behind the previous one. Separate sessions
+  // are separate loops, so they still run concurrently.
   async run(userMessage: string, options: AgentLoopOptions = {}): Promise<AgentResponse> {
+    const previous = this.runChain
+    let release = () => {}
+    this.runChain = new Promise((resolve) => {
+      release = resolve
+    })
+    await previous
+    try {
+      return await this.runAdmitted(userMessage, options)
+    } finally {
+      release()
+    }
+  }
+
+  private async runAdmitted(
+    userMessage: string,
+    options: AgentLoopOptions,
+  ): Promise<AgentResponse> {
     await this.compactor.drain()
 
     const { planningMode } = options

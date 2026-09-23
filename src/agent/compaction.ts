@@ -15,6 +15,8 @@ import type { ConversationHistory } from './history'
 export class CompactionScheduler {
   /** Tracks in-flight compaction so the next turn can await it before reading summary */
   private pending: Promise<void> | null = null
+  /** Bumped by reset(): a job scheduled before it belongs to a context that no longer exists. */
+  private generation = 0
 
   /**
    * Prune the dropped messages from the live context and chain a
@@ -43,6 +45,8 @@ export class CompactionScheduler {
 
     context.messages = history.prune(context.messages, droppedConversation)
 
+    const generation = this.generation
+
     // Chain onto any in-flight compaction instead of overwriting it —
     // overlapping summarizations raced on conversationSummary and lost
     // updates. existingSummary is read when the chained step runs.
@@ -55,6 +59,9 @@ export class CompactionScheduler {
         memory,
         conversationStore,
         sessionId: context.sessionId,
+        // A job that outlives reset() must not write its summary back: the sessions row it
+        // would update is the fresh conversation's. Model: formal/Compaction.tla.
+        isCurrent: () => this.generation === generation,
         onSummary: (summary) => {
           context.conversationSummary = summary
         },
@@ -64,13 +71,18 @@ export class CompactionScheduler {
 
   /** Await any in-flight compaction so the next turn reads a settled summary. */
   async drain(): Promise<void> {
-    if (!this.pending) return
-    await this.pending
-    this.pending = null
+    const awaited = this.pending
+    if (!awaited) return
+    await awaited
+    // Only clear what was awaited: a job chained on meanwhile is still in flight, and dropping
+    // it would let the next schedule() start a second chain beside it, both summarizing from
+    // the same base. Model: formal/Compaction.tla (NoLostSummary).
+    if (this.pending === awaited) this.pending = null
   }
 
   /** Drop the chain without awaiting it (context was cleared). */
   reset(): void {
     this.pending = null
+    this.generation++
   }
 }

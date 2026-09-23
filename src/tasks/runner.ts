@@ -84,6 +84,8 @@ export class TaskRunner {
   private tickTimer: ReturnType<typeof setInterval> | undefined
   private runningCount = 0
   private runningTasks: Map<string, { controller: AbortController }> = new Map()
+  /** Running tasks whose session got a reply mid-run; see noteReply(). */
+  private repliedDuringRun = new Set<string>()
   private lastInteractionAt: number = Date.now()
   private unsubscribeBus: (() => void) | undefined
 
@@ -186,10 +188,24 @@ export class TaskRunner {
     }
   }
 
-  /** Trigger a task immediately regardless of schedule */
+  /**
+   * A reply landed on the task's session while it was not parked. If the task is running, the
+   * run cannot see it (its loop loaded the transcript before the reply was written), so when
+   * the run then parks on an unanswered ask it runs again instead: nothing else would wake it.
+   * Model: formal/TaskRunner.tla (NoLostWakeup).
+   */
+  noteReply(taskId: string): void {
+    if (this.runningTasks.has(taskId)) this.repliedDuringRun.add(taskId)
+  }
+
+  /**
+   * Trigger a task immediately regardless of schedule. Refuses a task that is already running:
+   * two executions would share its transcript and workspace. Model: formal/TaskRunner.tla.
+   */
   async runNow(taskId: string): Promise<TaskRun | undefined> {
     const task = this.deps.store.get(taskId)
     if (!task) return undefined
+    if (this.runningTasks.has(taskId)) throw new Error(`Task ${taskId} is already running`)
     return this.executeTask(task)
   }
 
@@ -271,9 +287,10 @@ export class TaskRunner {
 
     log.info('tasks', `Executing task: ${task.name} (${task.id})`)
 
+    const execution = this.doExecute(task, signal, deadline, wrapupMarginMs)
     try {
       const { content: result, awaitingInput } = await Promise.race([
-        this.doExecute(task, signal, deadline, wrapupMarginMs),
+        execution,
         this.timeout(timeoutMs),
       ])
       const resultHash = await hashString(result)
@@ -287,21 +304,31 @@ export class TaskRunner {
         lastResultHash: resultHash,
       })
 
-      if (awaitingInput) {
+      if (awaitingInput && this.repliedDuringRun.has(task.id)) {
+        // The answer arrived while the run was finishing: run again with it, don't park.
+        this.deps.store.update(
+          task.id,
+          { nextRunAt: Date.now() },
+          'Reply arrived during the run — running again instead of parking',
+        )
+      } else if (awaitingInput) {
         // The run asked its supervisor and no answer came: park instead of rescheduling.
         // The scheduler skips non-active tasks, so the task sits here — visibly distinct
         // from paused/done — until a reply arrives (POST /chat on its session resumes it)
-        // or a human resumes it directly.
-        this.deps.store.update(
-          task.id,
-          { status: 'awaiting' },
-          'Parked: report ask went unanswered — awaiting supervisor input',
-        )
-        // Nothing will move until a human answers, so this is worth interrupting someone for.
-        // Deliberately fire-and-forget: a notification that fails must never fail the run.
-        try {
-          this.deps.onAwaitingInput?.(task)
-        } catch {}
+        // or a human resumes it directly. Only an active task parks: one the user paused
+        // or retired while it ran keeps that status (model: formal/TaskRunner.tla).
+        if (this.deps.store.get(task.id)?.status === 'active') {
+          this.deps.store.update(
+            task.id,
+            { status: 'awaiting' },
+            'Parked: report ask went unanswered — awaiting supervisor input',
+          )
+          // Nothing will move until a human answers, so this is worth interrupting someone for.
+          // Deliberately fire-and-forget: a notification that fails must never fail the run.
+          try {
+            this.deps.onAwaitingInput?.(task)
+          } catch {}
+        }
       } else if (task.kind === 'scheduled') {
         const nextRunAt = this.calculateTaskNextRun(task)
         this.deps.store.update(task.id, { nextRunAt })
@@ -384,8 +411,16 @@ export class TaskRunner {
       return { ...run, status: 'failure', error: errorMsg, errorKind, completedAt: Date.now() }
     } finally {
       clearTimeout(timeoutId)
-      this.runningCount--
-      this.runningTasks.delete(task.id)
+      // The slot is freed when the execution ends, not when this stops waiting for it. A
+      // timed-out run is aborted but lives until its next checkpoint, still writing to the
+      // task's transcript; freeing the slot at the timeout let the next tick start a second
+      // execution beside it. Model: formal/TaskRunner.tla (OneLiveExecution).
+      const release = () => {
+        this.runningCount--
+        this.runningTasks.delete(task.id)
+        this.repliedDuringRun.delete(task.id)
+      }
+      execution.then(release, release)
     }
   }
 
