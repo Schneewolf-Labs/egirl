@@ -5,6 +5,7 @@ import { parseBusinessHours } from '../../tasks/schedule'
 import type { TaskStore } from '../../tasks/store'
 import type { NewTask, TaskKind, TaskNotify } from '../../tasks/types'
 import { errorMessage } from '../../util/errors'
+import { log } from '../../util/logger'
 import type { Tool, ToolResult } from '../types'
 
 interface TaskToolContext {
@@ -386,27 +387,27 @@ Options:
   const taskRunNowTool: Tool = {
     definition: {
       name: 'task_run_now',
-      description: 'Trigger a background task to run immediately, regardless of its schedule.',
+      description:
+        'Start a background task immediately, regardless of its schedule. Returns once it has started; task_history has the result.',
       parameters: idParam,
     },
     async execute(params: Record<string, unknown>): Promise<ToolResult> {
       const id = params.id as string
       const task = store.get(id)
       if (!task) return { success: false, output: `Task ${id} not found.` }
+      if (runner.getRunningTaskIds().includes(id)) {
+        return { success: false, output: `Task "${task.name}" (${id}) is already running.` }
+      }
 
-      try {
-        const run = await runner.runNow(id)
-        if (!run) return { success: false, output: `Failed to trigger task ${id}.` }
-        return {
-          success: run.status === 'success',
-          output:
-            run.status === 'success'
-              ? `Task "${task.name}" completed:\n${run.result ?? '(no output)'}`
-              : `Task "${task.name}" failed (${run.errorKind ?? 'unknown'}): ${run.error ?? 'unknown error'}`,
-        }
-      } catch (err) {
-        const msg = errorMessage(err)
-        return { success: false, output: `Error running task: ${msg}` }
+      // Started, not awaited. This tool runs under the session mutex and the task run needs
+      // that mutex for its own tool calls: awaiting it here held the lock the run was queued
+      // on until the acquire timeout failed it. Model: formal/SessionMutex.tla.
+      runner
+        .runNow(id)
+        .catch((err) => log.warn('tasks', `task_run_now ${id} failed: ${errorMessage(err)}`))
+      return {
+        success: true,
+        output: `Started task "${task.name}" (${id}). It runs in the background; use task_history for its result.`,
       }
     },
   }
