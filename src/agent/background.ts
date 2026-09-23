@@ -21,6 +21,8 @@ export function triggerCompaction(args: {
   memory: MemoryManager | null
   conversationStore: ConversationStore | null
   sessionId: string
+  /** False once the context this summary is for has been cleared; the summary is then dropped. */
+  isCurrent?: () => boolean
   onSummary: (summary: string) => void
 }): Promise<void> {
   const {
@@ -30,6 +32,7 @@ export function triggerCompaction(args: {
     memory,
     conversationStore,
     sessionId,
+    isCurrent,
     onSummary,
   } = args
 
@@ -39,6 +42,10 @@ export function triggerCompaction(args: {
 
   const summaryPromise = summarizeMessages(droppedMessages, provider, existingSummary)
     .then((summary) => {
+      if (isCurrent && !isCurrent()) {
+        log.info('agent', 'Context compaction finished after a reset; summary discarded')
+        return
+      }
       onSummary(summary)
       log.info('agent', `Context compacted: summary updated (${summary.length} chars)`)
 
