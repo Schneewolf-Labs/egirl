@@ -37,7 +37,7 @@ The duties sort by who they face.
 | | Authority | `src/permissions/supervisor.ts` answers the code agent's permission, question, trust and confirmation prompts |
 | | Steering | `spiral-guard`, `repetition-guard`, `nudges` |
 | | Verification | only the "authoritative artifact" rule in `CLAUDE.md` |
-| **Sideways** | Delegation | `peer_message` / `peer_list` over `egirl-peer/1` ([peers.md](peers.md)); peer addresses resolved from a Wald registry (`src/peers/discovery.ts`) |
+| **Sideways** | Delegation | `peer_message` / `peer_list` over `egirl-peer/1`, synchronous; `delegate` through the Wald mailbox, asynchronous and to any registered agent ([peers.md](peers.md)); peer addresses resolved from a Wald registry (`src/peers/discovery.ts`) |
 | **Self** | Autonomy | unbounded task runs, cron, the autonomy loop ([autonomy-loop.md](autonomy-loop.md)) |
 | | Continuity | memory, `NOTES.md`, handoff, rollover, compaction |
 | **Up** | Informing | `report` notify, heartbeat and standup, Web Push |
@@ -68,9 +68,9 @@ more than one instance:
 
 | Wald pillar | Duty it serves | egirl today |
 |---|---|---|
-| Agent directory (`find_agents`, `register_agent`) | Delegation — who can take this work | discovery only: reads `list_agents` to find `egirl-peer/1` peers |
+| Agent directory (`find_agents`, `register_agent`) | Delegation — who can take this work | announces itself with `register_agent` at startup, and reads `list_agents` to find `egirl-peer/1` peers (`src/peers/discovery.ts`) |
 | Agent `owner` field | Principal — who an agent answers to | unused |
-| A2A mailbox (`send_agent_message`, `read_inbox`, `ack_messages`) | Delegation and informing without both ends being up | unused; peers talk synchronously over HTTP |
+| A2A mailbox (`send_agent_message`, `read_inbox`, `ack_messages`) | Delegation and informing without both ends being up | `delegate` sends; a seeded `mailbox` task polls, records each message as a task or a conversation, then acks (`src/peers/mailbox*.ts`) |
 | Wiki and resource directory | Intent and continuity — shared context beyond one instance's memory | reachable as an ordinary MCP server, not wired into recall |
 
 Wald stays a tool, reached over MCP. It is not a routing layer and not a second workflow
@@ -86,9 +86,13 @@ In rough order of what they would change:
    has been idle a week, close it?", "the task I finished unblocks X, start it?". A
    suggestion is an `ask` the principal may ignore; it probably needs its own lightweight
    form so it doesn't park a task waiting for an answer.
-3. **Delegation is synchronous and egirl-only.** `peer_message` blocks on HTTP and only
-   reaches other egirls. The Wald mailbox would let work be handed off to an agent that
-   is asleep, and to agents that aren't egirl.
+3. **Delegation trusts a sender name.** `delegate` hands work to any Wald agent, asleep
+   or not, and a delegating task parks until the answer comes back through the mailbox
+   ([peers.md](peers.md#mailbox-delegation)). What is left is trust: an inbound request is
+   acted on when its sender is the principal or a pinned peer, and that name only means
+   something with Wald's authentication on. Wald has no authorization of its own yet, so
+   every trusted sender may ask for anything; there is no "this peer may only ask for
+   reviews". Discovered peers are deliberately untrusted until pinned.
 4. **The principal isn't one concept in code.** It is spread across `[report] to`, channel
    owner lists and the Wald `owner` field. Worth unifying only when something needs to ask
    "who is my principal?" in one place.

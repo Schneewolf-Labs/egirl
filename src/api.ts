@@ -29,6 +29,7 @@ import { lintSkill } from './skills/linter'
 import { loadSkillsFromDirectories } from './skills/loader'
 import { sseResponse } from './sse'
 import type { Task, TaskRunner, TaskStore } from './tasks'
+import { resumeParkedTask } from './tasks/resume'
 import { WORKING_MEMORY_MAX_CHARS } from './tools/builtin/working-memory'
 import { traceStore } from './tracking/traces'
 import { getTheme } from './ui/theme'
@@ -148,25 +149,6 @@ function taskToJson(t: Task): JSONValue {
     run_count: t.runCount,
     consecutive_failures: t.consecutiveFailures,
     created_at: t.createdAt,
-  }
-}
-
-// A message landing on a parked task's session is the resume signal: the exchange just persisted
-// into the task's conversation, so the next run starts from it. Shared by the streaming and
-// non-streaming /chat paths.
-function resumeParkedTask(sessionId: string, deps: APIDeps): void {
-  if (!sessionId.startsWith('task:') || !deps.taskStore) return
-  const taskId = sessionId.slice('task:'.length)
-  const parked = deps.taskStore.get(taskId)
-  if (parked?.status === 'awaiting') {
-    deps.taskStore.update(
-      taskId,
-      { status: 'active', nextRunAt: Date.now() },
-      'Reply received on the task session — resuming',
-    )
-  } else {
-    // Not parked yet, but it may be about to: a run whose ask timed out parks when it ends.
-    deps.taskRunner?.noteReply(taskId)
   }
 }
 
@@ -463,7 +445,7 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
               if (position > 0) send({ t: 'queued', v: position })
               try {
                 const response = await done
-                resumeParkedTask(sessionId, deps)
+                resumeParkedTask(sessionId, deps.taskStore, deps.taskRunner)
                 if (!ended) {
                   send({
                     t: 'run_end',
@@ -490,7 +472,7 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
             agent.run(toRun, images?.length ? { images } : {}),
           )
           const response = await done
-          resumeParkedTask(sessionId, deps)
+          resumeParkedTask(sessionId, deps.taskStore, deps.taskRunner)
           return json({
             content: response.content,
             session_id: sessionId,

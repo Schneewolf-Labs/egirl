@@ -16,7 +16,15 @@ export interface ToolResult {
   awaitingInput?: boolean
 }
 
+/**
+ * Who is calling. Most tools do not care; one that must route a later answer back to the run
+ * that asked (delegate) needs the session, and has no other way to learn it.
+ */
+export interface ToolCallContext {
+  sessionId?: string
+}
+
 export interface Tool {
   definition: ToolDefinition
-  execute(params: Record<string, unknown>, cwd: string): Promise<ToolResult>
+  execute(params: Record<string, unknown>, cwd: string, ctx?: ToolCallContext): Promise<ToolResult>
 }

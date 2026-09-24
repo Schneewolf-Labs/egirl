@@ -163,7 +163,7 @@ async function executeToolsWithHooks(args: {
     if (signal?.aborted) {
       return new Map(toolCalls.map((call) => [call.id, skippedResult()]))
     }
-    return executor.executeAll(toolCalls, context.workspaceDir)
+    return executor.executeAll(toolCalls, context.workspaceDir, { sessionId: context.sessionId })
   }
 
   const results = new Map<string, ToolResult>()
@@ -187,7 +187,9 @@ async function executeToolsWithHooks(args: {
       }
     }
 
-    const result = await executor.execute(call, context.workspaceDir)
+    const result = await executor.execute(call, context.workspaceDir, {
+      sessionId: context.sessionId,
+    })
     events?.onAfterToolExec?.(call, result)
 
     results.set(call.id, result)

@@ -17,6 +17,7 @@ import { log } from '../util/logger'
 import { parseScheduleExpression } from './cron'
 import { classifyError, getRetryPolicy } from './error-classify'
 import { HEARTBEAT_TASK_NAME, heartbeatPreCheck } from './heartbeat'
+import { MAILBOX_TASK_NAME } from './mailbox-task'
 import { calculateNextRun, isWithinBusinessHours, parseBusinessHours } from './schedule'
 import { runSelfReview } from './self-review'
 import type { TaskStore } from './store'
@@ -77,6 +78,8 @@ export interface TaskRunnerDeps {
    * until somebody answers -- which they cannot do if they do not know.
    */
   onAwaitingInput?: (task: Task) => void
+  /** One pass over the Wald mailbox, for the seeded `mailbox` task. Absent = mailbox off here. */
+  pollMailbox?: () => Promise<string>
 }
 
 export class TaskRunner {
@@ -332,6 +335,10 @@ export class TaskRunner {
       } else if (task.kind === 'scheduled') {
         const nextRunAt = this.calculateTaskNextRun(task)
         this.deps.store.update(task.id, { nextRunAt })
+      } else if (task.kind === 'oneshot') {
+        // Done with its one run. Left in place, the past nextRunAt kept it due, and the next
+        // tick ran it again — for a mailbox task, answering the sender a second time.
+        this.deps.store.update(task.id, { nextRunAt: undefined })
       }
 
       if (task.maxRuns && task.runCount + 1 >= task.maxRuns) {
@@ -439,6 +446,13 @@ export class TaskRunner {
     deadline: number,
     wrapupMarginMs: number,
   ): Promise<{ content: string; awaitingInput: boolean }> {
+    if (task.name === MAILBOX_TASK_NAME) {
+      const content = this.deps.pollMailbox
+        ? await this.deps.pollMailbox()
+        : 'Mailbox is not configured in this process'
+      return { content, awaitingInput: false }
+    }
+
     if (task.name === HEARTBEAT_TASK_NAME) {
       const prompt = await heartbeatPreCheck(this.deps.config.workspace.path)
       if (!prompt) {

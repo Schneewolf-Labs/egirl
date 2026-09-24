@@ -199,3 +199,12 @@ dirs = ["~/.egirl/skills", "{workspace}/skills"]
 # registry = "wald"                      # name of the [[mcp.servers]] entry
 # self_url = "http://192.168.1.10:3000"  # so other instances can reach this one
 # capabilities = ["coding", "vision"]
+
+# The Wald A2A mailbox: `delegate` hands work to any registered agent without waiting for it
+# to be up, and a seeded `mailbox` task polls for work handed here. Requests are acted on only
+# from the [report] principal (when it is a peer) and [[peers]] pinned above; anything else is
+# recorded and reported to the principal, never run. Needs conversation persistence.
+# [mailbox]
+# enabled = true
+# registry = "wald"                      # name of the [[mcp.servers]] entry
+# schedule = "*/5 * * * *"               # how often to poll

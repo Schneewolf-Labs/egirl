@@ -617,6 +617,14 @@ export function loadConfig(options: LoadConfigOptions = {}): RuntimeConfig {
     }
   }
 
+  if (toml.mailbox?.enabled) {
+    config.mailbox = {
+      enabled: true,
+      registry: toml.mailbox.registry ?? 'wald',
+      schedule: toml.mailbox.schedule ?? '*/5 * * * *',
+    }
+  }
+
   if (toml.mcp?.servers && toml.mcp.servers.length > 0) {
     config.mcp = {
       servers: toml.mcp.servers.map((m) => ({

@@ -44,6 +44,11 @@ export interface DiscoveryOptions {
   selfUrl?: string
   capabilities?: string[]
   timeoutMs?: number
+  /**
+   * Register even without a selfUrl. A mailbox needs a registry row to send from and receive
+   * at; it does not need an address, since nobody calls it directly.
+   */
+  hasMailbox?: boolean
 }
 
 function findTool(tools: Tool[], registry: string, name: string): Tool | undefined {
@@ -55,18 +60,21 @@ function findTool(tools: Tool[], registry: string, name: string): Tool | undefin
  * defensively rather than assuming — a registry that answers with an error message should
  * degrade to "no peers", not throw during startup.
  */
-function parseAgents(output: string): RegistryAgent[] {
+export function parseMcpRows(output: string): unknown[] {
   try {
     const parsed = JSON.parse(output)
-    if (Array.isArray(parsed)) return parsed as RegistryAgent[]
-    // Wald concatenates content blocks with newlines when several are returned.
+    if (Array.isArray(parsed)) return parsed
+    // FastMCP sends one content block per row, so a single-row result is a bare object.
+    // Treating that as "no rows" hid the only agent in a one-agent registry.
+    if (parsed && typeof parsed === 'object') return [parsed]
     return []
   } catch {
-    const rows: RegistryAgent[] = []
+    // Several rows: Wald's content blocks, concatenated with newlines.
+    const rows: unknown[] = []
     for (const chunk of output.split(/\n(?=\{)/)) {
       try {
         const one = JSON.parse(chunk)
-        if (one && typeof one === 'object') rows.push(one as RegistryAgent)
+        if (one && typeof one === 'object') rows.push(one)
       } catch {
         // Not JSON — a prose error or a partial block. Skip it.
       }
@@ -75,11 +83,15 @@ function parseAgents(output: string): RegistryAgent[] {
   }
 }
 
+function parseAgents(output: string): RegistryAgent[] {
+  return parseMcpRows(output) as RegistryAgent[]
+}
+
 /** Announce this instance so other agents can find it. Best-effort. */
 export async function registerSelf(opts: DiscoveryOptions): Promise<boolean> {
   const registry = opts.registry ?? 'wald'
   const tool = findTool(opts.tools, registry, 'register_agent')
-  if (!tool || !opts.selfUrl) return false
+  if (!tool || (!opts.selfUrl && !opts.hasMailbox)) return false
 
   const result = await tool.execute(
     {
@@ -87,7 +99,7 @@ export async function registerSelf(opts: DiscoveryOptions): Promise<boolean> {
       name: opts.selfName,
       description: `egirl instance reachable over ${PEER_PROTOCOL}`,
       capabilities: opts.capabilities ?? [],
-      endpoint_url: opts.selfUrl,
+      ...(opts.selfUrl && { endpoint_url: opts.selfUrl }),
       // The registry's own `protocol` field is the discriminator: only rows speaking the
       // egirl peer protocol are peers, so a Wald full of unrelated agents stays harmless.
       protocol: PEER_PROTOCOL,

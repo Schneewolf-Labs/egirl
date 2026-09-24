@@ -339,6 +339,17 @@ const baseProperties = {
     }),
   ),
 
+  // The Wald A2A mailbox: hand work to agents that are not up (delegate), and take work
+  // handed here. Inbound is polled by a seeded task on this cron schedule -- never pushed.
+  mailbox: Type.Optional(
+    Type.Object({
+      enabled: Type.Boolean({ default: false }),
+      // MCP server name Wald is configured under, in [[mcp.servers]].
+      registry: Type.Optional(Type.String({ default: 'wald' })),
+      schedule: Type.Optional(Type.String({ default: '*/5 * * * *' })),
+    }),
+  ),
+
   // MCP servers whose tools are exposed to the agent. Either `command` (stdio, spawned) or
   // `url` (streamable HTTP). Tools are namespaced <server>_<tool> so two servers offering the
   // same tool name cannot shadow each other.
@@ -705,6 +716,11 @@ export interface RuntimeConfig {
     selfName?: string
     selfUrl?: string
     capabilities?: string[]
+  }
+  mailbox?: {
+    enabled: boolean
+    registry: string
+    schedule: string
   }
   mcp?: {
     servers: Array<{

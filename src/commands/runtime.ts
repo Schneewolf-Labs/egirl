@@ -3,6 +3,8 @@ import { SessionMutex } from '../agent/session-mutex'
 import { type AppServices, createAppServices } from '../bootstrap'
 import type { OutboundChannel } from '../channels/types'
 import type { RuntimeConfig } from '../config'
+import { MAIL_CHANNEL } from '../peers/mailbox-poll'
+import { createMailbox, type Mailbox } from '../peers/mailbox-setup'
 import { gatherStandup } from '../standup'
 import {
   createDiscovery,
@@ -14,6 +16,7 @@ import {
   taskRunnerEnabled,
   taskRunnerOffReason,
 } from '../tasks'
+import { seedMailboxTask } from '../tasks/mailbox-task'
 import { createTaskTools } from '../tools/builtin/tasks'
 import { log } from '../util/logger'
 
@@ -98,12 +101,15 @@ export function createBackgroundTasks(
     memory: rt.memory,
   }
 
+  // The poll closes over the mailbox, which needs the runner to exist first.
+  let mailbox: Mailbox | undefined
   const taskRunner = createTaskRunner({
     ...shared,
     outbound: opts.outbound,
     conversationStore: rt.conversations,
     sessionMutex: rt.sessionMutex,
     onAwaitingInput: opts.onAwaitingInput,
+    pollMailbox: async () => (mailbox ? mailbox.poll() : 'Mailbox is not enabled'),
   })
 
   const taskTools = createTaskTools(taskStore, taskRunner, config.tasks.maxActiveTasks, () => ({
@@ -111,6 +117,30 @@ export function createBackgroundTasks(
     channelTarget: opts.channelTarget,
   }))
   rt.toolExecutor.registerAll(Object.values(taskTools))
+
+  mailbox = createMailbox({
+    config,
+    toolExecutor: rt.toolExecutor,
+    tasks: taskStore,
+    runner: taskRunner,
+    conversations: rt.conversations,
+    outbound: opts.outbound,
+    channel: opts.channel,
+    channelTarget: opts.channelTarget,
+  })
+  if (mailbox && config.mailbox) {
+    opts.outbound.set(MAIL_CHANNEL, mailbox.outbound)
+    rt.toolExecutor.register(mailbox.delegateTool)
+    // Seeded in every process that runs tasks, unlike the heartbeat: an API-only instance
+    // still has an inbox, and the seed is idempotent.
+    seedMailboxTask({
+      store: taskStore,
+      runner: taskRunner,
+      schedule: config.mailbox.schedule,
+      channel: opts.channel,
+      channelTarget: opts.channelTarget,
+    })
+  }
 
   let discovery: Discovery | undefined
   if (opts.schedule !== false) {

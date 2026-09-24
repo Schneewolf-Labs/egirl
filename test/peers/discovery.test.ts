@@ -53,6 +53,13 @@ describe('discoverPeers', () => {
     expect(peers.map((p) => p.name).sort()).toEqual(['kira', 'scribe'])
   })
 
+  test('finds the only agent in a one-agent registry', async () => {
+    // FastMCP sends one block per row, so a single row arrives as a bare object.
+    const one = tool('wald_list_agents', { output: JSON.stringify(AGENTS[0], null, 2) })
+    const peers = await discoverPeers({ tools: [one], selfName: 'nobody' })
+    expect(peers.map((p) => p.name)).toEqual(['kira'])
+  })
+
   test('excludes this instance', async () => {
     const peers = await discoverPeers({ tools: [listTool], selfName: 'kira' })
     expect(peers.map((p) => p.name)).toEqual(['scribe'])
@@ -171,5 +178,20 @@ describe('registerSelf', () => {
     expect(seen.slug).toBe('kira')
     expect(seen.protocol).toBe(PEER_PROTOCOL)
     expect(seen.endpoint_url).toBe('https://kira.local')
+  })
+
+  test('a mailbox registers without an address, and publishes none', async () => {
+    // It needs a registry row to send from and receive at; nobody calls it directly.
+    let seen: Record<string, unknown> = {}
+    const reg: Tool = {
+      definition: { name: 'wald_register_agent', description: '', parameters: {} },
+      execute: async (params) => {
+        seen = params
+        return { success: true, output: '{}' }
+      },
+    }
+    expect(await registerSelf({ tools: [reg], selfName: 'kira', hasMailbox: true })).toBe(true)
+    expect(seen.slug).toBe('kira')
+    expect('endpoint_url' in seen).toBe(false)
   })
 })
