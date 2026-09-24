@@ -3,15 +3,15 @@
 </p>
 
 <p align="center">
-  <strong>Local AI that drives code agents.</strong><br>
-  The human-in-the-loop for your coding agent. Meet Kira.
+  <strong>The human in your agent's loop.</strong><br>
+  Local AI that drives code agents. Meet Kira.
 </p>
 
 ---
 
 ## What This Is
 
-egirl is a long-running local AI agent. It runs on your hardware, remembers what you've been working on, and **delegates real engineering work to a code agent**. The local LLM plans and supervises; Claude Code or Codex executes.
+egirl is the person a code agent needs around it: something that sets intent, approves or refuses risky actions, notices drift, remembers yesterday, hands work to other agents, and keeps whoever it answers to informed. It runs on your hardware as a long-running local AI agent and **delegates real engineering work to a code agent**. The local LLM plans and supervises; Claude Code or Codex executes.
 
 Think of it as a competent colleague who lives in your cluster, knows your projects, and drives your coding agent so you don't have to write every prompt by hand.
 

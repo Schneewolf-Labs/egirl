@@ -4,9 +4,11 @@ How an egirl instance runs a long-lived goal on its own: the control model, what
 stops it, how it survives its own context window, and how it involves a supervisor
 (human *or* agent) when it reaches the edge of what it can decide alone.
 
-> Status: **proposal**. Written after a full day of running Zero unattended on a
-> reverse-engineering task surfaced, one at a time, every place the loop was held
-> together by a human being present. This is the spec for removing that assumption.
+> Status: **adopted**. The thesis below is egirl's project identity (`CLAUDE.md`,
+> [human-in-the-loop.md](human-in-the-loop.md)), and both phases are in source. Written
+> after a full day of running Zero unattended on a reverse-engineering task surfaced, one
+> at a time, every place the loop was held together by a human being present. The
+> "What exists vs. what to build" table records the state when this was proposed.
 
 ## Thesis
 
