@@ -21,6 +21,14 @@ max_concurrent = 2                 # in-flight requests against the endpoint; se
 # cache_slots = 0                  # >0 pins a session to a server KV slot (sabrewing only)
 # stale_stream_timeout_ms = 90000   # raise well above your worst-case prefill time
 
+# [local.witchgrid]
+# Resolve the operator model through a Witchgrid control plane instead of the fixed endpoint
+# above: the live llama-server's direct address, or the auto-spawning proxy when the profile is
+# not running. With the CP unreachable, an explicit `endpoint` is the fallback. See
+# docs/configuration.md.
+# url = "http://witchgrid.lan:8765"
+# profile = "chat-qwen"
+
 # [local.auxiliary]
 # A second, smaller model for side work: compaction summaries and memory extraction.
 # These run on every compaction and every few turns. They do not need the operator model's

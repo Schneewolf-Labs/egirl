@@ -1,6 +1,7 @@
 import type { RuntimeConfig } from '../config'
 import { createLlamaCppProvider } from './llamacpp'
 import type { LLMProvider } from './types'
+import { createWitchgridReresolver } from './witchgrid'
 
 export { type ApiMessage, toApiMessages } from './chat-format'
 export { createLlamaCppProvider } from './llamacpp'
@@ -44,6 +45,9 @@ export function createProviderRegistry(config: RuntimeConfig): ProviderRegistry 
     config.local.maxConcurrent,
     config.local.temperature,
     config.local.apiKey,
+    config.local.witchgrid
+      ? createWitchgridReresolver(config.local.witchgrid, config.local)
+      : undefined,
   )
 
   const auxiliary = config.local.auxiliary
