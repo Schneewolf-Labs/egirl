@@ -133,6 +133,24 @@ describe('checkMcpServers', () => {
     expect(results[0]?.level).toBe('ok')
   })
 
+  test('a rejected credential fails', async () => {
+    // Wald with auth on answers 401 to a missing or wrong bearer token; the agent would start
+    // without any of its tools.
+    const server = track(
+      serve((req) =>
+        req.headers.get('authorization') === 'Bearer good'
+          ? new Response('no session', { status: 406 })
+          : new Response('invalid_token', { status: 401 }),
+      ),
+    )
+    const withHeader = (value: string) =>
+      ({
+        mcp: { servers: [{ name: 'wald', url: server.url, headers: { Authorization: value } }] },
+      }) as RuntimeConfig
+    expect((await checkMcpServers(withHeader('Bearer good')))[0]?.level).toBe('ok')
+    expect((await checkMcpServers(withHeader('Bearer ')))[0]?.level).toBe('fail')
+  })
+
   test('an unreachable server fails', async () => {
     const config = {
       mcp: { servers: [{ name: 'wald', url: 'http://127.0.0.1:1/mcp' }] },
