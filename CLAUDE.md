@@ -1,38 +1,48 @@
-# egirl — Local AI that Drives Code Agents
+# egirl — the Human in Your Agent's Loop
 
 ## What This Is
 
-egirl is a long-running local AI agent that acts as the **human in the loop** for code agents. The local LLM plans, remembers, supervises, and delegates; Claude Code or Codex does the heavy engineering work. Around that core sits memory, a toolbelt shaped like a human's hands (shell, files, git, browser, web), and a couple of ways to talk to it (CLI + Discord).
+A code agent needs a person around it: someone to set intent, grant or refuse authority, notice drift, check the work, remember context, and know when to escalate. egirl is that person. It is a long-running agent on a local model that supervises Claude Code or Codex, works autonomously toward goals, delegates to other agents, and keeps its own principal informed — a person, or another agent.
 
-Single user. Single operator model. No cloud escalation, no routing decisions — the local LLM is the operator, and it escalates to *tools*, not to other models.
+Around that core sits memory, a toolbelt shaped like a human's hands (shell, files, git, browser, web), peers it can hand work to, and several ways to talk to it (CLI, chat channels, HTTP API).
 
 ## The Mental Model
 
 > **One local LLM is the operator. It escalates to tools, not to other models. The most important tool is `code_agent`.**
 
-If you ever catch yourself adding "what if we route this to a bigger model" logic, stop. That's not what this is. If the local model can't do something itself, it calls `code_agent` for code work, or `execute_command` / `browser_*` / `web_research` / `git_*` for everything else.
+If you ever catch yourself adding "what if we route this to a bigger model" logic, stop. That's not what this is. If the local model can't do something itself, it calls `code_agent` for code work, `peer_message` for another agent, `report` for its principal, or `execute_command` / `browser_*` / `web_research` / `git_*` for everything else.
 
-## Purpose
+## What a Human in the Loop Does
 
-egirl is built for one person at Schneewolf Labs. It behaves like a competent colleague who:
-- Remembers what you've been working on
-- Knows how to drive a configured code agent for real project work
-- Can run shell commands, read/write files, interact with git and GitHub, browse the web
-- Wakes up on a cron to check in on things
-- Talks back through Discord DMs or the terminal
+This table is the feature filter. **Build what makes one of these judgments better. Skip what doesn't.**
 
-Feature priorities:
-- **Build**: Anything that makes local → code agent delegation better, or that makes the long-running memory richer.
-- **Skip**: Generic assistant features (weather, jokes, trivia). Multi-model routing. Multi-user anything. Hypothetical future integrations.
-- **Prioritize**: Depth over breadth. One code-agent delegation flow that works well beats five half-wired remote providers.
+| Duty | Direction | Where it lives today |
+|---|---|---|
+| **Intent** — decide what to do and write the prompt | down, to executors | agent loop → `code_agent` |
+| **Authority** — approve, deny, answer the agent's questions | down | `src/permissions/supervisor.ts` |
+| **Steering** — notice drift, spirals, stalls | down | `spiral-guard`, `repetition-guard`, `nudges` |
+| **Verification** — check the real artifact, not the claim | down | the rule below; little code yet |
+| **Delegation** — hand work to another agent | sideways, to peers | `peer_message`, Wald discovery (`src/peers/`) |
+| **Autonomy** — pursue a goal unattended for days | self | autonomy loop, tasks, cron (`docs/autonomy-loop.md`) |
+| **Continuity** — remember across sessions and restarts | self | memory, `NOTES.md`, handoff, compaction |
+| **Informing** — tell the principal what happened | up, to the principal | `report` notify, standup, push |
+| **Suggesting** — propose what should happen next | up | not built yet |
+| **Escalation** — stop and ask when a decision isn't its own | up | `report` ask, awaiting-input tasks |
+
+See [docs/human-in-the-loop.md](docs/human-in-the-loop.md) for how these fit together and what is still missing.
+
+Skip: generic assistant features (weather, jokes, trivia), multi-model routing, multi-tenancy, hypothetical future integrations. Prioritize depth over breadth: one delegation flow that works well beats five half-wired remote providers.
 
 ## Design Philosophy
 
-1. **Local LLM is the operator.** No model routing, no escalation to remote LLMs. Delegate to *tools* (code_agent, execute_command, browser_*) when the local model isn't the right executor.
-2. **Long-running by design.** Memory survives restarts. Cron wakes it up. Conversations persist.
-3. **One user, one cluster.** No auth, no pairing, no multi-user anything.
-4. **Flat and readable.** Minimal abstraction. If you can grep for it, don't wrap it.
-5. **Steal good ideas.** OpenClaw's skill format: yes. Their 50-layer gateway abstraction: no.
+1. **The operator is local; executors are tools.** One local model decides. It escalates to tools (`code_agent`, shell, browser, peers), never to other models.
+2. **One principal per instance.** An instance answers to one principal and holds one identity and one memory. A principal can be a person or another agent. More principals means more instances talking as peers, not a multi-tenant instance.
+3. **A human is a slow peer.** Reporting up to a person and to a supervising agent share one contract (`report`); only the latency differs. Supervision stacks as deep as the work warrants, with a person at the top.
+4. **Authority is bounded and legible.** Every stop is mechanical (the system handles it) or semantic (it goes up to the principal). No arbitrary caps.
+5. **Verify the artifact, not the claim.** An agent's report is a lead; the authoritative artifact, and the agent's own record naming it, is the evidence.
+6. **Long-running by design.** Memory, notes and schedules survive restarts; judgment has to survive the context window.
+7. **Flat and readable.** Minimal abstraction. If you can grep for it, don't wrap it.
+8. **Steal good ideas.** OpenClaw's skill format: yes. Their 50-layer gateway abstraction: no.
 
 ## Tech Stack
 
@@ -88,8 +98,8 @@ This list is load-bearing. When you catch yourself about to add one of these, st
 - **No workflow engine.** The LLM is the workflow engine. Don't build a second one.
 - **No event-driven task triggers** (file watchers, GitHub webhooks, inbound HTTP). Cron is enough. If you think you need webhooks, reconsider — almost always the right design is "check on a schedule."
 - **No plugin system for providers.** One local provider. That's the whole list.
-- **No skill gating/permissions.** You're the only user.
-- **No multi-user anything.**
+- **No permission system beyond the principal hierarchy.** Skills check `owner` / `allowed` / `everyone`; nothing finer-grained.
+- **No multi-tenancy.** One principal per instance. Another principal gets another instance.
 
 ## Rules for Working in This Codebase
 
