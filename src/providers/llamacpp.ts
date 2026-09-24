@@ -450,10 +450,6 @@ export class LlamaCppProvider implements LLMProvider {
   }
 
   /**
-   * Read an SSE stream from llama.cpp, emitting tokens via callback.
-   * Buffers text near `<tool_call>` and `<think>` tags to avoid leaking raw XML to the user.
-   */
-  /**
    * POST the chat request, following a moved Witchgrid endpoint once. Only a failure to connect
    * is retried: nothing was sent, so nothing can be duplicated, and an abort or HTTP error means
    * the server is where we thought it was.
@@ -470,6 +466,10 @@ export class LlamaCppProvider implements LLMProvider {
     }
   }
 
+  /**
+   * Read an SSE stream from llama.cpp, emitting tokens via callback.
+   * Buffers text near `<tool_call>` and `<think>` tags to avoid leaking raw XML to the user.
+   */
   private async readStream(
     body: ReadableStream<Uint8Array>,
     onToken: (token: string) => void,
