@@ -59,9 +59,11 @@ function parseAgents(output: string): RegistryAgent[] {
   try {
     const parsed = JSON.parse(output)
     if (Array.isArray(parsed)) return parsed as RegistryAgent[]
-    // Wald concatenates content blocks with newlines when several are returned.
-    return []
+    // FastMCP sends a list as one text block per element, so a registry holding exactly one
+    // agent arrives as a bare object -- and that one agent is the peer a second instance needs.
+    return parsed && typeof parsed === 'object' ? [parsed as RegistryAgent] : []
   } catch {
+    // Several agents: one pretty-printed object per block, joined with newlines.
     const rows: RegistryAgent[] = []
     for (const chunk of output.split(/\n(?=\{)/)) {
       try {
