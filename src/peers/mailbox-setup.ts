@@ -13,6 +13,7 @@ import { log } from '../util/logger'
 import { createMailboxClient } from './mailbox'
 import { parseMailTarget, pollMailbox } from './mailbox-poll'
 import { createMailboxStore } from './mailbox-store'
+import { probeWaldAuth, type WaldAuthState } from './wald-auth'
 
 export interface Mailbox {
   poll: () => Promise<string>
@@ -86,14 +87,33 @@ export function createMailbox(opts: MailboxSetupOptions): Mailbox | undefined {
 
   log.info('mailbox', `Mailbox on (trusted senders: ${[...trusted].join(', ') || 'none'})`)
 
+  // Asked every poll, logged only when it changes: a hub with auth off would otherwise warn
+  // every five minutes.
+  const registryServer = config.mcp?.servers.find((s) => s.name === config.mailbox?.registry)
+  let lastAuth: WaldAuthState | undefined
+  const senderVerified = async (): Promise<boolean> => {
+    const probe = await probeWaldAuth(registryServer)
+    if (probe.state !== lastAuth) {
+      lastAuth = probe.state
+      if (probe.state === 'on') log.info('mailbox', `Wald authentication on: ${probe.detail}`)
+      else
+        log.warn(
+          'mailbox',
+          `Wald authentication ${probe.state} (${probe.detail}) — requests from trusted senders are recorded and reported, not run`,
+        )
+    }
+    return probe.state === 'on'
+  }
+
   return {
-    poll: () =>
+    poll: async () =>
       pollMailbox({
         client,
         store,
         tasks: opts.tasks,
         conversations,
         trusted,
+        senderVerified: await senderVerified(),
         activateTask: (id) => opts.runner.activateTask(id),
         resume: (sessionId) =>
           resumeParkedTask(

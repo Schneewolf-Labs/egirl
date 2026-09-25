@@ -76,9 +76,10 @@ beforeEach(() => {
   resumed = []
 })
 
-function deps(client: MailboxClient, trusted = ['luna']) {
+function deps(client: MailboxClient, trusted = ['luna'], senderVerified = true) {
   return {
     client,
+    senderVerified,
     store,
     tasks,
     conversations,
@@ -156,6 +157,17 @@ describe('untrusted senders', () => {
     expect(notices[0]).toContain('"mallory"')
     expect(notices[0]).toContain('not your principal or a configured peer')
     expect(notices[0]).toContain('prompt-injection')
+    expect(conversations.loadMessages('mail:untrusted')).toHaveLength(1)
+  })
+
+  test('a pinned peer is not obeyed while Wald authentication is off', async () => {
+    const wald = fakeWald([msg({ id: 'm1' })])
+
+    const summary = await pollMailbox(deps(wald.client, ['luna'], false))
+
+    expect(summary).toContain('1 untrusted')
+    expect(tasks.list()).toHaveLength(0)
+    expect(notices[0]).toContain('authentication')
     expect(conversations.loadMessages('mail:untrusted')).toHaveLength(1)
   })
 

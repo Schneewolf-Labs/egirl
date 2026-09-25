@@ -336,9 +336,16 @@ export class TaskRunner {
         const nextRunAt = this.calculateTaskNextRun(task)
         this.deps.store.update(task.id, { nextRunAt })
       } else if (task.kind === 'oneshot') {
-        // Done with its one run. Left in place, the past nextRunAt kept it due, and the next
-        // tick ran it again — for a mailbox task, answering the sender a second time.
-        this.deps.store.update(task.id, { nextRunAt: undefined })
+        // Done with its one run. Left active with its past nextRunAt, the next tick ran it
+        // again — for a mailbox task, answering the sender a second time — and it kept counting
+        // against maxActiveTasks forever. Only an active task finishes: one the user paused or
+        // retired while it ran keeps that status.
+        const done = this.deps.store.get(task.id)?.status === 'active'
+        this.deps.store.update(
+          task.id,
+          done ? { nextRunAt: undefined, status: 'done' } : { nextRunAt: undefined },
+          done ? 'Oneshot finished' : undefined,
+        )
       }
 
       if (task.maxRuns && task.runCount + 1 >= task.maxRuns) {

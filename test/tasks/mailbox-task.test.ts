@@ -87,5 +87,27 @@ describe('oneshot', () => {
     await runner.runNow(task.id)
 
     expect(store.getDueTasks(Date.now() + 60_000).map((t) => t.id)).not.toContain(task.id)
+    expect(store.get(task.id)?.status).toBe('done')
+  })
+
+  test('finished mailbox requests do not use up the active task limit', async () => {
+    const { runner, store } = setup()
+    const limit = 20
+    for (let i = 0; i < limit + 1; i++) {
+      const task = store.create({
+        name: `mail from luna ${i}`,
+        description: 'd',
+        kind: 'oneshot',
+        prompt: 'answer luna',
+        channel: 'api',
+        channelTarget: 'x',
+        createdBy: 'wald:luna',
+      })
+      runner.activateTask(task.id)
+      await runner.runNow(task.id)
+    }
+
+    expect(store.activeCount()).toBe(0)
+    expect(store.activeCount()).toBeLessThan(limit)
   })
 })

@@ -16,9 +16,11 @@
  * | everything else                           | appended to `mail:untrusted`, principal |
  * |                                           | told — never acted on                   |
  *
- * Trusted means the principal (when it is an agent) or a peer pinned in `[[peers]]`. A peer
- * that only appeared through discovery is not trusted: registering in Wald proves nothing
- * about who you are, so discovery answers "where is it", never "should I obey it".
+ * Trusted means the principal (when it is an agent) or a peer pinned in `[[peers]]`, and only
+ * while Wald is seen enforcing authentication (wald-auth.ts): without it `from_agent` is a
+ * claim anyone can make. A peer that only appeared through discovery is never trusted:
+ * registering in Wald proves nothing about who you are, so discovery answers "where is it",
+ * never "should I obey it".
  *
  * A crash after the record and before the ack re-delivers the message; the `seen` table turns
  * that second delivery into an ack with no second record.
@@ -46,6 +48,11 @@ export interface MailboxPollDeps {
   conversations: ConversationStore
   /** Lowercased slugs whose requests are acted on. */
   trusted: Set<string>
+  /**
+   * Wald was seen enforcing authentication (probeWaldAuth), so `from_agent` is the sender's
+   * token and not a claim. Without it nothing is acted on: anyone could send as a pinned peer.
+   */
+  senderVerified: boolean
   /** Schedule a freshly created task (TaskRunner.activateTask). */
   activateTask: (taskId: string) => void
   /** Resume whatever was parked on a session (resumeParkedTask). */
@@ -148,10 +155,12 @@ function handle(msg: MailMessage, deps: MailboxPollDeps): Handled {
   const why = delegation
     ? `it answers work delegated to "${delegation.agent}", but came from someone else`
     : !from
-      ? 'Wald did not name the sender, so it cannot be attributed'
+      ? 'Wald did not name the sender, so it cannot be attributed (this Wald predates `from_agent`)'
       : !deps.trusted.has(from)
         ? 'the sender is not your principal or a configured peer'
-        : undefined
+        : !deps.senderVerified
+          ? `Wald authentication is off or unconfirmed, so "${from}" is a name anyone could claim`
+          : undefined
 
   if (why) {
     deps.conversations.appendMessages('mail:untrusted', [

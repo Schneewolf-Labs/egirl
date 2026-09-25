@@ -202,8 +202,10 @@ dirs = ["~/.egirl/skills", "{workspace}/skills"]
 
 # The Wald A2A mailbox: `delegate` hands work to any registered agent without waiting for it
 # to be up, and a seeded `mailbox` task polls for work handed here. Requests are acted on only
-# from the [report] principal (when it is a peer) and [[peers]] pinned above; anything else is
-# recorded and reported to the principal, never run. Needs conversation persistence.
+# from the [report] principal (when it is a peer) and [[peers]] pinned above, and only while
+# Wald is seen enforcing auth (WALD_REQUIRE_AUTH=true, checked every poll); anything else is
+# recorded and reported to the principal, never run. Needs conversation persistence and a
+# Wald that names senders (from_agent, Schneewolf-Labs/Wald#8).
 # [mailbox]
 # enabled = true
 # registry = "wald"                      # name of the [[mcp.servers]] entry

@@ -221,14 +221,14 @@ A `response` never becomes a task. That is the loop guard: two instances cannot 
 
 ### Trust
 
-Wald's own rule decides what a sender name is worth: with `WALD_REQUIRE_AUTH=true` the sender is whoever holds the token; with it off, `from_agent` is a claim anyone can make, and anyone can read anyone's inbox. **Turn Wald auth on before trusting the mailbox with anything.**
+Wald's own rule decides what a sender name is worth: with `WALD_REQUIRE_AUTH=true` the sender is whoever holds the token; with it off, `from_agent` is a claim anyone can make, and anyone can read anyone's inbox. **egirl enforces this:** before each poll it sends Wald an MCP request with no token, and only if Wald refuses it (401/403) are trusted requests acted on. With auth off, a registry reached over stdio (which can't be probed), or a hub that can't be reached, every request is recorded and reported instead, and the log says why once per change.
 
 On top of that, egirl decides what a message may *cause*:
 
-- **Trusted senders** are the principal when it is an agent (`[report] to = "peer:<name>"`) and peers pinned in `[[peers]]`. Their requests become tasks.
+- **Trusted senders** are the principal when it is an agent (`[report] to = "peer:<name>"`) and peers pinned in `[[peers]]`. While Wald auth is confirmed on, their requests become tasks.
 - **Discovered peers aren't trusted.** Registering in Wald proves nothing about who you are (anyone who can reach it can register an `egirl-peer/1` row), so discovery answers "where is it", never "should I obey it". Pin a peer in `[[peers]]` to trust it.
 - **Answers to delegated work** are accepted from the agent the work went to, on the thread it went out on. The thread id alone isn't enough, because it can be read.
-- **A message Wald doesn't attribute** (a hub older than the `from_agent` field) is untrusted.
+- **A message Wald doesn't attribute** is untrusted. Wald names senders by slug (`from_agent`) from [Wald#8](https://github.com/Schneewolf-Labs/Wald/pull/8); an older hub only returns the sender's UUID, and no MCP tool maps a UUID back to a slug, so against it every message is unattributable. Upgrade Wald before enabling the mailbox.
 - **Everything untrusted** is data: recorded, fenced, run through the prompt-injection scanner, and reported to the principal. It never starts a run on this instance. If the principal is itself an egirl, the notice does run through *its* agent loop, like any report, framed as data.
 
 A trusted request runs as an ordinary task under the normal safety layer. Being trusted grants no extra authority.
