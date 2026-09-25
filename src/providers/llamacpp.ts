@@ -157,6 +157,8 @@ export class LlamaCppProvider implements LLMProvider {
   private apiKey: string | undefined
   // Set when the endpoint came from Witchgrid, whose direct address can move between nodes.
   private reresolve: EndpointReresolver | undefined
+  // Set with it: moves off Witchgrid's auto-spawning proxy once the model runs directly.
+  private promote: EndpointReresolver | undefined
 
   constructor(
     endpoint: string,
@@ -166,9 +168,11 @@ export class LlamaCppProvider implements LLMProvider {
     defaultTemperature?: number,
     apiKey?: string,
     reresolve?: EndpointReresolver,
+    promote?: EndpointReresolver,
   ) {
     this.endpoint = endpoint.replace(/\/$/, '')
     this.reresolve = reresolve
+    this.promote = promote
     this.name = `llamacpp/${model}`
     this.defaultTemperature = defaultTemperature
     this.apiKey = apiKey
@@ -455,6 +459,8 @@ export class LlamaCppProvider implements LLMProvider {
    * the server is where we thought it was.
    */
   private async postChat(init: RequestInit): Promise<Response> {
+    const promoted = (await this.promote?.())?.replace(/\/$/, '')
+    if (promoted) this.endpoint = promoted
     try {
       return await fetch(`${this.endpoint}/v1/chat/completions`, init)
     } catch (error) {
@@ -740,6 +746,7 @@ export function createLlamaCppProvider(
   defaultTemperature?: number,
   apiKey?: string,
   reresolve?: EndpointReresolver,
+  promote?: EndpointReresolver,
 ): LLMProvider {
   return new LlamaCppProvider(
     endpoint,
@@ -749,6 +756,7 @@ export function createLlamaCppProvider(
     defaultTemperature,
     apiKey,
     reresolve,
+    promote,
   )
 }
 

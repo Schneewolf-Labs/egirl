@@ -28,6 +28,7 @@ max_concurrent = 2                 # in-flight requests against the endpoint; se
 # docs/configuration.md.
 # url = "http://witchgrid.lan:8765"
 # profile = "chat-qwen"
+# token comes from WITCHGRID_SHARED_SECRET in .env when the CP sets WITCHGRID_AUTH_PROTECT_READ
 
 # [local.auxiliary]
 # A second, smaller model for side work: compaction summaries and memory extraction.

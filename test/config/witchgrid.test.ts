@@ -9,6 +9,7 @@ describe('[local.witchgrid] config', () => {
   const saved = {
     config: process.env.EGIRL_CONFIG,
     endpoint: process.env.EGIRL_LOCAL_ENDPOINT,
+    secret: process.env.WITCHGRID_SHARED_SECRET,
   }
 
   function write(local: string): void {
@@ -20,6 +21,7 @@ describe('[local.witchgrid] config', () => {
   beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), 'egirl-witchgrid-')).replace(/\\/g, '/')
     delete process.env.EGIRL_LOCAL_ENDPOINT
+    delete process.env.WITCHGRID_SHARED_SECRET
   })
 
   afterEach(() => {
@@ -27,6 +29,7 @@ describe('[local.witchgrid] config', () => {
     for (const [key, value] of [
       ['EGIRL_CONFIG', saved.config],
       ['EGIRL_LOCAL_ENDPOINT', saved.endpoint],
+      ['WITCHGRID_SHARED_SECRET', saved.secret],
     ] as const) {
       if (value === undefined) delete process.env[key]
       else process.env[key] = value
@@ -48,6 +51,13 @@ describe('[local.witchgrid] config', () => {
       'endpoint = "http://gpu:8080"\n\n[local.witchgrid]\nurl = "http://wg:8765"\nprofile = "p"\n',
     )
     expect(loadConfig().local.witchgrid?.fallbackEndpoint).toBe('http://gpu:8080')
+  })
+
+  test('the CP secret comes from WITCHGRID_SHARED_SECRET, then the toml', () => {
+    write('\n[local.witchgrid]\nurl = "http://wg:8765"\nprofile = "p"\ntoken = "from-toml"\n')
+    expect(loadConfig().local.witchgrid?.token).toBe('from-toml')
+    process.env.WITCHGRID_SHARED_SECRET = 'from-env'
+    expect(loadConfig().local.witchgrid?.token).toBe('from-env')
   })
 
   test('EGIRL_LOCAL_ENDPOINT bypasses Witchgrid for the run', () => {

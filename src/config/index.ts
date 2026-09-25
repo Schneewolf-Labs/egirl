@@ -325,6 +325,9 @@ export function loadConfig(options: LoadConfigOptions = {}): RuntimeConfig {
             url: toml.local.witchgrid.url,
             profile: toml.local.witchgrid.profile,
             ...(toml.local.endpoint && { fallbackEndpoint: toml.local.endpoint }),
+            ...((process.env.WITCHGRID_SHARED_SECRET ?? toml.local.witchgrid.token) && {
+              token: process.env.WITCHGRID_SHARED_SECRET ?? toml.local.witchgrid.token,
+            }),
           },
         }),
       // Undefined means "let the server decide", which is llama.cpp's 0.8. Set 0 to make runs

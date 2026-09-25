@@ -113,6 +113,9 @@ const baseProperties = {
       Type.Object({
         url: Type.String(),
         profile: Type.String(),
+        // The CP's WITCHGRID_SHARED_SECRET, needed when it gates reads (WITCHGRID_AUTH_PROTECT_READ).
+        // Prefer the WITCHGRID_SHARED_SECRET env var over putting the secret in the toml.
+        token: Type.Optional(Type.String()),
       }),
     ),
     // A second, usually smaller model for side work: compaction summaries, memory extraction.
@@ -554,6 +557,8 @@ export interface RuntimeConfig {
       profile: string
       /** The explicitly configured endpoint, used only when the control plane is unreachable. */
       fallbackEndpoint?: string
+      /** Bearer for a CP that gates its read surface (WITCHGRID_AUTH_PROTECT_READ). */
+      token?: string
     }
     /** Optional smaller model for summarisation and memory extraction. */
     auxiliary?: {

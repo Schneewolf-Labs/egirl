@@ -11,6 +11,7 @@ import { afterAll, describe, expect, test } from 'bun:test'
 import { LlamaCppProvider } from '../../src/providers/llamacpp'
 import { LlamaCppTokenizer } from '../../src/providers/llamacpp-tokenizer'
 import {
+  createWitchgridPromoter,
   createWitchgridReresolver,
   resolveOperatorEndpoint,
   resolveWitchgrid,
@@ -40,19 +41,44 @@ function fakeLlama(name: string, status = 200) {
   return { server, hits, url: `http://localhost:${server.port}` }
 }
 
-/** A Witchgrid CP whose live location for each profile the test controls. */
-function fakeWitchgrid(live: Record<string, string | undefined>) {
+/**
+ * A Witchgrid CP whose live location for each profile the test controls. `known` is what
+ * /api/profiles/{name} knows about (defaults to the live ones); `secret` gates the read surface
+ * the way WITCHGRID_AUTH_PROTECT_READ does. The proxy route answers chat like a llama-server.
+ */
+function fakeWitchgrid(
+  live: Record<string, string | undefined>,
+  opts: { known?: string[]; secret?: string } = {},
+) {
   const resolves: string[] = []
+  const proxied: string[] = []
+  const known = new Set(opts.known ?? Object.keys(live))
   const server = Bun.serve({
     port: 0,
     fetch(req) {
       const path = new URL(req.url).pathname
+      if (path.startsWith('/v1/llama/')) {
+        proxied.push(path)
+        return sseReply('from proxy')
+      }
+      if (opts.secret && req.headers.get('authorization') !== `Bearer ${opts.secret}`) {
+        return Response.json({ error: 'unauthorized' }, { status: 401 })
+      }
+      if (path.startsWith('/api/profiles/')) {
+        const name = decodeURIComponent(path.slice('/api/profiles/'.length))
+        return known.has(name)
+          ? Response.json({ name })
+          : Response.json({ error: `no such profile: ${name}` }, { status: 404 })
+      }
       if (!path.startsWith('/resolve/')) return new Response('nope', { status: 404 })
       const profile = decodeURIComponent(path.slice('/resolve/'.length))
       resolves.push(profile)
       const baseUrl = live[profile]
       if (!baseUrl) {
-        return Response.json({ error: 'no running service for profile', profile }, { status: 404 })
+        return Response.json(
+          { error: 'no running service for profile', profile, alias: profile },
+          { status: 404 },
+        )
       }
       const u = new URL(baseUrl)
       return Response.json({
@@ -64,7 +90,7 @@ function fakeWitchgrid(live: Record<string, string | undefined>) {
       })
     },
   })
-  return { server, resolves, url: `http://localhost:${server.port}` }
+  return { server, resolves, proxied, url: `http://localhost:${server.port}` }
 }
 
 /** A port that nothing listens on: bind one, then release it. */
@@ -96,7 +122,7 @@ describe('resolveWitchgrid', () => {
   })
 
   test('nothing running falls back to the auto-spawning proxy', async () => {
-    const wg = fakeWitchgrid({})
+    const wg = fakeWitchgrid({}, { known: ['chat-qwen'] })
     cleanup.push(wg.server)
 
     const r = await resolveWitchgrid({ url: wg.url, profile: 'chat-qwen' })
@@ -109,6 +135,93 @@ describe('resolveWitchgrid', () => {
     await expect(
       resolveWitchgrid({ url: `http://localhost:${cp.port}`, profile: 'x' }),
     ).rejects.toThrow('503')
+  })
+})
+
+describe('resolve with a protected read surface', () => {
+  test('sends the shared secret as a bearer', async () => {
+    const wg = fakeWitchgrid({ p: 'http://10.0.0.20:18001' }, { secret: 's3cret' })
+    cleanup.push(wg.server)
+    const r = await resolveWitchgrid({ url: wg.url, profile: 'p', token: 's3cret' })
+    expect(r).toEqual({ kind: 'direct', baseUrl: 'http://10.0.0.20:18001' })
+  })
+
+  test('a 401 says which secret is missing', async () => {
+    const wg = fakeWitchgrid({ p: 'http://10.0.0.20:18001' }, { secret: 's3cret' })
+    cleanup.push(wg.server)
+    await expect(resolveWitchgrid({ url: wg.url, profile: 'p' })).rejects.toThrow(
+      /401.*WITCHGRID_SHARED_SECRET/,
+    )
+  })
+})
+
+describe('an unknown profile', () => {
+  test('is an error naming the profile, not a silent proxy fallback', async () => {
+    const wg = fakeWitchgrid({}, { known: ['chat-qwen'] })
+    cleanup.push(wg.server)
+    await expect(resolveWitchgrid({ url: wg.url, profile: 'chat-qwne' })).rejects.toThrow(
+      /no profile named 'chat-qwne'/,
+    )
+  })
+
+  test('fails startup when there is no explicit endpoint to fall back to', async () => {
+    const wg = fakeWitchgrid({}, { known: ['chat-qwen'] })
+    cleanup.push(wg.server)
+    await expect(resolveOperatorEndpoint({ url: wg.url, profile: 'chat-qwne' })).rejects.toThrow(
+      /no profile named 'chat-qwne'/,
+    )
+  })
+})
+
+describe('leaving the proxy once the model is up', () => {
+  test('the next request after the interval goes to the direct address', async () => {
+    const direct = fakeLlama('direct')
+    const live: Record<string, string | undefined> = {}
+    const wg = fakeWitchgrid(live, { known: ['p'] })
+    cleanup.push(direct.server, wg.server)
+    const target = { url: wg.url, profile: 'p' }
+
+    const holder = { endpoint: await resolveOperatorEndpoint(target) }
+    expect(holder.endpoint).toBe(`${wg.url}/v1/llama/p`)
+    const provider = new LlamaCppProvider(
+      holder.endpoint,
+      'test',
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      createWitchgridReresolver(target, holder),
+      createWitchgridPromoter(target, holder, 0),
+    )
+
+    // The first request through the proxy is what has Witchgrid spawn the model.
+    expect(await chatText(provider)).toBe('from proxy')
+    live.p = direct.url
+    expect(await chatText(provider)).toBe('from direct')
+    expect(holder.endpoint).toBe(direct.url)
+    expect(wg.proxied).toHaveLength(1)
+  })
+
+  test('checks at most once per interval while still on the proxy', async () => {
+    const wg = fakeWitchgrid({}, { known: ['p'] })
+    cleanup.push(wg.server)
+    const target = { url: wg.url, profile: 'p' }
+    const holder = { endpoint: `${wg.url}/v1/llama/p` }
+    const promote = createWitchgridPromoter(target, holder, 60_000)
+
+    expect(await promote()).toBeUndefined()
+    expect(await promote()).toBeUndefined()
+    expect(wg.resolves).toHaveLength(1)
+  })
+
+  test('does nothing on a direct endpoint', async () => {
+    const wg = fakeWitchgrid({ p: 'http://10.0.0.20:18001' })
+    cleanup.push(wg.server)
+    const holder = { endpoint: 'http://10.0.0.20:18001' }
+    const promote = createWitchgridPromoter({ url: wg.url, profile: 'p' }, holder, 0)
+
+    expect(await promote()).toBeUndefined()
+    expect(wg.resolves).toHaveLength(0)
   })
 })
 
@@ -163,7 +276,7 @@ describe('re-resolving a moved endpoint', () => {
   })
 
   test('a model that is gone everywhere moves to the proxy', async () => {
-    const wg = fakeWitchgrid({})
+    const wg = fakeWitchgrid({}, { known: ['chat-qwen'] })
     cleanup.push(wg.server)
     const holder = { endpoint: deadUrl() }
     const reresolve = createWitchgridReresolver({ url: wg.url, profile: 'chat-qwen' }, holder)
