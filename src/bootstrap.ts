@@ -19,6 +19,7 @@ import {
   serverContextLength,
   serverSupportsVision,
 } from './providers/server-props'
+import { resolveOperatorEndpoint } from './providers/witchgrid'
 import { buildSafetyConfig } from './safety/config-bridge'
 import { loadSkillsFromDirectories } from './skills'
 import type { Skill } from './skills/types'
@@ -194,6 +195,13 @@ function createTasks(config: RuntimeConfig): TaskStore | undefined {
  * Bootstrap all shared services from config.
  */
 export async function createAppServices(config: RuntimeConfig): Promise<AppServices> {
+  // Before anything reads the endpoint: the props probe, the providers and the tokenizer all
+  // take config.local.endpoint, so resolving here is the only place that needs to know.
+  if (config.local.witchgrid) {
+    const { fallbackEndpoint, ...target } = config.local.witchgrid
+    config.local.endpoint = await resolveOperatorEndpoint(target, fallbackEndpoint)
+  }
+
   // The server's n_ctx is a hard limit — a prompt one token over is rejected wholesale, and
   // token estimates run enough below real counts that a config within a few percent of the
   // server window overflows it in practice. Clamp before anything downstream captures the

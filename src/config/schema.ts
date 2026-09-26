@@ -106,6 +106,18 @@ const baseProperties = {
     // Bearer token for a llama-server started with --api-key (a shared/keyed operator endpoint).
     // Prefer the EGIRL_LOCAL_API_KEY env var over putting the secret in the toml.
     api_key: Type.Optional(Type.String()),
+    // Find the operator model through a Witchgrid control plane instead of a fixed endpoint:
+    // GET {url}/resolve/{profile} at startup, the auto-spawning {url}/v1/llama/{profile} proxy
+    // when nothing is running. `endpoint`, if set, is the fallback for an unreachable CP.
+    witchgrid: Type.Optional(
+      Type.Object({
+        url: Type.String(),
+        profile: Type.String(),
+        // The CP's WITCHGRID_SHARED_SECRET, needed when it gates reads (WITCHGRID_AUTH_PROTECT_READ).
+        // Prefer the WITCHGRID_SHARED_SECRET env var over putting the secret in the toml.
+        token: Type.Optional(Type.String()),
+      }),
+    ),
     // A second, usually smaller model for side work: compaction summaries, memory extraction.
     // These run on every compaction and every few turns, and they do not need the operator
     // model's capability — but they do occupy its slot and its context while they run.
@@ -539,6 +551,15 @@ export interface RuntimeConfig {
     temperature?: number
     /** Bearer token for a keyed llama-server (--api-key). Undefined for the usual open server. */
     apiKey?: string
+    /** Resolve `endpoint` through a Witchgrid control plane at startup (see providers/witchgrid). */
+    witchgrid?: {
+      url: string
+      profile: string
+      /** The explicitly configured endpoint, used only when the control plane is unreachable. */
+      fallbackEndpoint?: string
+      /** Bearer for a CP that gates its read surface (WITCHGRID_AUTH_PROTECT_READ). */
+      token?: string
+    }
     /** Optional smaller model for summarisation and memory extraction. */
     auxiliary?: {
       endpoint: string
