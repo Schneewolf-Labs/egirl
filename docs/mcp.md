@@ -14,23 +14,24 @@ all treat it identically.
 [[mcp.servers]]
 name = "wald"
 command = "wald-mcp"
-args = ["--stdio"]
+args = ["--transport", "stdio"]
 
 # http: egirl connects to a running endpoint
 [[mcp.servers]]
 name = "wald"
-url = "http://localhost:8090/mcp"
+url = "http://localhost:8091/mcp"
 timeout_ms = 30000
 ```
 
-A value beginning with `$` in `env` or `headers` is read from the environment, so tokens live in
-`.env` rather than in a config file that gets committed:
+`$VAR` (or `${VAR}`) anywhere in an `env` or `headers` value is read from the environment, so
+tokens live in `.env` rather than in a config file that gets committed. An unset variable expands
+to empty:
 
 ```toml
 [[mcp.servers]]
 name = "wald"
 url = "https://wald.internal/mcp"
-headers = { Authorization = "$WALD_TOKEN" }
+headers = { Authorization = "Bearer $WALD_TOKEN" }
 ```
 
 ## Tool names
