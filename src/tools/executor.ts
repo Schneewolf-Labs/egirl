@@ -4,7 +4,7 @@ import { checkToolCall, getAuditLogPath, logToolExecution, scanForInjection } fr
 import { errorMessage } from '../util/errors'
 import { log } from '../util/logger'
 import { matchToolName, remapParamKeys } from './fuzzy-match'
-import type { Tool, ToolDefinition, ToolResult } from './types'
+import type { Tool, ToolCallContext, ToolDefinition, ToolResult } from './types'
 
 /**
  * Tools whose output may contain untrusted external content
@@ -85,7 +85,7 @@ export class ToolExecutor {
     return matchToolName(name, this.listTools()).match
   }
 
-  async execute(call: ToolCall, cwd: string): Promise<ToolResult> {
+  async execute(call: ToolCall, cwd: string, ctx?: ToolCallContext): Promise<ToolResult> {
     // Resolve near-miss names before safety checks so they all see
     // the tool that actually runs, not the name the model emitted.
     if (!this.tools.has(call.name)) {
@@ -173,7 +173,7 @@ export class ToolExecutor {
     log.debug('tools', `Executing tool: ${call.name}`, call.arguments)
 
     try {
-      const result = await tool.execute(call.arguments, cwd)
+      const result = await tool.execute(call.arguments, cwd, ctx)
       log.debug('tools', `Tool ${call.name} completed:`, {
         success: result.success,
         outputLength: result.output.length,
@@ -205,7 +205,11 @@ export class ToolExecutor {
     }
   }
 
-  async executeAll(calls: ToolCall[], cwd: string): Promise<Map<string, ToolResult>> {
+  async executeAll(
+    calls: ToolCall[],
+    cwd: string,
+    ctx?: ToolCallContext,
+  ): Promise<Map<string, ToolResult>> {
     const results = new Map<string, ToolResult>()
 
     // Mutating tools run strictly in emission order; everything else runs concurrently
@@ -216,13 +220,13 @@ export class ToolExecutor {
 
     const parallelDone = Promise.all(
       parallel.map(async (call) => {
-        const result = await this.execute(call, cwd)
+        const result = await this.execute(call, cwd, ctx)
         return { id: call.id, result }
       }),
     )
 
     for (const call of sequential) {
-      results.set(call.id, await this.execute(call, cwd))
+      results.set(call.id, await this.execute(call, cwd, ctx))
     }
 
     for (const { id, result } of await parallelDone) {

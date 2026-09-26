@@ -113,7 +113,8 @@ describe('awaiting-input task state', () => {
 
     const run = await runner.runNow(task.id)
     expect(run?.status).toBe('success')
-    expect(store.get(task.id)?.status).toBe('active')
+    // Not parked: the oneshot ran to the end and is finished.
+    expect(store.get(task.id)?.status).toBe('done')
   })
 
   test('a parked task is not due for scheduling', async () => {

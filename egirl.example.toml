@@ -209,6 +209,17 @@ dirs = ["~/.egirl/skills", "{workspace}/skills"]
 # self_url = "http://192.168.1.10:3000"  # so other instances can reach this one
 # capabilities = ["coding", "vision"]
 
+# The Wald A2A mailbox: `delegate` hands work to any registered agent without waiting for it
+# to be up, and a seeded `mailbox` task polls for work handed here. Requests are acted on only
+# from the [report] principal (when it is a peer) and [[peers]] pinned above, and only while
+# Wald is seen enforcing auth (WALD_REQUIRE_AUTH=true, checked every poll); anything else is
+# recorded and reported to the principal, never run. Needs conversation persistence and a
+# Wald that names senders (from_agent, Schneewolf-Labs/Wald#8).
+# [mailbox]
+# enabled = true
+# registry = "wald"                      # name of the [[mcp.servers]] entry
+# schedule = "*/5 * * * *"               # how often to poll
+
 # MCP servers: their tools join the builtins as <name>_<tool>. See docs/mcp.md.
 # Witchgrid's control plane lets the operator list the inference fleet and spawn, stop or swap
 # models on it as tool calls. Drop `headers` if the CP runs without WITCHGRID_SHARED_SECRET.

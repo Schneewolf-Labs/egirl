@@ -300,33 +300,37 @@ export async function createAppServices(config: RuntimeConfig): Promise<AppServi
 
     // Peer discovery, once the registry's tools exist. Announce this instance, then resolve
     // peers from the registry and add any the config did not already name. Config wins on a
-    // collision: a hand-pinned URL was pinned for a reason.
+    // collision: a hand-pinned URL was pinned for a reason. The mailbox needs the same
+    // registration, address or not: Wald refuses mail from, and holds none for, an unknown agent.
     //
     // Everything here is best-effort. A registry that is unreachable leaves the statically
     // configured peers exactly as they were -- an optional source of addresses must never be
     // able to stop the agent from starting.
-    if (config.peerDiscovery?.enabled) {
+    if (config.peerDiscovery?.enabled || config.mailbox?.enabled) {
       try {
-        const registry = config.peerDiscovery.registry ?? 'wald'
-        const selfName = config.peerDiscovery.selfName ?? config.source.instance ?? 'egirl'
+        const registry = config.peerDiscovery?.registry ?? config.mailbox?.registry ?? 'wald'
+        const selfName = config.peerDiscovery?.selfName ?? config.source.instance ?? 'egirl'
         await registerSelf({
           tools: mcpTools,
           selfName,
           registry,
-          selfUrl: config.peerDiscovery.selfUrl,
-          capabilities: config.peerDiscovery.capabilities,
+          selfUrl: config.peerDiscovery?.selfUrl,
+          capabilities: config.peerDiscovery?.capabilities,
+          hasMailbox: config.mailbox?.enabled,
         })
-        const found = await discoverPeers({ tools: mcpTools, selfName, registry })
-        const before = config.peers?.length ?? 0
-        config.peers = mergePeers(config.peers ?? [], found)
-        if (config.peers.length !== before) {
-          log.info(
-            'peers',
-            `Discovered ${config.peers.length - before} peer(s) from '${registry}': ${config.peers
-              .slice(before)
-              .map((p) => p.name)
-              .join(', ')}`,
-          )
+        if (config.peerDiscovery?.enabled) {
+          const found = await discoverPeers({ tools: mcpTools, selfName, registry })
+          const before = config.peers?.length ?? 0
+          config.peers = mergePeers(config.peers ?? [], found)
+          if (config.peers.length !== before) {
+            log.info(
+              'peers',
+              `Discovered ${config.peers.length - before} peer(s) from '${registry}': ${config.peers
+                .slice(before)
+                .map((p) => p.name)
+                .join(', ')}`,
+            )
+          }
         }
       } catch (error) {
         log.warn(
