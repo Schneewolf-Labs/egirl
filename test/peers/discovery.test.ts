@@ -106,6 +106,20 @@ describe('discoverPeers', () => {
     expect(await discoverPeers({ tools: [prose], selfName: 'x' })).toEqual([])
   })
 
+  test('reads the shape Wald actually sends: one pretty-printed block per agent', async () => {
+    const blocks = AGENTS.map((a) => JSON.stringify(a, null, 2)).join('\n')
+    const wire = tool('wald_list_agents', { output: blocks })
+    const peers = await discoverPeers({ tools: [wire], selfName: 'x' })
+    expect(peers.map((p) => p.name).sort()).toEqual(['kira', 'scribe'])
+  })
+
+  test('a registry holding a single agent still yields it', async () => {
+    // One block, so the output parses as a bare object rather than an array.
+    const one = tool('wald_list_agents', { output: JSON.stringify(AGENTS[0], null, 2) })
+    const peers = await discoverPeers({ tools: [one], selfName: 'x' })
+    expect(peers.map((p) => p.name)).toEqual(['kira'])
+  })
+
   test('no registry configured is not an error', async () => {
     expect(await discoverPeers({ tools: [], selfName: 'x' })).toEqual([])
   })

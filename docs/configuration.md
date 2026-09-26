@@ -43,6 +43,55 @@ Settings for the local llama.cpp server. This is the only LLM provider.
 | `stale_stream_timeout_ms` | number | `90000` | Kill a streaming request that has produced no new tokens for this long |
 | `api_key` | string | — | Bearer token for a llama-server started with `--api-key` (a shared/keyed operator endpoint). Prefer the `EGIRL_LOCAL_API_KEY` env var over putting the secret in the toml |
 
+### `[local.witchgrid]`
+
+Find the operator model through a [Witchgrid](https://github.com/Schneewolf-Labs/Witchgrid)
+control plane instead of a fixed `endpoint`. Optional; when absent, `endpoint` is used as-is.
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `url` | string | — | Control plane base URL, e.g. `http://witchgrid.lan:8765` |
+| `profile` | string | — | Witchgrid profile or alias serving the operator model |
+| `token` | string | — | The CP's `WITCHGRID_SHARED_SECRET`, needed when it gates reads (`WITCHGRID_AUTH_PROTECT_READ`, which covers `/resolve`). Prefer the `WITCHGRID_SHARED_SECRET` env var, which wins over the toml |
+
+```toml
+[local]
+model = "qwen3-32b"
+# endpoint = "http://gpu-box:18001"   # optional: used only if the control plane is unreachable
+
+[local.witchgrid]
+url = "http://witchgrid.lan:8765"
+profile = "chat-qwen"
+```
+
+At startup egirl calls `GET {url}/resolve/{profile}`:
+
+- **Running** — egirl talks to the returned `base_url` directly. The control plane stays off the
+  hot path; Witchgrid's proxy queries every node on each request, which is the wrong cost for the
+  tokenize and chat calls egirl makes constantly.
+- **Not running (404)** — egirl uses the proxy `{url}/v1/llama/{profile}`, and the first request
+  through it has Witchgrid spawn the model. If the control plane gates inference
+  (`WITCHGRID_AUTH_PROTECT_INFERENCE`), set `api_key` / `EGIRL_LOCAL_API_KEY` to the shared secret:
+  the proxy checks it and does not forward it to llama-server. While on the proxy, egirl checks
+  `/resolve` again before a request (at most every 30 s) and moves to the direct `base_url` as
+  soon as the model is up, so only the first requests pay the proxy's fan-out.
+- **Unknown profile** — `/resolve` 404s for a name that does not exist too, so egirl asks
+  `GET {url}/api/profiles/{profile}`; a typo is an error naming the profile, not a proxy URL that
+  fails at the first chat.
+- **Reads gated (401)** — with `WITCHGRID_AUTH_PROTECT_READ` on, `/resolve` needs the shared
+  secret: set `WITCHGRID_SHARED_SECRET` (or `token`). The error says so.
+- **Unreachable, or any of the errors above** — startup fails with the reason, unless `endpoint` is set explicitly, in which
+  case egirl logs a warning and uses it. A named endpoint is a deliberate choice and the model may
+  still be up; the default `localhost:8080` is not, so it is never guessed.
+
+If the direct address later refuses connections (the model restarted on another port or moved
+to another node), egirl re-resolves once and retries the request at the new address, or at the
+proxy if nothing is running any more. HTTP errors from a reachable server are not retried.
+
+`EGIRL_LOCAL_ENDPOINT` bypasses Witchgrid for that run, so a bench pointed at one specific
+server is never redirected. `status` and `doctor` show the configured `endpoint`, not the
+resolved one. `[local.auxiliary]` keeps its own fixed `endpoint`.
+
 ### `[local.embeddings]`
 
 Optional. If omitted, the memory system is disabled entirely.

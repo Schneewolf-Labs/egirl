@@ -5,6 +5,7 @@ import { toApiMessages } from './chat-format'
 import { withReasoningFloor } from './reasoning-floors'
 import type { ChatRequest, ChatResponse, LLMProvider, ToolCall, ToolDefinition } from './types'
 import { ContextSizeError } from './types'
+import { type EndpointReresolver, isConnectionError } from './witchgrid'
 
 /** Server-side timings llama.cpp attaches to the final streamed chunk. All fields optional. */
 interface LlamaCppTimings {
@@ -154,6 +155,10 @@ export class LlamaCppProvider implements LLMProvider {
   // Bearer token for a llama.cpp server started with --api-key. Empty for the usual open local
   // server; set when the operator model is shared (e.g. a keyed endpoint also serving a peer).
   private apiKey: string | undefined
+  // Set when the endpoint came from Witchgrid, whose direct address can move between nodes.
+  private reresolve: EndpointReresolver | undefined
+  // Set with it: moves off Witchgrid's auto-spawning proxy once the model runs directly.
+  private promote: EndpointReresolver | undefined
 
   constructor(
     endpoint: string,
@@ -162,8 +167,12 @@ export class LlamaCppProvider implements LLMProvider {
     maxConcurrent?: number,
     defaultTemperature?: number,
     apiKey?: string,
+    reresolve?: EndpointReresolver,
+    promote?: EndpointReresolver,
   ) {
     this.endpoint = endpoint.replace(/\/$/, '')
+    this.reresolve = reresolve
+    this.promote = promote
     this.name = `llamacpp/${model}`
     this.defaultTemperature = defaultTemperature
     this.apiKey = apiKey
@@ -249,7 +258,7 @@ export class LlamaCppProvider implements LLMProvider {
     // consumer's long generation legitimately waits longer than that for its first byte —
     // observed as periodic "The operation timed out" transient retries once the review fork
     // began sharing the operator endpoint. Our own timeouts govern; Bun's must not.
-    const response = await fetch(`${this.endpoint}/v1/chat/completions`, {
+    const response = await this.postChat({
       // @ts-expect-error Bun extension: disable fetch's built-in timeout
       timeout: false,
       method: 'POST',
@@ -441,6 +450,25 @@ export class LlamaCppProvider implements LLMProvider {
       // field, where extractThinkingTags has nothing to find.
       thinking: thinking || reasoning || undefined,
       finish_reason: toolCalls.length > 0 ? 'tool_calls' : (finish_reason ?? 'stop'),
+    }
+  }
+
+  /**
+   * POST the chat request, following a moved Witchgrid endpoint once. Only a failure to connect
+   * is retried: nothing was sent, so nothing can be duplicated, and an abort or HTTP error means
+   * the server is where we thought it was.
+   */
+  private async postChat(init: RequestInit): Promise<Response> {
+    const promoted = (await this.promote?.())?.replace(/\/$/, '')
+    if (promoted) this.endpoint = promoted
+    try {
+      return await fetch(`${this.endpoint}/v1/chat/completions`, init)
+    } catch (error) {
+      if (!this.reresolve || init.signal?.aborted || !isConnectionError(error)) throw error
+      const next = (await this.reresolve())?.replace(/\/$/, '')
+      if (!next || next === this.endpoint) throw error
+      this.endpoint = next
+      return fetch(`${this.endpoint}/v1/chat/completions`, init)
     }
   }
 
@@ -717,6 +745,8 @@ export function createLlamaCppProvider(
   maxConcurrent?: number,
   defaultTemperature?: number,
   apiKey?: string,
+  reresolve?: EndpointReresolver,
+  promote?: EndpointReresolver,
 ): LLMProvider {
   return new LlamaCppProvider(
     endpoint,
@@ -725,6 +755,8 @@ export function createLlamaCppProvider(
     maxConcurrent,
     defaultTemperature,
     apiKey,
+    reresolve,
+    promote,
   )
 }
 

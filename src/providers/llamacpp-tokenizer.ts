@@ -12,13 +12,15 @@ const MAX_CACHE_ENTRIES = 2048
  * Falls back to char-ratio estimation on network/server errors.
  */
 export class LlamaCppTokenizer implements Tokenizer {
-  private endpoint: string
+  private endpoint: () => string
   private apiKey: string | undefined
   private cache = new Map<string, number>()
   private warnedFallback = false
 
-  constructor(endpoint: string, apiKey?: string) {
-    this.endpoint = endpoint.replace(/\/$/, '')
+  /** A getter follows an endpoint that moves at runtime (a re-resolved Witchgrid profile). */
+  constructor(endpoint: string | (() => string), apiKey?: string) {
+    const read = typeof endpoint === 'string' ? () => endpoint : endpoint
+    this.endpoint = () => read().replace(/\/$/, '')
     this.apiKey = apiKey
   }
 
@@ -41,7 +43,7 @@ export class LlamaCppTokenizer implements Tokenizer {
     if (cached !== undefined) return cached
 
     try {
-      const response = await fetch(`${this.endpoint}/tokenize`, {
+      const response = await fetch(`${this.endpoint()}/tokenize`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -74,6 +76,9 @@ export class LlamaCppTokenizer implements Tokenizer {
   }
 }
 
-export function createLlamaCppTokenizer(endpoint: string, apiKey?: string): Tokenizer {
+export function createLlamaCppTokenizer(
+  endpoint: string | (() => string),
+  apiKey?: string,
+): Tokenizer {
   return new LlamaCppTokenizer(endpoint, apiKey)
 }

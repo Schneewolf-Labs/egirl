@@ -317,6 +317,19 @@ export function loadConfig(options: LoadConfigOptions = {}): RuntimeConfig {
       ...((process.env.EGIRL_LOCAL_API_KEY ?? toml.local?.api_key) && {
         apiKey: process.env.EGIRL_LOCAL_API_KEY ?? toml.local?.api_key,
       }),
+      // EGIRL_LOCAL_ENDPOINT still wins outright: a one-off run pointed at a specific server
+      // (the bench) must not be redirected to whatever the fleet is serving.
+      ...(toml.local?.witchgrid &&
+        !process.env.EGIRL_LOCAL_ENDPOINT && {
+          witchgrid: {
+            url: toml.local.witchgrid.url,
+            profile: toml.local.witchgrid.profile,
+            ...(toml.local.endpoint && { fallbackEndpoint: toml.local.endpoint }),
+            ...((process.env.WITCHGRID_SHARED_SECRET ?? toml.local.witchgrid.token) && {
+              token: process.env.WITCHGRID_SHARED_SECRET ?? toml.local.witchgrid.token,
+            }),
+          },
+        }),
       // Undefined means "let the server decide", which is llama.cpp's 0.8. Set 0 to make runs
       // reproducible — see EGIRL_LOCAL_TEMPERATURE, which the bench uses.
       ...(process.env.EGIRL_LOCAL_TEMPERATURE !== undefined || toml.local?.temperature !== undefined

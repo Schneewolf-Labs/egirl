@@ -14,24 +14,50 @@ all treat it identically.
 [[mcp.servers]]
 name = "wald"
 command = "wald-mcp"
-args = ["--stdio"]
+args = ["--transport", "stdio"]
 
 # http: egirl connects to a running endpoint
 [[mcp.servers]]
 name = "wald"
-url = "http://localhost:8090/mcp"
+url = "http://localhost:8091/mcp"
 timeout_ms = 30000
 ```
 
-A value beginning with `$` in `env` or `headers` is read from the environment, so tokens live in
-`.env` rather than in a config file that gets committed:
+`$VAR` (or `${VAR}`) anywhere in an `env` or `headers` value is read from the environment, so
+tokens live in `.env` rather than in a config file that gets committed. An unset variable expands
+to empty:
 
 ```toml
 [[mcp.servers]]
 name = "wald"
 url = "https://wald.internal/mcp"
-headers = { Authorization = "$WALD_TOKEN" }
+headers = { Authorization = "Bearer $WALD_TOKEN" }
 ```
+
+### Witchgrid
+
+[Witchgrid](https://github.com/Schneewolf-Labs/Witchgrid)'s control plane serves MCP at `POST /mcp`.
+Connecting it lets the operator list the fleet's nodes, services, profiles and model catalog, and
+spawn, stop or swap models on it, as ordinary tool calls. That is the "escalate to tools" rule
+applied to the inference fleet: when a job wants a different or bigger model loaded somewhere, the
+operator does it with a tool instead of egirl growing any model-routing logic.
+
+```toml
+[[mcp.servers]]
+name = "witchgrid"
+url = "http://witchgrid.lan:8765/mcp"
+headers = { Authorization = "Bearer $WITCHGRID_SHARED_SECRET" }
+```
+
+The tools arrive as `witchgrid_list_nodes`, `witchgrid_list_services`, `witchgrid_list_profiles`,
+`witchgrid_list_catalog`, `witchgrid_fleet_status`, `witchgrid_resolve_profile`,
+`witchgrid_spawn_service` and `witchgrid_stop_service`. Leave out `headers` when the control plane
+runs without `WITCHGRID_SHARED_SECRET`. Witchgrid answers every request with buffered JSON: no SSE,
+no session id, `405` on GET and `202` for notifications. The client handles all of that as it is
+(see `test/mcp/witchgrid-http.test.ts`).
+
+To have egirl's own operator endpoint located through Witchgrid as well, see `[local.witchgrid]` in
+[configuration.md](configuration.md).
 
 ## Tool names
 

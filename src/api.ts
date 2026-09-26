@@ -514,6 +514,9 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
             // Who supervises this instance when it gets stuck — a peer or a human on a channel.
             report: cfg?.report?.to ?? null,
             peers: cfg?.peers?.length ?? 0,
+            // MCP tools never appear in `tools`; the server names tell a client (Stage's "tools
+            // locked down" check) what else this instance can reach. Names only, never secrets.
+            mcp: cfg?.mcp?.servers.map((s) => s.name) ?? [],
             permissions: cfg
               ? {
                   mode: cfg.permissionSupervisor.mode,

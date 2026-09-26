@@ -126,10 +126,22 @@ export async function checkMcpServers(config: RuntimeConfig): Promise<CheckResul
       results.push({ label: `mcp ${server.name}`, level: 'ok', message: 'stdio (not probed)' })
       continue
     }
-    // A bare GET on an MCP endpoint is not a valid session, so any HTTP answer -- including 4xx
-    // -- proves something is listening and routing. Only a transport failure is a real failure.
+    // A bare GET on an MCP endpoint is not a valid session, so most 4xx answers still prove
+    // something is listening and routing. 401/403 are the exception: sent with the configured
+    // headers, they mean the credential is wrong, and the agent will start without the tools.
     try {
-      await fetch(server.url, { signal: AbortSignal.timeout(TIMEOUT_MS) })
+      const res = await fetch(server.url, {
+        ...(server.headers && { headers: server.headers }),
+        signal: AbortSignal.timeout(TIMEOUT_MS),
+      })
+      if (res.status === 401 || res.status === 403) {
+        results.push({
+          label: `mcp ${server.name}`,
+          level: 'fail',
+          message: `${server.url}: HTTP ${res.status} -- check the Authorization header`,
+        })
+        continue
+      }
       results.push({ label: `mcp ${server.name}`, level: 'ok', message: server.url })
     } catch (error) {
       results.push({
