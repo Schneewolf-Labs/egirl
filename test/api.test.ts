@@ -473,3 +473,49 @@ describe('API bearer auth', () => {
     expect(res.status).toBe(200)
   })
 })
+
+describe('GET /info', () => {
+  const port = 3998
+  const base = `http://127.0.0.1:${port}`
+  const info = async (config?: unknown): Promise<Record<string, unknown>> => {
+    const deps = { agentFactory: (id: string) => stubAgent(id), agents: new Map(), config }
+    const server = startAPIServer({ host: '127.0.0.1', port }, deps as APIDeps)
+    try {
+      return (await (await fetch(`${base}/info`)).json()) as Record<string, unknown>
+    } finally {
+      server.stop(true)
+    }
+  }
+  // Just what /info reads; the rest of RuntimeConfig is irrelevant here.
+  const cfg = (mcp?: unknown) => ({
+    source: {},
+    workspace: { path: '/w' },
+    local: { model: 'm', endpoint: 'http://x' },
+    tools: { exec: false },
+    channels: {},
+    thinking: { level: 'off' },
+    peers: [],
+    permissionSupervisor: { mode: 'off', defaultAction: 'deny' },
+    ...(mcp ? { mcp } : {}),
+  })
+
+  test('names the MCP servers, never their commands, env or headers', async () => {
+    // A client deciding whether an instance is safe to expose (Stage's "tools locked down")
+    // cannot see MCP-provided tools in `tools`; the server names are the signal.
+    const body = await info(
+      cfg({
+        servers: [
+          { name: 'witchgrid', url: 'http://cp/mcp', headers: { authorization: 'Bearer s3cret' } },
+          { name: 'wald', command: 'wald-mcp', env: { WALD_TOKEN: 's3cret' } },
+        ],
+      }),
+    )
+    expect(body.mcp).toEqual(['witchgrid', 'wald'])
+    expect(JSON.stringify(body)).not.toContain('s3cret')
+  })
+
+  test('an empty list without MCP servers or config', async () => {
+    expect((await info(cfg())).mcp).toEqual([])
+    expect((await info()).mcp).toEqual([])
+  })
+})
