@@ -18,7 +18,7 @@ const KEEPALIVE_MS = 4000
  */
 export function sseResponse(
   run: (send: (frame: unknown) => void, closed: AbortSignal) => Promise<void>,
-  options: { signal?: AbortSignal } = {},
+  options: { signal?: AbortSignal; trailer?: string } = {},
 ): Response {
   const enc = new TextEncoder()
   const closed = new AbortController()
@@ -41,6 +41,8 @@ export function sseResponse(
       write(': open\n\n')
       try {
         await run((frame) => write(`data: ${JSON.stringify(frame)}\n\n`), closed.signal)
+        // A literal, not JSON: OpenAI-style clients end their read on `data: [DONE]`.
+        if (options.trailer !== undefined) write(`data: ${options.trailer}\n\n`)
       } finally {
         clearInterval(keepalive)
         try {

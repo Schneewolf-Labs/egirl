@@ -110,6 +110,7 @@ export class AgentLoop {
     this.tokenizer = createLlamaCppTokenizer(() => local.endpoint, local.apiKey)
     this.history = new ConversationHistory(this.conversationStore, deps.sessionId)
     this.history.hydrate(this.context)
+    if (deps.seedMessages) this.history.seed(this.context, deps.seedMessages)
   }
 
   /**

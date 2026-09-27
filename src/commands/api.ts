@@ -23,7 +23,15 @@ export async function runAPI(config: RuntimeConfig, args: string[]): Promise<voi
   }
 
   const rt = await createCommandRuntime(config)
-  const { memory, conversations, taskStore, toolExecutor, processRegistry, agentFactory } = rt
+  const {
+    memory,
+    conversations,
+    taskStore,
+    toolExecutor,
+    processRegistry,
+    agentFactory,
+    statelessAgentFactory,
+  } = rt
 
   const agents = new Map<string, AgentLoop>()
 
@@ -78,6 +86,7 @@ export async function runAPI(config: RuntimeConfig, args: string[]): Promise<voi
     push,
     pushStore,
     agentFactory,
+    statelessAgentFactory,
     agents,
     memory,
     taskStore,
