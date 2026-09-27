@@ -90,4 +90,6 @@ export interface AgentLoopDeps {
   sessionMutex?: SessionMutex
   /** History to start from instead of a stored session; treated as already persisted and mined. */
   seedMessages?: ChatMessage[]
+  /** Recall from memory but never write to it on its own (extraction, compaction flush, rollover). */
+  isMemoryReadOnly?: boolean
 }

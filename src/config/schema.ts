@@ -201,6 +201,7 @@ const baseProperties = {
         Type.Object({
           host: Type.String({ default: '127.0.0.1' }),
           port: Type.Number({ default: 3000 }),
+          openai_extract: Type.Boolean({ default: false }),
         }),
       ),
     }),
@@ -637,6 +638,8 @@ export interface RuntimeConfig {
       host: string
       port: number
       bearerToken?: string
+      /** Whether /v1/chat/completions turns may write memories. Recall works either way. */
+      openaiExtract: boolean
     }
   }
   conversation: {

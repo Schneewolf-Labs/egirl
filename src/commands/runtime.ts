@@ -52,9 +52,11 @@ export async function createCommandRuntime(config: RuntimeConfig): Promise<Comma
     })
 
   // One throwaway loop per OpenAI-compatible request: the client owns the transcript, so there
-  // is no conversation store. Memory stays wired -- recall and extraction of the new turn are
-  // instance-wide, not a property of the thread. A unique id keeps concurrent requests apart on
-  // the session bus.
+  // is no conversation store. Recall stays wired -- memory is instance-wide, not a property of
+  // the thread. Learning from these turns is off unless `openai_extract` says otherwise: a chat
+  // shaped by someone else's frontend (a roleplay card, a persona) is the last place to mine
+  // facts into the store that holds the real ones. A unique id keeps concurrent requests apart
+  // on the session bus.
   const statelessAgentFactory: StatelessAgentFactory = ({ history, note }) =>
     createAgentLoop({
       config,
@@ -67,6 +69,7 @@ export async function createCommandRuntime(config: RuntimeConfig): Promise<Comma
       additionalContext: [standup, note].filter(Boolean).join('\n\n') || undefined,
       sessionMutex,
       seedMessages: history,
+      isMemoryReadOnly: !config.channels.api?.openaiExtract,
     })
 
   return { ...services, sessionMutex, agentFactory, statelessAgentFactory }

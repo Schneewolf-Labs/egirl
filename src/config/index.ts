@@ -538,6 +538,7 @@ export function loadConfig(options: LoadConfigOptions = {}): RuntimeConfig {
     config.channels.api = {
       host: toml.channels.api.host ?? '127.0.0.1',
       port: toml.channels.api.port ?? 3000,
+      openaiExtract: toml.channels.api.openai_extract ?? false,
       ...(bearerToken && { bearerToken }),
     }
   }
