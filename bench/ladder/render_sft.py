@@ -19,6 +19,19 @@ Two outputs, both JSONL:
            (the pass escalated, the failure ground alone), honest/claimed (the failure's final
            message asserts success). ORPO material.
 
+With a shadow tutor on (EGIRL_TUTOR_ENDPOINT / EGIRL_TUTOR_MODEL, docs/shadow-tutor.md) the
+transcript also holds {"turn", "tutor"} lines: a stronger model's answer to the exact prompt of that
+turn, never acted on. Two more outputs come from those, from passing and failing runs alike -- the
+states a failing run reaches are the ones the operator most needs an expert answer for:
+
+  --tutor-sft    one {"messages", "tools"} row per labelled turn: the turn's prompt plus the tutor's
+                 answer. A label that errored, truncated, came back empty, or called a tool the
+                 turn did not offer is dropped. meta carries run_passed and agrees for filtering.
+  --tutor-pairs  one {"prompt", "chosen", "rejected"} row per turn where the tutor took a different
+                 action than the operator: chosen is the tutor's turn, rejected the operator's.
+                 Two plain-text answers are not compared -- prose differs every time and that is
+                 not a disagreement anyone can grade here.
+
 Usage:
     python3 render_sft.py --label ablate-b1.1-native --label ladder-b0-9b --sft b2_sft.jsonl --pairs b2_pairs.jsonl
     python3 render_sft.py --dir ~/Projects/egirl-other/bench/ladder --label x --sft out.jsonl
@@ -44,12 +57,15 @@ def load_results(ladder: Path, label: str) -> dict[str, dict]:
     return {r["id"]: r for r in data["results"]}
 
 
-def load_transcript(ladder: Path, label: str, task_id: str) -> list[dict] | None:
+def load_transcript(ladder: Path, label: str, task_id: str) -> tuple[list[dict], dict[int, dict]] | None:
+    """Model turns in order, and shadow-tutor labels keyed by the turn they answer."""
     path = ladder / "transcripts" / label / f"{task_id}.jsonl"
     if not path.exists():
         return None
     rows = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
-    return rows or None
+    turns = [r for r in rows if "messages" in r]
+    labels = {r["turn"]: r["tutor"] for r in rows if "tutor" in r}
+    return (turns, labels) if turns else None
 
 
 def api_tool_call(call: dict) -> dict:
@@ -93,6 +109,35 @@ def trajectory(turns: list[dict]) -> tuple[list[dict], list[dict]]:
         final["tool_calls"] = [api_tool_call(c) for c in resp["tool_calls"]]
     messages.append(final)
     return messages, api_tools(last["tools"])
+
+
+def assistant_turn(resp: dict) -> dict:
+    out = {"role": "assistant", "content": resp.get("content") or ""}
+    if resp.get("tool_calls"):
+        out["tool_calls"] = [api_tool_call(c) for c in resp["tool_calls"]]
+    return out
+
+
+def action(resp: dict) -> list[str] | None:
+    """What a turn did, comparable across models: its calls, or None for a plain-text answer."""
+    calls = resp.get("tool_calls") or []
+    if not calls:
+        return None
+    return sorted(c["name"] + json.dumps(c.get("arguments") or {}, sort_keys=True) for c in calls)
+
+
+def tutor_reject_reason(tutor: dict, offered: set[str]) -> str | None:
+    """Why a tutor label is not a usable training target, or None if it is."""
+    if tutor.get("error"):
+        return "errored"
+    if tutor.get("finish_reason") == "length":
+        return "truncated"
+    calls = tutor.get("tool_calls") or []
+    if not calls and not (tutor.get("content") or "").strip():
+        return "empty"
+    if any(c["name"] not in offered for c in calls):
+        return "called a tool not offered"
+    return None
 
 
 def touches_tests(diff: str) -> bool:
@@ -147,12 +192,17 @@ def main() -> None:
                     help="results/<label>.json + transcripts/<label>/ (repeatable)")
     ap.add_argument("--sft", type=Path, help="write clean passing trajectories here (JSONL)")
     ap.add_argument("--pairs", type=Path, help="write chosen/rejected pairs here (JSONL)")
+    ap.add_argument("--tutor-sft", type=Path, help="write per-turn shadow-tutor targets here (JSONL)")
+    ap.add_argument("--tutor-pairs", type=Path,
+                    help="write tutor-vs-operator pairs where they acted differently (JSONL)")
     ap.add_argument("--max-turns", type=int, default=24)
     ap.add_argument("--levels", help="comma-separated levels to keep, e.g. 1,2")
     args = ap.parse_args()
     levels = {int(x) for x in args.levels.split(",")} if args.levels else None
 
     sft_rows: list[dict] = []
+    tutor_rows: list[dict] = []
+    tutor_pairs: list[dict] = []
     by_task: dict[str, dict[str, list[dict]]] = {}
     counts: dict[str, int] = {}
     seen: set[str] = set()
@@ -164,10 +214,34 @@ def main() -> None:
         for task_id, result in load_results(args.dir, label).items():
             if levels and result.get("level") not in levels:
                 continue
-            turns = load_transcript(args.dir, label, task_id)
-            if not turns:
+            loaded = load_transcript(args.dir, label, task_id)
+            if not loaded:
                 count("no transcript")
                 continue
+            turns, labels = loaded
+            for t in turns:
+                tutor = labels.get(t["turn"])
+                if tutor is None:
+                    continue
+                reason = tutor_reject_reason(tutor, {tool["name"] for tool in t["tools"]})
+                if reason:
+                    count(f"tutor label dropped: {reason}")
+                    continue
+                prompt = [api_message(m) for m in t["messages"]]
+                ours = action(t["response"])
+                theirs = action(tutor)
+                agrees = ours == theirs
+                meta = {"label": label, "task": task_id, "turn": t["turn"],
+                        "run_passed": bool(result.get("passed")), "agrees": agrees,
+                        "tutor_model": tutor.get("model")}
+                tutor_rows.append({"messages": prompt + [assistant_turn(tutor)],
+                                   "tools": api_tools(t["tools"]), "meta": meta})
+                count("tutor label")
+                if not agrees:
+                    tutor_pairs.append({"prompt": prompt, "chosen": [assistant_turn(tutor)],
+                                        "rejected": [assistant_turn(t["response"])],
+                                        "tools": api_tools(t["tools"]), "kind": ["tutor/operator"],
+                                        "meta": meta})
             messages, tools = trajectory(turns)
             entry = {
                 "label": label,
@@ -227,12 +301,22 @@ def main() -> None:
                         }) + "\n")
                         pair_count += 1
 
+    for path, rows in ((args.tutor_sft, tutor_rows), (args.tutor_pairs, tutor_pairs)):
+        if path:
+            with path.open("w") as f:
+                for row in rows:
+                    f.write(json.dumps(row) + "\n")
+
     for k in sorted(counts):
         print(f"{counts[k]:5d}  {k}")
     if args.sft:
         print(f"wrote {len(sft_rows)} sft rows -> {args.sft}")
     if args.pairs:
         print(f"wrote {pair_count} pairs -> {args.pairs}")
+    if args.tutor_sft:
+        print(f"wrote {len(tutor_rows)} tutor rows -> {args.tutor_sft}")
+    if args.tutor_pairs:
+        print(f"wrote {len(tutor_pairs)} tutor pairs -> {args.tutor_pairs}")
 
 
 if __name__ == "__main__":

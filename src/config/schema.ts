@@ -322,6 +322,19 @@ const baseProperties = {
     ),
   ),
 
+  // Shadow tutor (docs/shadow-tutor.md): a stronger OpenAI-compatible model shown every operator
+  // turn of a transcribed one-shot run, whose answer is recorded next to the operator's for
+  // training data. It never drives. API key from .env: EGIRL_TUTOR_API_KEY.
+  tutor: Type.Optional(
+    Type.Object({
+      endpoint: Type.String(),
+      model: Type.String(),
+      max_concurrent: Type.Optional(Type.Number({ default: 4 })),
+      temperature: Type.Optional(Type.Number()),
+      timeout_ms: Type.Optional(Type.Number({ default: 600_000 })),
+    }),
+  ),
+
   // Who this agent reports to (docs/autonomy-loop.md, Phase 2): "peer:<name>" for an agent
   // supervisor, or "<channel>:<target>" — e.g. "xmpp:you@example.com", "discord:<channelId>",
   // "telegram:<chatId>", "matrix:!room:example.com"
@@ -726,6 +739,15 @@ export interface RuntimeConfig {
     temperature?: number
     apiKey?: string
   }>
+  /** Shadow tutor: labels each transcribed operator turn with a stronger model's answer. */
+  tutor?: {
+    endpoint: string
+    model: string
+    maxConcurrent: number
+    timeoutMs: number
+    temperature?: number
+    apiKey?: string
+  }
   /** Supervisor target for the report tool ("peer:<name>" or "<channel>:<target>"). */
   report?: {
     to: string

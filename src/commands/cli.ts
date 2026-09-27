@@ -4,6 +4,7 @@ import { createCLIChannel } from '../channels'
 import type { OutboundChannel } from '../channels/types'
 import type { RuntimeConfig } from '../config'
 import type { ToolResult } from '../tools/types'
+import { createShadowTutor } from '../tracking/shadow-tutor'
 import { applyLogLevel } from '../util/args'
 import { errorMessage } from '../util/errors'
 import { createBackgroundTasks, createCommandRuntime, onShutdown } from './runtime'
@@ -37,10 +38,16 @@ export async function runCLI(config: RuntimeConfig, args: string[]): Promise<voi
   const rt = await createCommandRuntime(config)
   const { conversations, taskStore, processRegistry, mcpConnections } = rt
 
+  // Shadow tutor labels run concurrently with the operator's next turn and land in the
+  // transcript as they resolve; a one-shot run waits for the stragglers before it exits.
+  const tutor = transcriptPath && config.tutor ? createShadowTutor(config.tutor) : undefined
+  const pendingLabels: Promise<void>[] = []
+
   // Single-message mode must actually exit once the answer is out. Anything with a live
   // handle -- an MCP streamable-http session, a lingering child -- keeps the event loop alive
   // otherwise, and `egirl cli -m ... --json` hangs until whoever spawned it gives up.
   const exitAfterOneShot = async (code: number): Promise<never> => {
+    await Promise.all(pendingLabels)
     await Promise.all(mcpConnections.map((conn) => conn.close()))
     await processRegistry.shutdownAll()
     taskStore?.close()
@@ -72,7 +79,14 @@ export async function runCLI(config: RuntimeConfig, args: string[]): Promise<voi
     const transcriptEvents: AgentEventHandler | undefined = transcriptPath
       ? {
           onModelTurn(turn: ModelTurn) {
-            appendFileSync(transcriptPath, `${JSON.stringify({ turn: turnIndex++, ...turn })}\n`)
+            const index = turnIndex++
+            appendFileSync(transcriptPath, `${JSON.stringify({ turn: index, ...turn })}\n`)
+            if (!tutor) return
+            pendingLabels.push(
+              tutor.label(turn).then((label) => {
+                appendFileSync(transcriptPath, `${JSON.stringify({ turn: index, tutor: label })}\n`)
+              }),
+            )
           },
         }
       : undefined
