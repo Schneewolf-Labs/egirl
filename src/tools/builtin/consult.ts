@@ -78,16 +78,37 @@ interface ConsultResponse {
   error?: { message?: string }
 }
 
-export function createConsultTool(consultants: ConsultantEntry[], workspaceDir: string): Tool {
+/**
+ * `allowFiles: false` drops the `files` parameter entirely: on an instance serving strangers the
+ * workspace holds every visitor's conversations, and whatever the consultant reads can come
+ * back out in its answer.
+ */
+export function createConsultTool(
+  consultants: ConsultantEntry[],
+  workspaceDir: string,
+  allowFiles = true,
+): Tool {
   const names = consultants.map((c) => c.name).join(', ')
   const single = consultants.length === 1 ? consultants[0] : undefined
+  const attachHint = allowFiles
+    ? ' The consultant has a much larger context window than you — attach whole files (your notes, state, source) rather than excerpts.'
+    : ''
+  const sources = allowFiles
+    ? 'the question, the attached files, or the context field'
+    : 'the question or the context field'
+  const filesParam = {
+    type: 'array',
+    items: { type: 'string' },
+    description:
+      'Paths of files to attach in full (resolved against your workspace). Attach generously — the consultant has room.',
+  }
 
   return {
     definition: {
       name: 'consult',
       description:
-        'Ask a consultant model for a read-only second opinion. The consultant has a much larger context window than you — attach whole files (your notes, state, source) rather than excerpts. ' +
-        'It cannot run tools or see your conversation; everything it needs must be in the question, the attached files, or the context field. ' +
+        `Ask a consultant model for a read-only second opinion.${attachHint} ` +
+        `It cannot run tools or see your conversation; everything it needs must be in ${sources}. ` +
         'Use it when you are stuck, suspect you are missing something, or want your plan or findings critiqued before committing to a direction. ' +
         `Configured consultants: ${names}.`,
       parameters: {
@@ -98,12 +119,7 @@ export function createConsultTool(consultants: ConsultantEntry[], workspaceDir: 
             description:
               'What you want reviewed or answered. Self-contained and specific — state what you have tried and what kind of answer helps.',
           },
-          files: {
-            type: 'array',
-            items: { type: 'string' },
-            description:
-              'Paths of files to attach in full (resolved against your workspace). Attach generously — the consultant has room.',
-          },
+          ...(allowFiles && { files: filesParam }),
           context: {
             type: 'string',
             description:
@@ -133,6 +149,10 @@ export function createConsultTool(consultants: ConsultantEntry[], workspaceDir: 
             ? `Unknown consultant "${chosenName}". Configured: ${names}`
             : `Multiple consultants configured — pass one of: ${names}`,
         }
+      }
+
+      if (!allowFiles && params.files !== undefined) {
+        return { success: false, output: 'File attachments are disabled for consult here.' }
       }
 
       // Read attachments; a missing file is reported, not fatal — the consultant is told.

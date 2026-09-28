@@ -120,6 +120,14 @@ describe('consult tool', () => {
     expect(result.output).toContain('deepseek')
   })
 
+  test('without file access, offers no files parameter and refuses attachments', async () => {
+    const tool = createConsultTool([entry], workspace, false)
+    expect(tool.definition.parameters.properties.files).toBeUndefined()
+    const result = await tool.execute({ question: 'q', files: ['NOTES.md'] }, workspace)
+    expect(result.success).toBe(false)
+    expect(result.output).toContain('disabled')
+  })
+
   test('question is required', async () => {
     const tool = createConsultTool([entry], workspace)
     const result = await tool.execute({}, workspace)

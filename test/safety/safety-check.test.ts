@@ -129,6 +129,33 @@ describe('checkToolCall', () => {
     expect(result.allowed).toBe(true)
   })
 
+  test('blocks consult attachments that are sensitive files', () => {
+    const config = makeConfig()
+    const result = checkToolCall(
+      'consult',
+      { question: 'q', files: ['notes.md', '/srv/egirl/.env'] },
+      cwd,
+      config,
+    )
+    expect(result.allowed).toBe(false)
+  })
+
+  test('blocks consult attachments outside allowed paths', () => {
+    const config = makeConfig({
+      pathSandbox: { enabled: true, allowedPaths: ['/home/user/project'] },
+    })
+    const result = checkToolCall('consult', { question: 'q', files: ['/etc/passwd'] }, cwd, config)
+    expect(result.allowed).toBe(false)
+  })
+
+  test('allows consult with ordinary attachments or none', () => {
+    const config = makeConfig()
+    expect(
+      checkToolCall('consult', { question: 'q', files: ['NOTES.md'] }, cwd, config).allowed,
+    ).toBe(true)
+    expect(checkToolCall('consult', { question: 'q' }, cwd, config).allowed).toBe(true)
+  })
+
   test('blocks sensitive file reads', () => {
     const config = makeConfig()
     const result = checkToolCall('read_file', { path: '/home/user/.ssh/id_rsa' }, cwd, config)

@@ -159,3 +159,20 @@ describe('background actor on agent-owned skills', () => {
     expect(r.success).toBe(true)
   })
 })
+
+describe('registration', () => {
+  test('offered with a skills dir, withheld when [tools] skill_manage = false', async () => {
+    const { createDefaultToolExecutor } = await import('../../src/tools/index')
+    const { makeConfig, makeWorkspace } = await import('../agent/helpers')
+    const workspace = makeWorkspace()
+    const config = makeConfig(workspace)
+    config.skills = { dirs: [join(workspace, 'skills')] }
+    const names = () =>
+      createDefaultToolExecutor(config)
+        .getDefinitions()
+        .map((d) => d.name)
+    expect(names()).toContain('skill_manage')
+    config.tools.skillManage = false
+    expect(names()).not.toContain('skill_manage')
+  })
+})

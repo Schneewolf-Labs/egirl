@@ -42,8 +42,10 @@ export interface SafetyConfig {
   permissionRules: PermissionRule[]
 }
 
-const FILE_TOOLS = ['read_file', 'write_file', 'edit_file', 'glob_files']
-const SENSITIVE_CHECK_TOOLS = ['read_file', 'write_file', 'edit_file']
+// consult reads the files it attaches and ships them to a consultant model, so its `files`
+// go through the same sandbox and sensitive-file checks as read_file.
+const FILE_TOOLS = ['read_file', 'write_file', 'edit_file', 'glob_files', 'consult']
+const SENSITIVE_CHECK_TOOLS = ['read_file', 'write_file', 'edit_file', 'consult']
 
 export type SafetyCheckResult =
   | { allowed: true }
@@ -75,8 +77,14 @@ export function getDefaultSafetyConfig(): SafetyConfig {
   }
 }
 
-function extractPath(args: Record<string, unknown>): string | undefined {
-  return (args.path as string | undefined) ?? (args.working_dir as string | undefined)
+function extractPaths(toolName: string, args: Record<string, unknown>): string[] {
+  if (toolName === 'consult') {
+    return Array.isArray(args.files)
+      ? args.files.filter((f): f is string => typeof f === 'string')
+      : []
+  }
+  const path = (args.path as string | undefined) ?? (args.working_dir as string | undefined)
+  return path ? [path] : []
 }
 
 export function checkToolCall(
@@ -106,9 +114,12 @@ export function checkToolCall(
   }
 
   // Path sandboxing
-  if (config.pathSandbox.enabled && FILE_TOOLS.includes(toolName)) {
-    const filePath = extractPath(args)
-    if (filePath && config.pathSandbox.allowedPaths.length > 0) {
+  if (
+    config.pathSandbox.enabled &&
+    FILE_TOOLS.includes(toolName) &&
+    config.pathSandbox.allowedPaths.length > 0
+  ) {
+    for (const filePath of extractPaths(toolName, args)) {
       const denied = isPathAllowed(filePath, cwd, config.pathSandbox.allowedPaths)
       if (denied) return { allowed: false, reason: denied }
     }
@@ -116,8 +127,7 @@ export function checkToolCall(
 
   // Sensitive file guard
   if (config.sensitiveFiles.enabled && SENSITIVE_CHECK_TOOLS.includes(toolName)) {
-    const filePath = extractPath(args)
-    if (filePath) {
+    for (const filePath of extractPaths(toolName, args)) {
       const sensitive = isSensitivePath(filePath, cwd, config.sensitiveFiles.patterns)
       if (sensitive) return { allowed: false, reason: sensitive }
     }

@@ -75,6 +75,8 @@ export function makeConfig(workspacePath: string): RuntimeConfig {
       codeAgent: false,
       webResearch: false,
       screenshot: false,
+      sessionSearch: true,
+      skillManage: true,
     },
     skills: { dirs: [] },
   } as RuntimeConfig

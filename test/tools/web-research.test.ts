@@ -1,5 +1,10 @@
 import { describe, expect, test } from 'bun:test'
-import { webResearchTool } from '../../src/tools/builtin/web-research'
+import {
+  createWebResearchTool,
+  fetchPublicOnly,
+  webResearchTool,
+} from '../../src/tools/builtin/web-research'
+import { checkPublicUrl } from '../../src/util/public-address'
 
 describe('web_research tool', () => {
   test('has correct definition', () => {
@@ -83,5 +88,32 @@ describe('htmlToText (via web_research tool integration)', () => {
   test('tool has optional timeout parameter', () => {
     const timeoutParam = webResearchTool.definition.parameters.properties.timeout
     expect(timeoutParam.type).toBe('number')
+  })
+})
+
+describe('web_research without private access', () => {
+  const tool = createWebResearchTool(false)
+
+  test('refuses a private destination before fetching', async () => {
+    const result = await tool.execute({ url: 'http://127.0.0.1:1/', timeout: 1000 }, '/tmp')
+    expect(result.success).toBe(false)
+    expect(result.output).toContain('private address')
+  })
+
+  test('checks every redirect hop, not just the first URL', async () => {
+    const server = Bun.serve({
+      port: 0,
+      fetch: () => new Response(null, { status: 302, headers: { location: 'http://10.0.0.1/' } }),
+    })
+    // The redirector itself is on loopback, so let only it through and judge the rest for real.
+    const first = `http://localhost:${server.port}/`
+    const check = (url: string) =>
+      url === first ? Promise.resolve(undefined) : checkPublicUrl(url)
+    try {
+      const result = await fetchPublicOnly(first, new AbortController().signal, check)
+      expect(result).toEqual({ blocked: expect.stringContaining('10.0.0.1') })
+    } finally {
+      server.stop(true)
+    }
   })
 })

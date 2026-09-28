@@ -42,6 +42,8 @@ export interface APIConfig {
   port: number
   /** If set, requests must include `Authorization: Bearer <token>` */
   bearerToken?: string
+  /** Most sessions kept in memory; least recently used idle ones are dropped past it. */
+  maxSessions?: number
 }
 
 export interface APIDeps {
@@ -109,11 +111,27 @@ function thinkingOverride(agent: AgentLoop): ThinkingConfig['level'] | null {
   return t.source === 'session' ? t.level : null
 }
 
-function getOrCreateAgent(sessionId: string, deps: APIDeps): AgentLoop {
-  let agent = deps.agents.get(sessionId)
-  if (!agent) {
-    agent = deps.agentFactory(sessionId)
-    deps.agents.set(sessionId, agent)
+/**
+ * Look up or build a session's agent, keeping the map in least-recently-used order. Past
+ * `maxSessions`, the oldest idle agents are dropped -- an instance serving many visitors
+ * would otherwise hold every one of them forever. The conversation stays in the store, so a
+ * returning session is rebuilt from it. A session that is running or has a turn queued is
+ * never dropped: its queued turn would finish on an agent the map no longer knows.
+ */
+function getOrCreateAgent(
+  sessionId: string,
+  deps: APIDeps,
+  maxSessions?: number,
+  isIdle?: (sessionId: string) => boolean,
+): AgentLoop {
+  const agent = deps.agents.get(sessionId) ?? deps.agentFactory(sessionId)
+  deps.agents.delete(sessionId)
+  deps.agents.set(sessionId, agent)
+  if (!maxSessions || !isIdle) return agent
+
+  for (const id of deps.agents.keys()) {
+    if (deps.agents.size <= maxSessions) break
+    if (id !== sessionId && isIdle(id)) deps.agents.delete(id)
   }
   return agent
 }
@@ -195,6 +213,9 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
     chains.set(sessionId, chain)
     return { done, position }
   }
+
+  const agentFor = (sessionId: string): AgentLoop =>
+    getOrCreateAgent(sessionId, deps, config.maxSessions, (id) => !isRunning(id) && !chains.has(id))
 
   const selfName = deps.selfName ?? 'egirl'
 
@@ -395,10 +416,12 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
             return err('message required')
           }
           const sessionId = (body.session_id as string | undefined) ?? 'api:default'
-          const agent = getOrCreateAgent(sessionId, deps)
+          const agent = agentFor(sessionId)
           // /learn works from every surface the same way: rewrite the input, run a normal
           // turn. The agent distills and saves the skill with its own tools.
-          const skillsDir = deps.config?.skills.dirs[0]
+          // Off with [tools] skill_manage: an instance serving strangers doesn't let them
+          // rewrite its skills, and the text then reaches the model as an ordinary message.
+          const skillsDir = deps.config?.tools.skillManage ? deps.config.skills.dirs[0] : undefined
           let toRun =
             skillsDir && (message === '/learn' || message.startsWith('/learn '))
               ? buildLearnPrompt(message.slice('/learn'.length), skillsDir)
@@ -531,7 +554,7 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
         // behaves the way it does, and it was previously only visible through the CLI.
         if (method === 'GET' && path === '/prompt') {
           const sessionId = url.searchParams.get('session_id') ?? 'api:default'
-          const agent = getOrCreateAgent(sessionId, deps)
+          const agent = agentFor(sessionId)
           const ctx = agent.getContext()
           return json({
             systemPrompt: ctx.systemPrompt,
@@ -691,7 +714,7 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
             })
           }
           const sessionId = peerSessionId(from)
-          const agent = getOrCreateAgent(sessionId, deps)
+          const agent = agentFor(sessionId)
           const response = await enqueueRun(sessionId, () =>
             agent.run(formatInboundPeerMessage(from, message)),
           ).done
@@ -785,7 +808,7 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
           const m = method === 'GET' && path.match(/^\/sessions\/(.+)\/context$/)
           if (m) {
             const sessionId = decodeURIComponent(m[1] as string)
-            const agent = getOrCreateAgent(sessionId, deps)
+            const agent = agentFor(sessionId)
             const s = await agent.contextStatus()
             return json({
               session_id: s.sessionId,
@@ -869,7 +892,7 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
           const m = method === 'POST' && path.match(/^\/sessions\/(.+)\/compact$/)
           if (m) {
             const sessionId = decodeURIComponent(m[1] as string)
-            const agent = getOrCreateAgent(sessionId, deps)
+            const agent = agentFor(sessionId)
             const r = await agent.compactNow()
             return json({
               ok: true,
@@ -888,7 +911,7 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
           if (m) {
             const sessionId = decodeURIComponent(m[1] as string)
             const level = (await readJson(req)).level
-            const agent = getOrCreateAgent(sessionId, deps)
+            const agent = agentFor(sessionId)
             if (level === 'default' || level === null) {
               agent.setThinking(undefined)
               return json({ ok: true, level: null })

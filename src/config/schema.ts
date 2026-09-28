@@ -201,6 +201,9 @@ const baseProperties = {
         Type.Object({
           host: Type.String({ default: '127.0.0.1' }),
           port: Type.Number({ default: 3000 }),
+          // Cap on sessions held in memory. Unset keeps every session; set it on an
+          // instance serving many visitors (see docs/public-instance.md).
+          max_sessions: Type.Optional(Type.Number({ minimum: 1 })),
         }),
       ),
     }),
@@ -484,9 +487,19 @@ const baseProperties = {
       code_agent: Type.Boolean({ default: false }),
       peers: Type.Boolean({ default: true }),
       consult: Type.Boolean({ default: true }),
+      // Let consult attach files. Off for an instance serving strangers: the workspace holds
+      // every session's conversations.db, and the consultant's answer comes back to the asker.
+      consult_files: Type.Boolean({ default: true }),
       web_research: Type.Boolean({ default: true }),
+      // Let web_research fetch loopback, private, and link-local addresses. Off for an instance
+      // serving strangers, or a visitor can make it read the internal network for them.
+      web_research_private: Type.Boolean({ default: true }),
       web_search: Type.Boolean({ default: true }),
       screenshot: Type.Boolean({ default: true }),
+      // Search over past conversations — every session's, not just the current one.
+      session_search: Type.Boolean({ default: true }),
+      // skill_manage and /learn: the agent rewriting its own skills.
+      skill_manage: Type.Boolean({ default: true }),
     }),
   ),
 
@@ -637,6 +650,7 @@ export interface RuntimeConfig {
       host: string
       port: number
       bearerToken?: string
+      maxSessions?: number
     }
   }
   conversation: {
@@ -807,10 +821,14 @@ export interface RuntimeConfig {
     codeAgent: boolean
     peers: boolean
     consult: boolean
+    consultFiles: boolean
     webResearch: boolean
+    webResearchPrivate: boolean
     webSearch: boolean
     /** true/false = explicit; 'auto' (unset in toml) = only when the endpoint reports vision. */
     screenshot: boolean | 'auto'
+    sessionSearch: boolean
+    skillManage: boolean
   }
   skills: {
     dirs: string[]

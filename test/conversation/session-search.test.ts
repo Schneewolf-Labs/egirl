@@ -131,6 +131,24 @@ describe('registration', () => {
     expect(names).toContain('session_search')
   })
 
+  test('[tools] session_search = false keeps it off even with a store', async () => {
+    const { createDefaultToolExecutor } = await import('../../src/tools/index')
+    const { makeConfig, makeWorkspace } = await import('../agent/helpers')
+    const config = makeConfig(makeWorkspace())
+    config.tools.sessionSearch = false
+    const executor = createDefaultToolExecutor(
+      config,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      makeStore(),
+    )
+    expect(executor.getDefinitions().map((d) => d.name)).not.toContain('session_search')
+  })
+
   test('absent store, absent tool', async () => {
     const { createDefaultToolExecutor } = await import('../../src/tools/index')
     const { makeConfig, makeWorkspace } = await import('../agent/helpers')
