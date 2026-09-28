@@ -9,6 +9,8 @@
 
 import { afterEach, describe, expect, test } from 'bun:test'
 import { existsSync } from 'node:fs'
+import { basename, dirname } from 'node:path'
+import { attachmentsDir } from '../../src/agent/attachments'
 import { AgentLoop } from '../../src/agent/loop'
 import { ConversationStore } from '../../src/conversation/store'
 import type { ChatRequest, ChatResponse, LLMProvider } from '../../src/providers/types'
@@ -208,8 +210,9 @@ describe('image attachments in the run loop', () => {
           : stubResponse({ content: 'done' })
       },
     }
+    const ws = makeWorkspace()
     const agent = new AgentLoop({
-      config: makeConfig(makeWorkspace()),
+      config: makeConfig(ws),
       toolExecutor: executor,
       localProvider: provider,
       sessionId: 'test:image-handoff',
@@ -218,7 +221,8 @@ describe('image attachments in the run loop', () => {
     await agent.run('and now without a picture')
     expect(seen).toHaveLength(2)
     expect(seen[0]).toHaveLength(1)
-    expect(seen[0]?.[0]).toMatch(/attachments\/test_image-handoff\/img1-[0-9a-f]{8}\.png$/)
+    expect(dirname(seen[0]?.[0] as string)).toBe(attachmentsDir(ws, 'test:image-handoff'))
+    expect(basename(seen[0]?.[0] as string)).toMatch(/^img1-[0-9a-f]{8}\.png$/)
     expect(existsSync(seen[0]?.[0] as string)).toBe(true)
     expect(seen[1]).toBeUndefined()
   })
