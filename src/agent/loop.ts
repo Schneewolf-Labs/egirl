@@ -13,6 +13,7 @@ import type { ToolExecutor } from '../tools'
 import { hasStrandedToolCall, stripStrandedToolCalls } from '../tools/format'
 import { errorMessage } from '../util/errors'
 import { log } from '../util/logger'
+import { attachmentNote, saveImageAttachments } from './attachments'
 import { runAutoExtraction } from './background'
 import { slotFor } from './cache-slots'
 import { chatWithContextWindow } from './chat'
@@ -227,13 +228,22 @@ export class AgentLoop {
 
     const userContent = planningMode ? planningModePrompt(userMessage) : userMessage
 
+    this.context.runImages = undefined
     // Attached images ride the same message as the text, in the content-part shape the
-    // provider already renders for the screenshot tool.
+    // provider already renders for the screenshot tool. They are also saved to disk, with a
+    // note naming them, so the operator can hand them to a code agent or consultant.
     if (options.images?.length) {
+      const saved = saveImageAttachments(
+        this.context.workspaceDir,
+        this.context.sessionId,
+        options.images,
+      )
+      this.context.runImages = saved.map((s) => s.path)
+      const note = attachmentNote(saved)
       addMessage(this.context, {
         role: 'user',
         content: [
-          { type: 'text', text: userContent },
+          { type: 'text', text: note ? `${userContent}\n\n${note}` : userContent },
           ...options.images.map((url) => ({ type: 'image_url' as const, image_url: { url } })),
         ],
       })
@@ -577,6 +587,7 @@ export class AgentLoop {
       throw error
     } finally {
       this.activeRun = null
+      this.context.runImages = undefined
       externalSignal?.removeEventListener('abort', forwardAbort)
       this.history.persistNew(this.context.messages)
       if (runError !== undefined) {

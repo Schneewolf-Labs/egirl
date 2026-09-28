@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
-import { isAbsolute, resolve } from 'node:path'
-import type { Tool, ToolResult } from '../types'
+import { extname, isAbsolute, resolve } from 'node:path'
+import { resolveImageRefs } from '../../agent/attachments'
+import type { Tool, ToolCallContext, ToolResult } from '../types'
 
 /**
  * The consult tool — a read-only second opinion from a bigger-context model.
@@ -21,6 +22,7 @@ export interface ConsultantEntry {
   timeoutMs: number
   temperature?: number
   apiKey?: string
+  vision?: boolean
 }
 
 /** Rough chars-per-token for budgeting packaged material. Conservative to avoid overflow. */
@@ -71,6 +73,31 @@ export function packConsultation(
   return parts.join('\n\n---\n\n')
 }
 
+const IMAGE_MIME: Record<string, string> = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.webp': 'image/webp',
+  '.gif': 'image/gif',
+}
+
+/** The user message: plain text, or text plus image parts for a vision consultant. */
+function consultUserContent(
+  body: string,
+  imagePaths: string[],
+): string | Array<Record<string, unknown>> {
+  if (imagePaths.length === 0) return body
+  return [
+    { type: 'text', text: body },
+    ...imagePaths.map((p) => ({
+      type: 'image_url',
+      image_url: {
+        url: `data:${IMAGE_MIME[extname(p).toLowerCase()] ?? 'image/png'};base64,${readFileSync(p).toString('base64')}`,
+      },
+    })),
+  ]
+}
+
 interface ConsultResponse {
   choices?: Array<{
     message?: { content?: string | null; reasoning?: string; reasoning_content?: string }
@@ -109,6 +136,12 @@ export function createConsultTool(consultants: ConsultantEntry[], workspaceDir: 
             description:
               'Optional free-form context to include: recent findings, error output, transcript excerpts.',
           },
+          images: {
+            type: 'array',
+            items: { type: 'string' },
+            description:
+              'Images to show the consultant: handles of attached images (img1, img2, ...) or image file paths. Only consultants configured with vision can see them.',
+          },
           consultant: {
             type: 'string',
             description: `Which consultant to ask (one of: ${names}). Optional when only one is configured.`,
@@ -118,7 +151,11 @@ export function createConsultTool(consultants: ConsultantEntry[], workspaceDir: 
       },
     },
 
-    async execute(params: Record<string, unknown>): Promise<ToolResult> {
+    async execute(
+      params: Record<string, unknown>,
+      _cwd?: string,
+      ctx?: ToolCallContext,
+    ): Promise<ToolResult> {
       const question = params.question as string | undefined
       if (!question?.trim()) return { success: false, output: 'question is required' }
 
@@ -144,6 +181,25 @@ export function createConsultTool(consultants: ConsultantEntry[], workspaceDir: 
           files.push({ path: p, content: readFileSync(abs, 'utf8') })
         } catch {
           files.push({ path: p, content: `[file could not be read: ${abs}]` })
+        }
+      }
+
+      const imageRefs = Array.isArray(params.images) ? (params.images as string[]) : []
+      const { paths: imagePaths, missing } = resolveImageRefs(
+        imageRefs,
+        workspaceDir,
+        ctx?.sessionId,
+      )
+      if (missing.length > 0) {
+        return {
+          success: false,
+          output: `Could not find image(s): ${missing.join(', ')}. Pass handles like img1 or paths to existing image files.`,
+        }
+      }
+      if (imagePaths.length > 0 && !consultant.vision) {
+        return {
+          success: false,
+          output: `Consultant ${consultant.name} is text-only and cannot see images. Describe what the image shows in the question or context instead.`,
         }
       }
 
@@ -177,7 +233,7 @@ export function createConsultTool(consultants: ConsultantEntry[], workspaceDir: 
             model: consultant.model,
             messages: [
               { role: 'system', content: CONSULTANT_SYSTEM_PROMPT },
-              { role: 'user', content: body },
+              { role: 'user', content: consultUserContent(body, imagePaths) },
             ],
             max_tokens: consultant.maxTokens,
             stream: false,

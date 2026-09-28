@@ -29,4 +29,6 @@ export type CodeAgentBackend = (
   config: CodeAgentConfig,
   task: string,
   workingDir: string,
+  /** Absolute paths of image files to show the agent along with the task. */
+  images?: string[],
 ) => Promise<ToolResult>

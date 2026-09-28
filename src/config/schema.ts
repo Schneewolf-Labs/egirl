@@ -319,6 +319,8 @@ const baseProperties = {
         max_tokens: Type.Optional(Type.Number({ default: 8192 })),
         timeout_ms: Type.Optional(Type.Number({ default: 600_000 })),
         temperature: Type.Optional(Type.Number()),
+        // The endpoint accepts image_url content parts; consult then sends attached images.
+        vision: Type.Optional(Type.Boolean({ default: false })),
       }),
     ),
   ),
@@ -728,6 +730,7 @@ export interface RuntimeConfig {
     timeoutMs: number
     temperature?: number
     apiKey?: string
+    vision?: boolean
   }>
   /** Supervisor target for the report tool ("peer:<name>" or "<channel>:<target>"). */
   report?: {

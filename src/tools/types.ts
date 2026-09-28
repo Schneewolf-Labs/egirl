@@ -22,6 +22,8 @@ export interface ToolResult {
  */
 export interface ToolCallContext {
   sessionId?: string
+  /** Files saved from the images attached to the current run's user message (agent/attachments). */
+  images?: string[]
 }
 
 export interface Tool {

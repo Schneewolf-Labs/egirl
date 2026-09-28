@@ -33,7 +33,11 @@ context, compaction chain) does.
 4. **Append the user message.** In planning mode the message is wrapped in the
    planning-mode prompt **and tool definitions are withheld from every turn** —
    a plan is produced from reasoning alone, never from tool use. Attached images
-   ride the same message as `image_url` content parts.
+   ride the same message as `image_url` content parts. They are also saved under
+   `<workspace>/attachments/<session>/` as `img1`, `img2`, ... (numbered across the
+   session; other sessions' folders are pruned after a week), a note naming each
+   handle and path is appended to the message text, and the run's tool calls
+   receive the paths, so `code_agent` and `consult` can hand the images on.
 5. **Memory recall.** Relevant memories are injected as a marked recall message.
    Recall messages are regenerated per run and never persisted.
 6. **Run state.** A fresh `RunState`; recovery caps resolved from `[recovery]`
