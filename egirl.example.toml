@@ -86,6 +86,7 @@ permission_mode = "default"
 # [channels.api]
 # host = "127.0.0.1"
 # port = 3000
+# openai_extract = false           # let /v1/chat/completions turns write memories (recall works either way)
 
 # Cross-egirl agent-to-agent messaging (egirl-peer protocol, see docs/peers.md).
 # Each peer is another egirl instance with its HTTP API running. If the peer

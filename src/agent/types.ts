@@ -1,7 +1,7 @@
 import type { RuntimeConfig } from '../config'
 import type { ConversationStore } from '../conversation'
 import type { MemoryManager } from '../memory'
-import type { LLMProvider } from '../providers/types'
+import type { ChatMessage, LLMProvider } from '../providers/types'
 import type { Skill } from '../skills/types'
 import type { ToolExecutor } from '../tools'
 import type { AgentEventHandler } from './events'
@@ -88,4 +88,8 @@ export interface AgentLoopDeps {
   additionalContext?: string
   /** Shared mutex to serialize agent runs across entry points */
   sessionMutex?: SessionMutex
+  /** History to start from instead of a stored session; treated as already persisted and mined. */
+  seedMessages?: ChatMessage[]
+  /** Recall from memory but never write to it on its own (extraction, compaction flush, rollover). */
+  isMemoryReadOnly?: boolean
 }

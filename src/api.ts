@@ -13,6 +13,7 @@ import {
 import type { RuntimeConfig } from './config'
 import type { SessionInfo } from './conversation'
 import type { MemoryCategory, MemoryManager } from './memory'
+import { handleChatCompletions, modelsResponse, type StatelessAgentFactory } from './openai-compat'
 import {
   formatInboundPeerMessage,
   formatOperatorMessage,
@@ -63,6 +64,8 @@ export interface APIDeps {
    * server has touched; the store knows every conversation from every channel, which is what
    * a session picker actually wants to show.
    */
+  /** One throwaway loop per OpenAI-compatible request (see ./openai-compat.ts). */
+  statelessAgentFactory?: StatelessAgentFactory
   /** Escalations addressed to `console:` — questions waiting for a human in the browser. */
   consoleInbox?: ConsoleInbox
   /** Delivers a console answer back to the run parked on it. */
@@ -483,6 +486,19 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
             // How many turns ran before this one got its slot; 0 means it ran immediately.
             queued_behind: position,
           })
+        }
+
+        // --- OpenAI-compatible ----------------------------------------------
+        // /v1 is the path every OpenAI client appends to, not a versioning scheme of ours.
+        if (method === 'GET' && path === '/v1/models') return modelsResponse(selfName)
+        if (method === 'POST' && path === '/v1/chat/completions') {
+          if (!deps.statelessAgentFactory) return err('chat completions not available', 503)
+          return handleChatCompletions(
+            req,
+            await readJson(req),
+            deps.statelessAgentFactory,
+            selfName,
+          )
         }
 
         // --- Introspection -------------------------------------------------

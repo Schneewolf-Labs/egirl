@@ -3,6 +3,7 @@ import { SessionMutex } from '../agent/session-mutex'
 import { type AppServices, createAppServices } from '../bootstrap'
 import type { OutboundChannel } from '../channels/types'
 import type { RuntimeConfig } from '../config'
+import type { StatelessAgentFactory } from '../openai-compat'
 import { MAIL_CHANNEL } from '../peers/mailbox-poll'
 import { createMailbox, type Mailbox } from '../peers/mailbox-setup'
 import { gatherStandup } from '../standup'
@@ -28,6 +29,7 @@ import { log } from '../util/logger'
 export interface CommandRuntime extends AppServices {
   sessionMutex: SessionMutex
   agentFactory: AgentFactory
+  statelessAgentFactory: StatelessAgentFactory
 }
 
 export async function createCommandRuntime(config: RuntimeConfig): Promise<CommandRuntime> {
@@ -49,7 +51,28 @@ export async function createCommandRuntime(config: RuntimeConfig): Promise<Comma
       sessionMutex,
     })
 
-  return { ...services, sessionMutex, agentFactory }
+  // One throwaway loop per OpenAI-compatible request: the client owns the transcript, so there
+  // is no conversation store. Recall stays wired -- memory is instance-wide, not a property of
+  // the thread. Learning from these turns is off unless `openai_extract` says otherwise: a chat
+  // shaped by someone else's frontend (a roleplay card, a persona) is the last place to mine
+  // facts into the store that holds the real ones. A unique id keeps concurrent requests apart
+  // on the session bus.
+  const statelessAgentFactory: StatelessAgentFactory = ({ history, note }) =>
+    createAgentLoop({
+      config,
+      toolExecutor: services.toolExecutor,
+      localProvider: services.providers.local,
+      auxProvider: services.providers.auxiliary,
+      sessionId: `openai:${crypto.randomUUID()}`,
+      memory: services.memory,
+      skills: services.skills,
+      additionalContext: [standup, note].filter(Boolean).join('\n\n') || undefined,
+      sessionMutex,
+      seedMessages: history,
+      isMemoryReadOnly: !config.channels.api?.openaiExtract,
+    })
+
+  return { ...services, sessionMutex, agentFactory, statelessAgentFactory }
 }
 
 export interface BackgroundTasksOptions {

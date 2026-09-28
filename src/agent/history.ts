@@ -78,6 +78,17 @@ export class ConversationHistory {
     }
   }
 
+  /**
+   * Start from a transcript someone else owns (a stateless API client resending its history).
+   * Both watermarks move past it: it is not ours to persist, and mining it again on every
+   * request would store the same memories once per turn of that conversation.
+   */
+  seed(context: AgentContext, messages: ChatMessage[]): void {
+    context.messages = [...messages]
+    this.persistedIndex = messages.length
+    this.extractionWatermark = messages.length
+  }
+
   /** Persist messages added since the last call. */
   persistNew(messages: ChatMessage[]): void {
     if (!this.store) return
