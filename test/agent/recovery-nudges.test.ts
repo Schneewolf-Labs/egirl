@@ -8,9 +8,11 @@
  */
 
 import { afterEach, describe, expect, test } from 'bun:test'
+import { existsSync } from 'node:fs'
 import { AgentLoop } from '../../src/agent/loop'
 import { ConversationStore } from '../../src/conversation/store'
 import type { ChatRequest, ChatResponse, LLMProvider } from '../../src/providers/types'
+import { createToolExecutor } from '../../src/tools/executor'
 import { makeConfig, makeExecutorWithNoop, makeWorkspace, stubResponse } from './helpers'
 
 // Unrecoverable junk: no repairable name, so it genuinely strands. (The doubled-brace shape
@@ -169,11 +171,55 @@ describe('image attachments in the run loop', () => {
       images: ['data:image/png;base64,AAAA'],
     })
     expect(Array.isArray(seenContent)).toBe(true)
-    const parts = seenContent as Array<{ type: string }>
-    expect(parts[0]).toEqual({ type: 'text', text: 'what do you think of this?' })
+    const parts = seenContent as Array<{ type: string; text?: string }>
+    expect(parts[0]?.type).toBe('text')
+    expect(parts[0]?.text).toStartWith('what do you think of this?')
+    expect(parts[0]?.text).toContain('img1 = ')
     expect(parts[1]).toEqual({
       type: 'image_url',
       image_url: { url: 'data:image/png;base64,AAAA' },
     })
+  })
+
+  test("tools called during the run get the saved images, and the next run doesn't", async () => {
+    const seen: Array<string[] | undefined> = []
+    const executor = createToolExecutor()
+    executor.register({
+      definition: {
+        name: 'look',
+        description: 'records its context',
+        parameters: { type: 'object', properties: {} },
+      },
+      execute: async (_params, _cwd, ctx) => {
+        seen.push(ctx?.images)
+        return { success: true, output: 'ok' }
+      },
+    })
+    let turn = 0
+    const provider: LLMProvider = {
+      name: 'stub',
+      async chat(): Promise<ChatResponse> {
+        turn++
+        return turn % 2 === 1
+          ? stubResponse({
+              tool_calls: [{ id: `c${turn}`, name: 'look', arguments: {} }],
+              finish_reason: 'tool_calls',
+            })
+          : stubResponse({ content: 'done' })
+      },
+    }
+    const agent = new AgentLoop({
+      config: makeConfig(makeWorkspace()),
+      toolExecutor: executor,
+      localProvider: provider,
+      sessionId: 'test:image-handoff',
+    })
+    await agent.run('fix what this shows', { images: ['data:image/png;base64,AAAA'] })
+    await agent.run('and now without a picture')
+    expect(seen).toHaveLength(2)
+    expect(seen[0]).toHaveLength(1)
+    expect(seen[0]?.[0]).toMatch(/attachments\/test_image-handoff\/img1-[0-9a-f]{8}\.png$/)
+    expect(existsSync(seen[0]?.[0] as string)).toBe(true)
+    expect(seen[1]).toBeUndefined()
   })
 })

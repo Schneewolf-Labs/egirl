@@ -65,6 +65,7 @@ describe('Codex stdio transport', () => {
       { permissionMode: 'default', workingDir: process.cwd(), timeoutMs: 400 },
       'test',
       process.cwd(),
+      [],
       (cwd, events) => connectCodex(cwd, events, process.execPath, ['-e', fake, mode]),
     )
     expect(result.success).toBe(false)
@@ -75,6 +76,7 @@ describe('Codex stdio transport', () => {
       { permissionMode: 'default', workingDir: process.cwd(), timeoutMs: 400 },
       'test',
       process.cwd(),
+      [],
       (cwd, events) => connectCodex(cwd, events, 'missing-codex-test-binary'),
     )
     expect(result.success).toBe(false)

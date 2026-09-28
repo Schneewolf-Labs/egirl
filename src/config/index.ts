@@ -606,6 +606,7 @@ export function loadConfig(options: LoadConfigOptions = {}): RuntimeConfig {
         maxTokens: c.max_tokens ?? 8192,
         timeoutMs: c.timeout_ms ?? 600_000,
         ...(c.temperature !== undefined && { temperature: c.temperature }),
+        ...(c.vision && { vision: true }),
         ...(apiKey && { apiKey }),
       }
     })

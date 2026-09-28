@@ -1,3 +1,13 @@
+/**
+ * For backends that take a text prompt only: name the image files in the task so the agent
+ * opens them itself (Claude Code's Read tool renders images).
+ */
+export function withImagePaths(task: string, images: string[] | undefined): string {
+  if (!images?.length) return task
+  const list = images.map((p) => `- ${p}`).join('\n')
+  return `${task}\n\nImages the user attached (open them to see what they show):\n${list}`
+}
+
 /** Default timeout: 5 minutes */
 export const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000
 

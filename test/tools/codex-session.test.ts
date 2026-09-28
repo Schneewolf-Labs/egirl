@@ -25,6 +25,7 @@ function supervisor(action: 'allow' | 'deny' | 'ask_user'): PermissionSupervisor
 function fixture(
   run: (events: CodexEvents) => void | Promise<void>,
   config: Partial<CodeAgentConfig> = {},
+  images: string[] = [],
 ) {
   const requests: { method: string; params: RpcObject }[] = []
   const replies: RpcObject[] = []
@@ -33,6 +34,7 @@ function fixture(
     { permissionMode: 'default', workingDir: '/project', timeoutMs: 100, ...config },
     'Fix the tests',
     '/project',
+    images,
     (_cwd, events): CodexConnection => ({
       async request(method, params) {
         requests.push({ method, params })
@@ -87,6 +89,22 @@ describe('Codex structured lifecycle', () => {
     })
     expect((await f.promise).success).toBe(true)
     expect(f.forced()).toBe(false)
+  })
+  test('attached images reach the turn as local image inputs', async () => {
+    const f = fixture(
+      (events) => {
+        message(events)
+        complete(events)
+      },
+      {},
+      ['/ws/attachments/s/img1-abc.png'],
+    )
+    await f.promise
+    const turn = f.requests.find((r) => r.method === 'turn/start')
+    expect(turn?.params.input).toEqual([
+      { type: 'text', text: 'Fix the tests', text_elements: [] },
+      { type: 'localImage', path: '/ws/attachments/s/img1-abc.png' },
+    ])
   })
   test.each(['failed', 'interrupted'])('%s cannot be hidden by Completed text', async (status) => {
     const f = fixture((events) => {

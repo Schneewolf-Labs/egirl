@@ -1,7 +1,8 @@
 import { homedir } from 'os'
+import { resolveImageRefs } from '../../../agent/attachments'
 import type { CodeAgentProvider } from '../../../config/schema'
 import { log } from '../../../util/logger'
-import type { Tool, ToolResult } from '../../types'
+import type { Tool, ToolCallContext, ToolResult } from '../../types'
 import { runClaudeCodeAgent } from './claude'
 import { runCodexCodeAgent } from './codex'
 import { resolveProviderChain, shouldFailover } from './failover'
@@ -43,6 +44,14 @@ export function createCodeAgentTool(config: CodeAgentConfig): Tool {
             type: 'string',
             description: 'A clear description of the coding task to perform',
           },
+          images: {
+            type: 'array',
+            items: { type: 'string' },
+            description:
+              'Images to show the agent: handles of attached images (img1, img2, ...) or image file ' +
+              'paths. The agent cannot see your conversation, so pass any screenshot the task ' +
+              "depends on. Defaults to the images attached to the user's current message.",
+          },
           working_dir: {
             type: 'string',
             description:
@@ -55,8 +64,21 @@ export function createCodeAgentTool(config: CodeAgentConfig): Tool {
       },
     },
 
-    async execute(params: Record<string, unknown>, cwd: string): Promise<ToolResult> {
+    async execute(
+      params: Record<string, unknown>,
+      cwd: string,
+      ctx?: ToolCallContext,
+    ): Promise<ToolResult> {
       const task = params.task as string
+      const { paths: images, missing } = Array.isArray(params.images)
+        ? resolveImageRefs(params.images as string[], cwd, ctx?.sessionId)
+        : { paths: ctx?.images ?? [], missing: [] }
+      if (missing.length > 0) {
+        return {
+          success: false,
+          output: `Could not find image(s): ${missing.join(', ')}. Pass handles like img1 or paths to existing image files.`,
+        }
+      }
       const { dir: workingDir, inferred } = resolveWorkingDir({
         explicit: params.working_dir as string | undefined,
         task,
@@ -74,13 +96,14 @@ export function createCodeAgentTool(config: CodeAgentConfig): Tool {
         `Starting ${chain[0]} task: ${task.substring(0, 100)}${task.length > 100 ? '...' : ''}`,
       )
       log.debug('code-agent', `Working dir: ${workingDir}  providers: ${chain.join(' -> ')}`)
+      if (images.length > 0) log.info('code-agent', `Attaching ${images.length} image(s)`)
 
       const attempted: string[] = []
       let last: ToolResult | undefined
 
       for (const provider of chain) {
         const backend = BACKENDS[provider] ?? runClaudeCodeAgent
-        const result = await backend({ ...config, provider }, task, workingDir)
+        const result = await backend({ ...config, provider }, task, workingDir, images)
         attempted.push(provider)
         last = result
 

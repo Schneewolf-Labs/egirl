@@ -602,6 +602,7 @@ Delegate a coding task to an autonomous code agent. Backends are Claude Code via
 |-----------|------|----------|-------------|
 | `task` | string | Yes | A clear description of the coding task to perform |
 | `working_dir` | string | No | Working directory for the task (defaults to configured workspace) |
+| `images` | string[] | No | Attached-image handles (`img1`, ...) or image file paths to show the agent; defaults to the images attached to the current user message |
 
 **Behavior:**
 - Launches Claude Code using the Agent SDK's `query()` function, Codex using its interactive terminal UI through a PTY, or OpenCode by spawning `opencode serve` and driving it over HTTP
@@ -609,6 +610,7 @@ Delegate a coding task to an autonomous code agent. Backends are Claude Code via
 - Provider, permission mode, model, and max turns are configured in `[channels.code_agent]` in `egirl.toml`; `[channels.claude_code]` remains a backward-compatible fallback
 - For Codex, egirl runs the interactive CLI and asks the local model to answer numbered trust, permission, and clarification prompts
 - For OpenCode, egirl routes each structured permission event from the server's SSE stream through the local model supervisor
+- Images reach Codex as `localImage` inputs; Claude Code and OpenCode get the file paths listed under the task and open them themselves. An unknown handle or missing file fails the call before any agent starts
 - Default timeout is 5 minutes; the session is aborted if exceeded
 - Returns the agent's final result with metadata (turns, cost, duration, session ID)
 - If the agent completes without producing a result, returns `success: false`
