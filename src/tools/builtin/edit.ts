@@ -1,6 +1,6 @@
 import { readFile, writeFile } from 'fs/promises'
-import { isAbsolute, resolve } from 'path'
 import { errorMessage } from '../../util/errors'
+import { resolveUserPath } from '../../util/paths'
 import type { Tool, ToolResult } from '../types'
 
 export const editTool: Tool = {
@@ -34,7 +34,7 @@ export const editTool: Tool = {
     const newText = params.new_text as string
 
     try {
-      const fullPath = isAbsolute(path) ? path : resolve(cwd, path)
+      const fullPath = resolveUserPath(path, cwd)
       const content = await readFile(fullPath, 'utf-8')
 
       if (!content.includes(oldText)) {
