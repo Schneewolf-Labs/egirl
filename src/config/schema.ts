@@ -204,6 +204,7 @@ const baseProperties = {
           // Cap on sessions held in memory. Unset keeps every session; set it on an
           // instance serving many visitors (see docs/public-instance.md).
           max_sessions: Type.Optional(Type.Number({ minimum: 1 })),
+          openai_extract: Type.Boolean({ default: false }),
         }),
       ),
     }),
@@ -321,6 +322,8 @@ const baseProperties = {
         max_tokens: Type.Optional(Type.Number({ default: 8192 })),
         timeout_ms: Type.Optional(Type.Number({ default: 600_000 })),
         temperature: Type.Optional(Type.Number()),
+        // The endpoint accepts image_url content parts; consult then sends attached images.
+        vision: Type.Optional(Type.Boolean({ default: false })),
       }),
     ),
   ),
@@ -651,6 +654,8 @@ export interface RuntimeConfig {
       port: number
       bearerToken?: string
       maxSessions?: number
+      /** Whether /v1/chat/completions turns may write memories. Recall works either way. */
+      openaiExtract: boolean
     }
   }
   conversation: {
@@ -739,6 +744,7 @@ export interface RuntimeConfig {
     timeoutMs: number
     temperature?: number
     apiKey?: string
+    vision?: boolean
   }>
   /** Supervisor target for the report tool ("peer:<name>" or "<channel>:<target>"). */
   report?: {

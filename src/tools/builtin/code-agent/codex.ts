@@ -19,10 +19,19 @@ export function codexTurnResult(turn: RpcObject, output: string, workingDir: str
   return { success: true, output }
 }
 
+/** The turn's input: the task text, then each image as a local file Codex reads itself. */
+export function codexInput(task: string, images: string[]): RpcObject[] {
+  return [
+    { type: 'text', text: task, text_elements: [] },
+    ...images.map((path) => ({ type: 'localImage', path })),
+  ]
+}
+
 export async function runCodexSession(
   config: CodeAgentConfig,
   task: string,
   workingDir: string,
+  images: string[] = [],
   connect: (cwd: string, events: CodexEvents) => CodexConnection = connectCodex,
 ): Promise<ToolResult> {
   const started = Date.now()
@@ -155,7 +164,7 @@ export async function runCodexSession(
       threadId = object(thread.thread).id as string
       const startedTurn = await rpc.request('turn/start', {
         threadId,
-        input: [{ type: 'text', text: task, text_elements: [] }],
+        input: codexInput(task, images),
       })
       if (!turnId && typeof object(startedTurn.turn).id === 'string') {
         turnId = object(startedTurn.turn).id as string

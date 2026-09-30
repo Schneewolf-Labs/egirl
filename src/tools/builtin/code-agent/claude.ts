@@ -6,7 +6,7 @@ import {
 import type { PermissionSupervisor } from '../../../permissions/supervisor'
 import { log } from '../../../util/logger'
 import type { ToolResult } from '../../types'
-import { DEFAULT_TIMEOUT_MS } from './shared'
+import { DEFAULT_TIMEOUT_MS, withImagePaths } from './shared'
 import type { CodeAgentBackend } from './types'
 
 /**
@@ -73,7 +73,7 @@ function userApprovalResult(reason: string, partial: string): ToolResult {
   }
 }
 
-export const runClaudeCodeAgent: CodeAgentBackend = async (config, task, workingDir) => {
+export const runClaudeCodeAgent: CodeAgentBackend = async (config, task, workingDir, images) => {
   const startTime = Date.now()
   let sessionId = ''
   let sdkTurns: number | undefined
@@ -112,7 +112,7 @@ export const runClaudeCodeAgent: CodeAgentBackend = async (config, task, working
       }
 
   try {
-    for await (const message of query({ prompt: task, options })) {
+    for await (const message of query({ prompt: withImagePaths(task, images), options })) {
       if (abortController.signal.aborted) break
       if (!('type' in message)) continue
 

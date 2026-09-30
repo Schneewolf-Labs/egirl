@@ -1,5 +1,6 @@
 import type { ChatResponse, ToolCall } from '../providers/types'
 import type { Tool, ToolExecutor, ToolResult } from '../tools'
+import type { ToolCallContext } from '../tools/types'
 import { log } from '../util/logger'
 import { type AgentContext, addMessage } from './context'
 import { truncateToolResultSync } from './context-window'
@@ -9,6 +10,12 @@ import { publish } from './session-events'
 
 /** Default max tokens per tool result — matches context-window.ts default */
 const MAX_TOOL_RESULT_TOKENS = 8000
+
+function toolContext(context: AgentContext): ToolCallContext {
+  return context.runImages?.length
+    ? { sessionId: context.sessionId, images: context.runImages }
+    : { sessionId: context.sessionId }
+}
 
 /**
  * Execute the tool calls from a model response and append the paired
@@ -163,7 +170,7 @@ async function executeToolsWithHooks(args: {
     if (signal?.aborted) {
       return new Map(toolCalls.map((call) => [call.id, skippedResult()]))
     }
-    return executor.executeAll(toolCalls, context.workspaceDir, { sessionId: context.sessionId })
+    return executor.executeAll(toolCalls, context.workspaceDir, toolContext(context))
   }
 
   const results = new Map<string, ToolResult>()
@@ -187,9 +194,7 @@ async function executeToolsWithHooks(args: {
       }
     }
 
-    const result = await executor.execute(call, context.workspaceDir, {
-      sessionId: context.sessionId,
-    })
+    const result = await executor.execute(call, context.workspaceDir, toolContext(context))
     events?.onAfterToolExec?.(call, result)
 
     results.set(call.id, result)

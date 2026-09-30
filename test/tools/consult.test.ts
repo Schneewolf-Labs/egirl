@@ -128,6 +128,52 @@ describe('consult tool', () => {
     expect(result.output).toContain('disabled')
   })
 
+  test('without file access, image paths are refused but handles still resolve', async () => {
+    writeFileSync(join(workspace, 'shot3.png'), 'x')
+    const tool = createConsultTool([{ ...entry, vision: true }], workspace, false)
+    const byPath = await tool.execute({ question: 'q', images: ['shot3.png'] }, workspace)
+    expect(byPath.success).toBe(false)
+    expect(byPath.output).toContain('shot3.png')
+    const byHandle = await tool.execute({ question: 'q', images: ['img9'] }, workspace, {
+      sessionId: 's1',
+    })
+    expect(byHandle.output).not.toContain('Image paths are disabled')
+  })
+
+  test('a vision consultant gets attached images as image parts', async () => {
+    const png = join(workspace, 'shot.png')
+    writeFileSync(png, Buffer.from([0x89, 0x50, 0x4e, 0x47]))
+    const tool = createConsultTool([{ ...entry, vision: true }], workspace)
+    const result = await tool.execute(
+      { question: 'what is wrong here?', images: ['shot.png'] },
+      workspace,
+    )
+    expect(result.success).toBe(true)
+    const content = (lastBody?.messages as Array<{ content: unknown }>)[1]?.content as Array<{
+      type: string
+      image_url?: { url: string }
+    }>
+    expect(content[0]?.type).toBe('text')
+    expect(content[1]?.image_url?.url).toBe('data:image/png;base64,iVBORw==')
+  })
+
+  test('a text-only consultant refuses images instead of dropping them', async () => {
+    writeFileSync(join(workspace, 'shot2.png'), 'x')
+    const tool = createConsultTool([entry], workspace)
+    const result = await tool.execute({ question: 'q', images: ['shot2.png'] }, workspace)
+    expect(result.success).toBe(false)
+    expect(result.output).toContain('text-only')
+  })
+
+  test('an unknown image handle is an error', async () => {
+    const tool = createConsultTool([{ ...entry, vision: true }], workspace)
+    const result = await tool.execute({ question: 'q', images: ['img9'] }, workspace, {
+      sessionId: 's1',
+    })
+    expect(result.success).toBe(false)
+    expect(result.output).toContain('img9')
+  })
+
   test('question is required', async () => {
     const tool = createConsultTool([entry], workspace)
     const result = await tool.execute({}, workspace)

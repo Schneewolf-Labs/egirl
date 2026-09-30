@@ -148,6 +148,19 @@ describe('checkToolCall', () => {
     expect(result.allowed).toBe(false)
   })
 
+  test('sandboxes consult image paths but not attachment handles', () => {
+    const config = makeConfig({
+      pathSandbox: { enabled: true, allowedPaths: ['/home/user/project'] },
+    })
+    expect(
+      checkToolCall('consult', { question: 'q', images: ['/srv/other/shot.png'] }, cwd, config)
+        .allowed,
+    ).toBe(false)
+    expect(checkToolCall('consult', { question: 'q', images: ['img1'] }, cwd, config).allowed).toBe(
+      true,
+    )
+  })
+
   test('allows consult with ordinary attachments or none', () => {
     const config = makeConfig()
     expect(

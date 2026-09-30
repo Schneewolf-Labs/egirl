@@ -199,6 +199,8 @@ DELETE /memory/:key
 GET    /tasks?status=...     → list
 POST   /tasks                { name, prompt, kind, interval_ms?, cron? }
 POST   /tasks/:id/run        → trigger a task immediately
+GET    /v1/models            → the instance, as the one model
+POST   /v1/chat/completions  OpenAI-compatible, stateless (see below)
 ```
 
 Example:
@@ -207,6 +209,8 @@ curl -s http://localhost:3000/chat \
   -H 'content-type: application/json' \
   -d '{"message":"what did we work on yesterday?"}' | jq -r .content
 ```
+
+`/v1/chat/completions` lets any OpenAI client (Open WebUI, SillyTavern, the `openai` SDK) use egirl as if she were a model. Point the client at `http://host:3000/v1` and use `EGIRL_API_TOKEN` as the API key. It is stateless: the client's history is replayed into a throwaway loop, her personality, memory and tools run behind the one call, and nothing is kept per conversation. The client's system prompt reaches her as a note, not as a replacement identity. She recalls from memory but doesn't learn from these chats unless `openai_extract = true` is set under `[channels.api]`. `model` is ignored, client-side `tools` are rejected, and with `stream: true` her reasoning and tool activity arrive as `reasoning_content`. For a conversation she should own herself (compaction, tool results carried across turns), use `/chat`.
 
 No OpenAPI spec, no versioned paths, no plugin framework. If you want to build something on top, talk to egirl over HTTP in whatever language you like.
 

@@ -15,6 +15,8 @@ export interface AgentContext {
   workspaceDir: string
   sessionId: string
   conversationSummary?: string
+  /** Paths of the images attached to the message this run is answering; cleared when it ends. */
+  runImages?: string[]
 }
 
 /**

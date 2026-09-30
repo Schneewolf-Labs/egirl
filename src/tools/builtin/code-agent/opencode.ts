@@ -2,7 +2,7 @@ import { spawn } from 'child_process'
 import { sanitizedEnv } from '../../../util/env'
 import { errorMessage } from '../../../util/errors'
 import { log } from '../../../util/logger'
-import { DEFAULT_TIMEOUT_MS } from './shared'
+import { DEFAULT_TIMEOUT_MS, withImagePaths } from './shared'
 import type { CodeAgentBackend, CodeAgentConfig } from './types'
 
 interface OpencodeEvent {
@@ -142,7 +142,7 @@ async function handlePermission(
   await replyToPermission(baseUrl, permission, decision.action === 'deny' ? 'reject' : 'once')
 }
 
-export const runOpencodeCodeAgent: CodeAgentBackend = async (config, task, workingDir) => {
+export const runOpencodeCodeAgent: CodeAgentBackend = async (config, task, workingDir, images) => {
   const startTime = Date.now()
   const timeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS
   const abortController = new AbortController()
@@ -200,7 +200,7 @@ export const runOpencodeCodeAgent: CodeAgentBackend = async (config, task, worki
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...(model && { model }),
-          parts: [{ type: 'text', text: task }],
+          parts: [{ type: 'text', text: withImagePaths(task, images) }],
         }),
         signal: abortController.signal,
       },

@@ -313,6 +313,7 @@ Required only when running `api` (or `serve` with the API enabled).
 | `host` | string | `127.0.0.1` | Bind address. Use `0.0.0.0` to listen on all interfaces (requires `EGIRL_API_TOKEN`) |
 | `port` | number | `3000` | Port for the HTTP API server |
 | `max_sessions` | number | unset | Most sessions held in memory; least recently used idle ones are dropped past it and rebuilt from the store on return. See [public-instance.md](public-instance.md) |
+| `openai_extract` | boolean | `false` | Let `/v1/chat/completions` turns write memories (auto-extraction, compaction flush). Off by default: those chats come through someone else's frontend. Recall and her explicit memory tools work either way |
 
 See the [README](../README.md#http-api) for the endpoint list.
 

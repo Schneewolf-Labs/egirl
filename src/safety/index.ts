@@ -1,3 +1,4 @@
+import { HANDLE_RE } from '../agent/attachments'
 import { type AuditEntry, appendAuditLog } from './audit-log'
 import { buildCommandFilterConfig, type CommandFilterConfig, checkCommand } from './command-filter'
 import { getDefaultSensitivePatterns, isPathAllowed, isSensitivePath } from './path-guard'
@@ -79,9 +80,14 @@ export function getDefaultSafetyConfig(): SafetyConfig {
 
 function extractPaths(toolName: string, args: Record<string, unknown>): string[] {
   if (toolName === 'consult') {
-    return Array.isArray(args.files)
+    // Image handles (img1) name this session's attachments; anything else is a path.
+    const images = Array.isArray(args.images)
+      ? args.images.filter((i): i is string => typeof i === 'string' && !HANDLE_RE.test(i.trim()))
+      : []
+    const files = Array.isArray(args.files)
       ? args.files.filter((f): f is string => typeof f === 'string')
       : []
+    return [...files, ...images]
   }
   const path = (args.path as string | undefined) ?? (args.working_dir as string | undefined)
   return path ? [path] : []
