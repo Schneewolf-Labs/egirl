@@ -33,6 +33,9 @@ If you need context from previous runs, use memory_search.`
  * which by convention sits at the top of the file. */
 const MAX_STATE_BRIEF_CHARS = 16000
 
+/** How long past its hard timeout a claimed run holds the task before another process may take it. */
+const CLAIM_LEASE_MARGIN_MS = 10 * 60_000
+
 /**
  * Frame a state-file's content as a pinned, settled-ground-truth block for the system prompt.
  * Empty content yields undefined (nothing to pin). Over-long content is truncated head-first so
@@ -264,6 +267,15 @@ export class TaskRunner {
           this.deps.store.update(task.id, { nextRunAt })
           continue
         }
+      }
+
+      // Another process on this tasks.db may have picked the same due task this tick.
+      const leaseUntil = Date.now() + this.deps.tasksConfig.taskTimeoutMs + CLAIM_LEASE_MARGIN_MS
+      if (
+        task.nextRunAt === undefined ||
+        !this.deps.store.claimDue(task.id, task.nextRunAt, leaseUntil)
+      ) {
+        continue
       }
 
       this.executeTask(task).catch((err) =>
