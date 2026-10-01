@@ -140,15 +140,24 @@ export const execTool: Tool = {
         })
       })
 
-      proc.on('close', (code) => {
+      proc.on('close', (code, sig) => {
         if (killed) {
           settle(timedOut(''))
           return
         }
         const output = stdout + (stderr ? `\n\nstderr:\n${stderr}` : '')
+        if (code === 0) {
+          settle({ success: true, output: output || 'Command completed with exit code 0' })
+          return
+        }
+        // The model only sees `output`, never `success`: a failing command that printed
+        // something (a deploy script that says "Done." and exits 3) must still say it failed.
+        const status = code === null ? `killed by ${sig ?? 'signal'}` : `exit code ${code}`
         settle({
-          success: code === 0,
-          output: output || `Command completed with exit code ${code}`,
+          success: false,
+          output: output
+            ? `${output.trimEnd()}\n\n[command failed: ${status}]`
+            : `Command failed: ${status}`,
         })
       })
     })
