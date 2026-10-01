@@ -1,3 +1,4 @@
+import { join } from 'node:path'
 import {
   type ChatChannel,
   createDiscordChannel,
@@ -55,7 +56,9 @@ export async function runServe(
 
   const outbound = new Map<string, OutboundChannel>()
   // Routes inbound chat messages to pending report asks (see src/report/broker.ts).
-  const replyBroker = createReplyBroker()
+  // Shared with the other processes on this workspace, so a reply heard here can answer an ask
+  // parked by a task running in another one (serve hears chat; api runs tasks).
+  const replyBroker = createReplyBroker({ dbPath: join(config.workspace.path, 'asks.db') })
 
   // Chat channels, in priority order: the first one configured is where background tasks
   // and the heartbeat report by default. Discord runs one session per channel/thread/DM;

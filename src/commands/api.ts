@@ -39,7 +39,9 @@ export async function runAPI(config: RuntimeConfig, args: string[]): Promise<voi
   // browser had nowhere to escalate to -- a peer supervisor worked, but "this one is the
   // human's call" died in a tool error, and the agent went back to guessing.
   const consoleInbox = new ConsoleInbox(config.source.instance ?? 'egirl')
-  const replyBroker = createReplyBroker()
+  // Shared with the other processes on this workspace, so a reply heard here can answer an ask
+  // parked by a task running in another one (serve hears chat; api runs tasks).
+  const replyBroker = createReplyBroker({ dbPath: join(config.workspace.path, 'asks.db') })
   // Matrix is send-only here: serve owns the room conversation, but a task or a report that
   // runs in this process still has to reach the room the human actually reads.
   const outbound = new Map<string, OutboundChannel>([['console', { send: consoleInbox.send }]])
