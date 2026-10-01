@@ -1,7 +1,7 @@
 import { spawn } from 'child_process'
-import { isAbsolute, resolve } from 'path'
 import { sanitizedEnv } from '../../util/env'
 import { log } from '../../util/logger'
+import { resolveUserPath } from '../../util/paths'
 import type { Tool, ToolResult } from '../types'
 
 const DEFAULT_TIMEOUT = 30000
@@ -56,11 +56,7 @@ export const execTool: Tool = {
    */
   async execute(params: Record<string, unknown>, cwd: string): Promise<ToolResult> {
     const command = params.command as string
-    const workingDir = params.working_dir
-      ? isAbsolute(params.working_dir as string)
-        ? (params.working_dir as string)
-        : resolve(cwd, params.working_dir as string)
-      : cwd
+    const workingDir = params.working_dir ? resolveUserPath(params.working_dir as string, cwd) : cwd
     const timeout = (params.timeout as number) ?? DEFAULT_TIMEOUT
 
     return new Promise((resolvePromise) => {

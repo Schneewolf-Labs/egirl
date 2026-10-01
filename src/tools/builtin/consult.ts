@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
-import { extname, isAbsolute, resolve } from 'node:path'
+import { extname } from 'node:path'
 import { resolveImageRefs } from '../../agent/attachments'
+import { resolveUserPath } from '../../util/paths'
 import type { Tool, ToolCallContext, ToolResult } from '../types'
 
 /**
@@ -176,7 +177,7 @@ export function createConsultTool(consultants: ConsultantEntry[], workspaceDir: 
       const filePaths = Array.isArray(params.files) ? (params.files as string[]) : []
       const files: Array<{ path: string; content: string }> = []
       for (const p of filePaths) {
-        const abs = isAbsolute(p) ? p : resolve(workspaceDir, p)
+        const abs = resolveUserPath(p, workspaceDir)
         try {
           files.push({ path: p, content: readFileSync(abs, 'utf8') })
         } catch {

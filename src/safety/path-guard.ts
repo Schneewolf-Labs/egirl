@@ -1,5 +1,6 @@
 import { realpathSync } from 'fs'
-import { normalize, resolve } from 'path'
+import { normalize } from 'path'
+import { resolveUserPath } from '../util/paths'
 
 const DEFAULT_SENSITIVE_PATTERNS: RegExp[] = [
   // Environment / dotenv
@@ -79,10 +80,10 @@ export function isPathAllowed(
 ): string | undefined {
   if (allowedPaths.length === 0) return undefined
 
-  const fullPath = comparisonPath(resolve(cwd, filePath))
+  const fullPath = comparisonPath(resolveUserPath(filePath, cwd))
 
   for (const allowed of allowedPaths) {
-    const normalizedAllowed = comparisonPath(resolve(cwd, allowed))
+    const normalizedAllowed = comparisonPath(resolveUserPath(allowed, cwd))
     const prefix = normalizedAllowed.endsWith('/') ? normalizedAllowed : `${normalizedAllowed}/`
     if (fullPath === normalizedAllowed || fullPath.startsWith(prefix)) {
       return undefined
@@ -97,7 +98,7 @@ export function isSensitivePath(
   cwd: string,
   patterns: RegExp[],
 ): string | undefined {
-  const fullPath = comparisonPath(resolve(cwd, filePath))
+  const fullPath = comparisonPath(resolveUserPath(filePath, cwd))
 
   for (const pattern of patterns) {
     if (pattern.test(fullPath)) {

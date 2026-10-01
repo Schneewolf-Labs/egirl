@@ -1,6 +1,6 @@
 import { readFile } from 'fs/promises'
-import { isAbsolute, resolve } from 'path'
 import { errorMessage } from '../../util/errors'
+import { resolveUserPath } from '../../util/paths'
 import type { Tool, ToolResult } from '../types'
 
 export const readTool: Tool = {
@@ -33,7 +33,7 @@ export const readTool: Tool = {
     const endLine = params.end_line as number | undefined
 
     try {
-      const fullPath = isAbsolute(path) ? path : resolve(cwd, path)
+      const fullPath = resolveUserPath(path, cwd)
       const content = await readFile(fullPath, 'utf-8')
 
       if (startLine !== undefined || endLine !== undefined) {
