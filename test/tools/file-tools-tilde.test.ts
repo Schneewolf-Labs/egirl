@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { execTool } from '../../src/tools/builtin/exec'
 import { readTool } from '../../src/tools/builtin/read'
 import { writeTool } from '../../src/tools/builtin/write'
 
@@ -23,4 +24,13 @@ describe('file tools and ~', () => {
     const back = await readTool.execute({ path: `~/${dir}/repos.md` }, ws)
     expect(back.output).toContain('hello')
   })
+  test.skipIf(process.platform === 'win32')(
+    'execute_command with working_dir ~ runs in home',
+    async () => {
+      const ws = mkdtempSync(join(tmpdir(), 'egirl-ws-'))
+      const r = await execTool.execute({ command: 'pwd', working_dir: '~' }, ws)
+      expect(r.success).toBe(true)
+      expect(r.output.trim().split('\n')[0]).toBe(realpathSync(homedir()))
+    },
+  )
 })

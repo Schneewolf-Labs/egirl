@@ -1,11 +1,11 @@
-import { isAbsolute, resolve } from 'path'
 import { runGit } from '../../util/git'
+import { resolveUserPath } from '../../util/paths'
 import { truncate } from '../../util/text'
 import type { Tool, ToolResult } from '../types'
 
 function resolveCwd(dir: string | undefined, cwd: string): string {
   if (!dir) return cwd
-  return isAbsolute(dir) ? dir : resolve(cwd, dir)
+  return resolveUserPath(dir, cwd)
 }
 
 // --- git_status ---

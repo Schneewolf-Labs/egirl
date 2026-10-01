@@ -1,11 +1,11 @@
-import { isAbsolute, resolve } from 'path'
 import { errorMessage } from '../../util/errors'
+import { resolveUserPath } from '../../util/paths'
 import type { ProcessRegistry, ProcessSnapshot } from '../process-registry'
 import type { Tool, ToolResult } from '../types'
 
 function resolveDir(workingDir: unknown, cwd: string): string {
   if (typeof workingDir !== 'string' || workingDir.length === 0) return cwd
-  return isAbsolute(workingDir) ? workingDir : resolve(cwd, workingDir)
+  return resolveUserPath(workingDir, cwd)
 }
 
 function summarize(p: ProcessSnapshot): string {

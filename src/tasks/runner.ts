@@ -1,5 +1,4 @@
 import { readFileSync } from 'node:fs'
-import { isAbsolute, resolve } from 'node:path'
 import { AgentLoop } from '../agent/loop'
 import { subscribeAll } from '../agent/session-events'
 import type { SessionMutex } from '../agent/session-mutex'
@@ -14,6 +13,7 @@ import { gatherStandup } from '../standup'
 import type { ToolExecutor } from '../tools'
 import { errorMessage } from '../util/errors'
 import { log } from '../util/logger'
+import { resolveUserPath } from '../util/paths'
 import { parseScheduleExpression } from './cron'
 import { classifyError, getRetryPolicy } from './error-classify'
 import { HEARTBEAT_TASK_NAME, heartbeatPreCheck } from './heartbeat'
@@ -478,7 +478,7 @@ export class TaskRunner {
    */
   private loadStateBrief(task: Task, cwd: string): string | undefined {
     if (!task.stateFile) return undefined
-    const path = isAbsolute(task.stateFile) ? task.stateFile : resolve(cwd, task.stateFile)
+    const path = resolveUserPath(task.stateFile, cwd)
     let content: string
     try {
       content = readFileSync(path, 'utf8').trim()

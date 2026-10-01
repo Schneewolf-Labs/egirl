@@ -3,6 +3,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } fr
 import { isAbsolute, join, relative, resolve, sep } from 'node:path'
 import type { Tool, ToolResult } from '../tools/types'
 import { log } from '../util/logger'
+import { resolveUserPath } from '../util/paths'
 
 /**
  * Skill mutation ledger — ported from hermes-agent's skill_ledger. Every write to a file
@@ -140,7 +141,7 @@ export function withSkillLedger(tool: Tool, skillsDirs: string[], ledgerDir: str
       const rawPath = params.path
       let abs: string | undefined
       if (typeof rawPath === 'string' && rawPath.trim()) {
-        abs = isAbsolute(rawPath) ? rawPath : resolve(cwd, rawPath)
+        abs = resolveUserPath(rawPath, cwd)
       }
       const inSkills =
         abs !== undefined &&
