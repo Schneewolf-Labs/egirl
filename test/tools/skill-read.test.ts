@@ -47,6 +47,11 @@ describe('skill_read', () => {
     expect(r.output).toContain('Read the diff')
   })
 
+  test('matches a name passed with the emoji the listing shows', async () => {
+    const r = await tool.execute({ name: '\u{1F50D} Code Review' }, '/tmp')
+    expect(r.success).toBe(true)
+  })
+
   test('is case insensitive', async () => {
     const r = await tool.execute({ name: 'HEMLOCK' }, '/tmp')
     expect(r.success).toBe(true)
