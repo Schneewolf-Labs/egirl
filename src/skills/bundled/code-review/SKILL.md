@@ -36,7 +36,15 @@ file:line you read or a command you ran.
 4. **Look for:** bugs (logic, edge cases, error handling), security (paths, injection, secrets,
    untrusted input), tests that cannot fail (a test that returns instead of asserting), behaviour
    changes for existing users that the description doesn't mention.
-5. **Run the tests** on the PR branch. Say what you ran and what it printed.
+5. **Ask what the change risks, not just whether it works:**
+   - What leaves the machine? Any new network call: what data it sends (prompts, files, tool
+     output), to whom, and whether the docs warn about it.
+   - What does it cost? New paid or remote calls: is there a cap, a budget or a timeout?
+   - What waits on it? New work on the exit path or in the loop: worst-case delay.
+   - Does it change project rules (CONTRIBUTING, CLAUDE.md, AGENTS.md, defaults)? Flag that for the
+     owner to decide; don't approve it on their behalf.
+   - What isn't tested? Name the new code paths no test touches.
+6. **Run the tests** on the PR branch. Say what you ran and what it printed.
 
 ## Output Format
 
