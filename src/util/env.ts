@@ -12,6 +12,13 @@ const SECRET_PATTERNS = [
   /SECRET/i,
   /PASSWORD/i,
   /PRIVATE.?KEY/i,
+  // OPENAI_API_KEY, EGIRL_TUTOR_API_KEY and friends matched none of the above, so every command
+  // the agent ran inherited them, and one `env` printed them into the transcript.
+  /API.?KEY/i,
+  /CREDENTIAL/i,
+  // The agent's own configuration is not the child's. A command that runs egirl itself (its test
+  // suite, a second instance) otherwise loads this process's config file and endpoints.
+  /^EGIRL_/,
 ]
 
 export function sanitizedEnv(): Record<string, string | undefined> {
