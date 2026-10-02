@@ -620,6 +620,23 @@ export function loadConfig(options: LoadConfigOptions = {}): RuntimeConfig {
     })
   }
 
+  // EGIRL_TUTOR_ENDPOINT + EGIRL_TUTOR_MODEL switch the tutor on for one run without a
+  // [tutor] section, the way EGIRL_LOCAL_* repoint the operator — a bench run opts in from env.
+  const tutorEndpoint = process.env.EGIRL_TUTOR_ENDPOINT ?? toml.tutor?.endpoint
+  const tutorModel = process.env.EGIRL_TUTOR_MODEL ?? toml.tutor?.model
+  if (tutorEndpoint && tutorModel) {
+    const apiKey = process.env.EGIRL_TUTOR_API_KEY
+    config.tutor = {
+      // The provider appends /v1/chat/completions; accept the base URL hosted APIs document.
+      endpoint: tutorEndpoint.replace(/\/+$/, '').replace(/\/v1$/, ''),
+      model: tutorModel,
+      maxConcurrent: toml.tutor?.max_concurrent ?? 4,
+      timeoutMs: toml.tutor?.timeout_ms ?? 600_000,
+      ...(toml.tutor?.temperature !== undefined && { temperature: toml.tutor.temperature }),
+      ...(apiKey && { apiKey }),
+    }
+  }
+
   if (toml.report?.to) {
     config.report = {
       to: toml.report.to,

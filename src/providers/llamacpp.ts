@@ -159,6 +159,9 @@ export class LlamaCppProvider implements LLMProvider {
   private reresolve: EndpointReresolver | undefined
   // Set with it: moves off Witchgrid's auto-spawning proxy once the model runs directly.
   private promote: EndpointReresolver | undefined
+  // llama-server serves whatever it loaded and never needed the model named; a hosted
+  // OpenAI-compatible API (the shadow tutor's frontier endpoint) rejects a request without it.
+  private model: string | undefined
 
   constructor(
     endpoint: string,
@@ -169,8 +172,10 @@ export class LlamaCppProvider implements LLMProvider {
     apiKey?: string,
     reresolve?: EndpointReresolver,
     promote?: EndpointReresolver,
+    sendModel?: boolean,
   ) {
     this.endpoint = endpoint.replace(/\/$/, '')
+    this.model = sendModel ? model : undefined
     this.reresolve = reresolve
     this.promote = promote
     this.name = `llamacpp/${model}`
@@ -268,6 +273,7 @@ export class LlamaCppProvider implements LLMProvider {
       },
       signal: req.signal,
       body: JSON.stringify({
+        ...(this.model && { model: this.model }),
         messages,
         // An agent turn routinely issues several calls at once; without this the server's
         // tool grammar stops the model after one.
@@ -747,6 +753,7 @@ export function createLlamaCppProvider(
   apiKey?: string,
   reresolve?: EndpointReresolver,
   promote?: EndpointReresolver,
+  sendModel?: boolean,
 ): LLMProvider {
   return new LlamaCppProvider(
     endpoint,
@@ -757,6 +764,7 @@ export function createLlamaCppProvider(
     apiKey,
     reresolve,
     promote,
+    sendModel,
   )
 }
 
