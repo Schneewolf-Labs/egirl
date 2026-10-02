@@ -407,6 +407,22 @@ export class TaskStore {
     return rows.map(rowToTask)
   }
 
+  /**
+   * Take a due task for this process. Several processes can share one tasks.db (an instance's
+   * `serve` and `api` both run a task runner) and each only knows its own in-flight runs, so
+   * without this every process ran every due task, side by side on the same model. The
+   * compare-and-set on next_run_at lets exactly one of them start the run. The lease pushes
+   * next_run_at past the run's hard timeout, so a process that dies mid-run leaves the task due
+   * again when the lease runs out; a run that ends normally sets next_run_at itself.
+   */
+  claimDue(id: string, seenNextRunAt: number, leaseUntil: number): boolean {
+    const result = this.db.run(
+      "UPDATE tasks SET next_run_at = ? WHERE id = ? AND status = 'active' AND next_run_at = ?",
+      [leaseUntil, id, seenNextRunAt],
+    )
+    return result.changes === 1
+  }
+
   /** Get tasks that depend on a given task ID */
   getDependents(taskId: string): Task[] {
     const rows = this.db

@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from 'fs/promises'
-import { dirname, isAbsolute, resolve } from 'path'
+import { dirname } from 'path'
 import { errorMessage } from '../../util/errors'
+import { resolveUserPath } from '../../util/paths'
 import type { Tool, ToolResult } from '../types'
 
 export const writeTool: Tool = {
@@ -34,7 +35,7 @@ export const writeTool: Tool = {
     const createDirectories = params.create_directories !== false
 
     try {
-      const fullPath = isAbsolute(path) ? path : resolve(cwd, path)
+      const fullPath = resolveUserPath(path, cwd)
 
       if (createDirectories) {
         await mkdir(dirname(fullPath), { recursive: true })

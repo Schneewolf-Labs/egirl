@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
-import { extname, isAbsolute, join } from 'node:path'
+import { extname, join } from 'node:path'
 import { log } from '../util/logger'
+import { resolveUserPath } from '../util/paths'
 
 /**
  * Images the principal attaches are saved to disk so they can be handed on. The operator sees
@@ -119,7 +120,7 @@ export function resolveImageRefs(
       else missing.push(ref)
       continue
     }
-    const abs = isAbsolute(ref) ? ref : join(workspaceDir, ref)
+    const abs = resolveUserPath(ref, workspaceDir)
     if (IMAGE_EXTS.has(extname(abs).toLowerCase()) && existsSync(abs)) paths.push(abs)
     else missing.push(ref)
   }

@@ -93,3 +93,12 @@ describe('path-guard', () => {
     })
   })
 })
+
+describe('tilde paths', () => {
+  test('a ~/ path is judged by where it really points', () => {
+    const ws = '/tmp/egirl-ws-tilde'
+    // Resolved against the workspace, ~/x would look inside it and pass; it is really in home.
+    expect(isPathAllowed('~/outside.md', ws, [ws])).toBeDefined()
+    expect(isPathAllowed('inside.md', ws, [ws])).toBeUndefined()
+  })
+})

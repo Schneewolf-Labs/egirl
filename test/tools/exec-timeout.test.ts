@@ -30,6 +30,18 @@ describe('execute_command timeout escalation', () => {
     expect(r.success).toBe(false)
   })
 
+  test('a nonzero exit is visible in the output even when the command printed something', async () => {
+    const r = await execTool.execute({ command: 'echo Done. && exit 3' }, CWD)
+    expect(r.success).toBe(false)
+    expect(r.output).toContain('Done.')
+    expect(r.output).toContain('exit code 3')
+  })
+
+  test('a silent nonzero exit names the code', async () => {
+    const r = await execTool.execute({ command: 'exit 4' }, CWD)
+    expect(r.output).toContain('exit code 4')
+  })
+
   test('a sleeping command is killed at the timeout and reports partial output', async () => {
     const t0 = Date.now()
     const command =

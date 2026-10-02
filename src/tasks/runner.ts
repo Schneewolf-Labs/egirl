@@ -1,5 +1,4 @@
 import { readFileSync } from 'node:fs'
-import { isAbsolute, resolve } from 'node:path'
 import { AgentLoop } from '../agent/loop'
 import { subscribeAll } from '../agent/session-events'
 import type { SessionMutex } from '../agent/session-mutex'
@@ -14,6 +13,7 @@ import { gatherStandup } from '../standup'
 import type { ToolExecutor } from '../tools'
 import { errorMessage } from '../util/errors'
 import { log } from '../util/logger'
+import { resolveUserPath } from '../util/paths'
 import { parseScheduleExpression } from './cron'
 import { classifyError, getRetryPolicy } from './error-classify'
 import { HEARTBEAT_TASK_NAME, heartbeatPreCheck } from './heartbeat'
@@ -32,6 +32,9 @@ If you need context from previous runs, use memory_search.`
  * history stays in the agent's own notes, read on demand. Truncated head keeps the ledger,
  * which by convention sits at the top of the file. */
 const MAX_STATE_BRIEF_CHARS = 16000
+
+/** How long past its hard timeout a claimed run holds the task before another process may take it. */
+const CLAIM_LEASE_MARGIN_MS = 10 * 60_000
 
 /**
  * Frame a state-file's content as a pinned, settled-ground-truth block for the system prompt.
@@ -266,6 +269,15 @@ export class TaskRunner {
         }
       }
 
+      // Another process on this tasks.db may have picked the same due task this tick.
+      const leaseUntil = Date.now() + this.deps.tasksConfig.taskTimeoutMs + CLAIM_LEASE_MARGIN_MS
+      if (
+        task.nextRunAt === undefined ||
+        !this.deps.store.claimDue(task.id, task.nextRunAt, leaseUntil)
+      ) {
+        continue
+      }
+
       this.executeTask(task).catch((err) =>
         log.error('tasks', `Scheduled task ${task.id} failed: ${err}`),
       )
@@ -478,7 +490,7 @@ export class TaskRunner {
    */
   private loadStateBrief(task: Task, cwd: string): string | undefined {
     if (!task.stateFile) return undefined
-    const path = isAbsolute(task.stateFile) ? task.stateFile : resolve(cwd, task.stateFile)
+    const path = resolveUserPath(task.stateFile, cwd)
     let content: string
     try {
       content = readFileSync(path, 'utf8').trim()

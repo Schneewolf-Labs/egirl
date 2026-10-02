@@ -186,3 +186,58 @@ describe('parking at the end of a run', () => {
     expect(store.get(task.id)?.status).toBe('awaiting')
   })
 })
+
+describe('several processes on one tasks.db', () => {
+  test('two runners sharing a store run a due task once, not once each', async () => {
+    const workspace = mkdtempSync(join(tmpdir(), 'egirl-claim-'))
+    const config = makeConfig(workspace)
+    const dbPath = join(workspace, 'tasks.db')
+    let calls = 0
+    const provider: LLMProvider = {
+      name: 'stub',
+      async chat(): Promise<ChatResponse> {
+        calls++
+        await Bun.sleep(20)
+        return stubResponse({ content: 'done' })
+      },
+    }
+    // Two stores on one file, as `serve` and `api` open the same workspace's tasks.db.
+    const runners = [createTaskStore(dbPath), createTaskStore(dbPath)].map((store) =>
+      createTaskRunner({
+        config,
+        tasksConfig: { ...config.tasks, taskTimeoutMs: 300_000, tickIntervalMs: 10 },
+        store,
+        toolExecutor: createToolExecutor(),
+        localProvider: provider,
+        memory: undefined,
+        outbound: new Map(),
+      }),
+    )
+    const store = createTaskStore(dbPath)
+    const task = store.create({
+      name: 'once',
+      description: 'once',
+      kind: 'oneshot',
+      prompt: 'go',
+      channel: 'api',
+      channelTarget: 'api:default',
+      createdBy: 'user',
+    })
+    store.update(task.id, { status: 'active', nextRunAt: Date.now() })
+    for (const r of runners) r.start()
+    await Bun.sleep(300)
+    for (const r of runners) r.stop()
+    expect(store.getRecentRuns(task.id).length).toBe(1)
+    expect(calls).toBe(1)
+  })
+
+  test('a claim only succeeds against the next_run_at it saw', () => {
+    const workspace = mkdtempSync(join(tmpdir(), 'egirl-claim-'))
+    const store = createTaskStore(join(workspace, 'tasks.db'))
+    const task = createTask(store, 'cas')
+    store.update(task.id, { status: 'active', nextRunAt: 1000 })
+    expect(store.claimDue(task.id, 1000, 5000)).toBe(true)
+    expect(store.claimDue(task.id, 1000, 9000)).toBe(false)
+    expect(store.get(task.id)?.nextRunAt).toBe(5000)
+  })
+})
