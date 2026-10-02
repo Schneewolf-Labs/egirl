@@ -26,8 +26,11 @@ import { Database } from 'bun:sqlite'
  */
 export function openDatabase(path: string): Database {
   const db = new Database(path)
-  db.run('PRAGMA journal_mode=WAL')
+  // busy_timeout first: switching to WAL takes a lock, and set in the other order the very first
+  // statement had no timeout. Two processes starting together (launchd restarting `serve` and
+  // `api` at once) then lost the race on open, and the loser ran with that store disabled.
   db.run('PRAGMA busy_timeout=5000')
+  db.run('PRAGMA journal_mode=WAL')
   db.run('PRAGMA synchronous=NORMAL')
   return db
 }
