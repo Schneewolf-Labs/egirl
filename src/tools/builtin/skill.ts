@@ -42,7 +42,9 @@ export function createSkillReadTool(skills: Skill[]): Tool {
         return { success: false, output: 'No skill name given.' }
       }
 
-      const wanted = requested.toLowerCase()
+      // The listing shows each skill with its emoji in front, and models copy it: "⚖️ Reading
+      // Check Results" used to miss every time and cost a turn. Match on the letters alone.
+      const wanted = requested.replace(/^[^\p{L}\p{N}]+/u, '').toLowerCase()
       const skill =
         skills.find((s) => s.name.toLowerCase() === wanted) ??
         // Models routinely pass a slug for a display name ("code-review" for "Code Review").
@@ -58,7 +60,9 @@ export function createSkillReadTool(skills: Skill[]): Tool {
 
       return {
         success: true,
-        output: `# ${skill.name}\n\n${skill.content}`,
+        output: skill.content.trimStart().startsWith('# ')
+          ? skill.content
+          : `# ${skill.name}\n\n${skill.content}`,
       }
     },
   }

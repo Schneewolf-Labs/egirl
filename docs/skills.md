@@ -169,4 +169,4 @@ When asked to review code:
 
 ## Bundled Skills
 
-`src/skills/bundled/` contains skills that ship with egirl: `code-review` and `research`. These are loaded alongside user-installed skills from the configured `[skills] dirs`.
+`src/skills/bundled/` contains skills that ship with egirl: `code-review` (`/review`), `land-pr` (`/land`), `check-results`, `ci-triage` (`/ci`), `delegate-code`, `deliver-work`, `model-eval` (`/eval`), `repo-survey` and `research`. These are loaded alongside user-installed skills from the configured `[skills] dirs`.
