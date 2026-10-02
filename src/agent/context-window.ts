@@ -163,7 +163,29 @@ export function truncateToolResultSync(content: string, maxTokens: number): stri
   if (estimatedTokens <= maxTokens) return content
 
   const maxChars = Math.floor(maxTokens * 3.5)
-  return `${content.slice(0, maxChars)}\n\n[Output truncated — ${estimatedTokens} estimated tokens exceeded ${maxTokens} token limit]`
+  return keepHeadAndTail(
+    content,
+    maxChars,
+    `[Output truncated — ${estimatedTokens} estimated tokens exceeded ${maxTokens} token limit; middle omitted]`,
+  )
+}
+
+/** Share of a truncated tool result kept from the end. */
+const TAIL_SHARE = 0.3
+
+/**
+ * Cut the middle out of an over-long tool result, keeping its start and its end.
+ *
+ * Keeping only the start dropped exactly what decides a command's outcome: test runners print
+ * their pass/fail summary last, and execute_command appends `[command failed: exit code N]` at
+ * the very end. A long failing test run reached the model as a wall of passing lines with the
+ * result and the exit code cut off.
+ */
+export function keepHeadAndTail(content: string, maxChars: number, marker: string): string {
+  if (content.length <= maxChars) return content
+  const tail = Math.floor(maxChars * TAIL_SHARE)
+  const head = Math.max(0, maxChars - tail)
+  return `${content.slice(0, head)}\n\n${marker}\n\n${content.slice(content.length - tail)}`
 }
 
 /**
@@ -202,7 +224,11 @@ async function truncateToolResult(
 
   return {
     ...message,
-    content: `${message.content.slice(0, maxChars)}\n\n[Output truncated to fit context window]`,
+    content: keepHeadAndTail(
+      message.content,
+      maxChars,
+      '[Output truncated to fit context window; middle omitted]',
+    ),
   }
 }
 

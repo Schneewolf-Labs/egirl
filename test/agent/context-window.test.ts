@@ -70,6 +70,16 @@ describe('truncateToolResultSync', () => {
   test('preserves empty content', () => {
     expect(truncateToolResultSync('', 100)).toBe('')
   })
+
+  test("keeps the end, where a test run's summary and the exit code are", () => {
+    const content = `${'(pass) a test\n'.repeat(5000)}2 fail\n1466 pass\n\n[command failed: exit code 1]`
+    const result = truncateToolResultSync(content, 500)
+    expect(result.length).toBeLessThan(2500)
+    expect(result.startsWith('(pass) a test')).toBe(true)
+    expect(result).toContain('middle omitted')
+    expect(result).toContain('2 fail')
+    expect(result).toContain('[command failed: exit code 1]')
+  })
 })
 
 describe('fitToContextWindow', () => {
