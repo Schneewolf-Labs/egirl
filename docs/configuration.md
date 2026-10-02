@@ -318,7 +318,7 @@ See the [README](../README.md#http-api) for the endpoint list.
 
 ### `[conversation]`
 
-Optional. Controls conversation persistence and compaction.
+Optional. Controls conversation persistence, compaction, and the turn cap for chat runs.
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
@@ -328,6 +328,7 @@ Optional. Controls conversation persistence and compaction.
 | `compact_on_startup` | bool | `true` | Run compaction when egirl starts |
 | `context_compaction` | bool | `true` | Summarize interior messages when context fills instead of dropping |
 | `context_rollover` | bool | `false` | When context fills, roll over to a fresh window seeded with a mechanical handoff record (operator inputs, pending tool results) instead of summarizing. Adds the `new_context` and `context_remaining` tools. Unbounded task runs use it regardless. |
+| `max_turns` | number | `10` | Turn cap for a run that sets none of its own: `POST /chat` (a request's `max_turns` overrides it), the chat channels (Discord, XMPP, Telegram, Matrix), and `/v1/chat/completions`. Tasks use their own `max_turns`; the interactive CLI uses its session setting. When the cap ends a run, the reply says it ran out of steps and `/chat` returns `turn_limit_reached: true` |
 
 ### `[recovery]`
 

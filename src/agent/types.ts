@@ -70,6 +70,8 @@ export interface AgentResponse {
   aborted?: boolean
   /** True if a tool reported it is waiting on supervisor input that never came */
   awaitingInput?: boolean
+  /** True if the turn cap ended the run and the reply is the forced no-tools summary */
+  turnLimitReached?: boolean
 }
 
 export interface AgentLoopDeps {

@@ -38,6 +38,14 @@ import { errorMessage } from './util/errors'
 import { log } from './util/logger'
 import { ansiToHex, renderChatPage } from './web-ui'
 
+/**
+ * Ceiling on a /chat request's `max_turns`. A /chat run holds its session's queue and, on the
+ * JSON path, an open HTTP request for its whole length; 100 turns of local inference is already
+ * an hour or more. Work that needs longer belongs in a task (POST /tasks, `unbounded`), which
+ * has a timeout, a wrap-up warning and checkpointing instead of a client waiting on a socket.
+ */
+export const CHAT_MAX_TURNS_LIMIT = 100
+
 export interface APIConfig {
   host: string
   port: number
@@ -419,6 +427,20 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
                 .filter((u): u is string => typeof u === 'string' && u.startsWith('data:image/'))
                 .slice(0, 4)
             : undefined
+          // A per-request turn cap, for a multi-step job the configured default
+          // (`conversation.max_turns`) would cut short. Absent: the run uses that default.
+          // Clamped at CHAT_MAX_TURNS_LIMIT -- see there.
+          let maxTurns: number | undefined
+          if (body.max_turns !== undefined) {
+            if (!Number.isInteger(body.max_turns) || (body.max_turns as number) < 1) {
+              return err('max_turns must be a positive integer')
+            }
+            maxTurns = Math.min(body.max_turns as number, CHAT_MAX_TURNS_LIMIT)
+          }
+          const runOptions = {
+            ...(images?.length && { images }),
+            ...(maxTurns !== undefined && { maxTurns }),
+          }
 
           // Streaming path: a local reasoning model spends most of a turn (measured ~96% on a
           // Qwen3.8 turn) emitting thinking before any answer exists, so a blocking request looks
@@ -441,7 +463,7 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
                 if (ev.t === 'run_end' || ev.t === 'error') ended = true
                 send(ev)
               })
-              return agent.run(toRun, images?.length ? { images } : {})
+              return agent.run(toRun, runOptions)
             })
             return sseResponse(async (emit) => {
               send = emit
@@ -460,6 +482,7 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
                       duration_ms: 0,
                       aborted: response.aborted ?? false,
                       awaiting: response.awaitingInput ?? false,
+                      ...(response.turnLimitReached && { turn_limit_reached: true }),
                     },
                   })
                 }
@@ -471,9 +494,7 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
             })
           }
 
-          const { done, position } = enqueueRun(sessionId, () =>
-            agent.run(toRun, images?.length ? { images } : {}),
-          )
+          const { done, position } = enqueueRun(sessionId, () => agent.run(toRun, runOptions))
           const response = await done
           resumeParkedTask(sessionId, deps.taskStore, deps.taskRunner)
           return json({
@@ -485,6 +506,8 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
             turns: response.turns,
             // How many turns ran before this one got its slot; 0 means it ran immediately.
             queued_behind: position,
+            // The cap ended the run: the reply is a forced summary, not the model's own stop.
+            ...(response.turnLimitReached && { turn_limit_reached: true }),
           })
         }
 
