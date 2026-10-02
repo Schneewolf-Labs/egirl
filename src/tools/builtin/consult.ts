@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { extname } from 'node:path'
-import { resolveImageRefs } from '../../agent/attachments'
+import { HANDLE_RE, resolveImageRefs } from '../../agent/attachments'
 import { resolveUserPath } from '../../util/paths'
 import type { Tool, ToolCallContext, ToolResult } from '../types'
 
@@ -106,16 +106,37 @@ interface ConsultResponse {
   error?: { message?: string }
 }
 
-export function createConsultTool(consultants: ConsultantEntry[], workspaceDir: string): Tool {
+/**
+ * `allowFiles: false` drops the `files` parameter entirely: on an instance serving strangers the
+ * workspace holds every visitor's conversations, and whatever the consultant reads can come
+ * back out in its answer.
+ */
+export function createConsultTool(
+  consultants: ConsultantEntry[],
+  workspaceDir: string,
+  allowFiles = true,
+): Tool {
   const names = consultants.map((c) => c.name).join(', ')
   const single = consultants.length === 1 ? consultants[0] : undefined
+  const attachHint = allowFiles
+    ? ' The consultant has a much larger context window than you — attach whole files (your notes, state, source) rather than excerpts.'
+    : ''
+  const sources = allowFiles
+    ? 'the question, the attached files, or the context field'
+    : 'the question or the context field'
+  const filesParam = {
+    type: 'array',
+    items: { type: 'string' },
+    description:
+      'Paths of files to attach in full (resolved against your workspace). Attach generously — the consultant has room.',
+  }
 
   return {
     definition: {
       name: 'consult',
       description:
-        'Ask a consultant model for a read-only second opinion. The consultant has a much larger context window than you — attach whole files (your notes, state, source) rather than excerpts. ' +
-        'It cannot run tools or see your conversation; everything it needs must be in the question, the attached files, or the context field. ' +
+        `Ask a consultant model for a read-only second opinion.${attachHint} ` +
+        `It cannot run tools or see your conversation; everything it needs must be in ${sources}. ` +
         'Use it when you are stuck, suspect you are missing something, or want your plan or findings critiqued before committing to a direction. ' +
         `Configured consultants: ${names}.`,
       parameters: {
@@ -126,12 +147,7 @@ export function createConsultTool(consultants: ConsultantEntry[], workspaceDir: 
             description:
               'What you want reviewed or answered. Self-contained and specific — state what you have tried and what kind of answer helps.',
           },
-          files: {
-            type: 'array',
-            items: { type: 'string' },
-            description:
-              'Paths of files to attach in full (resolved against your workspace). Attach generously — the consultant has room.',
-          },
+          ...(allowFiles && { files: filesParam }),
           context: {
             type: 'string',
             description:
@@ -140,8 +156,9 @@ export function createConsultTool(consultants: ConsultantEntry[], workspaceDir: 
           images: {
             type: 'array',
             items: { type: 'string' },
-            description:
-              'Images to show the consultant: handles of attached images (img1, img2, ...) or image file paths. Only consultants configured with vision can see them.',
+            description: allowFiles
+              ? 'Images to show the consultant: handles of attached images (img1, img2, ...) or image file paths. Only consultants configured with vision can see them.'
+              : 'Images to show the consultant: handles of attached images (img1, img2, ...). Only consultants configured with vision can see them.',
           },
           consultant: {
             type: 'string',
@@ -173,6 +190,10 @@ export function createConsultTool(consultants: ConsultantEntry[], workspaceDir: 
         }
       }
 
+      if (!allowFiles && params.files !== undefined) {
+        return { success: false, output: 'File attachments are disabled for consult here.' }
+      }
+
       // Read attachments; a missing file is reported, not fatal — the consultant is told.
       const filePaths = Array.isArray(params.files) ? (params.files as string[]) : []
       const files: Array<{ path: string; content: string }> = []
@@ -186,6 +207,15 @@ export function createConsultTool(consultants: ConsultantEntry[], workspaceDir: 
       }
 
       const imageRefs = Array.isArray(params.images) ? (params.images as string[]) : []
+      // Without file access, only this session's own attachment handles: a path could name
+      // any image on disk, another session's attachments included.
+      const imagePathRefs = imageRefs.filter((r) => !HANDLE_RE.test(r.trim()))
+      if (!allowFiles && imagePathRefs.length > 0) {
+        return {
+          success: false,
+          output: `Image paths are disabled for consult here; pass attached image handles (img1, img2, ...) instead of ${imagePathRefs.join(', ')}.`,
+        }
+      }
       const { paths: imagePaths, missing } = resolveImageRefs(
         imageRefs,
         workspaceDir,

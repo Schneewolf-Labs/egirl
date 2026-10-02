@@ -120,6 +120,26 @@ describe('consult tool', () => {
     expect(result.output).toContain('deepseek')
   })
 
+  test('without file access, offers no files parameter and refuses attachments', async () => {
+    const tool = createConsultTool([entry], workspace, false)
+    expect(tool.definition.parameters.properties.files).toBeUndefined()
+    const result = await tool.execute({ question: 'q', files: ['NOTES.md'] }, workspace)
+    expect(result.success).toBe(false)
+    expect(result.output).toContain('disabled')
+  })
+
+  test('without file access, image paths are refused but handles still resolve', async () => {
+    writeFileSync(join(workspace, 'shot3.png'), 'x')
+    const tool = createConsultTool([{ ...entry, vision: true }], workspace, false)
+    const byPath = await tool.execute({ question: 'q', images: ['shot3.png'] }, workspace)
+    expect(byPath.success).toBe(false)
+    expect(byPath.output).toContain('shot3.png')
+    const byHandle = await tool.execute({ question: 'q', images: ['img9'] }, workspace, {
+      sessionId: 's1',
+    })
+    expect(byHandle.output).not.toContain('Image paths are disabled')
+  })
+
   test('a vision consultant gets attached images as image parts', async () => {
     const png = join(workspace, 'shot.png')
     writeFileSync(png, Buffer.from([0x89, 0x50, 0x4e, 0x47]))

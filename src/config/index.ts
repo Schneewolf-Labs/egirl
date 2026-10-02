@@ -466,9 +466,13 @@ export function loadConfig(options: LoadConfigOptions = {}): RuntimeConfig {
       codeAgent: toml.tools?.code_agent ?? false,
       peers: toml.tools?.peers ?? true,
       consult: toml.tools?.consult ?? true,
+      consultFiles: toml.tools?.consult_files ?? true,
       webResearch: toml.tools?.web_research ?? true,
+      webResearchPrivate: toml.tools?.web_research_private ?? true,
       webSearch: toml.tools?.web_search ?? true,
       screenshot: toml.tools?.screenshot ?? 'auto',
+      sessionSearch: toml.tools?.session_search ?? true,
+      skillManage: toml.tools?.skill_manage ?? true,
     },
     tracing: {
       verbosity: toml.tracing?.verbosity ?? 'verbose',
@@ -542,6 +546,7 @@ export function loadConfig(options: LoadConfigOptions = {}): RuntimeConfig {
       port: toml.channels.api.port ?? 3000,
       openaiExtract: toml.channels.api.openai_extract ?? false,
       ...(bearerToken && { bearerToken }),
+      ...(toml.channels.api.max_sessions && { maxSessions: toml.channels.api.max_sessions }),
     }
   }
 

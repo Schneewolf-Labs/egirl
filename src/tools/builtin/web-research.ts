@@ -1,8 +1,15 @@
 import { errorMessage } from '../../util/errors'
+import { checkPublicUrl } from '../../util/public-address'
 import type { Tool, ToolResult } from '../types'
 
 const DEFAULT_TIMEOUT = 15000
 const MAX_CONTENT_LENGTH = 50000
+const MAX_REDIRECTS = 5
+const HEADERS = {
+  'User-Agent':
+    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+  Accept: 'text/html, application/json, text/plain, */*',
+}
 
 /**
  * Strip HTML tags and extract readable text content.
@@ -44,102 +51,130 @@ function htmlToText(html: string): string {
   return text.trim()
 }
 
-export const webResearchTool: Tool = {
-  definition: {
-    name: 'web_research',
-    description:
-      'Fetch a URL and return its text content. Useful for reading web pages, documentation, API responses, and other online resources.',
-    parameters: {
-      type: 'object',
-      properties: {
-        url: {
-          type: 'string',
-          description: 'The URL to fetch (must start with http:// or https://)',
+/**
+ * Fetch with every hop checked: the first URL and each redirect target must resolve to a
+ * public address, or a public page could simply redirect us into the internal network.
+ */
+export async function fetchPublicOnly(
+  url: string,
+  signal: AbortSignal,
+  check: (url: string) => Promise<string | undefined> = checkPublicUrl,
+): Promise<Response | { blocked: string }> {
+  let current = url
+  for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+    const blocked = await check(current)
+    if (blocked) return { blocked }
+    const response = await fetch(current, { signal, headers: HEADERS, redirect: 'manual' })
+    const location = response.headers.get('location')
+    if (response.status < 300 || response.status >= 400 || !location) return response
+    current = new URL(location, current).toString()
+  }
+  return { blocked: `More than ${MAX_REDIRECTS} redirects` }
+}
+
+/**
+ * `allowPrivate: false` refuses loopback, private, and link-local destinations, for an
+ * instance whose users are strangers who shouldn't be able to read the internal network.
+ */
+export function createWebResearchTool(allowPrivate: boolean): Tool {
+  return {
+    definition: {
+      name: 'web_research',
+      description:
+        'Fetch a URL and return its text content. Useful for reading web pages, documentation, API responses, and other online resources.',
+      parameters: {
+        type: 'object',
+        properties: {
+          url: {
+            type: 'string',
+            description: 'The URL to fetch (must start with http:// or https://)',
+          },
+          timeout: {
+            type: 'number',
+            description: `Request timeout in milliseconds (default: ${DEFAULT_TIMEOUT})`,
+          },
         },
-        timeout: {
-          type: 'number',
-          description: `Request timeout in milliseconds (default: ${DEFAULT_TIMEOUT})`,
-        },
+        required: ['url'],
       },
-      required: ['url'],
     },
-  },
 
-  async execute(params: Record<string, unknown>, _cwd: string): Promise<ToolResult> {
-    const url = params.url as string
-    const timeout = (params.timeout as number | undefined) ?? DEFAULT_TIMEOUT
+    async execute(params: Record<string, unknown>, _cwd: string): Promise<ToolResult> {
+      const url = params.url as string
+      const timeout = (params.timeout as number | undefined) ?? DEFAULT_TIMEOUT
 
-    if (!url.startsWith('http://') && !url.startsWith('https://')) {
-      return {
-        success: false,
-        output: 'URL must start with http:// or https://',
-      }
-    }
-
-    try {
-      const controller = new AbortController()
-      const timer = setTimeout(() => controller.abort(), timeout)
-
-      const response = await fetch(url, {
-        signal: controller.signal,
-        headers: {
-          'User-Agent':
-            'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-          Accept: 'text/html, application/json, text/plain, */*',
-        },
-        redirect: 'follow',
-      })
-
-      clearTimeout(timer)
-
-      if (!response.ok) {
+      if (!url.startsWith('http://') && !url.startsWith('https://')) {
         return {
           success: false,
-          output: `HTTP ${response.status} ${response.statusText}`,
+          output: 'URL must start with http:// or https://',
         }
       }
 
-      const contentType = response.headers.get('content-type') ?? ''
-      const raw = await response.text()
+      try {
+        const controller = new AbortController()
+        const timer = setTimeout(() => controller.abort(), timeout)
 
-      let content: string
-      if (contentType.includes('application/json')) {
-        // Pretty-print JSON for readability
-        try {
-          content = JSON.stringify(JSON.parse(raw), null, 2)
-        } catch {
+        const fetched = allowPrivate
+          ? await fetch(url, { signal: controller.signal, headers: HEADERS, redirect: 'follow' })
+          : await fetchPublicOnly(url, controller.signal)
+
+        clearTimeout(timer)
+
+        if (!(fetched instanceof Response)) {
+          return { success: false, output: fetched.blocked }
+        }
+        const response = fetched
+
+        if (!response.ok) {
+          return {
+            success: false,
+            output: `HTTP ${response.status} ${response.statusText}`,
+          }
+        }
+
+        const contentType = response.headers.get('content-type') ?? ''
+        const raw = await response.text()
+
+        let content: string
+        if (contentType.includes('application/json')) {
+          // Pretty-print JSON for readability
+          try {
+            content = JSON.stringify(JSON.parse(raw), null, 2)
+          } catch {
+            content = raw
+          }
+        } else if (contentType.includes('text/html')) {
+          content = htmlToText(raw)
+        } else {
+          // Plain text or other text formats
           content = raw
         }
-      } else if (contentType.includes('text/html')) {
-        content = htmlToText(raw)
-      } else {
-        // Plain text or other text formats
-        content = raw
-      }
 
-      // Truncate if too long
-      if (content.length > MAX_CONTENT_LENGTH) {
-        content = `${content.slice(0, MAX_CONTENT_LENGTH)}\n\n[Truncated — content exceeded ${MAX_CONTENT_LENGTH} characters]`
-      }
+        // Truncate if too long
+        if (content.length > MAX_CONTENT_LENGTH) {
+          content = `${content.slice(0, MAX_CONTENT_LENGTH)}\n\n[Truncated — content exceeded ${MAX_CONTENT_LENGTH} characters]`
+        }
 
-      return {
-        success: true,
-        output: content,
-      }
-    } catch (error) {
-      const message = errorMessage(error)
+        return {
+          success: true,
+          output: content,
+        }
+      } catch (error) {
+        const message = errorMessage(error)
 
-      if (message.includes('abort')) {
+        if (message.includes('abort')) {
+          return {
+            success: false,
+            output: `Request timed out after ${timeout}ms`,
+          }
+        }
+
         return {
           success: false,
-          output: `Request timed out after ${timeout}ms`,
+          output: `Failed to fetch URL: ${message}`,
         }
       }
-
-      return {
-        success: false,
-        output: `Failed to fetch URL: ${message}`,
-      }
-    }
-  },
+    },
+  }
 }
+
+export const webResearchTool = createWebResearchTool(true)

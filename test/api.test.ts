@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import type { AgentLoop } from '../src/agent'
 import { endRun, resetSessionEvents, startRun } from '../src/agent/session-events'
 import { type APIConfig, type APIDeps, startAPIServer } from '../src/api'
+import type { RuntimeConfig } from '../src/config'
 
 function stubAgent(sessionId: string): AgentLoop {
   const messages: Array<{ role: string; content: string }> = []
@@ -517,5 +518,85 @@ describe('GET /info', () => {
   test('an empty list without MCP servers or config', async () => {
     expect((await info(cfg())).mcp).toEqual([])
     expect((await info()).mcp).toEqual([])
+  })
+})
+
+describe('API session cap', () => {
+  const post = (base: string, message: string, session_id: string) =>
+    fetch(`${base}/chat`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ message, session_id }),
+    })
+
+  test('drops the least recently used idle session past max_sessions', async () => {
+    const agents = new Map<string, AgentLoop>()
+    const server = startAPIServer(
+      { host: '127.0.0.1', port: 0, maxSessions: 2 },
+      { agentFactory: (id) => stubAgent(id), agents },
+    )
+    const base = `http://127.0.0.1:${server.port}`
+    try {
+      await post(base, 'a', 'v:a')
+      await post(base, 'b', 'v:b')
+      await post(base, 'a again', 'v:a') // a is now the most recent
+      await post(base, 'c', 'v:c')
+      expect([...agents.keys()].sort()).toEqual(['v:a', 'v:c'])
+    } finally {
+      server.stop(true)
+    }
+  })
+
+  test('never drops a session with a run in flight', async () => {
+    resetSessionEvents()
+    const agents = new Map<string, AgentLoop>()
+    const server = startAPIServer(
+      { host: '127.0.0.1', port: 0, maxSessions: 1 },
+      { agentFactory: (id) => stubAgent(id), agents },
+    )
+    const base = `http://127.0.0.1:${server.port}`
+    try {
+      await post(base, 'a', 'v:a')
+      startRun('v:a', stubAgent('v:a'), 'working')
+      await post(base, 'b', 'v:b')
+      expect([...agents.keys()].sort()).toEqual(['v:a', 'v:b'])
+      endRun('v:a', { t: 'error', v: 'done' })
+      await post(base, 'c', 'v:c')
+      expect([...agents.keys()]).toEqual(['v:c'])
+    } finally {
+      server.stop(true)
+      resetSessionEvents()
+    }
+  })
+})
+
+describe('API /learn', () => {
+  const learn = async (skillManage: boolean): Promise<string> => {
+    const config = {
+      tools: { skillManage },
+      skills: { dirs: ['/tmp/egirl-learn-skills'] },
+    } as unknown as RuntimeConfig
+    const server = startAPIServer(
+      { host: '127.0.0.1', port: 0 },
+      { agentFactory: (id) => stubAgent(id), agents: new Map(), config },
+    )
+    try {
+      const res = await fetch(`http://127.0.0.1:${server.port}/chat`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ message: '/learn how to deploy' }),
+      })
+      return ((await res.json()) as { content: string }).content
+    } finally {
+      server.stop(true)
+    }
+  }
+
+  test('rewrites into a skill-authoring turn when skill_manage is on', async () => {
+    expect(await learn(true)).not.toBe('echo: /learn how to deploy')
+  })
+
+  test('passes through as plain text when skill_manage is off', async () => {
+    expect(await learn(false)).toBe('echo: /learn how to deploy')
   })
 })

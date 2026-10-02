@@ -56,6 +56,7 @@ import {
   createMemoryTools,
   createPeerTools,
   createProcessTools,
+  createWebResearchTool,
   createWebSearchTool,
   createWorkingMemoryTool,
   editTool,
@@ -69,7 +70,6 @@ import {
   globTool,
   readTool,
   screenshotTool,
-  webResearchTool,
   writeTool,
 } from './builtin'
 import { createSessionSearchTool } from './builtin/session-search'
@@ -160,10 +160,11 @@ export function createDefaultToolExecutor(
     executor.register(execTool)
   }
 
-  // Search over the agent's own past conversations. Gated only on persistence existing: it
-  // reads what is already stored, needs no embeddings, and an agent that can remember
-  // should be able to look things up.
-  if (conversationStore) {
+  // Search over the agent's own past conversations. Needs only persistence: it reads what is
+  // already stored, needs no embeddings, and an agent that can remember should be able to
+  // look things up. It searches every session, so [tools] session_search turns it off for an
+  // instance whose sessions belong to different people.
+  if (t.sessionSearch && conversationStore) {
     executor.register(createSessionSearchTool(conversationStore))
   }
 
@@ -194,13 +195,13 @@ export function createDefaultToolExecutor(
 
   // Web research
   if (t.webResearch) {
-    executor.register(webResearchTool)
+    executor.register(createWebResearchTool(t.webResearchPrivate))
   }
 
   // Consultant models (read-only second opinions from bigger-context endpoints).
   // Like peers: no warning when unconfigured — having no consultants is the normal state.
   if (t.consult && config.consultants && config.consultants.length > 0) {
-    executor.register(createConsultTool(config.consultants, config.workspace.path))
+    executor.register(createConsultTool(config.consultants, config.workspace.path, t.consultFiles))
   }
 
   // Peer agents (agent-to-agent messaging over the egirl-peer HTTP protocol).
@@ -264,7 +265,7 @@ export function createDefaultToolExecutor(
 
   // Structured skill mutations (create/patch/archive with lint + ledger + provenance guards).
   // Registered whenever a skills directory exists — authoring the FIRST skill needs it too.
-  if ((config.skills?.dirs?.length ?? 0) > 0 && config.workspace?.path) {
+  if (t.skillManage && (config.skills?.dirs?.length ?? 0) > 0 && config.workspace?.path) {
     executor.register(
       createSkillManageTool(config.skills.dirs, join(config.workspace.path, '.skill-ledger')),
     )

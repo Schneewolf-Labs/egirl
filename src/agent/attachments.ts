@@ -25,7 +25,7 @@ const EXT: Record<string, string> = {
   webp: 'webp',
   gif: 'gif',
 }
-const HANDLE_RE = /^img(\d+)$/
+export const HANDLE_RE = /^img(\d+)$/
 const IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif'])
 const KEEP_MS = 7 * 24 * 60 * 60 * 1000
 
