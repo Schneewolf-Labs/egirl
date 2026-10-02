@@ -131,7 +131,10 @@ describe('one live execution per task', () => {
 
   test('a timed-out execution keeps its slot until it actually ends', async () => {
     const { provider, open } = gatedProvider()
-    const { runner, store } = makeRunner({ provider, taskTimeoutMs: 50 })
+    // The timeout has to land while the execution is stuck inside the gated call. At 50ms it
+    // could land before the run got there (setup on a slow Windows runner took longer), the loop
+    // saw the abort at its first check and ended cleanly, and the slot was rightly freed.
+    const { runner, store } = makeRunner({ provider, taskTimeoutMs: 1000 })
     const task = createTask(store, 'stuck')
 
     const run = await runner.runNow(task.id)
