@@ -37,6 +37,22 @@ const MAX_STATE_BRIEF_CHARS = 16000
 const CLAIM_LEASE_MARGIN_MS = 10 * 60_000
 
 /**
+ * How soon a run interrupted by shutdown is due again. Not immediately: the dying process's
+ * aborted execution may still be winding down (persisting its transcript) until it exits, and
+ * another live process on this tasks.db must not start the task beside it.
+ */
+const SHUTDOWN_REARM_DELAY_MS = 30_000
+
+/** What one execution produced, as the runner needs it to book the run. */
+interface ExecutionOutcome {
+  content: string
+  awaitingInput: boolean
+  /** The agent run ended because its signal was aborted, not because it finished. */
+  aborted?: boolean
+  tokensUsed?: number
+}
+
+/**
  * Frame a state-file's content as a pinned, settled-ground-truth block for the system prompt.
  * Empty content yields undefined (nothing to pin). Over-long content is truncated head-first so
  * the DONE ledger — by convention at the top of the file — is what survives. Pure for testing.
@@ -133,8 +149,10 @@ export class TaskRunner {
     this.unsubscribeBus?.()
     this.unsubscribeBus = undefined
 
+    // The reason is what tells executeTask this run was cut short by shutdown, not finished:
+    // an aborted agent run returns normally (aborted: true) rather than throwing.
     for (const [, entry] of this.runningTasks) {
-      entry.controller.abort()
+      entry.controller.abort('shutdown')
     }
     this.runningTasks.clear()
 
@@ -304,10 +322,20 @@ export class TaskRunner {
 
     const execution = this.doExecute(task, signal, deadline, wrapupMarginMs)
     try {
-      const { content: result, awaitingInput } = await Promise.race([
-        execution,
-        this.timeout(timeoutMs),
-      ])
+      const outcome = await Promise.race([execution, this.timeout(timeoutMs)])
+      if (outcome.aborted && signal.reason === 'shutdown') return this.recordInterrupted(task, run)
+      // The hard abort can end the agent run before the race's own timer rejects; it is the
+      // same timeout either way, not a finished run.
+      if (outcome.aborted && signal.reason === 'timeout') {
+        throw new Error(`Task timed out after ${timeoutMs}ms`)
+      }
+      const { content: result, awaitingInput, tokensUsed } = outcome
+      if (!result.trim()) {
+        log.warn(
+          'tasks',
+          `Task ${task.name} finished with an empty result (${tokensUsed ?? 0} tokens)`,
+        )
+      }
       const resultHash = await hashString(result)
       const shouldNotify = this.shouldNotify(task, resultHash)
 
@@ -364,7 +392,7 @@ export class TaskRunner {
         this.deps.store.update(task.id, { status: 'done' }, `Reached max runs (${task.maxRuns})`)
       }
 
-      this.deps.store.completeRun(run.id, { status: 'success', result })
+      this.deps.store.completeRun(run.id, { status: 'success', result, tokensUsed })
 
       if (shouldNotify && result) {
         await this.notify(task, result)
@@ -372,8 +400,15 @@ export class TaskRunner {
 
       await this.triggerDependents(task.id)
 
-      return { ...run, status: 'success', result, completedAt: Date.now() }
+      return {
+        ...run,
+        status: 'success',
+        result,
+        tokensUsed: tokensUsed ?? 0,
+        completedAt: Date.now(),
+      }
     } catch (err) {
+      if (signal.reason === 'shutdown') return this.recordInterrupted(task, run)
       const errorMsg = errorMessage(err)
 
       // An unbounded run reaching its wall-clock time budget is a scheduled checkpoint boundary,
@@ -450,6 +485,29 @@ export class TaskRunner {
     }
   }
 
+  /**
+   * Book a run cut short by shutdown. It did not finish, so it is not a success (a oneshot
+   * would go to done with no output and never run again), and it is not the task's failure
+   * either: no failure count, no retry policy, no notification. The task is left due again
+   * shortly, which the next process to start picks up. Only an active task is re-armed: one
+   * the user paused or retired while it ran keeps that status. Until this update the task still
+   * carries the claim's lease (or, for runNow, its own schedule), so no other process has
+   * started it; the delay keeps one from starting it while this execution winds down.
+   */
+  private recordInterrupted(task: Task, run: TaskRun): TaskRun {
+    const error = 'Interrupted by shutdown'
+    log.warn('tasks', `Task ${task.name}: interrupted by shutdown — will run again on restart`)
+    if (this.deps.store.get(task.id)?.status === 'active') {
+      this.deps.store.update(
+        task.id,
+        { nextRunAt: Date.now() + SHUTDOWN_REARM_DELAY_MS },
+        'Re-armed: run interrupted by shutdown',
+      )
+    }
+    this.deps.store.completeRun(run.id, { status: 'failure', error })
+    return { ...run, status: 'failure', error, completedAt: Date.now() }
+  }
+
   /** Trigger tasks that depend on the completed task */
   private async triggerDependents(completedTaskId: string): Promise<void> {
     const dependents = this.deps.store.getDependents(completedTaskId)
@@ -464,7 +522,7 @@ export class TaskRunner {
     signal: AbortSignal | undefined,
     deadline: number,
     wrapupMarginMs: number,
-  ): Promise<{ content: string; awaitingInput: boolean }> {
+  ): Promise<ExecutionOutcome> {
     if (task.name === MAILBOX_TASK_NAME) {
       const content = this.deps.pollMailbox
         ? await this.deps.pollMailbox()
@@ -506,7 +564,7 @@ export class TaskRunner {
     signal?: AbortSignal,
     deadline?: number,
     wrapupMarginMs?: number,
-  ): Promise<{ content: string; awaitingInput: boolean }> {
+  ): Promise<ExecutionOutcome> {
     const cwd = this.deps.config.workspace.path
     const standup = await gatherStandup(cwd)
 
@@ -637,7 +695,12 @@ export class TaskRunner {
       }).catch((err) => log.warn('tasks', `Self-review failed for ${task.name}: ${err}`))
     }
 
-    return { content: response.content, awaitingInput: response.awaitingInput === true }
+    return {
+      content: response.content,
+      awaitingInput: response.awaitingInput === true,
+      aborted: response.aborted === true,
+      tokensUsed: response.usage.input_tokens + response.usage.output_tokens,
+    }
   }
 
   private shouldNotify(task: Task, resultHash: string): boolean {
