@@ -17,12 +17,18 @@ import type { TaskKind } from '../../src/tasks/types'
 import { createToolExecutor } from '../../src/tools/executor'
 import { makeConfig } from '../agent/helpers'
 
-/** A provider whose inference never finishes on its own; it ends only when the run is aborted. */
+/**
+ * A provider whose inference never finishes on its own; it ends only when the run is aborted.
+ * Like fetch, it rejects at once on a signal that is already aborted: stop() can land before the
+ * run reaches its first chat call (on Windows the 10ms sleep regularly loses that race), and a
+ * listener added after the abort never fires, which hung the test instead of exercising it.
+ */
 function hangingProvider(): LLMProvider {
   return {
     name: 'stub',
     chat(req: ChatRequest): Promise<ChatResponse> {
       return new Promise((_, reject) => {
+        if (req.signal?.aborted) return reject(new Error('aborted'))
         req.signal?.addEventListener('abort', () => reject(new Error('aborted')), { once: true })
       })
     },
