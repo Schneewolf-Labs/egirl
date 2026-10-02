@@ -190,7 +190,7 @@ A small REST-ish API for scripts, automations, LAN clients, and mobile apps. Bun
 
 ```
 GET    /                     → { service, version }
-POST   /chat                 { message, session_id? } → agent response
+POST   /chat                 { message, session_id?, max_turns? } → agent response
 GET    /sessions/:id         → messages
 DELETE /sessions/:id         → clear session
 GET    /memory?q=...&limit=  → search results
@@ -209,6 +209,8 @@ curl -s http://localhost:3000/chat \
   -H 'content-type: application/json' \
   -d '{"message":"what did we work on yesterday?"}' | jq -r .content
 ```
+
+A `/chat` run is capped at `conversation.max_turns` tool turns (default 10). A request can raise or lower that for itself with `max_turns` (a positive integer, clamped at 100; longer work belongs in a task). When the cap ends a run, the reply opens by saying it ran out of steps, and the response carries `turn_limit_reached: true` (on the stream, in the `run_end` frame); the field is absent otherwise.
 
 `/v1/chat/completions` lets any OpenAI client (Open WebUI, SillyTavern, the `openai` SDK) use egirl as if she were a model. Point the client at `http://host:3000/v1` and use `EGIRL_API_TOKEN` as the API key. It is stateless: the client's history is replayed into a throwaway loop, her personality, memory and tools run behind the one call, and nothing is kept per conversation. The client's system prompt reaches her as a note, not as a replacement identity. She recalls from memory but doesn't learn from these chats unless `openai_extract = true` is set under `[channels.api]`. `model` is ignored, client-side `tools` are rejected, and with `stream: true` her reasoning and tool activity arrive as `reasoning_content`. For a conversation she should own herself (compaction, tool results carried across turns), use `/chat`.
 

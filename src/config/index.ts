@@ -237,6 +237,7 @@ const defaultToml: EgirlConfig = {
     context_compaction: true,
     context_rollover: false,
     consolidation_interval: 0,
+    max_turns: 10,
   },
   skills: {
     dirs: ['~/.egirl/skills', '{workspace}/skills'],
@@ -371,6 +372,7 @@ export function loadConfig(options: LoadConfigOptions = {}): RuntimeConfig {
       contextCompaction: toml.conversation?.context_compaction ?? true,
       contextRollover: toml.conversation?.context_rollover ?? false,
       consolidationInterval: toml.conversation?.consolidation_interval ?? 0,
+      maxTurns: toml.conversation?.max_turns ?? 10,
     },
     recovery: {
       continuationRetries: toml.recovery?.continuation_retries ?? 3,

@@ -216,6 +216,7 @@ const baseProperties = {
       context_compaction: Type.Boolean({ default: true }),
       context_rollover: Type.Boolean({ default: false }),
       consolidation_interval: Type.Number({ default: 0 }),
+      max_turns: Type.Number({ minimum: 1, default: 10 }),
     }),
   ),
 
@@ -657,6 +658,11 @@ export interface RuntimeConfig {
     contextRollover: boolean
     /** Turns between consolidation-break nudges (0 = off). See docs/autonomy-loop.md. */
     consolidationInterval: number
+    /**
+     * Turn cap for a run that sets none of its own: POST /chat (unless the request names one),
+     * the chat channels, /v1/chat/completions. Tasks and the CLI session carry their own.
+     */
+    maxTurns: number
   }
   /** Retry budgets for the agent loop's recovery rules. See src/agent/recovery.ts. */
   recovery?: {

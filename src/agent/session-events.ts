@@ -50,6 +50,8 @@ export type SessionEvent =
         duration_ms: number
         aborted: boolean
         awaiting: boolean
+        /** Present (true) only when the turn cap ended the run. */
+        turn_limit_reached?: boolean
       }
     }
   /** The run threw. Always the last event of a run that ends this way. */

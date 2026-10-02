@@ -45,8 +45,9 @@ export const PROCESS_TOOL_RESULTS_NUDGE =
   '[System: You executed tool calls but returned an empty response. Process the tool results above and continue with the task.]'
 
 /** Turn budget exhausted mid-flow: force a no-tools summary of where the run got to. */
+/** It opens by saying it ran out, so the reader doesn't mistake the cap for a choice to stop. */
 export const MAX_TURNS_SUMMARY_NUDGE =
-  '[System: Maximum turns reached. Do not call any tools. Summarize what you accomplished, what remains unfinished, and your best answer so far.]'
+  '[System: You have used all the steps allowed for this run and are being stopped before finishing. Do not call any tools. Begin your reply by saying plainly that you ran out of steps before finishing, then summarize what you accomplished, what remains unfinished, and your best answer so far.]'
 
 /** Fallback feedback when a post-response validator rejects without saying why. */
 export const DEFAULT_VALIDATION_FEEDBACK =

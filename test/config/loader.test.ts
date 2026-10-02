@@ -132,6 +132,29 @@ dirs = ["{workspace}/skills"]
     expect(config.source.codeAgentUsesClaudeCodeFallback).toBe(true)
   })
 
+  test('conversation.max_turns defaults to 10 and can be raised', async () => {
+    process.chdir(tmpDir)
+    const base = `
+[workspace]
+path = "${tmpDir}/workspace"
+
+[local]
+endpoint = "http://localhost:8080"
+model = "test-model"
+context_length = 8192
+max_concurrent = 1
+
+[skills]
+dirs = ["{workspace}/skills"]
+`
+    const { loadConfig } = await import('../../src/config/index')
+    writeFileSync(join(tmpDir, 'egirl.toml'), base)
+    expect(loadConfig().conversation.maxTurns).toBe(10)
+
+    writeFileSync(join(tmpDir, 'egirl.toml'), `${base}\n[conversation]\nmax_turns = 40\n`)
+    expect(loadConfig().conversation.maxTurns).toBe(40)
+  })
+
   test('composes profile, persona, and instance config', async () => {
     process.chdir(tmpDir)
     writeFileSync(

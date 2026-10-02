@@ -216,7 +216,10 @@ export class AgentLoop {
     // end on a mechanical failure, a semantic report, or a human — not an artificial count.
     // The ceiling is a backstop only; hitting it means a detector that should have fired
     // didn't, which is a bug, not a normal exit. See docs/autonomy-loop.md.
-    const maxTurns = options.unbounded ? UNBOUNDED_SAFETY_CEILING : (options.maxTurns ?? 10)
+    // A run that sets no cap of its own (the chat surfaces) gets `conversation.max_turns`.
+    const maxTurns = options.unbounded
+      ? UNBOUNDED_SAFETY_CEILING
+      : (options.maxTurns ?? this.config.conversation.maxTurns ?? 10)
     const turnStartedAt = Date.now()
 
     // Always explicit, including `off`: an omitted setting leaves the chat template's own
@@ -298,6 +301,9 @@ export class AgentLoop {
     // Persistence and the run's end on the bus happen in `finally` so a provider error
     // mid-run doesn't lose the user message and tool activity already in context.
     let runError: unknown
+    // Set when the cap, not the model, ended the run -- surfaced so a caller can tell a cut-off
+    // run from one that chose to stop.
+    let turnLimitReached = false
     startRun(this.context.sessionId, this, userMessage)
     try {
       while (state.turns < maxTurns) {
@@ -566,6 +572,7 @@ export class AgentLoop {
         } else {
           log.warn('agent', `Exhausted max turns (${maxTurns}) without a final response`)
         }
+        turnLimitReached = true
         finalContent = await this.forceFinalResponse(totalUsage, thinking, events, signal)
         events?.onResponseComplete?.()
       }
@@ -581,6 +588,7 @@ export class AgentLoop {
         continuationRetries: state.continuationRetries > 0 ? state.continuationRetries : undefined,
         aborted: signal?.aborted ? true : undefined,
         awaitingInput: state.awaitingInput ? true : undefined,
+        turnLimitReached: turnLimitReached ? true : undefined,
       }
     } catch (error) {
       runError = error
@@ -606,6 +614,7 @@ export class AgentLoop {
             duration_ms: Date.now() - turnStartedAt,
             aborted: signal?.aborted ?? false,
             awaiting: state.awaitingInput,
+            ...(turnLimitReached && { turn_limit_reached: true }),
           },
         })
       }
