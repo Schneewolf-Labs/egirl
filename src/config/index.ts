@@ -571,6 +571,7 @@ export function loadConfig(options: LoadConfigOptions = {}): RuntimeConfig {
       model: cc.model,
       workingDir: cc.working_dir ? expandPath(cc.working_dir, workspacePath) : workspacePath,
       maxTurns: cc.max_turns,
+      timeoutMs: 'timeout_ms' in cc ? (cc.timeout_ms as number | undefined) : undefined,
     }
   }
 

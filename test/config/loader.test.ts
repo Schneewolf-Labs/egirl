@@ -80,8 +80,10 @@ working_dir = "${tmpDir}/claude"
 
 [channels.code_agent]
 provider = "codex"
+providers = ["codex", "claude"]
 permission_mode = "default"
 working_dir = "${tmpDir}/codex"
+timeout_ms = 1800000
 
 [skills]
 dirs = ["{workspace}/skills"]
@@ -96,6 +98,8 @@ dirs = ["{workspace}/skills"]
     expect(config.channels.codeAgent?.provider).toBe('codex')
     expect(config.channels.codeAgent?.permissionMode).toBe('default')
     expect(config.channels.codeAgent?.workingDir.endsWith(`${sep}codex`)).toBe(true)
+    expect(config.channels.codeAgent?.timeoutMs).toBe(1_800_000)
+    expect(config.channels.codeAgent?.providers).toEqual(['codex', 'claude'])
     expect(config.source.codeAgentUsesClaudeCodeFallback).toBe(false)
   })
 

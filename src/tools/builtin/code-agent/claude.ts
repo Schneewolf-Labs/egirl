@@ -149,7 +149,11 @@ export const runClaudeCodeAgent: CodeAgentBackend = async (config, task, working
   } catch (error) {
     clearTimeout(timeoutId)
     if (escalation) return userApprovalResult(escalation, finalResult)
-    const isTimeout = error instanceof DOMException && error.name === 'AbortError'
+    // The SDK surfaces our abort as its own "Claude Code process aborted by user" error, not an
+    // AbortError, so the model was told a person had stopped the run. Our signal is the truth.
+    const isTimeout =
+      abortController.signal.aborted ||
+      (error instanceof DOMException && error.name === 'AbortError')
     const msg = isTimeout
       ? `Code agent timed out after ${(timeoutMs / 1000).toFixed(0)}s`
       : error instanceof Error
