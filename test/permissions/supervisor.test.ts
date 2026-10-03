@@ -167,4 +167,32 @@ describe('PermissionSupervisor', () => {
     expect(allowed.action).toBe('allow')
     expect(allowed.optionId).toBeUndefined()
   })
+
+  test('sets thinking explicitly and leaves room for the JSON after it', async () => {
+    const seen: Array<{ thinking?: { level: string }; max_tokens?: number }> = []
+    const recording: LLMProvider = {
+      name: 'fake',
+      async chat(req) {
+        seen.push({ thinking: req.thinking, max_tokens: req.max_tokens })
+        return {
+          content: '{"action":"choose","optionId":"1","reason":"ok","confidence":1}',
+          usage: { input_tokens: 1, output_tokens: 1 },
+          model: 'fake',
+        }
+      },
+    }
+    await createPermissionSupervisor({
+      config: config({ thinkBeforeDeciding: true }),
+      localProvider: recording,
+    }).decide(request)
+    await createPermissionSupervisor({
+      config: config({ thinkBeforeDeciding: false }),
+      localProvider: recording,
+    }).decide(request)
+
+    expect(seen[0]?.thinking?.level).toBe('low')
+    expect(seen[0]?.max_tokens).toBeGreaterThan(2048)
+    expect(seen[1]?.thinking?.level).toBe('off')
+    expect(seen[1]?.max_tokens).toBeGreaterThanOrEqual(300)
+  })
 })
