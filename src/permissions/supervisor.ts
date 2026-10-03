@@ -209,6 +209,9 @@ async function writeMemory(
   }
 }
 
+/** Room for the decision JSON itself, after any thinking. */
+const DECISION_MAX_TOKENS = 300
+
 export class PermissionSupervisor {
   constructor(private deps: PermissionSupervisorDeps) {}
 
@@ -278,11 +281,24 @@ export class PermissionSupervisor {
           { role: 'user', content: userPrompt },
         ],
         temperature: 0.1,
-        max_tokens: 200,
+        // Always explicit: left unset, a reasoning model's chat template thinks by default, and the
+        // old 200-token cap counted that thinking. A deployment saw a decision come back empty and
+        // fall to the default action, which in a background task (no user to ask) stopped the
+        // code agent at its first permission request. Thinking now gets its own budget.
+        thinking: { level: config.thinkBeforeDeciding ? 'low' : 'off' },
+        max_tokens: config.thinkBeforeDeciding ? 2048 + DECISION_MAX_TOKENS : DECISION_MAX_TOKENS,
       })
 
       const decision = parseDecisionJson(response.content, request)
-      if (!decision) throw new Error(`Invalid decision JSON: ${response.content}`)
+      if (!decision) {
+        // Say why: an empty answer cut off at the length limit after a long think reads the same
+        // as a malformed one otherwise.
+        throw new Error(
+          `Invalid decision JSON (finish=${response.finish_reason ?? '?'}, ` +
+            `out=${response.usage.output_tokens} tok, thinking=${response.thinking?.length ?? 0} chars): ` +
+            `${response.content}`,
+        )
+      }
 
       if (config.askUserBelowConfidence && decision.confidence < config.minConfidence) {
         return decisionFromAction(
