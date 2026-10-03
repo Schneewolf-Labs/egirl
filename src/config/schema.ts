@@ -43,6 +43,9 @@ const CodeAgentChannelSchema = Type.Object({
   model: Type.Optional(Type.String()),
   working_dir: Type.Optional(Type.String()),
   max_turns: Type.Optional(Type.Number()),
+  // Wall-clock limit for one delegated task. The 5-minute default fits a focused fix, not a
+  // review that runs two test suites.
+  timeout_ms: Type.Optional(Type.Number({ minimum: 1000 })),
 })
 
 const baseProperties = {
@@ -640,6 +643,7 @@ export interface RuntimeConfig {
       model?: string
       workingDir: string
       maxTurns?: number
+      timeoutMs?: number
     }
     xmpp?: {
       service: string

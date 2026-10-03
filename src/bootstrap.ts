@@ -126,15 +126,18 @@ function createMemory(config: RuntimeConfig): MemoryManager | undefined {
 /**
  * Extract CodeAgentConfig from RuntimeConfig if a code agent channel is configured.
  */
-function getCodeAgentConfig(config: RuntimeConfig): CodeAgentConfig | undefined {
+export function getCodeAgentConfig(config: RuntimeConfig): CodeAgentConfig | undefined {
   const cc = config.channels.codeAgent
   if (!cc) return undefined
   return {
     provider: cc.provider,
+    // Dropping this here silently disabled the configured failover chain.
+    providers: cc.providers,
     permissionMode: cc.permissionMode,
     model: cc.model,
     workingDir: cc.workingDir,
     maxTurns: cc.maxTurns,
+    timeoutMs: cc.timeoutMs,
   }
 }
 
