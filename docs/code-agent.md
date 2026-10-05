@@ -100,7 +100,7 @@ Codex permission modes map to CLI sandbox choices:
 | `plan` | read-only |
 | `default`, `acceptEdits` | workspace-write |
 
-Codex ignores `max_turns`; the app-server reports when its turn completes. A successful tool result means Codex returned a final answer; read that answer for whether the requested work and tests succeeded. Timeouts and interrupted or failed turns always return failure, and the owned server process tree is stopped. Each delegation starts a fresh ephemeral thread in the selected working directory.
+Codex ignores `max_turns`; the app-server reports when its turn completes. A successful tool result means Codex returned a final answer; read that answer for whether the requested work and tests succeeded. Timeouts and interrupted or failed turns always return failure, and the owned server process tree is stopped. Each delegation starts a fresh thread in the selected working directory. Threads are persisted (not ephemeral) so a timed-out thread can be resumed with `thread/resume`.
 
 ## OpenCode Backend
 
@@ -149,6 +149,63 @@ Tool call shape:
 ```
 
 The result includes the backend's final output plus metadata such as duration, session id, turns, or cost when the backend exposes it.
+
+## When the code agent times out
+
+A delegation that runs past `timeout_ms` is aborted, but the work it did stays in the tree: a merge may be committed, conflicts half-resolved, a venv half-built. A bare "timed out" leaves the operator guessing, so the tool result is a compact report instead:
+
+```text
+Code agent timed out after 1800s (claude, 58 turns, 41 tool calls). The work is partial: check the state below before retrying.
+
+Last 10 of 41 actions:
+- Bash: git add -A && git commit --no-edit
+- Bash: python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"
+- Bash: .venv/bin/pytest tests/unit -q
+- Grep: def handle_upload in src
+- Edit: src/upload.py
+- Bash: .venv/bin/pytest tests/integration -q
+
+Last message from the agent:
+Unit tests pass (412 passed). Merge is committed. Now running the integration suite...
+
+git status --short:
+ M src/upload.py
+
+git diff --stat:
+ src/upload.py | 12 +++++++-----
+ 1 file changed, 7 insertions(+), 5 deletions(-)
+
+To continue: call code_agent again with resume_session="claude:4f7c2a10-..." and a narrower task for the remaining work (for example "continue: <next step only>"), or split the rest into smaller tasks.
+```
+
+- **Actions** are the last 10 tool calls with a one-line gist of the input (the command, file path, or pattern).
+- **Last message** is the tail of the agent's most recent text, capped at ~1200 characters.
+- **Git state** appears only when `working_dir` is a git work tree. `git status --short` and `git diff --stat` are each capped at 20 lines and run with a 3-second timeout; if git fails or is missing, the section is dropped and the report is still returned.
+- **A pending permission decision does not outlive the run.** If the Claude run times out while the local supervisor is still deciding a permission, the callback answers "deny, interrupt" at once instead of writing a late answer to the aborted process. Older Agent SDKs (0.2.x) threw that late write as an unhandled `Operation aborted` and took egirl down; for a minute after each timeout exactly that rejection is logged instead, and any other unhandled rejection still crashes as before.
+- **A timeout never fails over** to the next provider. The agent ran and left partial work; a second agent over the same tree is more likely to conflict than help. Failover remains for backends that could not run at all (missing binary, auth, quota, a server that never started).
+
+### Resuming
+
+Pass the printed value as `resume_session` with the next instruction as `task`:
+
+```json
+{
+  "name": "code_agent",
+  "arguments": {
+    "task": "continue: the merge is done; run only tests/integration and report failures",
+    "working_dir": "/home/user/projects/app",
+    "resume_session": "claude:4f7c2a10-9b3e-4d8a-a1c2-6e0f5b7d9c31"
+  }
+}
+```
+
+The run gets a fresh timeout and keeps the agent's history. A resume runs only the backend that owns the session (the `provider:` prefix; a bare id uses the first configured provider) and never fails over. Prefer a narrower instruction or splitting the remaining work over repeating the original task — the same task will likely time out again.
+
+| Backend | Report | Resume |
+|---------|--------|--------|
+| Claude | turns, actions (tool_use blocks), last assistant text, git, session id | SDK `resume` option |
+| Codex | actions (commands, file changes, MCP/dynamic tools), last agent message, git, thread id | `thread/resume` (threads are persisted for this) |
+| OpenCode | actions (tool parts from the event stream), last text part, git, session id | posts the next message to the existing session |
 
 ## Migration Notes
 

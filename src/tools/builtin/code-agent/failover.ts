@@ -1,4 +1,5 @@
 import type { ToolResult } from '../../types'
+import { TIMEOUT_PREFIX } from './timeout-report'
 
 /**
  * Should the next provider be tried?
@@ -32,7 +33,7 @@ const INFRASTRUCTURE_SIGNALS = [
   /\b429\b/,
   /failed to (start|spawn)/i,
   /connection refused/i,
-  /timed out after/i,
+  /did not start within/i, // backend server never came up
 ]
 
 /** A transcript long enough that the agent plainly did work worth not repeating. */
@@ -41,6 +42,11 @@ const SUBSTANTIVE_OUTPUT_CHARS = 400
 export function shouldFailover(result: ToolResult): boolean {
   if (result.success) return false
   const output = result.output ?? ''
+
+  // A timeout means the agent ran — for up to timeout_ms — and left partial work in the tree.
+  // Starting another agent over that tree is the conflict this rule exists to avoid; the timeout
+  // report tells the caller how to inspect and resume instead.
+  if (output.startsWith(TIMEOUT_PREFIX)) return false
 
   // An agent that wrote a real transcript ran. Whatever it concluded is its answer, and running
   // a second agent over the same tree is more likely to conflict than to help.

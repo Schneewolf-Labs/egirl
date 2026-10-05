@@ -33,4 +33,13 @@ export type CodeAgentBackend = (
   workingDir: string,
   /** Absolute paths of image files to show the agent along with the task. */
   images?: string[],
+  options?: CodeAgentRunOptions,
 ) => Promise<ToolResult>
+
+export interface CodeAgentRunOptions {
+  /**
+   * Continue this backend session/thread (from a timeout report) instead of starting fresh; the
+   * task becomes the next instruction. A backend that cannot resume returns a failure saying so.
+   */
+  resumeSession?: string
+}

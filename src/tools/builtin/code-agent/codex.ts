@@ -2,7 +2,8 @@ import type { ToolResult } from '../../types'
 import type { CodexConnection, CodexEvents, RpcObject } from './codex-rpc'
 import { connectCodex, object } from './codex-rpc'
 import { DEFAULT_TIMEOUT_MS } from './shared'
-import type { CodeAgentBackend, CodeAgentConfig } from './types'
+import { ActionLog, formatTimeoutReport } from './timeout-report'
+import type { CodeAgentBackend, CodeAgentConfig, CodeAgentRunOptions } from './types'
 
 /** Only explicit protocol completion can report success. */
 export function codexTurnResult(turn: RpcObject, output: string, workingDir: string): ToolResult {
@@ -33,8 +34,12 @@ export async function runCodexSession(
   workingDir: string,
   images: string[] = [],
   connect: (cwd: string, events: CodexEvents) => CodexConnection = connectCodex,
+  runOptions: CodeAgentRunOptions = {},
 ): Promise<ToolResult> {
   const started = Date.now()
+  const timeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS
+  const actions = new ActionLog()
+  let lastText = ''
   let connection: CodexConnection | undefined
   let threadId: string | undefined
   let turnId: string | undefined
@@ -55,13 +60,16 @@ export async function runCodexSession(
       success: false,
       output: `Code agent error: ${error.message}\n${output}`,
     })
-  const timer = setTimeout(
-    () =>
-      fail(
-        new Error('Codex deadline exceeded; work may be partial. Inspect changes before retrying.'),
-      ),
-    config.timeoutMs ?? DEFAULT_TIMEOUT_MS,
-  )
+  const timer = setTimeout(() => {
+    void formatTimeoutReport({
+      provider: 'codex',
+      timeoutMs,
+      workingDir,
+      actions,
+      lastMessage: output || lastText,
+      sessionId: threadId,
+    }).then((report) => finish({ success: false, output: report }))
+  }, timeoutMs)
   const matches = (params: RpcObject): boolean =>
     params.threadId === threadId && (turnId === undefined || params.turnId === turnId)
   try {
@@ -70,8 +78,10 @@ export async function runCodexSession(
       notification(method, params) {
         if (settled || params.threadId !== threadId) return
         if (method === 'turn/started') turnId = String(object(params.turn).id)
+        if (method === 'item/started' && matches(params)) recordAction(object(params.item))
         if (method === 'item/completed' && matches(params)) {
           const item = object(params.item)
+          if (item.type === 'agentMessage' && typeof item.text === 'string') lastText = item.text
           if (
             item.type === 'agentMessage' &&
             item.phase !== 'commentary' &&
@@ -139,7 +149,7 @@ export async function runCodexSession(
       })
       if (settled) return
       rpc.notify('initialized', {})
-      const thread = await rpc.request('thread/start', {
+      const threadParams = {
         cwd: workingDir,
         developerInstructions:
           'You are the coding executor invoked by egirl through its code_agent tool. ' +
@@ -156,8 +166,15 @@ export async function runCodexSession(
             : config.permissionMode === 'bypassPermissions'
               ? 'danger-full-access'
               : 'workspace-write',
-        ephemeral: true,
-      })
+      }
+      // Persisted (not ephemeral) so a timed-out thread can be resumed with thread/resume.
+      const thread = runOptions.resumeSession
+        ? await rpc.request('thread/resume', {
+            ...threadParams,
+            threadId: runOptions.resumeSession,
+            excludeTurns: true,
+          })
+        : await rpc.request('thread/start', { ...threadParams, ephemeral: false })
       if (settled) return
       if (typeof object(thread.thread).id !== 'string')
         throw new Error('Codex returned no thread ID')
@@ -178,8 +195,22 @@ export async function runCodexSession(
     clearTimeout(timer)
     await connection?.close(!completed)
     const value = await result
-    value.output += `\n\n[code_agent: codex app-server | ${((Date.now() - started) / 1000).toFixed(1)}s]`
+    const thread = threadId ? ` | thread: ${threadId}` : ''
+    value.output += `\n\n[code_agent: codex app-server | ${((Date.now() - started) / 1000).toFixed(1)}s${thread}]`
+  }
+
+  function recordAction(item: RpcObject): void {
+    if (item.type === 'commandExecution') actions.add('command', item.command)
+    else if (item.type === 'fileChange' && Array.isArray(item.changes))
+      actions.add(
+        'edit',
+        item.changes.map((change) => String(object(change).path ?? '')).join(', '),
+      )
+    else if (item.type === 'mcpToolCall') actions.add(`${item.server}.${item.tool}`, item.arguments)
+    else if (item.type === 'dynamicToolCall') actions.add(String(item.tool), item.arguments)
+    else if (item.type === 'webSearch') actions.add('webSearch', item.query)
   }
 }
 
-export const runCodexCodeAgent: CodeAgentBackend = runCodexSession
+export const runCodexCodeAgent: CodeAgentBackend = (config, task, workingDir, images, options) =>
+  runCodexSession(config, task, workingDir, images, connectCodex, options)

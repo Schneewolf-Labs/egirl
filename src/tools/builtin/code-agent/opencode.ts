@@ -3,6 +3,7 @@ import { sanitizedEnv } from '../../../util/env'
 import { errorMessage } from '../../../util/errors'
 import { log } from '../../../util/logger'
 import { DEFAULT_TIMEOUT_MS, withImagePaths } from './shared'
+import { ActionLog, formatTimeoutReport } from './timeout-report'
 import type { CodeAgentBackend, CodeAgentConfig } from './types'
 
 interface OpencodeEvent {
@@ -142,8 +143,28 @@ async function handlePermission(
   await replyToPermission(baseUrl, permission, decision.action === 'deny' ? 'reject' : 'once')
 }
 
-export const runOpencodeCodeAgent: CodeAgentBackend = async (config, task, workingDir, images) => {
+interface OpencodePart {
+  id?: string
+  sessionID?: string
+  type?: string
+  text?: string
+  synthetic?: boolean
+  tool?: string
+  state?: { input?: unknown }
+}
+
+export const runOpencodeCodeAgent: CodeAgentBackend = async (
+  config,
+  task,
+  workingDir,
+  images,
+  runOptions,
+) => {
   const startTime = Date.now()
+  const actions = new ActionLog()
+  const seenTools = new Set<string>()
+  let lastText = ''
+  let sessionId: string | undefined
   const timeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS
   const abortController = new AbortController()
   let timedOut = false
@@ -164,23 +185,43 @@ export const runOpencodeCodeAgent: CodeAgentBackend = async (config, task, worki
     const baseUrl = await waitForServer(proc, timeoutMs)
     log.debug('code-agent', `opencode server: ${baseUrl}`)
 
-    const createRes = await fetch(
-      `${baseUrl}/session?directory=${encodeURIComponent(workingDir)}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: task.slice(0, 80) }),
-        signal: abortController.signal,
-      },
-    )
-    if (!createRes.ok) {
-      throw new Error(
-        `Failed to create opencode session: ${createRes.status} ${await createRes.text()}`,
+    let session: { id: string }
+    if (runOptions?.resumeSession) {
+      // Sessions persist in opencode's storage; a new message continues the old one.
+      session = { id: runOptions.resumeSession }
+    } else {
+      const createRes = await fetch(
+        `${baseUrl}/session?directory=${encodeURIComponent(workingDir)}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title: task.slice(0, 80) }),
+          signal: abortController.signal,
+        },
       )
+      if (!createRes.ok) {
+        throw new Error(
+          `Failed to create opencode session: ${createRes.status} ${await createRes.text()}`,
+        )
+      }
+      session = (await createRes.json()) as { id: string }
     }
-    const session = (await createRes.json()) as { id: string }
+    sessionId = session.id
 
     streamEvents(baseUrl, eventStreamController.signal, (event) => {
+      if (event.type === 'message.part.updated') {
+        // Kept only for the timeout report: what the agent did and last said.
+        const part = (event.properties?.part ?? {}) as OpencodePart
+        if (part.sessionID !== session.id) return
+        if (part.type === 'text' && part.text && !part.synthetic) lastText = part.text
+        const input = part.state?.input
+        const hasInput = !!input && (typeof input !== 'object' || Object.keys(input).length > 0)
+        if (part.type === 'tool' && part.id && part.tool && hasInput && !seenTools.has(part.id)) {
+          seenTools.add(part.id)
+          actions.add(part.tool, input)
+        }
+        return
+      }
       if (event.type !== 'permission.updated') return
       const permission = event.properties as unknown as OpencodePermission
       if (permission.sessionID !== session.id) return
@@ -225,7 +266,7 @@ export const runOpencodeCodeAgent: CodeAgentBackend = async (config, task, worki
 
     return {
       success: true,
-      output: `${finalText}\n\n[code_agent: opencode | ${durationSec}s | session: ${session.id.slice(0, 8)}]`,
+      output: `${finalText}\n\n[code_agent: opencode | ${durationSec}s | session: ${session.id}]`,
     }
   } catch (error) {
     if (escalation) {
@@ -237,7 +278,14 @@ export const runOpencodeCodeAgent: CodeAgentBackend = async (config, task, worki
     if (timedOut) {
       return {
         success: false,
-        output: `Code agent timed out after ${(timeoutMs / 1000).toFixed(0)}s`,
+        output: await formatTimeoutReport({
+          provider: 'opencode',
+          timeoutMs,
+          workingDir,
+          actions,
+          lastMessage: lastText,
+          sessionId,
+        }),
       }
     }
     const msg = errorMessage(error)
