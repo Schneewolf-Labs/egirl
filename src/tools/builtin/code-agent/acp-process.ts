@@ -13,6 +13,13 @@ export interface AcpTransport {
   close(force: boolean): Promise<void>
 }
 
+/** How long a polite close waits for the agent to exit before killing it. */
+const POLITE_EXIT_MS = 2000
+/** How long to wait for a killed agent to exit before giving up on it. */
+const KILL_WAIT_MS = 1000
+/** How long, after the agent exits, its pipes get to drain (stderr for error reports). */
+const DRAIN_MS = 250
+
 export type AcpConnect = (command: string[], cwd: string) => AcpTransport
 
 /**
@@ -39,9 +46,11 @@ export function spawnAcpAgent(command: string[], cwd: string): AcpTransport {
   proc.stderr.on('data', (data: Buffer) => {
     stderr = (stderr + data.toString()).slice(-8000)
   })
-  let exited = proc.exitCode !== null
+  // 'exit', not 'close': close also waits for every holder of the stdio pipes, and a grandchild
+  // that escaped the process tree can hold stdout open long after the agent is dead.
+  let exited = proc.exitCode !== null || proc.signalCode !== null
   const exit = new Promise<void>((resolve) => {
-    proc.on('close', () => {
+    proc.on('exit', () => {
       exited = true
       resolve()
     })
@@ -52,12 +61,16 @@ export function spawnAcpAgent(command: string[], cwd: string): AcpTransport {
       resolve()
     })
   })
+  // Every holder of the pipes is gone, including descendants that inherited them.
+  const drained = new Promise<void>((resolve) => proc.on('close', () => resolve()))
   // Writes after the agent died would otherwise surface as an unhandled EPIPE.
   proc.stdin.on('error', () => {})
 
+  // Also run after the agent itself exited: on POSIX its group may still hold children.
   const killTree = (): void => {
-    if (!proc.pid || exited) return
+    if (!proc.pid) return
     if (isWindows) {
+      if (exited) return
       const killer = spawn('taskkill.exe', ['/PID', String(proc.pid), '/T', '/F'], {
         windowsHide: true,
         stdio: 'ignore',
@@ -68,8 +81,19 @@ export function spawnAcpAgent(command: string[], cwd: string): AcpTransport {
     try {
       process.kill(-proc.pid, 'SIGKILL')
     } catch {
-      proc.kill('SIGKILL')
+      if (!exited) proc.kill('SIGKILL')
     }
+  }
+
+  // Drop our ends of the pipes so nothing an escaped descendant holds keeps the stream alive,
+  // after a short drain so a crashed agent's last stderr still makes the error report.
+  const release = async (): Promise<void> => {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    await Promise.race([drained, new Promise<void>((r) => (timer = setTimeout(r, DRAIN_MS)))])
+    clearTimeout(timer)
+    proc.stdin.destroy()
+    proc.stdout.destroy()
+    proc.stderr.destroy()
   }
 
   return {
@@ -79,13 +103,25 @@ export function spawnAcpAgent(command: string[], cwd: string): AcpTransport {
     ),
     stderr: () => stderr.trim(),
     async close(force) {
-      if (exited) return
-      if (force) killTree()
-      else proc.stdin.end()
-      // A polite close gets a moment to exit on its own.
-      const timer = setTimeout(killTree, 2000)
-      await exit
+      if (exited) {
+        if (force) killTree()
+        await release()
+        return
+      }
+      if (!force) proc.stdin.end()
+      // A polite close gets a moment to exit on its own, then is killed; a kill that does not
+      // take (a stuck taskkill, an unkillable process) stops being waited on after a bound.
+      let timer: ReturnType<typeof setTimeout> | undefined
+      const bounded = new Promise<void>((resolve) => {
+        const kill = (): void => {
+          killTree()
+          timer = setTimeout(resolve, KILL_WAIT_MS)
+        }
+        timer = setTimeout(kill, force ? 0 : POLITE_EXIT_MS)
+      })
+      await Promise.race([exit, bounded])
       clearTimeout(timer)
+      await release()
     },
   }
 }
