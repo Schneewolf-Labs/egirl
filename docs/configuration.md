@@ -145,6 +145,7 @@ Settings for the `code_agent` tool. If omitted, egirl falls back to `[channels.c
 | `provider` | string | `"claude"` | Code agent backend: `"claude"`, `"codex"`, or `"opencode"` |
 | `permission_mode` | string | `"bypassPermissions"` | Agent permission mode. For Codex, non-bypass modes use the interactive CLI with a workspace-write sandbox and local-model prompt decisions. For OpenCode, non-bypass modes route each permission request through the local model supervisor |
 | `model` | string | (none) | Override the selected backend model |
+| `timeout_ms` | number | `300000` | Per-delegation deadline. On timeout the tool returns a report and a session to resume; see [When the code agent times out](code-agent.md#when-the-code-agent-times-out) |
 | `working_dir` | string | workspace path | Working directory for code agent operations |
 | `max_turns` | number | (none) | Maximum Claude Code turns before stopping. Ignored by Codex and OpenCode |
 

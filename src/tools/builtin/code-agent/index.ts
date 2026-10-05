@@ -7,6 +7,7 @@ import { runClaudeCodeAgent } from './claude'
 import { runCodexCodeAgent } from './codex'
 import { resolveProviderChain, shouldFailover } from './failover'
 import { runOpencodeCodeAgent } from './opencode'
+import { parseResumeSession } from './timeout-report'
 import type { CodeAgentBackend, CodeAgentConfig } from './types'
 import { resolveWorkingDir } from './working-dir'
 
@@ -35,6 +36,9 @@ export function createCodeAgentTool(config: CodeAgentConfig): Tool {
         'debugging, running tests, or any task that benefits from deep codebase',
         'exploration. The agent has full access to the filesystem and can run commands.',
         "Provide a clear, specific task description. Returns the agent's final result.",
+        'If it times out, the result is a report of what the agent did and the state of the tree;',
+        'read it, then call again with resume_session and a narrower instruction for the next step,',
+        'or split the remaining work into smaller tasks. Do not just repeat the same task.',
         'When telling the user about this tool, refer to it as "the code agent", not "code_agent".',
       ].join(' '),
       parameters: {
@@ -58,6 +62,14 @@ export function createCodeAgentTool(config: CodeAgentConfig): Tool {
               'Absolute path to the repository or directory the task refers to. Set this whenever ' +
               'the task concerns a specific project — without it the agent runs in the persona ' +
               'workspace, where the task usually makes no sense.',
+          },
+          resume_session: {
+            type: 'string',
+            description:
+              'Continue a previous code agent session instead of starting fresh — use the value ' +
+              'given in a timeout report (e.g. "claude:<id>"). The agent keeps its history and ' +
+              'gets a fresh timeout; `task` is its next instruction, e.g. "continue: run only the ' +
+              'unit tests and report the failures".',
           },
         },
         required: ['task'],
@@ -89,7 +101,17 @@ export function createCodeAgentTool(config: CodeAgentConfig): Tool {
       if (inferred) {
         log.info('code-agent', `Inferred working_dir from the task text: ${workingDir}`)
       }
-      const chain = resolveProviderChain(config.providers, config.provider, 'claude')
+      const configured = resolveProviderChain(config.providers, config.provider, 'claude')
+      // A session belongs to the backend that created it: resume runs that one backend only, and
+      // never fails over (another agent cannot continue it).
+      const resume =
+        typeof params.resume_session === 'string' && params.resume_session.trim()
+          ? parseResumeSession(params.resume_session, Object.keys(BACKENDS))
+          : undefined
+      const chain = resume
+        ? [(resume.provider as CodeAgentProvider | undefined) ?? configured[0] ?? 'claude']
+        : configured
+      if (resume) log.info('code-agent', `Resuming ${chain[0]} session ${resume.id}`)
 
       log.info(
         'code-agent',
@@ -103,7 +125,13 @@ export function createCodeAgentTool(config: CodeAgentConfig): Tool {
 
       for (const provider of chain) {
         const backend = BACKENDS[provider] ?? runClaudeCodeAgent
-        const result = await backend({ ...config, provider }, task, workingDir, images)
+        const result = await backend(
+          { ...config, provider },
+          task,
+          workingDir,
+          images,
+          resume ? { resumeSession: resume.id } : undefined,
+        )
         attempted.push(provider)
         last = result
 
