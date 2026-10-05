@@ -10,7 +10,7 @@ export interface CodeAgentConfig {
   provider?: CodeAgentProvider
   /** Ordered fallback chain. Takes precedence over `provider` when non-empty. */
   providers?: CodeAgentProvider[]
-  permissionMode: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan'
+  permissionMode: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan' | 'auto'
   model?: string
   workingDir: string
   maxTurns?: number

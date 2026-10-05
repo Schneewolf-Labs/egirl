@@ -37,6 +37,8 @@ const CodeAgentChannelSchema = Type.Object({
       Type.Literal('acceptEdits'),
       Type.Literal('bypassPermissions'),
       Type.Literal('plan'),
+      // Claude Code's classifier decides each call; only what it can't decide reaches canUseTool.
+      Type.Literal('auto'),
     ],
     { default: 'bypassPermissions' },
   ),
@@ -642,7 +644,7 @@ export interface RuntimeConfig {
     codeAgent?: {
       provider?: CodeAgentProvider
       providers?: CodeAgentProvider[]
-      permissionMode: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan'
+      permissionMode: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan' | 'auto'
       model?: string
       workingDir: string
       maxTurns?: number

@@ -92,7 +92,8 @@ export const runClaudeCodeAgent: CodeAgentBackend = async (config, task, working
   const options: ClaudeAgentOptions = supervised
     ? {
         // Run in a gating mode so the SDK routes tool calls through canUseTool;
-        // never bypass, or the supervisor would never be consulted.
+        // never bypass, or the supervisor would never be consulted. In 'auto' Claude Code's
+        // own classifier settles routine calls and only the ones it can't decide come here.
         permissionMode: isBypass ? 'default' : config.permissionMode,
         canUseTool: buildCanUseTool(config.permissionSupervisor, task, workingDir, (reason) => {
           escalation = reason
@@ -103,7 +104,11 @@ export const runClaudeCodeAgent: CodeAgentBackend = async (config, task, working
         abortController,
       }
     : {
-        permissionMode: isBypass ? 'bypassPermissions' : 'default',
+        permissionMode: isBypass
+          ? 'bypassPermissions'
+          : config.permissionMode === 'auto'
+            ? 'auto'
+            : 'default',
         ...(isBypass && { allowDangerouslySkipPermissions: true }),
         model: config.model,
         maxTurns: config.maxTurns,

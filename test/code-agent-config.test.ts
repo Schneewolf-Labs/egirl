@@ -21,4 +21,11 @@ describe('getCodeAgentConfig', () => {
     expect(cc?.timeoutMs).toBe(1_800_000)
     expect(cc?.acpCommand).toEqual(['npx', '@agentclientprotocol/claude-agent-acp'])
   })
+
+  test("passes 'auto' through so Claude Code's classifier settles routine calls", () => {
+    const config = {
+      channels: { codeAgent: { provider: 'claude', permissionMode: 'auto', workingDir: '/work' } },
+    } as unknown as RuntimeConfig
+    expect(getCodeAgentConfig(config)?.permissionMode).toBe('auto')
+  })
 })

@@ -134,6 +134,7 @@ Settings for the Claude Code bridge channel (`claude-code` / `cc` command). This
 - `"acceptEdits"` — Auto-approve file edits, ask about everything else
 - `"bypassPermissions"` — Skip all permission prompts (trust Claude Code)
 - `"plan"` — Claude Code creates a plan before executing
+- `"auto"` — Claude Code's own classifier approves or denies each call; only the calls it cannot decide reach the permission supervisor (or you). Needs a Claude account where auto mode is available; otherwise Claude Code falls back to `"default"`
 
 ### `[channels.code_agent]`
 
