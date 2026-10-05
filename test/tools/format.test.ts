@@ -1,4 +1,5 @@
-import { describe, expect, test } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import { setToolDialect } from '../../src/tools/dialects'
 import { hasToolCalls, parseToolCalls } from '../../src/tools/format'
 
 describe('parseToolCalls', () => {
@@ -145,5 +146,128 @@ describe('hasToolCalls', () => {
 
   test('returns false when no tool calls', () => {
     expect(hasToolCalls('just text')).toBe(false)
+  })
+})
+
+// DeepSeek-V4's native invoke/parameter form. Fixtures are from deepseek-ai/DeepSeek-V4-Flash
+// encoding/: the first two verbatim from tests/test_output_1.txt and test_output_3.txt, the rest
+// rendered by encoding_dsv4.py's encode_messages (no gold file carries string="false" or several
+// invokes in one block).
+describe('parseToolCalls (deepseek DSML invoke form)', () => {
+  beforeEach(() => {
+    setToolDialect('deepseek')
+  })
+  afterEach(() => {
+    setToolDialect('auto')
+  })
+
+  test('parses the gold get_weather call from test_output_1.txt', () => {
+    const content = `<｜DSML｜tool_calls>
+<｜DSML｜invoke name="get_weather">
+<｜DSML｜parameter name="location" string="true">Beijing</｜DSML｜parameter>
+<｜DSML｜parameter name="unit" string="true">celsius</｜DSML｜parameter>
+</｜DSML｜invoke>
+</｜DSML｜tool_calls>`
+
+    const result = parseToolCalls(content)
+    expect(result.toolCalls).toHaveLength(1)
+    expect(result.toolCalls[0].name).toBe('get_weather')
+    expect(result.toolCalls[0].arguments).toEqual({ location: 'Beijing', unit: 'celsius' })
+    expect(result.content).toBe('')
+  })
+
+  test('keeps surrounding text and non-ASCII values (test_output_3.txt)', () => {
+    const content = `Let me look that up.
+
+<｜DSML｜tool_calls>
+<｜DSML｜invoke name="search">
+<｜DSML｜parameter name="queries" string="true">小柴胡冲剂 布洛芬 相互作用 一起吃</｜DSML｜parameter>
+</｜DSML｜invoke>
+</｜DSML｜tool_calls>`
+
+    const result = parseToolCalls(content)
+    expect(result.toolCalls).toHaveLength(1)
+    expect(result.toolCalls[0].name).toBe('search')
+    expect(result.toolCalls[0].arguments).toEqual({ queries: '小柴胡冲剂 布洛芬 相互作用 一起吃' })
+    expect(result.content).toBe('Let me look that up.')
+  })
+
+  test('parses multiple invokes with string and JSON params and a multi-line value', () => {
+    const content = `<｜DSML｜tool_calls>
+<｜DSML｜invoke name="search">
+<｜DSML｜parameter name="query" string="true">weather in Beijing</｜DSML｜parameter>
+<｜DSML｜parameter name="num_results" string="false">5</｜DSML｜parameter>
+</｜DSML｜invoke>
+<｜DSML｜invoke name="open">
+<｜DSML｜parameter name="open_list" string="false">[{"id": "https://example.com", "loc": -1, "view_source": false}]</｜DSML｜parameter>
+</｜DSML｜invoke>
+<｜DSML｜invoke name="write_file">
+<｜DSML｜parameter name="path" string="true">notes.md</｜DSML｜parameter>
+<｜DSML｜parameter name="content" string="true">line one
+line two
+
+  indented</｜DSML｜parameter>
+</｜DSML｜invoke>
+</｜DSML｜tool_calls>`
+
+    const result = parseToolCalls(content)
+    expect(result.toolCalls.map((c) => c.name)).toEqual(['search', 'open', 'write_file'])
+    expect(result.toolCalls[0].arguments).toEqual({ query: 'weather in Beijing', num_results: 5 })
+    expect(result.toolCalls[1].arguments).toEqual({
+      open_list: [{ id: 'https://example.com', loc: -1, view_source: false }],
+    })
+    expect(result.toolCalls[2].arguments).toEqual({
+      path: 'notes.md',
+      content: 'line one\nline two\n\n  indented',
+    })
+    expect(result.toolCalls.map((c) => c.id)).toEqual(['call_0', 'call_1', 'call_2'])
+    expect(result.content).toBe('')
+  })
+
+  test('string="true" keeps JSON-looking text as a string', () => {
+    const content = `<｜DSML｜tool_calls>
+<｜DSML｜invoke name="search">
+<｜DSML｜parameter name="query" string="true">42</｜DSML｜parameter>
+<｜DSML｜parameter name="filter" string="true">{"a": 1}</｜DSML｜parameter>
+<｜DSML｜parameter name="strict" string="false">true</｜DSML｜parameter>
+</｜DSML｜invoke>
+</｜DSML｜tool_calls>`
+
+    const result = parseToolCalls(content)
+    expect(result.toolCalls[0].arguments).toEqual({ query: '42', filter: '{"a": 1}', strict: true })
+  })
+
+  test('recovers a call whose closers were cut off', () => {
+    const content = `<｜DSML｜tool_calls>
+<｜DSML｜invoke name="get_weather">
+<｜DSML｜parameter name="location" string="true">Beijing</｜DSML｜parameter>
+<｜DSML｜parameter name="unit" string="true">celsius`
+
+    const result = parseToolCalls(content)
+    expect(result.toolCalls).toHaveLength(1)
+    expect(result.toolCalls[0].arguments).toEqual({ location: 'Beijing', unit: 'celsius' })
+    expect(result.content).toBe('')
+  })
+
+  test('a missing invoke closer does not swallow the next invoke', () => {
+    const content = `<｜DSML｜tool_calls>
+<｜DSML｜invoke name="read_file">
+<｜DSML｜parameter name="path" string="true">/a</｜DSML｜parameter>
+<｜DSML｜invoke name="read_file">
+<｜DSML｜parameter name="path" string="true">/b</｜DSML｜parameter>
+</｜DSML｜invoke>
+</｜DSML｜tool_calls>`
+
+    const result = parseToolCalls(content)
+    expect(result.toolCalls.map((c) => c.arguments.path)).toEqual(['/a', '/b'])
+    expect(result.content).toBe('')
+  })
+
+  test('still parses the JSON-bodied DSML opener', () => {
+    const result = parseToolCalls(
+      '<｜DSML｜tool_call>\n{"name": "read_file", "arguments": {"path": "/etc/hosts"}}',
+    )
+    expect(result.toolCalls).toHaveLength(1)
+    expect(result.toolCalls[0].arguments).toEqual({ path: '/etc/hosts' })
   })
 })

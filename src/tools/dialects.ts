@@ -410,12 +410,58 @@ function normalizeDsmlToolCalls(content: string): string {
 }
 
 /**
- * DeepSeek v4: normalize the native DSML opener to ASCII, then run the same fallback chain as
- * `auto` — its native token once normalized is just more of the same.
+ * DeepSeek-V4's actual native call syntax, per encoding_dsv4.py in deepseek-ai/DeepSeek-V4-Flash:
+ *   <｜DSML｜tool_calls>
+ *   <｜DSML｜invoke name="NAME">
+ *   <｜DSML｜parameter name="KEY" string="true">raw text</｜DSML｜parameter>
+ *   <｜DSML｜parameter name="KEY2" string="false">JSON</｜DSML｜parameter>
+ *   </｜DSML｜invoke>
+ *   </｜DSML｜tool_calls>
+ * string="true" values are taken verbatim (they may span lines); string="false" values are JSON.
+ * Lenient about closers in the same way as toolCallChunks: an invoke ends at its closer, the
+ * next invoke, the block closer, or end of content; a parameter ends at its closer, the next
+ * parameter, the invoke closer, or end of the invoke.
+ */
+const DSML_INVOKE_RE =
+  /<｜DSML｜invoke\s+name="([^"]*)"\s*>([\s\S]*?)(?:<\/｜DSML｜invoke>|(?=<｜DSML｜invoke[\s>])|(?=<\/｜DSML｜tool_calls>)|$)/g
+const DSML_PARAM_RE =
+  /<｜DSML｜parameter\s+name="([^"]*)"(?:\s+string="(true|false)")?\s*>([\s\S]*?)(?:<\/｜DSML｜parameter>|(?=<｜DSML｜parameter[\s>])|$)/g
+const DSML_BLOCK_TAG_RE = /<\/?｜DSML｜tool_calls>/g
+
+function parseDsmlInvokeToolCalls(content: string): {
+  content: string
+  toolCalls: Omit<ToolCall, 'id'>[]
+} {
+  const toolCalls: Omit<ToolCall, 'id'>[] = []
+  let cleaned = content
+  for (const invoke of content.matchAll(DSML_INVOKE_RE)) {
+    const name = invoke[1]?.trim()
+    if (!name) continue
+    const args: Record<string, unknown> = {}
+    for (const param of (invoke[2] ?? '').matchAll(DSML_PARAM_RE)) {
+      const key = param[1]?.trim()
+      if (!key) continue
+      let value = param[3] ?? ''
+      // without its closer, the newline before the next tag is layout, not value
+      if (!param[0].endsWith('</｜DSML｜parameter>')) value = value.replace(/\n$/, '')
+      args[key] = param[2] === 'true' ? value : coerceArgValue(value)
+    }
+    toolCalls.push({ name, arguments: args })
+    cleaned = cleaned.replace(invoke[0], '')
+  }
+  if (toolCalls.length > 0) cleaned = cleaned.replace(DSML_BLOCK_TAG_RE, '')
+  return { content: cleaned, toolCalls }
+}
+
+/**
+ * DeepSeek v4: the native invoke/parameter form first, then normalize the JSON-bodied DSML
+ * opener to ASCII and run the same fallback chain as `auto`.
  */
 export const deepseekDialect: ToolDialect = {
   name: 'deepseek',
   parseToolCalls(content) {
+    const native = parseDsmlInvokeToolCalls(content)
+    if (native.toolCalls.length > 0) return withIds(native)
     return autoDialect.parseToolCalls(normalizeDsmlToolCalls(content))
   },
 }
