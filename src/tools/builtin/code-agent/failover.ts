@@ -21,6 +21,7 @@ const INFRASTRUCTURE_SIGNALS = [
   /\bENOENT\b/,
   /not found on PATH/i,
   /command not found/i,
+  /is not recognized as an internal or external command/i, // cmd.exe's ENOENT
   /\b401\b|\b403\b/,
   /unauthor(i[sz])?ed/i,
   /api[_ ]?key/i,

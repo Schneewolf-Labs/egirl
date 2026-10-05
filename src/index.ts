@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 
+import { runAcp } from './commands/acp'
 import { runAPI } from './commands/api'
 import { runClaudeCode } from './commands/claude-code'
 import { runCLI } from './commands/cli'
@@ -147,6 +148,10 @@ async function main() {
       await runServe(config, commandArgs)
       break
 
+    case 'acp':
+      await runAcp(config, commandArgs)
+      break
+
     default:
       log.error('main', `Unknown command: ${command}`)
       showHelp()
@@ -174,6 +179,7 @@ ${c.primary}Commands${RESET}
   ${c.accent}matrix${RESET}         Start Matrix bot (unencrypted rooms)
   ${c.accent}api${RESET}            Start HTTP API (localhost by default — scripts, automations, LAN access)
   ${c.accent}serve${RESET}          Discord + XMPP + Telegram + Matrix + background task runner in one process
+  ${c.accent}acp${RESET}            Serve the Agent Client Protocol on stdio ${DIM}(for Zed, JetBrains, other ACP editors)${RESET}
   ${c.accent}claude-code${RESET}    Bridge to Claude Code with local model supervision ${DIM}(alias: cc)${RESET}
   ${c.accent}status${RESET}         Show current configuration and status
   ${c.accent}update${RESET}         Pull the latest egirl and reinstall deps if needed ${DIM}(alias: upgrade, --check to preview)${RESET}

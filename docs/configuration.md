@@ -142,11 +142,12 @@ Settings for the `code_agent` tool. If omitted, egirl falls back to `[channels.c
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `provider` | string | `"claude"` | Code agent backend: `"claude"`, `"codex"`, or `"opencode"` |
+| `provider` | string | `"claude"` | Code agent backend: `"claude"`, `"codex"`, `"opencode"`, or `"acp"` (any Agent Client Protocol agent; see [acp.md](acp.md)) |
 | `permission_mode` | string | `"bypassPermissions"` | Agent permission mode. For Codex, non-bypass modes use the interactive CLI with a workspace-write sandbox and local-model prompt decisions. For OpenCode, non-bypass modes route each permission request through the local model supervisor |
 | `model` | string | (none) | Override the selected backend model |
 | `working_dir` | string | workspace path | Working directory for code agent operations |
-| `max_turns` | number | (none) | Maximum Claude Code turns before stopping. Ignored by Codex and OpenCode |
+| `max_turns` | number | (none) | Maximum Claude Code turns before stopping. Ignored by Codex, OpenCode and ACP |
+| `acp_command` | string[] | (none) | Required for `provider = "acp"`: the ACP agent's command line, e.g. `["gemini", "--acp"]`, `["npx", "-y", "@agentclientprotocol/claude-agent-acp"]`, `["npx", "-y", "@agentclientprotocol/codex-acp"]`, `["opencode", "acp"]`. See [acp.md](acp.md) |
 
 **Migration note:** existing Claude-only configs can keep `[channels.claude_code]` unchanged. To configure the tool explicitly, add `[channels.code_agent] provider = "claude"` and copy any shared `permission_mode`, `model`, or `working_dir` values. To use Codex or OpenCode instead, set `provider = "codex"` or `provider = "opencode"`; `[channels.claude_code]` still only controls the direct `claude-code` / `cc` bridge command.
 
@@ -452,7 +453,7 @@ still accepted so an existing config loads; the loader logs a warning.
 
 ### `[permission_supervisor]`
 
-Controls how egirl answers code-agent permission, trust, and clarification prompts. The shared supervisor is currently used by the Codex and OpenCode `code_agent` backends. The direct Claude Code bridge has its own local-model supervisor; Claude through `code_agent` still follows Claude Agent SDK permission behavior.
+Controls how egirl answers code-agent permission, trust, and clarification prompts. The shared supervisor is currently used by the Codex, OpenCode and ACP `code_agent` backends. The direct Claude Code bridge has its own local-model supervisor; Claude through `code_agent` still follows Claude Agent SDK permission behavior.
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
@@ -568,7 +569,7 @@ dimensions = 2048
 multimodal = true
 
 [channels.code_agent]
-provider = "codex"      # "claude", "codex", or "opencode"
+provider = "codex"      # "claude", "codex", "opencode", or "acp" (+ acp_command)
 permission_mode = "default"
 # model = "gpt-5.5"
 # working_dir = "~/projects/myrepo"

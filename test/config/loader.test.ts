@@ -103,6 +103,38 @@ dirs = ["{workspace}/skills"]
     expect(config.source.codeAgentUsesClaudeCodeFallback).toBe(false)
   })
 
+  test('loads the acp provider and its agent command', async () => {
+    process.chdir(tmpDir)
+    writeFileSync(
+      join(tmpDir, 'egirl.toml'),
+      `
+[workspace]
+path = "${tmpDir}/workspace"
+
+[local]
+endpoint = "http://localhost:8080"
+model = "test-model"
+context_length = 8192
+max_concurrent = 1
+
+[channels.code_agent]
+provider = "acp"
+providers = ["acp", "claude"]
+acp_command = ["gemini", "--acp"]
+
+[skills]
+dirs = ["{workspace}/skills"]
+`,
+    )
+
+    const { loadConfig } = await import('../../src/config/index')
+    const config = loadConfig()
+
+    expect(config.channels.codeAgent?.provider).toBe('acp')
+    expect(config.channels.codeAgent?.providers).toEqual(['acp', 'claude'])
+    expect(config.channels.codeAgent?.acpCommand).toEqual(['gemini', '--acp'])
+  })
+
   test('falls back to claude_code for code_agent when explicit config is absent', async () => {
     process.chdir(tmpDir)
     writeFileSync(

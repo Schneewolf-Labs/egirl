@@ -15,6 +15,8 @@ export interface CodeAgentConfig {
   workingDir: string
   maxTurns?: number
   timeoutMs?: number
+  /** Command and arguments for the `acp` provider's agent process. */
+  acpCommand?: string[]
   localProvider?: LLMProvider
   memory?: MemoryManager
   permissionSupervisor?: PermissionSupervisor

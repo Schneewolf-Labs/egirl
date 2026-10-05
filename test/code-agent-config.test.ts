@@ -3,7 +3,7 @@ import { getCodeAgentConfig } from '../src/bootstrap'
 import type { RuntimeConfig } from '../src/config/schema'
 
 describe('getCodeAgentConfig', () => {
-  test('passes the failover chain and the timeout through to the tool', () => {
+  test('passes the failover chain, the timeout and the acp command through to the tool', () => {
     const config = {
       channels: {
         codeAgent: {
@@ -12,12 +12,14 @@ describe('getCodeAgentConfig', () => {
           permissionMode: 'default',
           workingDir: '/work',
           timeoutMs: 1_800_000,
+          acpCommand: ['npx', '@agentclientprotocol/claude-agent-acp'],
         },
       },
     } as unknown as RuntimeConfig
     const cc = getCodeAgentConfig(config)
     expect(cc?.providers).toEqual(['claude', 'codex'])
     expect(cc?.timeoutMs).toBe(1_800_000)
+    expect(cc?.acpCommand).toEqual(['npx', '@agentclientprotocol/claude-agent-acp'])
   })
 
   test("passes 'auto' through so Claude Code's classifier settles routine calls", () => {

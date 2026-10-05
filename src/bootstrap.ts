@@ -138,6 +138,7 @@ export function getCodeAgentConfig(config: RuntimeConfig): CodeAgentConfig | und
     workingDir: cc.workingDir,
     maxTurns: cc.maxTurns,
     timeoutMs: cc.timeoutMs,
+    acpCommand: cc.acpCommand,
   }
 }
 
