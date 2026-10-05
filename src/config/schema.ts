@@ -4,7 +4,7 @@ export type ThinkingLevel = 'off' | 'low' | 'medium' | 'high'
 
 // Single source of truth for code-agent backends. A new literal here flows
 // into the config schema and the dispatch map.
-export const CODE_AGENT_PROVIDERS = ['claude', 'codex', 'opencode'] as const
+export const CODE_AGENT_PROVIDERS = ['claude', 'codex', 'opencode', 'acp'] as const
 export type CodeAgentProvider = (typeof CODE_AGENT_PROVIDERS)[number]
 
 const codeAgentProviderSchema = Type.Union(
@@ -46,6 +46,9 @@ const CodeAgentChannelSchema = Type.Object({
   // Wall-clock limit for one delegated task. The 5-minute default fits a focused fix, not a
   // review that runs two test suites.
   timeout_ms: Type.Optional(Type.Number({ minimum: 1000 })),
+  // The agent the `acp` provider spawns: command and arguments, e.g.
+  // ["npx", "@agentclientprotocol/claude-agent-acp"] or ["gemini", "--acp"]. See docs/acp.md.
+  acp_command: Type.Optional(Type.Array(Type.String(), { minItems: 1 })),
 })
 
 const baseProperties = {
@@ -644,6 +647,7 @@ export interface RuntimeConfig {
       workingDir: string
       maxTurns?: number
       timeoutMs?: number
+      acpCommand?: string[]
     }
     xmpp?: {
       service: string

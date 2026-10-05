@@ -3,6 +3,7 @@ import { resolveImageRefs } from '../../../agent/attachments'
 import type { CodeAgentProvider } from '../../../config/schema'
 import { log } from '../../../util/logger'
 import type { Tool, ToolCallContext, ToolResult } from '../../types'
+import { runAcpCodeAgent } from './acp'
 import { runClaudeCodeAgent } from './claude'
 import { runCodexCodeAgent } from './codex'
 import { resolveProviderChain, shouldFailover } from './failover'
@@ -18,6 +19,7 @@ const BACKENDS: Record<CodeAgentProvider, CodeAgentBackend> = {
   claude: runClaudeCodeAgent,
   codex: runCodexCodeAgent,
   opencode: runOpencodeCodeAgent,
+  acp: runAcpCodeAgent,
 }
 
 /**

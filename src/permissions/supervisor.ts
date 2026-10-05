@@ -23,7 +23,7 @@ export interface PermissionOption {
 }
 
 export interface PermissionRequest {
-  backend: 'claude' | 'codex' | 'opencode'
+  backend: 'claude' | 'codex' | 'opencode' | 'acp'
   kind: 'permission' | 'question' | 'trust' | 'confirmation'
   originalTask: string
   workingDir: string

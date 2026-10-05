@@ -120,6 +120,7 @@ bun run src/index.ts telegram             # Telegram bot only
 bun run src/index.ts matrix               # Matrix bot only (unencrypted rooms)
 bun run src/index.ts api                  # HTTP API on localhost:3000 (configurable)
 bun run src/index.ts serve                # Discord/XMPP/Telegram/Matrix + background task runner
+bun run src/index.ts acp                  # Agent Client Protocol on stdio (Zed, JetBrains)
 bun run src/index.ts claude-code          # Direct Claude Code bridge (alias: cc)
 bun run src/index.ts cc -m "fix the tests"
 bun run src/index.ts status               # Show config + connection status
@@ -226,6 +227,7 @@ No OpenAPI spec, no versioned paths, no plugin framework. If you want to build s
 | [Tools](docs/tools.md) | All built-in tools with parameters |
 | [Background Tasks](docs/background-tasks.md) | Cron-scheduled task system |
 | [Code Agent Integration](docs/code-agent.md) | The core delegation flow |
+| [Agent Client Protocol](docs/acp.md) | egirl as an ACP agent for editors, and ACP agents as code agents |
 | [Claude Code Bridge](docs/claude-code.md) | Direct Claude Code bridge channel |
 | [Permission Supervisor](docs/permissions.md) | Code-agent permission policy and local-model decisions |
 | [Skills](docs/skills.md) | Creating reusable skill files |

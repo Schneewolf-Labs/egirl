@@ -130,6 +130,7 @@ No unsolicited changes. No "while I was in here I also..." modifications. No REA
 Don't install new packages without asking. The current stack is intentionally minimal:
 
 ```
+@agentclientprotocol/sdk         # ACP: `egirl acp` and the acp code-agent backend
 @anthropic-ai/claude-agent-sdk   # Claude Code backend
 codex app-server (installed CLI)  # structured Codex backend
 @sinclair/typebox                # config validation

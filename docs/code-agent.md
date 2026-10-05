@@ -7,6 +7,7 @@ Supported backends:
 - **Claude Code** through `@anthropic-ai/claude-agent-sdk`
 - **Codex** through the local interactive `codex` CLI in a PTY
 - **OpenCode** through a locally-spawned `opencode serve` HTTP server
+- **Any ACP agent** (Gemini CLI, Claude Code or Codex through adapters, opencode) through the Agent Client Protocol — see [acp.md](acp.md)
 
 ## Mental Model
 
