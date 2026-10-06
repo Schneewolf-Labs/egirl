@@ -364,9 +364,50 @@ interface TaskRunner {
 - **Tick interval**: Checks for due scheduled tasks every 30 seconds (configurable via `tick_interval_ms`)
 - **Concurrency**: One background task at a time. Local inference is single-threaded — running two agent loops simultaneously would thrash the GPU
 - **Preemption**: Interactive user messages take priority. If a user sends a message while a background task is mid-execution, the runner yields after the current tool call completes, lets the interactive request through, then resumes
-- **Timeout**: Each task run has a max duration (configurable via `task_timeout_ms`, default: 5 min). Prevents runaway loops
+- **Timeout**: Each task run has a max duration (configurable via `task_timeout_ms`, default: 5 min). Prevents runaway loops. A bounded run can earn more time and stop itself cleanly — see [Deadlines](#deadlines-resume-extension-clean-stop)
 - **Retry**: Failed tasks increment `consecutive_failures`. After 2 consecutive failures, the task is paused and the user is notified. Successful runs reset the counter
 - **Event queue**: When event sources fire while a task is already running, events are queued (bounded, newest wins for same-task events). Prevents pile-up from chatty file watchers
+
+#### Deadlines: resume, extension, clean stop
+
+A bounded run that hits `task_timeout_ms` is a failure of kind `timeout`, and the retry
+policy retries it once. Before, the retry started from scratch in a fresh session: a run
+that had already written and committed its deliverable did the hour of work again. Now:
+
+- **Resume, not restart.** A bounded run persists its conversation whenever a conversation
+  store exists (without `persist_conversation`, a *fresh* run first clears the previous
+  run's transcript, so it still starts clean). When the previous run ended on the time limit,
+  the retry loads that conversation and opens with:
+  `[Your previous run hit its time limit after N min and was stopped mid-way. Your messages
+  and tool results so far are above; files you wrote and commits you made are in place.
+  Check what's already done and continue from there — don't redo finished steps.]`
+  With nothing persisted (no store), the retry is a fresh run as before. Retry count and
+  backoff are unchanged.
+- **`request_extension({ minutes, reason, remaining })`** — the runner decides, not the
+  model: an agent's own "almost done" is not evidence. It grants up to the requested minutes
+  only if, since the run started or since the last grant, the run made **at least one
+  artifact action** (`write_file`, `edit_file`, `git_commit`, or `execute_command` running
+  `git commit`/`git push`) **or at least 3 successful tool calls with distinct (name, args)**,
+  **and** the repeat detector did not flag a call in that window. Caps: at most
+  `max_extensions` grants (default 2) and total extension ≤ `task_timeout_ms` ×
+  `max_extension_ratio` (default 1.0); a grant is clipped to what the cap has left. A grant
+  moves the real deadline (the abort and the runner's timeout race) and re-arms the wrap-up
+  warning. A denial says why (no progress / looping / cap reached) and tells the agent to wrap
+  up; at the cap, if a `report` tool exists, it adds that the agent may ask the human with
+  `report(mode=ask)` — it never asks on its own. Every decision is logged and written to the
+  trace store as a `decision` event with its evidence counts.
+- **`end_task({ status, summary })`** — stops the run with no further model turns.
+  `done`: a normal success, the summary is the result. `blocked`: the run succeeds with a
+  `[Blocked] …` result; a oneshot is paused (visible, not retried), a scheduled task keeps its
+  schedule. `abandoned`: the run is a failure that is never retried; a oneshot goes to
+  `failed`, a scheduled task waits for its next regular run. If the deadline hits after
+  `end_task` was called (a slow tool in the same batch), the declared outcome stands.
+
+Both tools exist only inside bounded task runs: they are handed to that run's loop, never
+registered on the shared executor. Unbounded runs keep their own model (the time budget is a
+checkpoint, see [autonomy-loop.md](autonomy-loop.md)) and get neither. The wrap-up warning
+names both tools when the run has them. Config: `extensions`, `max_extensions`,
+`max_extension_ratio` under `[tasks]`.
 
 **Execution flow per task:**
 
@@ -576,6 +617,9 @@ enabled = true
 tick_interval_ms = 30000        # how often to check for due scheduled tasks
 max_active_tasks = 20           # max number of active tasks at once
 task_timeout_ms = 300000        # 5 min max per task run
+extensions = true               # bounded runs may request_extension (granted on evidence)
+max_extensions = 2              # grants per run
+max_extension_ratio = 1.0       # total extension ≤ task_timeout_ms × this
 discovery_enabled = true        # agent looks for work during idle time
 discovery_interval_ms = 1800000 # 30 min between discovery runs
 idle_threshold_ms = 600000      # 10 min idle before discovery kicks in

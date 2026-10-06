@@ -4,6 +4,7 @@ import type { MemoryManager } from '../memory'
 import type { ChatMessage, LLMProvider } from '../providers/types'
 import type { Skill } from '../skills/types'
 import type { ToolExecutor } from '../tools'
+import type { Tool } from '../tools/types'
 import type { AgentEventHandler } from './events'
 import type { SessionMutex } from './session-mutex'
 
@@ -42,14 +43,22 @@ export interface AgentLoopOptions {
   /**
    * Wall-clock instant (ms epoch) at which this run will be hard-aborted by its caller (a task
    * timeout). Used only to warn the agent to wrap up BEFORE that happens, turning a mid-thought
-   * guillotine into a self-directed wind-down. Undefined = no wall-clock limit.
+   * guillotine into a self-directed wind-down. Undefined = no wall-clock limit. A function is
+   * read each turn, for a deadline that can move (a task run's granted extension); when it
+   * moves back out of the margin, the warning re-arms.
    */
-  deadline?: number
+  deadline?: number | (() => number)
   /**
    * How long before `deadline` to inject the one-time wrap-up warning. The caller sets this to
    * leave enough room for the agent to checkpoint and conclude at its own pace. Default 7 min.
    */
   wrapupMarginMs?: number
+  /**
+   * Tools this run alone offers, run inline like the loop's own intrinsic tools (never through
+   * the shared executor). A task run passes request_extension and end_task here, so they exist
+   * only inside task runs. A result with `endRun` ends the run after its batch.
+   */
+  extraTools?: Map<string, Tool>
 }
 
 export interface AgentResponse {

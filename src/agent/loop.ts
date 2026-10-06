@@ -11,6 +11,7 @@ import type {
 } from '../providers/types'
 import type { ToolExecutor } from '../tools'
 import { hasStrandedToolCall, stripStrandedToolCalls } from '../tools/format'
+import type { Tool } from '../tools/types'
 import { errorMessage } from '../util/errors'
 import { log } from '../util/logger'
 import { attachmentNote, saveImageAttachments } from './attachments'
@@ -292,11 +293,18 @@ export class AgentLoop {
           },
         })
       : undefined
-    const intrinsicDefs = [...(intrinsicTools?.values() ?? [])].map((t) => t.definition)
+    const runTools = mergeTools(intrinsicTools, options.extraTools)
+    const intrinsicDefs = [...(runTools?.values() ?? [])].map((t) => t.definition)
     // Wall-clock wrap-up: warn once as the hard deadline (a task timeout) nears, so the agent
     // winds down and checkpoints on its own instead of being killed mid-inference.
-    const deadline = options.deadline
+    const deadlineOpt = options.deadline
+    const deadlineAt =
+      typeof deadlineOpt === 'function' ? deadlineOpt : () => deadlineOpt as number | undefined
     const wrapupMarginMs = options.wrapupMarginMs ?? 7 * 60_000
+    const wrapupTools = {
+      extension: runTools?.has('request_extension') ?? false,
+      endTask: runTools?.has('end_task') ?? false,
+    }
 
     // Persistence and the run's end on the bus happen in `finally` so a provider error
     // mid-run doesn't lose the user message and tool activity already in context.
@@ -360,10 +368,15 @@ export class AgentLoop {
         // consolidation break, keeping the wall-clock limit consistent with the loop's
         // "pause and capture" rhythm rather than killing a turn mid-thought. See
         // docs/autonomy-loop.md.
+        const deadline = deadlineAt()
+        if (deadline && state.wrapupWarned && Date.now() < deadline - wrapupMarginMs) {
+          // An extension moved the deadline back out of the margin: warn again when it nears.
+          state.wrapupWarned = false
+        }
         if (deadline && !state.wrapupWarned && Date.now() >= deadline - wrapupMarginMs) {
           state.wrapupWarned = true
           const minsLeft = Math.max(1, Math.round((deadline - Date.now()) / 60_000))
-          addMessage(this.context, { role: 'user', content: wrapupNudge(minsLeft) })
+          addMessage(this.context, { role: 'user', content: wrapupNudge(minsLeft, wrapupTools) })
         }
 
         const tools = isPlanning ? [] : [...this.toolExecutor.getDefinitions(), ...intrinsicDefs]
@@ -481,7 +494,7 @@ export class AgentLoop {
               response,
               context: this.context,
               executor: this.toolExecutor,
-              intrinsic: intrinsicTools,
+              intrinsic: runTools,
               seenToolCalls,
               events,
               signal,
@@ -490,6 +503,13 @@ export class AgentLoop {
           if (toolOutcome.awaitingInput) state.awaitingInput = true
 
           state.toolsRan = true
+
+          // A tool ended the run (a task's end_task): no further model turns.
+          if (toolOutcome.endRun) {
+            finalContent = toolOutcome.endRun.content
+            events?.onResponseComplete?.()
+            break
+          }
 
           // new_context: the rollover the model asked for, applied atomically now that the
           // whole batch has run — the batch's results ride into the fresh window as the
@@ -751,6 +771,15 @@ export class AgentLoop {
     this.history.deleteStored()
     this.clearContext()
   }
+}
+
+/** The run's inline tools: the loop's own (rollover) plus any the caller passed for this run. */
+function mergeTools(
+  intrinsic: Map<string, Tool> | undefined,
+  extra: Map<string, Tool> | undefined,
+): Map<string, Tool> | undefined {
+  if (!extra || extra.size === 0) return intrinsic
+  return new Map([...(intrinsic ?? []), ...extra])
 }
 
 export function createAgentLoop(deps: AgentLoopDeps): AgentLoop {

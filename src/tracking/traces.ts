@@ -24,9 +24,10 @@ export interface TraceEvent {
   session?: string
   /**
    * 'run_start'/'run_end' bracket one agent run; 'turn' = one inference; 'tool' = one tool
-   * execution; 'aux' = side-model work.
+   * execution; 'aux' = side-model work; 'decision' = a runner decision about a task run
+   * (request_extension grants/denials with their evidence, end_task stops).
    */
-  kind: 'run_start' | 'run_end' | 'turn' | 'tool' | 'aux'
+  kind: 'run_start' | 'run_end' | 'turn' | 'tool' | 'aux' | 'decision'
   /** Tool name, aux job name ('compaction', 'extraction'), or model for turns. */
   name?: string
   success?: boolean

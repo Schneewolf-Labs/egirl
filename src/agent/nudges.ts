@@ -28,8 +28,23 @@ export function checkpointNudge(contextPressed: boolean, rollover = false): stri
 }
 
 /** One-time wall-clock warning as the run's hard deadline nears: wind down, don't get killed. */
-export function wrapupNudge(minutesLeft: number): string {
-  return `[System: You have been working for nearly this round's full time budget — about ${minutesLeft} minute(s) remain before the run ends automatically. Stop starting new work now. Write everything you have learned to your durable notes, save any in-progress artifacts to files, and update your Status/NEXT so the next run resumes cleanly, then give a brief wrap-up. If this run developed a reusable procedure worth keeping — a setup ritual, a debugging recipe, a verified command sequence — and it is not yet a skill, spend one minute writing it as a SKILL.md in your skills directory so future runs start with it. This is a scheduled break, not a failure — you will pick up where you left off in the next run.]`
+export function wrapupNudge(
+  minutesLeft: number,
+  tools: { extension?: boolean; endTask?: boolean } = {},
+): string {
+  const options: string[] = []
+  if (tools.extension) {
+    options.push(
+      'If you are close to finishing and have been making real progress, call request_extension with the minutes you need and what remains — the runner grants it only on evidence of progress in this run, not on your estimate.',
+    )
+  }
+  if (tools.endTask) {
+    options.push(
+      'If the work is already finished, or you are blocked, call end_task (status done, blocked or abandoned) with a summary to stop cleanly now.',
+    )
+  }
+  const extra = options.length > 0 ? ` ${options.join(' ')}` : ''
+  return `[System: You have been working for nearly this round's full time budget — about ${minutesLeft} minute(s) remain before the run ends automatically. Stop starting new work now. Write everything you have learned to your durable notes, save any in-progress artifacts to files, and update your Status/NEXT so the next run resumes cleanly, then give a brief wrap-up. If this run developed a reusable procedure worth keeping — a setup ritual, a debugging recipe, a verified command sequence — and it is not yet a skill, spend one minute writing it as a SKILL.md in your skills directory so future runs start with it. This is a scheduled break, not a failure — you will pick up where you left off in the next run.${extra}]`
 }
 
 /** Truncated (finish_reason: length) response: ask for the rest. */

@@ -350,6 +350,33 @@ Roll over to a fresh context window as soon as the current tool batch completes.
 
 ---
 
+## request_extension
+
+Ask for more time before a bounded task run's deadline. Only offered inside bounded task runs (and only with `[tasks] extensions = true`); run by the agent loop itself, not the shared tool executor. The runner grants it only on evidence of progress since the run started or the last grant — at least one artifact action (`write_file`, `edit_file`, `git_commit`, a shell `git commit`/`git push`) or 3 distinct successful tool calls, and no repeat-detector trip — capped by `max_extensions` and `max_extension_ratio`. See [background-tasks.md](background-tasks.md#deadlines-resume-extension-clean-stop).
+
+**Source:** `src/tasks/task-controls.ts`, policy in `src/tasks/extensions.ts`
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `minutes` | number | Yes | Minutes requested |
+| `reason` | string | Yes | Why the time is needed |
+| `remaining` | string | Yes | The steps still left |
+
+---
+
+## end_task
+
+Stop a bounded task run now, with no further model turns. `done` completes the run with the summary as its result; `blocked` completes it with a `[Blocked]` result (a oneshot is paused, not retried); `abandoned` records a failure that is never retried. Only offered inside bounded task runs.
+
+**Source:** `src/tasks/task-controls.ts`
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `status` | string | Yes | `done`, `blocked` or `abandoned` |
+| `summary` | string | Yes | What was done; for blocked/abandoned, why |
+
+---
+
 ## screenshot
 
 Capture a screenshot of the current display.

@@ -14,6 +14,11 @@ export interface ToolResult {
    * instead of scheduling the next one. See docs/autonomy-loop.md.
    */
   awaitingInput?: boolean
+  /**
+   * The tool ends the run: no further model turns follow this batch, and `content` is the
+   * run's final reply. Set by a task run's end_task. See src/tasks/task-controls.ts.
+   */
+  endRun?: { content: string }
 }
 
 /**

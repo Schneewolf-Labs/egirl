@@ -61,7 +61,7 @@ export async function runToolCalls(args: {
   seenToolCalls: RepeatDetector
   events?: AgentEventHandler
   signal?: AbortSignal
-}): Promise<{ awaitingInput: boolean }> {
+}): Promise<{ awaitingInput: boolean; endRun?: { content: string } }> {
   const { response, context, executor, intrinsic, seenToolCalls, events, signal } = args
   const calls = response.tool_calls ?? []
 
@@ -77,6 +77,7 @@ export async function runToolCalls(args: {
   events?.onToolCallStart?.(calls)
 
   let awaitingInput = false
+  let endRun: { content: string } | undefined
   const toolResults = await executeToolsWithHooks({
     toolCalls: calls,
     context,
@@ -88,6 +89,7 @@ export async function runToolCalls(args: {
 
   for (const [callId, result] of toolResults) {
     if (result.awaitingInput) awaitingInput = true
+    if (result.endRun && !endRun) endRun = result.endRun
     log.debug(
       'agent',
       `Tool ${callId}: ${result.output.substring(0, 100)}${result.output.length > 100 ? '...' : ''}`,
@@ -122,9 +124,10 @@ export async function runToolCalls(args: {
     const names = [...new Set(duplicateNames)].join(', ')
     log.warn('agent', `Tool loop detected: repeated call(s) to ${names}`)
     addMessage(context, { role: 'user', content: duplicateToolWarning(names) })
+    publish(context.sessionId, { t: 'repeat_warning', v: [...new Set(duplicateNames)] })
   }
 
-  return { awaitingInput }
+  return endRun ? { awaitingInput, endRun } : { awaitingInput }
 }
 
 async function executeToolsWithHooks(args: {

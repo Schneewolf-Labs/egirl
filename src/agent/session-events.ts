@@ -27,6 +27,8 @@ export type SessionEvent =
       t: 'tool_done'
       v: { name: string; success: boolean; args: string; output: string }
     }
+  /** The repeat detector flagged calls in a batch as a likely loop (names of the calls). */
+  | { t: 'repeat_warning'; v: string[] }
   /** One completed inference, with everything the journal keeps. */
   | {
       t: 'turn'
