@@ -364,6 +364,14 @@ export class TaskRunner {
       if (outcome.aborted && signal.reason === 'timeout') {
         throw new Error(`Task timed out after ${timeoutMs + deadline.extended}ms`)
       }
+      // A one-shot task exists to deliver something; ending on an empty final answer means the
+      // run broke down (e.g. a model that kept stalling until the empty-response re-prompts ran
+      // out), not that it finished. Recording that as success retired the task silently with
+      // its deliverable missing. Fail it so the retry policy applies. Recurring tasks keep the
+      // warning below: "nothing to report" can be a legitimate quiet tick there.
+      if (task.kind === 'oneshot' && !outcome.awaitingInput && !outcome.content.trim()) {
+        throw new Error('Run ended without a final answer (empty result)')
+      }
       return await this.recordSuccess(task, run, outcome)
     } catch (err) {
       if (signal.reason === 'shutdown') return this.recordInterrupted(task, run)
