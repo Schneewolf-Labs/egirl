@@ -83,6 +83,14 @@ from the wall-clock timeout, and the timeout counting as a failure — was found
 production when Zero's task auto-timed-out at 50 min and logged a failure; fixed by the
 time-trigger wrap-up plus the not-a-failure treatment.)
 
+A *bounded* run reaching its time budget is still a timeout failure, but no longer a
+restart: its conversation is persisted and the retry continues it with a "your previous run
+hit its time limit" note. A bounded run also gets two tools the unbounded loop does not:
+`request_extension`, granted by the runner only on measured progress (artifact actions or
+distinct successful calls, no repeat-detector trip — never the model's own estimate), and
+`end_task` (done / blocked / abandoned) to stop cleanly. The wrap-up nudge names both. See
+[background-tasks.md](background-tasks.md#deadlines-resume-extension-clean-stop).
+
 It does three jobs at once:
 
 - **Note collection** — the durable record stays current instead of being written

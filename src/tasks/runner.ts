@@ -15,12 +15,20 @@ import { errorMessage } from '../util/errors'
 import { log } from '../util/logger'
 import { resolveUserPath } from '../util/paths'
 import { parseScheduleExpression } from './cron'
+import { RunDeadline } from './deadline'
 import { classifyError, getRetryPolicy } from './error-classify'
 import { HEARTBEAT_TASK_NAME, heartbeatPreCheck } from './heartbeat'
 import { MAILBOX_TASK_NAME } from './mailbox-task'
 import { calculateNextRun, isWithinBusinessHours, parseBusinessHours } from './schedule'
 import { runSelfReview } from './self-review'
 import type { TaskStore } from './store'
+import {
+  createTaskControls,
+  type EndRequest,
+  endContent,
+  type TaskControls,
+  timeoutResumeNudge,
+} from './task-controls'
 import type { Task, TaskRun, TasksConfig } from './types'
 
 const TASK_SYSTEM_PROMPT = `You are executing a background task. Be concise and focused.
@@ -42,6 +50,18 @@ const CLAIM_LEASE_MARGIN_MS = 10 * 60_000
  * another live process on this tasks.db must not start the task beside it.
  */
 const SHUTDOWN_REARM_DELAY_MS = 30_000
+
+/** How one execution is run: its abort signal, moving deadline, and per-run tools. */
+interface ExecutionPlan {
+  signal: AbortSignal
+  /** Current hard deadline (ms epoch); read each turn because an extension moves it. */
+  deadline: () => number
+  wrapupMarginMs: number
+  /** request_extension / end_task, for bounded runs. */
+  extraTools?: TaskControls['tools']
+  /** Set when this run continues a bounded run that hit its time limit (its length, in min). */
+  resumeAfterMinutes?: number
+}
 
 /** What one execution produced, as the runner needs it to book the run. */
 interface ExecutionOutcome {
@@ -288,7 +308,7 @@ export class TaskRunner {
       }
 
       // Another process on this tasks.db may have picked the same due task this tick.
-      const leaseUntil = Date.now() + this.deps.tasksConfig.taskTimeoutMs + CLAIM_LEASE_MARGIN_MS
+      const leaseUntil = Date.now() + this.maxRunMs() + CLAIM_LEASE_MARGIN_MS
       if (
         task.nextRunAt === undefined ||
         !this.deps.store.claimDue(task.id, task.nextRunAt, leaseUntil)
@@ -302,113 +322,55 @@ export class TaskRunner {
     }
   }
 
+  /** Longest a run can last: its budget plus every extension it could be granted. */
+  private maxRunMs(): number {
+    const { taskTimeoutMs, extensions, maxExtensionRatio } = this.deps.tasksConfig
+    return taskTimeoutMs * (1 + (extensions ? Math.max(0, maxExtensionRatio) : 0))
+  }
+
   private async executeTask(task: Task): Promise<TaskRun> {
     this.runningCount++
     const abortController = new AbortController()
     this.runningTasks.set(task.id, { controller: abortController })
 
+    // Read before this run is created: whether the previous one ended on the time limit.
+    const resumeAfterMinutes = this.timedOutRunToResume(task)
     const run = this.deps.store.createRun(task.id)
     const timeoutMs = this.deps.tasksConfig.taskTimeoutMs
     const signal = abortController.signal
-    // The wall-clock instant this run will be hard-aborted, and how long before it the agent
-    // is warned to wrap up. The margin scales with the budget so a longer round gets a longer
-    // wind-down, capped so it never eats most of a short one.
-    const deadline = Date.now() + timeoutMs
+    // The wall-clock instant this run will be hard-aborted — movable by a granted extension —
+    // and how long before it the agent is warned to wrap up. The margin scales with the budget
+    // so a longer round gets a longer wind-down, capped so it never eats most of a short one.
+    const deadline = new RunDeadline(timeoutMs, () => abortController.abort('timeout'))
     const wrapupMarginMs = Math.min(Math.round(timeoutMs * 0.15), 10 * 60_000)
-
-    const timeoutId = setTimeout(() => abortController.abort('timeout'), timeoutMs)
+    const controls = this.createControls(task, deadline)
 
     log.info('tasks', `Executing task: ${task.name} (${task.id})`)
 
-    const execution = this.doExecute(task, signal, deadline, wrapupMarginMs)
+    const execution = this.doExecute(task, {
+      signal,
+      deadline: () => deadline.at,
+      wrapupMarginMs,
+      extraTools: controls?.tools,
+      resumeAfterMinutes,
+    })
     try {
-      const outcome = await Promise.race([execution, this.timeout(timeoutMs)])
+      const outcome = await Promise.race([execution, deadline.expired])
       if (outcome.aborted && signal.reason === 'shutdown') return this.recordInterrupted(task, run)
+      const ended = controls?.endRequest()
+      if (ended) return await this.recordEnded(task, run, ended, outcome.tokensUsed)
       // The hard abort can end the agent run before the race's own timer rejects; it is the
       // same timeout either way, not a finished run.
       if (outcome.aborted && signal.reason === 'timeout') {
-        throw new Error(`Task timed out after ${timeoutMs}ms`)
+        throw new Error(`Task timed out after ${timeoutMs + deadline.extended}ms`)
       }
-      const { content: result, awaitingInput, tokensUsed } = outcome
-      if (!result.trim()) {
-        log.warn(
-          'tasks',
-          `Task ${task.name} finished with an empty result (${tokensUsed ?? 0} tokens)`,
-        )
-      }
-      const resultHash = await hashString(result)
-      const shouldNotify = this.shouldNotify(task, resultHash)
-
-      this.deps.store.update(task.id, {
-        lastRunAt: Date.now(),
-        runCount: task.runCount + 1,
-        consecutiveFailures: 0,
-        lastErrorKind: undefined,
-        lastResultHash: resultHash,
-      })
-
-      if (awaitingInput && this.repliedDuringRun.has(task.id)) {
-        // The answer arrived while the run was finishing: run again with it, don't park.
-        this.deps.store.update(
-          task.id,
-          { nextRunAt: Date.now() },
-          'Reply arrived during the run — running again instead of parking',
-        )
-      } else if (awaitingInput) {
-        // The run asked its supervisor and no answer came: park instead of rescheduling.
-        // The scheduler skips non-active tasks, so the task sits here — visibly distinct
-        // from paused/done — until a reply arrives (POST /chat on its session resumes it)
-        // or a human resumes it directly. Only an active task parks: one the user paused
-        // or retired while it ran keeps that status (model: formal/TaskRunner.tla).
-        if (this.deps.store.get(task.id)?.status === 'active') {
-          this.deps.store.update(
-            task.id,
-            { status: 'awaiting' },
-            'Parked: report ask went unanswered — awaiting supervisor input',
-          )
-          // Nothing will move until a human answers, so this is worth interrupting someone for.
-          // Deliberately fire-and-forget: a notification that fails must never fail the run.
-          try {
-            this.deps.onAwaitingInput?.(task)
-          } catch {}
-        }
-      } else if (task.kind === 'scheduled') {
-        const nextRunAt = this.calculateTaskNextRun(task)
-        this.deps.store.update(task.id, { nextRunAt })
-      } else if (task.kind === 'oneshot') {
-        // Done with its one run. Left active with its past nextRunAt, the next tick ran it
-        // again — for a mailbox task, answering the sender a second time — and it kept counting
-        // against maxActiveTasks forever. Only an active task finishes: one the user paused or
-        // retired while it ran keeps that status.
-        const done = this.deps.store.get(task.id)?.status === 'active'
-        this.deps.store.update(
-          task.id,
-          done ? { nextRunAt: undefined, status: 'done' } : { nextRunAt: undefined },
-          done ? 'Oneshot finished' : undefined,
-        )
-      }
-
-      if (task.maxRuns && task.runCount + 1 >= task.maxRuns) {
-        this.deps.store.update(task.id, { status: 'done' }, `Reached max runs (${task.maxRuns})`)
-      }
-
-      this.deps.store.completeRun(run.id, { status: 'success', result, tokensUsed })
-
-      if (shouldNotify && result) {
-        await this.notify(task, result)
-      }
-
-      await this.triggerDependents(task.id)
-
-      return {
-        ...run,
-        status: 'success',
-        result,
-        tokensUsed: tokensUsed ?? 0,
-        completedAt: Date.now(),
-      }
+      return await this.recordSuccess(task, run, outcome)
     } catch (err) {
       if (signal.reason === 'shutdown') return this.recordInterrupted(task, run)
+      // The agent declared the outcome itself (end_task) and the deadline then cut a tool in
+      // the same batch short: book what it declared, not a timeout that would redo the work.
+      const ended = controls?.endRequest()
+      if (ended) return await this.recordEnded(task, run, ended)
       const errorMsg = errorMessage(err)
 
       // An unbounded run reaching its wall-clock time budget is a scheduled checkpoint boundary,
@@ -416,7 +378,8 @@ export class TaskRunner {
       // persisted (the agent persists in its finally), and it will continue next run. Counting it
       // as a failure would march a healthy long-running task toward auto-pause. See
       // docs/autonomy-loop.md. Bounded tasks keep the old behaviour — there, a timeout more likely
-      // means a genuine hang.
+      // means a genuine hang — except that the retry continues the persisted conversation
+      // (timedOutRunToResume) instead of starting over.
       if (task.unbounded && /timed out after/.test(errorMsg)) {
         log.info('tasks', `Task ${task.name}: reached its time budget — wrapped up (not a failure)`)
         this.deps.store.update(task.id, {
@@ -471,18 +434,205 @@ export class TaskRunner {
       this.deps.store.completeRun(run.id, { status: 'failure', error: errorMsg, errorKind })
       return { ...run, status: 'failure', error: errorMsg, errorKind, completedAt: Date.now() }
     } finally {
-      clearTimeout(timeoutId)
+      deadline.clear()
       // The slot is freed when the execution ends, not when this stops waiting for it. A
       // timed-out run is aborted but lives until its next checkpoint, still writing to the
       // task's transcript; freeing the slot at the timeout let the next tick start a second
       // execution beside it. Model: formal/TaskRunner.tla (OneLiveExecution).
       const release = () => {
+        controls?.dispose()
         this.runningCount--
         this.runningTasks.delete(task.id)
         this.repliedDuringRun.delete(task.id)
       }
       execution.then(release, release)
     }
+  }
+
+  /** Book a run that finished: reschedule, park, or retire the task as its kind and answer call for. */
+  private async recordSuccess(
+    task: Task,
+    run: TaskRun,
+    outcome: Pick<ExecutionOutcome, 'content' | 'awaitingInput' | 'tokensUsed'>,
+  ): Promise<TaskRun> {
+    const { content: result, awaitingInput, tokensUsed } = outcome
+    if (!result.trim()) {
+      log.warn(
+        'tasks',
+        `Task ${task.name} finished with an empty result (${tokensUsed ?? 0} tokens)`,
+      )
+    }
+    const resultHash = await hashString(result)
+    const shouldNotify = this.shouldNotify(task, resultHash)
+
+    this.deps.store.update(task.id, {
+      lastRunAt: Date.now(),
+      runCount: task.runCount + 1,
+      consecutiveFailures: 0,
+      lastErrorKind: undefined,
+      lastResultHash: resultHash,
+    })
+
+    if (awaitingInput && this.repliedDuringRun.has(task.id)) {
+      // The answer arrived while the run was finishing: run again with it, don't park.
+      this.deps.store.update(
+        task.id,
+        { nextRunAt: Date.now() },
+        'Reply arrived during the run — running again instead of parking',
+      )
+    } else if (awaitingInput) {
+      // The run asked its supervisor and no answer came: park instead of rescheduling.
+      // The scheduler skips non-active tasks, so the task sits here — visibly distinct
+      // from paused/done — until a reply arrives (POST /chat on its session resumes it)
+      // or a human resumes it directly. Only an active task parks: one the user paused
+      // or retired while it ran keeps that status (model: formal/TaskRunner.tla).
+      if (this.deps.store.get(task.id)?.status === 'active') {
+        this.deps.store.update(
+          task.id,
+          { status: 'awaiting' },
+          'Parked: report ask went unanswered — awaiting supervisor input',
+        )
+        // Nothing will move until a human answers, so this is worth interrupting someone for.
+        // Deliberately fire-and-forget: a notification that fails must never fail the run.
+        try {
+          this.deps.onAwaitingInput?.(task)
+        } catch {}
+      }
+    } else if (task.kind === 'scheduled') {
+      const nextRunAt = this.calculateTaskNextRun(task)
+      this.deps.store.update(task.id, { nextRunAt })
+    } else if (task.kind === 'oneshot') {
+      // Done with its one run. Left active with its past nextRunAt, the next tick ran it
+      // again — for a mailbox task, answering the sender a second time — and it kept counting
+      // against maxActiveTasks forever. Only an active task finishes: one the user paused or
+      // retired while it ran keeps that status.
+      const done = this.deps.store.get(task.id)?.status === 'active'
+      this.deps.store.update(
+        task.id,
+        done ? { nextRunAt: undefined, status: 'done' } : { nextRunAt: undefined },
+        done ? 'Oneshot finished' : undefined,
+      )
+    }
+
+    if (task.maxRuns && task.runCount + 1 >= task.maxRuns) {
+      this.deps.store.update(task.id, { status: 'done' }, `Reached max runs (${task.maxRuns})`)
+    }
+
+    this.deps.store.completeRun(run.id, { status: 'success', result, tokensUsed })
+
+    if (shouldNotify && result) {
+      await this.notify(task, result)
+    }
+
+    await this.triggerDependents(task.id)
+
+    return {
+      ...run,
+      status: 'success',
+      result,
+      tokensUsed: tokensUsed ?? 0,
+      completedAt: Date.now(),
+    }
+  }
+
+  /**
+   * Book a run the agent stopped itself with end_task. done is an ordinary success. blocked
+   * completes the run with a [Blocked] result; a oneshot is paused (visible to the operator,
+   * not retried) and a scheduled task keeps its schedule. abandoned is a failure with no retry:
+   * a oneshot goes to failed, a scheduled task just waits for its next regular run.
+   */
+  private async recordEnded(
+    task: Task,
+    run: TaskRun,
+    ended: EndRequest,
+    tokensUsed?: number,
+  ): Promise<TaskRun> {
+    if (ended.status === 'done') {
+      return this.recordSuccess(task, run, {
+        content: ended.summary,
+        awaitingInput: false,
+        tokensUsed,
+      })
+    }
+
+    const isActive = this.deps.store.get(task.id)?.status === 'active'
+    const nextRunAt = task.kind === 'scheduled' ? this.calculateTaskNextRun(task) : undefined
+    const reason = `${ended.status === 'blocked' ? 'Blocked' : 'Abandoned'}: ${ended.summary.slice(0, 200)}`
+
+    if (ended.status === 'blocked') {
+      const result = endContent(ended)
+      this.deps.store.update(task.id, {
+        lastRunAt: Date.now(),
+        runCount: task.runCount + 1,
+        consecutiveFailures: 0,
+        lastErrorKind: undefined,
+        nextRunAt,
+      })
+      if (task.kind === 'oneshot' && isActive) {
+        this.deps.store.update(task.id, { status: 'paused' }, reason)
+      }
+      this.deps.store.completeRun(run.id, { status: 'success', result, tokensUsed })
+      if (task.notify !== 'never') await this.notify(task, `Task "${task.name}" ${result}`)
+      return {
+        ...run,
+        status: 'success',
+        result,
+        tokensUsed: tokensUsed ?? 0,
+        completedAt: Date.now(),
+      }
+    }
+
+    const error = `Abandoned: ${ended.summary}`
+    log.warn('tasks', `Task ${task.name}: abandoned by the agent — not retrying`)
+    this.deps.store.update(task.id, {
+      lastRunAt: Date.now(),
+      consecutiveFailures: task.consecutiveFailures + 1,
+      lastErrorKind: undefined,
+      nextRunAt,
+    })
+    if (task.kind === 'oneshot' && isActive) {
+      this.deps.store.update(task.id, { status: 'failed' }, reason)
+    }
+    this.deps.store.completeRun(run.id, { status: 'failure', error })
+    if (task.notify === 'on_failure' || task.notify === 'always') {
+      await this.notify(task, `Task "${task.name}" ${error}`)
+    }
+    return { ...run, status: 'failure', error, completedAt: Date.now() }
+  }
+
+  /** request_extension / end_task for this run: bounded agent runs only. */
+  private createControls(task: Task, deadline: RunDeadline): TaskControls | undefined {
+    if (task.unbounded || task.name === MAILBOX_TASK_NAME) return undefined
+    const cfg = this.deps.tasksConfig
+    return createTaskControls({
+      sessionId: `task:${task.id}`,
+      taskName: task.name,
+      deadline,
+      extensions: cfg.extensions,
+      policy: {
+        budgetMs: cfg.taskTimeoutMs,
+        maxExtensions: cfg.maxExtensions,
+        maxExtensionRatio: cfg.maxExtensionRatio,
+      },
+      canReport: this.deps.toolExecutor.getDefinitions().some((d) => d.name === 'report'),
+    })
+  }
+
+  /**
+   * Minutes the previous run lasted, when this run should continue it: a bounded task whose
+   * last run hit the wall-clock limit and left a persisted conversation to continue. Undefined
+   * means a fresh run (the fallback whenever there is nothing to resume from).
+   */
+  private timedOutRunToResume(task: Task): number | undefined {
+    const conversations = this.deps.conversationStore
+    if (task.unbounded || !conversations || task.lastErrorKind !== 'timeout') return undefined
+    const last = this.deps.store.getRecentRuns(task.id, 1)[0]
+    if (!last || last.status !== 'failure' || !/^Task timed out after/.test(last.error ?? '')) {
+      return undefined
+    }
+    if (conversations.loadMessages(`task:${task.id}`).length === 0) return undefined
+    const ranMs = (last.completedAt ?? Date.now()) - last.startedAt
+    return Math.max(1, Math.round(ranMs / 60_000))
   }
 
   /**
@@ -517,12 +667,7 @@ export class TaskRunner {
     }
   }
 
-  private async doExecute(
-    task: Task,
-    signal: AbortSignal | undefined,
-    deadline: number,
-    wrapupMarginMs: number,
-  ): Promise<ExecutionOutcome> {
+  private async doExecute(task: Task, plan: ExecutionPlan): Promise<ExecutionOutcome> {
     if (task.name === MAILBOX_TASK_NAME) {
       const content = this.deps.pollMailbox
         ? await this.deps.pollMailbox()
@@ -535,10 +680,10 @@ export class TaskRunner {
       if (!prompt) {
         return { content: 'No unchecked items in HEARTBEAT.md', awaitingInput: false }
       }
-      return this.executePrompt({ ...task, prompt }, signal, deadline, wrapupMarginMs)
+      return this.executePrompt({ ...task, prompt }, plan)
     }
 
-    return this.executePrompt(task, signal, deadline, wrapupMarginMs)
+    return this.executePrompt(task, plan)
   }
 
   /**
@@ -559,12 +704,7 @@ export class TaskRunner {
     return formatStateBrief(content, task.stateFile)
   }
 
-  private async executePrompt(
-    task: Task,
-    signal?: AbortSignal,
-    deadline?: number,
-    wrapupMarginMs?: number,
-  ): Promise<ExecutionOutcome> {
+  private async executePrompt(task: Task, plan: ExecutionPlan): Promise<ExecutionOutcome> {
     const cwd = this.deps.config.workspace.path
     const standup = await gatherStandup(cwd)
 
@@ -607,35 +747,44 @@ export class TaskRunner {
       if (recalled) contextParts.push(recalled)
     }
 
+    const sessionId = `task:${task.id}`
     const deps: AgentLoopDeps = {
       config: this.deps.config,
       toolExecutor: this.deps.toolExecutor,
       localProvider: this.deps.localProvider,
       auxProvider: this.deps.auxProvider,
-      sessionId: `task:${task.id}`,
+      sessionId,
       memory: this.deps.memory,
-      conversationStore:
-        task.persistConversation && this.deps.conversationStore
-          ? this.deps.conversationStore
-          : undefined,
+      conversationStore: this.taskConversationStore(task, sessionId, plan),
       additionalContext: `${TASK_SYSTEM_PROMPT}\n\nTask: ${task.description}\n\n${contextParts.join('\n\n')}`,
       sessionMutex: this.deps.sessionMutex,
     }
 
     const agent = new AgentLoop(deps)
-    const response = await agent.run(task.prompt, {
+    // A run continuing one that hit its time limit opens on the resume note, not the prompt
+    // again: the prompt and everything the first run did are already in the conversation.
+    const message =
+      plan.resumeAfterMinutes !== undefined
+        ? timeoutResumeNudge(plan.resumeAfterMinutes)
+        : task.prompt
+    if (plan.resumeAfterMinutes !== undefined) {
+      log.info('tasks', `Task ${task.name}: resuming the run that hit its time limit`)
+    }
+    const response = await agent.run(message, {
       maxTurns: task.maxTurns ?? 10,
       unbounded: task.unbounded,
       // An unbounded run is the autonomy loop proper: its state lives in NOTES/work by
       // contract, so its context is disposable — recycle it from notes rather than summarize.
       ...(task.unbounded && { contextRollover: true }),
       // consolidationInterval falls through to the instance config default in the loop.
-      signal,
+      signal: plan.signal,
       // Deadline drives the loop's wrap-up warning so the agent winds down before the hard
       // timeout aborts it. Wrap-up is offered on every task; the not-a-failure treatment of an
-      // over-run is unbounded-only (in executeTask's catch).
-      ...(deadline !== undefined && { deadline }),
-      ...(wrapupMarginMs !== undefined && { wrapupMarginMs }),
+      // over-run is unbounded-only (in executeTask's catch). It is a function: an extension
+      // moves it.
+      deadline: plan.deadline,
+      wrapupMarginMs: plan.wrapupMarginMs,
+      ...(plan.extraTools && { extraTools: plan.extraTools }),
     })
 
     if (this.deps.memory) {
@@ -703,6 +852,25 @@ export class TaskRunner {
     }
   }
 
+  /**
+   * Where a task run's conversation is kept. A bounded run always persists when a store exists,
+   * so a run that hits its time limit can be continued instead of redone; without
+   * persist_conversation, a fresh run first clears the previous run's transcript so it still
+   * starts clean. Unbounded runs keep their own setting.
+   */
+  private taskConversationStore(
+    task: Task,
+    sessionId: string,
+    plan: ExecutionPlan,
+  ): ConversationStore | undefined {
+    const store = this.deps.conversationStore
+    if (!store) return undefined
+    if (task.persistConversation) return store
+    if (task.unbounded) return undefined
+    if (plan.resumeAfterMinutes === undefined) store.deleteSession(sessionId)
+    return store
+  }
+
   private shouldNotify(task: Task, resultHash: string): boolean {
     switch (task.notify) {
       case 'always':
@@ -729,12 +897,6 @@ export class TaskRunner {
     } catch (err) {
       log.error('tasks', `Failed to send notification for ${task.name}: ${err}`)
     }
-  }
-
-  private timeout(ms: number): Promise<never> {
-    return new Promise((_, reject) => {
-      setTimeout(() => reject(new Error(`Task timed out after ${ms}ms`)), ms)
-    })
   }
 }
 

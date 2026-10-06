@@ -436,6 +436,9 @@ Optional. Configures the [background task framework](background-tasks.md).
 | `max_active_tasks` | number | `20` | Maximum active tasks at once |
 | `max_concurrent_tasks` | number | `1` | Tasks running simultaneously |
 | `task_timeout_ms` | number | `300000` | Maximum duration per task run (5 min default) |
+| `extensions` | bool | `true` | Offer `request_extension` to bounded task runs; the runner grants it only on evidence of progress (see [background tasks](background-tasks.md#deadlines-resume-extension-clean-stop)) |
+| `max_extensions` | number | `2` | Most extensions one run can be granted |
+| `max_extension_ratio` | number | `1.0` | Total extension per run is capped at `task_timeout_ms` × this |
 | `discovery_enabled` | bool | `true` | Agent looks for useful work during idle time |
 | `discovery_interval_ms` | number | `1800000` | Time between discovery runs (30 min default) |
 | `idle_threshold_ms` | number | `600000` | Idle time before discovery kicks in (10 min default) |

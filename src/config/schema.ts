@@ -424,6 +424,11 @@ const baseProperties = {
       // Post-run self-review for unbounded tasks: a restricted fork (skill/memory tools only)
       // reviews the run digest and patches skills / stores lessons autonomously.
       self_review: Type.Boolean({ default: true }),
+      // Deadline extensions for bounded task runs: request_extension, granted by the runner
+      // only on evidence of progress. Total extension ≤ task_timeout_ms × max_extension_ratio.
+      extensions: Type.Boolean({ default: true }),
+      max_extensions: Type.Number({ default: 2 }),
+      max_extension_ratio: Type.Number({ default: 1.0 }),
       discovery_enabled: Type.Boolean({ default: true }),
       discovery_interval_ms: Type.Number({ default: 1800000 }),
       idle_threshold_ms: Type.Number({ default: 600000 }),
@@ -824,6 +829,10 @@ export interface RuntimeConfig {
     taskTimeoutMs: number
     /** Post-run self-review pass for unbounded tasks. */
     selfReview: boolean
+    /** Offer request_extension to bounded task runs. */
+    extensions: boolean
+    maxExtensions: number
+    maxExtensionRatio: number
     discoveryEnabled: boolean
     discoveryIntervalMs: number
     idleThresholdMs: number
