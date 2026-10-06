@@ -28,6 +28,7 @@ import {
   callerFor,
   registerApplicationCommands,
 } from './discord-commands'
+import { type DiscordFile, withImages } from './discord-images'
 import { deliver, runTurn } from './spine'
 import type { ChatChannel } from './types'
 
@@ -38,6 +39,7 @@ export interface DiscordConfig {
   ownerUsers: string[] // User IDs who may run owner-only commands
   passiveChannels: string[] // Channel IDs to passively monitor (respond without being tagged)
   batchWindowMs: number // Debounce window before evaluating a batch (ms)
+  attachImagesFrom?: string[] // URL prefixes whose markdown images are uploaded as attachments
 }
 
 const DISCORD_MAX_MESSAGE_LENGTH = 2000
@@ -316,6 +318,15 @@ export class DiscordChannel implements ChatChannel {
     this.processing = false
   }
 
+  /** A reply chunk, with allowed markdown images uploaded as attachments (see discord-images). */
+  private async payload(
+    chunk: string,
+  ): Promise<string | { content?: string; files: DiscordFile[] }> {
+    const p = await withImages(chunk, this.config.attachImagesFrom ?? [])
+    if (p.files.length === 0) return chunk
+    return { ...(p.content ? { content: p.content } : {}), files: p.files }
+  }
+
   private async processMessage(message: Message, content: string): Promise<void> {
     log.info('discord', `Message from ${message.author.tag}: ${content.slice(0, 100)}...`)
 
@@ -335,9 +346,9 @@ export class DiscordChannel implements ChatChannel {
         send: async (chunk) => {
           if (!replied) {
             replied = true
-            await message.reply(chunk)
+            await message.reply(await this.payload(chunk))
           } else if ('send' in channel) {
-            await channel.send(chunk)
+            await channel.send(await this.payload(chunk))
           }
         },
         // Discord has no explicit "stopped typing"; the indicator lapses once a message lands.
@@ -390,8 +401,8 @@ export class DiscordChannel implements ChatChannel {
         send: async (chunk) => {
           if (first) {
             first = false
-            await interaction.editReply(chunk)
-          } else await interaction.followUp(chunk)
+            await interaction.editReply(await this.payload(chunk))
+          } else await interaction.followUp(await this.payload(chunk))
         },
       },
       text,
@@ -479,7 +490,7 @@ export class DiscordChannel implements ChatChannel {
           {
             maxLength: DISCORD_MAX_MESSAGE_LENGTH,
             send: async (chunk) => {
-              await channel.send(chunk)
+              await channel.send(await this.payload(chunk))
             },
           },
           message,

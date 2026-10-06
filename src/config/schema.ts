@@ -164,6 +164,9 @@ const baseProperties = {
           owner_users: Type.Array(Type.String(), { default: [] }),
           passive_channels: Type.Array(Type.String(), { default: [] }),
           batch_window_ms: Type.Number({ default: 3000 }),
+          // URL prefixes whose markdown images are uploaded as attachments (e.g. a loopback image
+          // server Discord cannot reach). Empty: images stay as links.
+          attach_images_from: Type.Array(Type.String(), { default: [] }),
         }),
       ),
       claude_code: Type.Optional(
@@ -634,6 +637,7 @@ export interface RuntimeConfig {
       ownerUsers: string[]
       passiveChannels: string[]
       batchWindowMs: number
+      attachImagesFrom: string[]
     }
     claudeCode?: {
       permissionMode: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan'
