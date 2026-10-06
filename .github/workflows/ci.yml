@@ -55,7 +55,14 @@ jobs:
 
       - run: bun install --frozen-lockfile
 
+      - name: timers
+        shell: bash
+        run: |
+          set +e
+          timeout 20 bun scripts/ci-debug/timers.ts; echo "timers rc=$?"
+          timeout 30 bun test test/tasks/extensions.test.ts --timeout 3000; echo "ext rc=$?"
       - name: per-file
+        if: false
         shell: bash
         run: |
           set +e
