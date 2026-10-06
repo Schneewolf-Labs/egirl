@@ -124,15 +124,15 @@ describe('buildSystemPrompt', () => {
     expect(parts.stable).toContain('read_file')
   })
 
-  test('volatile is empty when no memory or additional context', () => {
+  test('volatile holds only the date when no memory or additional context', () => {
     const workspace = makeTempWorkspace()
     writeFileSync(join(workspace, 'IDENTITY.md'), 'I am Kira')
 
     const config = makeConfig(workspace)
-    const parts = buildSystemPrompt(config)
+    const parts = buildSystemPrompt(config, { now: new Date(2026, 9, 6) })
 
-    expect(parts.volatile).toBe('')
-    expect(parts.full).toBe(parts.stable)
+    expect(parts.volatile).toBe('Current date: 2026-10-06 (Tuesday)')
+    expect(parts.full.startsWith(parts.stable)).toBe(true)
   })
 
   test('additional context is classified as volatile', () => {

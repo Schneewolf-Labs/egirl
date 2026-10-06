@@ -37,6 +37,8 @@ function loadWorkspaceFile(workspaceDir: string, filename: string): string {
 export interface SystemPromptOptions {
   skills?: Skill[]
   additionalContext?: string
+  /** Clock for the date line; tests pin it. */
+  now?: Date
 }
 
 export interface SystemPromptParts {
@@ -151,12 +153,18 @@ Use tools proactively to gather information rather than asking. Use git tools di
 
   const allSections = [...stableSections, ...volatileSections]
 
+  // Today's date. Without it the model dates changelogs, notes and reports by guesswork (a
+  // deployment shipped a release section dated eleven days early and a report dated six weeks
+  // late on the same day). Volatile, so it sits after the cached stable prefix.
+  const dateLine = `Current date: ${formatCurrentDate(options.now ?? new Date())}`
+
   // Fallback if no personality files loaded
   if (allSections.length === 1) {
     log.warn('context', 'No personality files found, using minimal prompt')
-    const full = `You are Kira, a helpful AI assistant. Be concise, direct, and use tools when needed.\n\n${allSections[0]}`
-    return { full, stable: full, volatile: '' }
+    const stable = `You are Kira, a helpful AI assistant. Be concise, direct, and use tools when needed.\n\n${allSections[0]}`
+    return { full: `${stable}\n\n---\n\n${dateLine}`, stable, volatile: dateLine }
   }
+  volatileSections.push(dateLine)
 
   const separator = '\n\n---\n\n'
   const stable = stableSections.join(separator)
@@ -164,6 +172,15 @@ Use tools proactively to gather information rather than asking. Use git tools di
   const full = volatile ? `${stable}${separator}${volatile}` : stable
 
   return { full, stable, volatile }
+}
+
+/** "2026-10-06 (Tuesday)" in the local timezone: what a person means by "today". */
+export function formatCurrentDate(now: Date): string {
+  const y = now.getFullYear()
+  const m = String(now.getMonth() + 1).padStart(2, '0')
+  const d = String(now.getDate()).padStart(2, '0')
+  const weekday = now.toLocaleDateString('en-US', { weekday: 'long' })
+  return `${y}-${m}-${d} (${weekday})`
 }
 
 /**
