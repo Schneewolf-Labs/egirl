@@ -493,6 +493,7 @@ export function loadConfig(options: LoadConfigOptions = {}): RuntimeConfig {
       ownerUsers: toml.channels.discord.owner_users ?? [],
       passiveChannels: toml.channels.discord.passive_channels ?? [],
       batchWindowMs: toml.channels.discord.batch_window_ms ?? 3000,
+      attachImagesFrom: toml.channels.discord.attach_images_from ?? [],
     }
   }
 

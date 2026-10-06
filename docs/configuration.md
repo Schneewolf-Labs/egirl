@@ -117,6 +117,7 @@ Required only when running `discord` (or `serve`). The Discord token itself goes
 | `owner_users` | string[] | `[]` | User IDs who may run commands a skill marks `permission: owner`. Not implied by `allowed_users` |
 | `passive_channels` | string[] | `[]` | Channels where the bot lurks — reads but only responds when a batch evaluator decides it's relevant |
 | `batch_window_ms` | number | `3000` | Debounce window for grouping consecutive messages before responding |
+| `attach_images_from` | string[] | `[]` | URL prefixes whose markdown images in a reply are uploaded as attachments (e.g. `["http://127.0.0.1:8300/images/"]` for an image server Discord cannot reach). Only these are fetched, since replies are model output; empty leaves images as links |
 
 ### `[channels.claude_code]`
 
