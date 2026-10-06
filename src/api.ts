@@ -92,6 +92,8 @@ export interface APIDeps {
      */
     loadMessages(sessionId: string): ChatMessage[]
     loadSummary(sessionId: string): string | undefined
+    /** Forget a session on disk; true when there was one. */
+    deleteSession(sessionId: string): boolean
   }
 }
 
@@ -970,7 +972,10 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
             agent.resetSession()
             deps.agents.delete(sessionId)
           }
-          return json({ ok: true })
+          // The store too: after a restart nothing is cached, and a session left on disk is
+          // reloaded by the next turn as if it had never been forgotten.
+          const stored = deps.conversationStore?.deleteSession(sessionId) ?? false
+          return json({ ok: true, deleted: !!agent || stored })
         }
 
         // --- Memory ---

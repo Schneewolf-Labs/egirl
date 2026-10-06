@@ -82,6 +82,11 @@ describe('sessions over the API', () => {
           ]
         : [],
     loadSummary: () => undefined,
+    deleted: [] as string[],
+    deleteSession(id: string) {
+      this.deleted.push(id)
+      return id === 'cli:default'
+    },
   }
 
   const deps: APIDeps = {
@@ -154,6 +159,31 @@ describe('sessions over the API', () => {
     } finally {
       agents.delete('cli:default')
     }
+  })
+
+  test('DELETE forgets a persisted session even when no agent is cached', async () => {
+    // Found live: after an egirl restart the agents map is empty, so DELETE answered ok and
+    // cleared nothing -- the next turn reloaded the old history from disk.
+    store.deleted.length = 0
+    const res = await fetch(`${base}/sessions/cli:default`, { method: 'DELETE' })
+    expect(await res.json()).toEqual({ ok: true, deleted: true })
+    expect(store.deleted).toEqual(['cli:default'])
+    expect(agents.has('cli:default')).toBe(false)
+  })
+
+  test('DELETE resets a cached agent and drops it; an unknown session reports nothing deleted', async () => {
+    let reset = 0
+    const live = gatedAgent('api:live', order)
+    live.resetSession = () => {
+      reset++
+    }
+    agents.set('api:live', live)
+    const res = await fetch(`${base}/sessions/api:live`, { method: 'DELETE' })
+    expect(await res.json()).toEqual({ ok: true, deleted: true })
+    expect(reset).toBe(1)
+    expect(agents.has('api:live')).toBe(false)
+    const none = await fetch(`${base}/sessions/typo:nope`, { method: 'DELETE' })
+    expect(await none.json()).toEqual({ ok: true, deleted: false })
   })
 
   test('a session nobody has heard of is still a 404', async () => {
