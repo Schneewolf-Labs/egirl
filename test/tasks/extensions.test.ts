@@ -100,7 +100,13 @@ describe('RunDeadline', () => {
     expect(deadline.at).toBe(firstAt + 300)
     await Bun.sleep(200)
     expect(aborted).toBe(0)
-    await expect(deadline.expired).rejects.toThrow('Task timed out after 400ms')
+    // Settle first, then assert: `await expect(pending).rejects` hangs bun test on Windows.
+    const err = await deadline.expired.then(
+      () => undefined,
+      (e: unknown) => e,
+    )
+    expect(err).toBeInstanceOf(Error)
+    expect((err as Error).message).toBe('Task timed out after 400ms')
     expect(aborted).toBe(1)
     expect(deadline.extend(100)).toBe(false)
   })
