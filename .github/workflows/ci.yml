@@ -35,7 +35,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [windows-latest]
-        ref: [32278b7, 8ec7e96]
+        ref: [32278b754afaae25ddc5ef7ef8fe999233f32cc7, 8ec7e96f6678edb4f62fd702caa043fb53011cca]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 25
 
