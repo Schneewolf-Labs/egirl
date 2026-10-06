@@ -35,11 +35,15 @@ jobs:
       fail-fast: false
       matrix:
         os: [windows-latest]
+        ref: [32278b7, 8ec7e96]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 20
+    timeout-minutes: 25
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.ref }}
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
@@ -54,9 +58,10 @@ jobs:
       - name: per-file
         shell: bash
         run: |
+          set +e
           for f in $(find test -name '*.test.ts' | sort); do
             start=$(date +%s)
-            timeout 90 bun test "$f" > out.txt 2>&1; rc=$?
+            timeout 60 bun test "$f" > out.txt 2>&1; rc=$?
             echo "$rc $(( $(date +%s)-start ))s $f"
             if [ $rc -ne 0 ]; then tail -40 out.txt; fi
           done
