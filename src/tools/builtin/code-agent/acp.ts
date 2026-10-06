@@ -79,11 +79,15 @@ export async function decideAcpPermission(
   })
 
   if (decision.action === 'ask_user') return { escalate: decision.reason }
+  if (decision.action === 'allow') return answer(true)
   if (decision.action === 'choose') {
+    // A choice that names no offered option is malformed: deny, as the codex backend does.
     const chosen = options.find((o) => o.optionId === decision.optionId)
-    if (chosen) return answer(chosen.kind.startsWith('allow'))
+    if (!chosen) log.warn('code-agent', `acp supervisor chose unknown option; denying`)
+    return answer(chosen !== undefined && ALLOW.includes(chosen.kind))
   }
-  return answer(decision.action === 'allow' || decision.action === 'choose')
+  // deny, and anything unrecognised, fails closed.
+  return answer(false)
 }
 
 export async function runAcpSession(

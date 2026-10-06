@@ -1,8 +1,9 @@
 import { describe, expect, test } from 'bun:test'
 import * as acp from '@agentclientprotocol/sdk'
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { PermissionSupervisor } from '../../src/permissions/supervisor'
+import { type PermissionDecision, PermissionSupervisor } from '../../src/permissions/supervisor'
 import { runAcpSession } from '../../src/tools/builtin/code-agent/acp'
 import { shouldFailover } from '../../src/tools/builtin/code-agent/failover'
 import type { CodeAgentConfig } from '../../src/tools/builtin/code-agent/types'
@@ -103,6 +104,38 @@ describe('acp code agent: permission requests', () => {
     expect(result.output).toContain('needs user approval')
   })
 
+  test('a choose naming an option that was not offered is a deny, not an allow', async () => {
+    const answering = supervisor('allow')
+    answering.decide = async (): Promise<PermissionDecision> => ({
+      action: 'choose',
+      optionId: 'no-such-option',
+      reason: 'malformed',
+      confidence: 1,
+    })
+    const result = await run({ permissionSupervisor: answering })
+    expect(result.success).toBe(true)
+    expect(result.output).toStartWith('no')
+  })
+
+  test('a choose with no option id at all is a deny', async () => {
+    const answering = supervisor('allow')
+    answering.decide = async (): Promise<PermissionDecision> => ({
+      action: 'choose',
+      reason: 'malformed',
+      confidence: 1,
+    })
+    const result = await run({ permissionSupervisor: answering })
+    expect(result.output).toStartWith('no')
+  })
+
+  test('an unrecognised decision action fails closed', async () => {
+    const answering = supervisor('allow')
+    answering.decide = async (): Promise<PermissionDecision> =>
+      ({ action: 'approve', reason: 'bogus', confidence: 1 }) as unknown as PermissionDecision
+    const result = await run({ permissionSupervisor: answering })
+    expect(result.output).toStartWith('no')
+  })
+
   test('without an active supervisor, permission_mode decides', async () => {
     const inactive = supervisor('deny', 'bypass')
     expect(
@@ -178,6 +211,44 @@ describe('acp code agent: failures', () => {
     expect(result.output).toContain('timed out after 1s')
     expect(Date.now() - started).toBeLessThan(5000)
   })
+
+  test('a timeout returns promptly even when an escaped grandchild holds stdout open', async () => {
+    // Before the fix the backend waited for the stdout pipe to close, i.e. for the grandchild's
+    // 8s sleep: a 1s timeout took ~8.2s.
+    const dir = mkdtempSync(join(tmpdir(), 'egirl-acp-'))
+    const pidFile = join(dir, 'grandchild.pid')
+    const started = Date.now()
+    try {
+      const result = await runAcpSession(
+        {
+          permissionMode: 'default',
+          workingDir: tmpdir(),
+          acpCommand: [
+            process.execPath,
+            join(import.meta.dir, '..', 'fixtures', 'acp-escaped-child-agent.ts'),
+            pidFile,
+          ],
+          timeoutMs: 1000,
+        },
+        'Hang',
+        tmpdir(),
+      )
+      const elapsed = Date.now() - started
+      expect(result.success).toBe(false)
+      expect(result.output).toContain('timed out after 1s')
+      // timeout (1s) + cancel grace (1s) + kill grace, well short of the grandchild's 8s.
+      expect(elapsed).toBeLessThan(4500)
+    } finally {
+      if (existsSync(pidFile)) {
+        try {
+          process.kill(Number(readFileSync(pidFile, 'utf8')))
+        } catch {
+          // already gone
+        }
+      }
+      rmSync(dir, { recursive: true, force: true })
+    }
+  }, 15_000)
 
   test('an agent binary that does not exist fails over', async () => {
     const result = await runAcpSession(
