@@ -57,9 +57,10 @@ function fakeServer(gaps: number[], sendProgress: boolean, seen: Record<string, 
 describe('prefill progress and the stale-stream timer', () => {
   test('progress chunks keep a long prefill alive, and the request asks for them', async () => {
     const seen: Record<string, unknown>[] = []
-    // 5 × 80 ms of prefill = 400 ms of no tokens, against a 200 ms stale timeout.
-    const url = fakeServer([80, 80, 80, 80, 80], true, seen)
-    const provider = new LlamaCppProvider(url, 'plain-test-model', 200)
+    // 5 × 300 ms of prefill = 1.5 s of no tokens, against a 1 s stale timeout. The margin per
+    // gap is wide on purpose: Windows loopback can hold a small write back ~200 ms.
+    const url = fakeServer([300, 300, 300, 300, 300], true, seen)
+    const provider = new LlamaCppProvider(url, 'plain-test-model', 1000)
     const res = await provider.chat({ messages: [{ role: 'user', content: 'hi' }] })
     expect(res.content).toBe('answer')
     expect(seen[0]?.return_progress).toBe(true)
@@ -67,8 +68,8 @@ describe('prefill progress and the stale-stream timer', () => {
 
   test('the same silence without progress chunks is still treated as a stall', async () => {
     const seen: Record<string, unknown>[] = []
-    const url = fakeServer([80, 80, 80, 80, 80], false, seen)
-    const provider = new LlamaCppProvider(url, 'plain-test-model', 200)
+    const url = fakeServer([300, 300, 300, 300, 300], false, seen)
+    const provider = new LlamaCppProvider(url, 'plain-test-model', 1000)
     const res = await provider.chat({ messages: [{ role: 'user', content: 'hi' }] })
     expect(res.content).not.toBe('answer')
   })
