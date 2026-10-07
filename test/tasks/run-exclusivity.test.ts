@@ -282,7 +282,7 @@ describe('several processes on one tasks.db', () => {
     })
     for (const r of runners) r.start()
     // Three 60 ms runs one at a time, with tick slack.
-    for (let i = 0; i < 100 && ids.some((id) => store.getRecentRuns(id).length === 0); i++) {
+    for (let i = 0; i < 300 && ids.some((id) => store.getRecentRuns(id).length === 0); i++) {
       await Bun.sleep(20)
     }
     await Bun.sleep(100)
@@ -353,7 +353,7 @@ describe('several processes on one tasks.db', () => {
     const aStore = createTaskStore(dbPath)
     const a = make(aStore, provider)
     a.start()
-    for (let i = 0; i < 50 && store.getRecentRuns(first.id).length === 0; i++) await Bun.sleep(10)
+    for (let i = 0; i < 300 && store.getRecentRuns(first.id).length === 0; i++) await Bun.sleep(10)
     // Process exit: stop the runner, then close its store, before the aborted run settles.
     a.stop()
     aStore.close()
@@ -369,7 +369,7 @@ describe('several processes on one tasks.db', () => {
       chat: async () => stubResponse({ content: 'done' }),
     })
     b.start()
-    for (let i = 0; i < 50 && store.getRecentRuns(next.id).length === 0; i++) await Bun.sleep(10)
+    for (let i = 0; i < 300 && store.getRecentRuns(next.id).length === 0; i++) await Bun.sleep(10)
     b.stop()
     expect(store.getRecentRuns(next.id).length).toBe(1)
   })
@@ -410,8 +410,9 @@ describe('several processes on one tasks.db', () => {
     }
     const x = make('x')
     runner.start()
-    for (let i = 0; i < 50 && store.getRecentRuns(x).length === 0; i++) await Bun.sleep(10)
-    await Bun.sleep(30)
+    // Wait on the condition, not a fixed delay: the Windows runner is much slower.
+    for (let i = 0; i < 300 && store.getRecentRuns(x).length === 0; i++) await Bun.sleep(10)
+    for (let i = 0; i < 300 && runner.getRunningTaskIds().length > 0; i++) await Bun.sleep(10)
     expect(runner.getRunningTaskIds()).toEqual([])
     // The unreleased lease stays in the store until it expires; simulate that, so what's left
     // to test is the local slot: with max 1, a leaked slot would stop y from ever starting.
@@ -419,7 +420,7 @@ describe('several processes on one tasks.db', () => {
       'UPDATE tasks SET lease_until = NULL',
     )
     const y = make('y')
-    for (let i = 0; i < 50 && store.getRecentRuns(y).length === 0; i++) await Bun.sleep(10)
+    for (let i = 0; i < 300 && store.getRecentRuns(y).length === 0; i++) await Bun.sleep(10)
     runner.stop()
     expect(store.getRecentRuns(y).length).toBe(1)
   })
