@@ -566,3 +566,24 @@ describe('where the tools exist', () => {
     expect(count(2)).toBe(2) // nearing again: warned a second time
   })
 })
+
+describe('empty final answer', () => {
+  test('fails a one-shot task instead of retiring it as done', async () => {
+    const provider = scripted([call('noop', { n: 1 }), { response: { content: '' } }], [])
+    const { runner, store } = makeRunner({ provider })
+    const task = createTask(store)
+
+    const run = await runner.runNow(task.id)
+    expect(run?.status).toBe('failure')
+    expect(run?.error).toContain('without a final answer')
+    expect(store.get(task.id)?.status).not.toBe('done')
+  })
+
+  test('a recurring task may still end quietly', async () => {
+    const provider = scripted([{ response: { content: '' } }], [])
+    const { runner, store } = makeRunner({ provider })
+    const task = createTask(store, 'scheduled')
+
+    expect((await runner.runNow(task.id))?.status).toBe('success')
+  })
+})

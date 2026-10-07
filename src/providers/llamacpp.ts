@@ -286,6 +286,11 @@ export class LlamaCppProvider implements LLMProvider {
         // which throws off the token-budget and context-pressure accounting downstream. The
         // non-streaming path got usage for free in its response body.
         ...(shouldStream && { stream_options: { include_usage: true } }),
+        // Stream prompt-processing progress too. A cold prompt on slow hardware can prefill for
+        // minutes with no token, which the stale-stream timer would otherwise take for a hang
+        // (a 15k-token prompt at ~90 tok/s is ~170 s, before any thinking). Servers that don't
+        // know the field ignore it.
+        ...(shouldStream && { return_progress: true }),
         // The template variable Qwen3-class templates read. llama.cpp only passes template
         // variables from chat_template_kwargs; a top-level enable_thinking is silently ignored,
         // and the template's default is thinking ON -- so `off` was never off. Verified against
@@ -583,7 +588,12 @@ export class LlamaCppProvider implements LLMProvider {
               usage?: { prompt_tokens: number; completion_tokens: number }
               model?: string
               timings?: LlamaCppTimings
+              prompt_progress?: { total: number; processed: number }
             }
+
+            // Prefill progress (requested with return_progress): the server is working through
+            // the prompt, which is not a stalled stream.
+            if (parsed.prompt_progress) resetStaleTimer()
 
             if (parsed.usage) usage = parsed.usage
             if (parsed.model) model = parsed.model
