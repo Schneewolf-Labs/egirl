@@ -305,9 +305,123 @@ describe('several processes on one tasks.db', () => {
     // a's process died without releasing: once its lease has passed, b can go.
     expect(store.claimDue(b.id, 1000, 9000, limit(6000))).toBe(true)
     // b finishes normally and releases at once.
-    store.releaseLease(b.id)
+    store.releaseLease(b.id, 9000)
     store.update(a.id, { nextRunAt: 7000 })
     expect(store.claimDue(a.id, 7000, 12000, limit(7000))).toBe(true)
+  })
+
+  test('a release clears only the lease that run claimed, not a newer one', () => {
+    const workspace = mkdtempSync(join(tmpdir(), 'egirl-claim-'))
+    const store = createTaskStore(join(workspace, 'tasks.db'))
+    const a = createTask(store, 'a')
+    const b = createTask(store, 'b')
+    store.update(a.id, { status: 'active', nextRunAt: 1000 })
+    store.update(b.id, { status: 'active', nextRunAt: 1000 })
+    const limit = (now: number) => ({ now, maxConcurrent: 1 })
+    expect(store.claimDue(a.id, 1000, 5000, limit(1000))).toBe(true)
+    // The first lease ran out and another process re-claimed a.
+    expect(store.claimDue(a.id, 5000, 20000, limit(6000))).toBe(true)
+    // The first run's late release must not clear the second claim's lease.
+    store.releaseLease(a.id, 5000)
+    expect(store.claimDue(b.id, 1000, 30000, limit(7000))).toBe(false)
+  })
+
+  test('stopping a runner gives its places back before shutdown closes the store', async () => {
+    const workspace = mkdtempSync(join(tmpdir(), 'egirl-claim-'))
+    const config = makeConfig(workspace)
+    const dbPath = join(workspace, 'tasks.db')
+    const { provider, open } = gatedProvider()
+    const tasksConfig = {
+      ...config.tasks,
+      taskTimeoutMs: 300_000,
+      tickIntervalMs: 10,
+      maxConcurrentTasks: 1,
+    }
+    const make = (store: TaskStore, localProvider: LLMProvider) =>
+      createTaskRunner({
+        config,
+        tasksConfig,
+        store,
+        toolExecutor: createToolExecutor(),
+        localProvider,
+        memory: undefined,
+        outbound: new Map(),
+      })
+    const store = createTaskStore(dbPath)
+    const first = createTask(store, 'stuck')
+    store.update(first.id, { status: 'active', nextRunAt: Date.now() })
+    const aStore = createTaskStore(dbPath)
+    const a = make(aStore, provider)
+    a.start()
+    for (let i = 0; i < 50 && store.getRecentRuns(first.id).length === 0; i++) await Bun.sleep(10)
+    // Process exit: stop the runner, then close its store, before the aborted run settles.
+    a.stop()
+    aStore.close()
+    open()
+    await Bun.sleep(30)
+
+    // A fresh process must be able to run a different due task right away, not after the
+    // stopped process's lease (here 10+ minutes) runs out.
+    const next = createTask(store, 'next')
+    store.update(next.id, { status: 'active', nextRunAt: Date.now() })
+    const b = make(createTaskStore(dbPath), {
+      name: 'stub',
+      chat: async () => stubResponse({ content: 'done' }),
+    })
+    b.start()
+    for (let i = 0; i < 50 && store.getRecentRuns(next.id).length === 0; i++) await Bun.sleep(10)
+    b.stop()
+    expect(store.getRecentRuns(next.id).length).toBe(1)
+  })
+
+  test('a store that throws on release does not leak the local slot', async () => {
+    const workspace = mkdtempSync(join(tmpdir(), 'egirl-claim-'))
+    const config = makeConfig(workspace)
+    const store = createTaskStore(join(workspace, 'tasks.db'))
+    store.releaseLease = () => {
+      throw new Error('database is locked')
+    }
+    const runner = createTaskRunner({
+      config,
+      tasksConfig: {
+        ...config.tasks,
+        taskTimeoutMs: 300_000,
+        tickIntervalMs: 10,
+        maxConcurrentTasks: 1,
+      },
+      store,
+      toolExecutor: createToolExecutor(),
+      localProvider: { name: 'stub', chat: async () => stubResponse({ content: 'done' }) },
+      memory: undefined,
+      outbound: new Map(),
+    })
+    const make = (name: string) => {
+      const t = store.create({
+        name,
+        description: name,
+        kind: 'oneshot',
+        prompt: 'go',
+        channel: 'api',
+        channelTarget: 'api:default',
+        createdBy: 'user',
+      })
+      store.update(t.id, { status: 'active', nextRunAt: Date.now() })
+      return t.id
+    }
+    const x = make('x')
+    runner.start()
+    for (let i = 0; i < 50 && store.getRecentRuns(x).length === 0; i++) await Bun.sleep(10)
+    await Bun.sleep(30)
+    expect(runner.getRunningTaskIds()).toEqual([])
+    // The unreleased lease stays in the store until it expires; simulate that, so what's left
+    // to test is the local slot: with max 1, a leaked slot would stop y from ever starting.
+    ;(store as unknown as { db: { run: (sql: string) => void } }).db.run(
+      'UPDATE tasks SET lease_until = NULL',
+    )
+    const y = make('y')
+    for (let i = 0; i < 50 && store.getRecentRuns(y).length === 0; i++) await Bun.sleep(10)
+    runner.stop()
+    expect(store.getRecentRuns(y).length).toBe(1)
   })
 
   test('a claim only succeeds against the next_run_at it saw', () => {

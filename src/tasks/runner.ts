@@ -126,6 +126,8 @@ export class TaskRunner {
   private tickTimer: ReturnType<typeof setInterval> | undefined
   private runningCount = 0
   private runningTasks: Map<string, { controller: AbortController }> = new Map()
+  /** Leases this process holds on the shared store (task id → the lease_until it claimed). */
+  private leases: Map<string, number> = new Map()
   /** Running tasks whose session got a reply mid-run; see noteReply(). */
   private repliedDuringRun = new Set<string>()
   private lastInteractionAt: number = Date.now()
@@ -175,6 +177,9 @@ export class TaskRunner {
       entry.controller.abort('shutdown')
     }
     this.runningTasks.clear()
+    // Give our places back now: the aborted runs settle after the store may already be closed,
+    // and a lease left behind would hold a place against the next process until it expired.
+    for (const taskId of [...this.leases.keys()]) this.releaseLeaseOf(taskId)
 
     log.info('tasks', 'Task runner stopped')
   }
@@ -318,10 +323,23 @@ export class TaskRunner {
       ) {
         continue
       }
+      this.leases.set(task.id, leaseUntil)
 
       this.executeTask(task).catch((err) =>
         log.error('tasks', `Scheduled task ${task.id} failed: ${err}`),
       )
+    }
+  }
+
+  /** Release the shared-store lease this process claimed for `taskId`, if any. Never throws. */
+  private releaseLeaseOf(taskId: string): void {
+    const leaseUntil = this.leases.get(taskId)
+    if (leaseUntil === undefined) return
+    this.leases.delete(taskId)
+    try {
+      this.deps.store.releaseLease(taskId, leaseUntil)
+    } catch (err) {
+      log.warn('tasks', `Could not release the lease on ${taskId} (it expires on its own): ${err}`)
     }
   }
 
@@ -451,11 +469,12 @@ export class TaskRunner {
       // task's transcript; freeing the slot at the timeout let the next tick start a second
       // execution beside it. Model: formal/TaskRunner.tla (OneLiveExecution).
       const release = () => {
-        this.deps.store.releaseLease(task.id)
         controls?.dispose()
         this.runningCount--
         this.runningTasks.delete(task.id)
         this.repliedDuringRun.delete(task.id)
+        // Last, and never throwing: a locked or closed store must not leak the local slot.
+        this.releaseLeaseOf(task.id)
       }
       execution.then(release, release)
     }

@@ -442,9 +442,16 @@ export class TaskStore {
     return result.changes === 1
   }
 
-  /** End a claim's lease when its run finishes. A process that dies keeps the lease until it expires. */
-  releaseLease(id: string): void {
-    this.db.run('UPDATE tasks SET lease_until = NULL WHERE id = ?', [id])
+  /**
+   * End a claim's lease when its run finishes. Only the lease this claim took: if the task has
+   * since been claimed again (by another process, after this lease ran out), that newer lease
+   * is not ours to clear. A process that dies keeps its lease until it expires.
+   */
+  releaseLease(id: string, leaseUntil: number): void {
+    this.db.run('UPDATE tasks SET lease_until = NULL WHERE id = ? AND lease_until = ?', [
+      id,
+      leaseUntil,
+    ])
   }
 
   /** Get tasks that depend on a given task ID */
