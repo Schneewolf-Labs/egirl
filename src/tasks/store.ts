@@ -195,6 +195,7 @@ export class TaskStore {
       ['max_turns', 'ALTER TABLE tasks ADD COLUMN max_turns INTEGER'],
       ['unbounded', 'ALTER TABLE tasks ADD COLUMN unbounded INTEGER DEFAULT 0'],
       ['state_file', 'ALTER TABLE tasks ADD COLUMN state_file TEXT'],
+      ['lease_until', 'ALTER TABLE tasks ADD COLUMN lease_until INTEGER'],
     ]
 
     for (const [col, sql] of migrations) {
@@ -415,12 +416,42 @@ export class TaskStore {
    * next_run_at past the run's hard timeout, so a process that dies mid-run leaves the task due
    * again when the lease runs out; a run that ends normally sets next_run_at itself.
    */
-  claimDue(id: string, seenNextRunAt: number, leaseUntil: number): boolean {
+  claimDue(
+    id: string,
+    seenNextRunAt: number,
+    leaseUntil: number,
+    limit?: { now: number; maxConcurrent: number },
+  ): boolean {
+    if (!limit) {
+      const result = this.db.run(
+        "UPDATE tasks SET next_run_at = ?, lease_until = ? WHERE id = ? AND status = 'active' AND next_run_at = ?",
+        [leaseUntil, leaseUntil, id, seenNextRunAt],
+      )
+      return result.changes === 1
+    }
+    // `[tasks] max_concurrent_tasks` is a limit for the instance, not for each process: with
+    // serve and api both running a runner, a per-process count let two tasks run side by side
+    // on one model (and in one working tree). Count live leases across every process in the
+    // same statement as the claim, so two runners can't both take the last free place.
     const result = this.db.run(
-      "UPDATE tasks SET next_run_at = ? WHERE id = ? AND status = 'active' AND next_run_at = ?",
-      [leaseUntil, id, seenNextRunAt],
+      `UPDATE tasks SET next_run_at = ?, lease_until = ?
+       WHERE id = ? AND status = 'active' AND next_run_at = ?
+         AND (SELECT COUNT(*) FROM tasks WHERE lease_until > ?) < ?`,
+      [leaseUntil, leaseUntil, id, seenNextRunAt, limit.now, limit.maxConcurrent],
     )
     return result.changes === 1
+  }
+
+  /**
+   * End a claim's lease when its run finishes. Only the lease this claim took: if the task has
+   * since been claimed again (by another process, after this lease ran out), that newer lease
+   * is not ours to clear. A process that dies keeps its lease until it expires.
+   */
+  releaseLease(id: string, leaseUntil: number): void {
+    this.db.run('UPDATE tasks SET lease_until = NULL WHERE id = ? AND lease_until = ?', [
+      id,
+      leaseUntil,
+    ])
   }
 
   /** Get tasks that depend on a given task ID */
