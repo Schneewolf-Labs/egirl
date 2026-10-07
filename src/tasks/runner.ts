@@ -311,7 +311,10 @@ export class TaskRunner {
       const leaseUntil = Date.now() + this.maxRunMs() + CLAIM_LEASE_MARGIN_MS
       if (
         task.nextRunAt === undefined ||
-        !this.deps.store.claimDue(task.id, task.nextRunAt, leaseUntil)
+        !this.deps.store.claimDue(task.id, task.nextRunAt, leaseUntil, {
+          now: Date.now(),
+          maxConcurrent,
+        })
       ) {
         continue
       }
@@ -448,6 +451,7 @@ export class TaskRunner {
       // task's transcript; freeing the slot at the timeout let the next tick start a second
       // execution beside it. Model: formal/TaskRunner.tla (OneLiveExecution).
       const release = () => {
+        this.deps.store.releaseLease(task.id)
         controls?.dispose()
         this.runningCount--
         this.runningTasks.delete(task.id)

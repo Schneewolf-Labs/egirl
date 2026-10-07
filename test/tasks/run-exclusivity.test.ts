@@ -234,6 +234,82 @@ describe('several processes on one tasks.db', () => {
     expect(calls).toBe(1)
   })
 
+  test('max_concurrent_tasks holds across runners, not per runner', async () => {
+    const workspace = mkdtempSync(join(tmpdir(), 'egirl-claim-'))
+    const config = makeConfig(workspace)
+    const dbPath = join(workspace, 'tasks.db')
+    let live = 0
+    let peak = 0
+    const provider: LLMProvider = {
+      name: 'stub',
+      async chat(): Promise<ChatResponse> {
+        live++
+        peak = Math.max(peak, live)
+        await Bun.sleep(60)
+        live--
+        return stubResponse({ content: 'done' })
+      },
+    }
+    const runners = [createTaskStore(dbPath), createTaskStore(dbPath)].map((store) =>
+      createTaskRunner({
+        config,
+        tasksConfig: {
+          ...config.tasks,
+          taskTimeoutMs: 300_000,
+          tickIntervalMs: 10,
+          maxConcurrentTasks: 1,
+        },
+        store,
+        toolExecutor: createToolExecutor(),
+        localProvider: provider,
+        memory: undefined,
+        outbound: new Map(),
+      }),
+    )
+    const store = createTaskStore(dbPath)
+    const ids = ['a', 'b', 'c'].map((name) => {
+      const task = store.create({
+        name,
+        description: name,
+        kind: 'oneshot',
+        prompt: 'go',
+        channel: 'api',
+        channelTarget: 'api:default',
+        createdBy: 'user',
+      })
+      store.update(task.id, { status: 'active', nextRunAt: Date.now() })
+      return task.id
+    })
+    for (const r of runners) r.start()
+    // Three 60 ms runs one at a time, with tick slack.
+    for (let i = 0; i < 100 && ids.some((id) => store.getRecentRuns(id).length === 0); i++) {
+      await Bun.sleep(20)
+    }
+    await Bun.sleep(100)
+    for (const r of runners) r.stop()
+    expect(ids.map((id) => store.getRecentRuns(id).length)).toEqual([1, 1, 1])
+    expect(peak).toBe(1)
+  })
+
+  test('a finished run gives its place back; a crashed one holds it only until the lease ends', () => {
+    const workspace = mkdtempSync(join(tmpdir(), 'egirl-claim-'))
+    const store = createTaskStore(join(workspace, 'tasks.db'))
+    const a = createTask(store, 'a')
+    const b = createTask(store, 'b')
+    store.update(a.id, { status: 'active', nextRunAt: 1000 })
+    store.update(b.id, { status: 'active', nextRunAt: 1000 })
+    const limit = (now: number) => ({ now, maxConcurrent: 1 })
+    expect(store.claimDue(a.id, 1000, 5000, limit(1000))).toBe(true)
+    // a holds the only place.
+    expect(store.claimDue(b.id, 1000, 5000, limit(1000))).toBe(false)
+    // a's process died without releasing: once its lease has passed, b can go.
+    expect(store.claimDue(b.id, 1000, 9000, limit(6000))).toBe(true)
+    // b finishes normally and releases at once.
+    store.releaseLease(b.id)
+    store.update(a.id, { nextRunAt: 7000 })
+    expect(store.claimDue(a.id, 7000, 12000, limit(7000))).toBe(true)
+  })
+
   test('a claim only succeeds against the next_run_at it saw', () => {
     const workspace = mkdtempSync(join(tmpdir(), 'egirl-claim-'))
     const store = createTaskStore(join(workspace, 'tasks.db'))
