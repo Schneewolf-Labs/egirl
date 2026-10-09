@@ -538,6 +538,10 @@ const baseProperties = {
 
   skills: Type.Object({
     dirs: Type.Array(Type.String(), { default: ['~/.egirl/skills', '{workspace}/skills'] }),
+    // The operator skills that ship with egirl (code review, CI triage, landing PRs ...) and
+    // their slash commands. Off for an instance strangers talk to, which should offer only
+    // its own skills.
+    bundled: Type.Boolean({ default: true }),
   }),
 }
 
@@ -889,5 +893,7 @@ export interface RuntimeConfig {
   }
   skills: {
     dirs: string[]
+    /** Load the bundled skills too; absent means true. */
+    bundled?: boolean
   }
 }

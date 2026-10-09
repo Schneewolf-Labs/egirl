@@ -241,6 +241,7 @@ const defaultToml: EgirlConfig = {
   },
   skills: {
     dirs: ['~/.egirl/skills', '{workspace}/skills'],
+    bundled: true,
   },
 }
 
@@ -483,6 +484,7 @@ export function loadConfig(options: LoadConfigOptions = {}): RuntimeConfig {
     },
     skills: {
       dirs: (toml.skills?.dirs ?? defaultToml.skills.dirs).map((d) => expandPath(d, workspacePath)),
+      bundled: toml.skills?.bundled ?? true,
     },
   }
 

@@ -527,6 +527,7 @@ Enable / disable tool groups.
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `dirs` | string[] | `["~/.egirl/skills", "{workspace}/skills"]` | Directories scanned for `SKILL.md` files. `{workspace}` is replaced with the workspace path |
+| `bundled` | boolean | `true` | Load the skills that ship with egirl (code review, CI triage, landing PRs, ...) and their slash commands. Set `false` for an instance strangers talk to (e.g. a VTuber on Discord) so it offers only its own skills |
 
 ## .env
 
