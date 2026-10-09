@@ -158,9 +158,14 @@ function getGitHubConfig(config: RuntimeConfig): GitHubConfig | undefined {
  * Load skills from bundled + configured directories.
  * Bundled skills are loaded first so user directories can override them.
  */
-async function loadSkills(config: RuntimeConfig): Promise<Skill[]> {
+/** Where skills are loaded from: the bundled ones first (unless turned off), then the configured. */
+export function skillDirs(skills: { dirs: string[]; bundled?: boolean }): string[] {
   const bundledDir = join(import.meta.dir, 'skills', 'bundled')
-  const allDirs = [bundledDir, ...config.skills.dirs]
+  return skills.bundled === false ? [...skills.dirs] : [bundledDir, ...skills.dirs]
+}
+
+async function loadSkills(config: RuntimeConfig): Promise<Skill[]> {
+  const allDirs = skillDirs(config.skills)
 
   try {
     const skills = await loadSkillsFromDirectories(allDirs)

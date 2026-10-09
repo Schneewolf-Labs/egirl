@@ -103,6 +103,31 @@ dirs = ["{workspace}/skills"]
     expect(config.source.codeAgentUsesClaudeCodeFallback).toBe(false)
   })
 
+  test('bundled skills are on by default and can be turned off for a public instance', async () => {
+    process.chdir(tmpDir)
+    const toml = (skills: string) => `
+[workspace]
+path = "${tmpDir}/workspace"
+
+[local]
+endpoint = "http://localhost:8080"
+model = "test-model"
+context_length = 8192
+max_concurrent = 1
+
+[skills]
+${skills}
+`
+    const { loadConfig } = await import('../../src/config/index')
+    writeFileSync(join(tmpDir, 'egirl.toml'), toml('dirs = ["{workspace}/skills"]'))
+    expect(loadConfig().skills.bundled).toBe(true)
+    writeFileSync(
+      join(tmpDir, 'egirl.toml'),
+      toml('dirs = ["{workspace}/skills"]\nbundled = false'),
+    )
+    expect(loadConfig().skills.bundled).toBe(false)
+  })
+
   test('loads the acp provider and its agent command', async () => {
     process.chdir(tmpDir)
     writeFileSync(
