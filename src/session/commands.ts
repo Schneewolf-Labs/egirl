@@ -47,6 +47,11 @@ export interface CommandScope {
   /** Skills that may declare commands (see `egirl.command` in SKILL.md). */
   skills?: Skill[]
   caller?: Caller
+  /**
+   * Who may run the built-ins other than /help (/think, /status, /context, /settings) on this
+   * channel. Unset means everyone, as before; a public server sets `owner`.
+   */
+  builtinPermission?: CommandPermission
 }
 
 export type CommandPermission = NonNullable<
@@ -108,12 +113,15 @@ export function customCommands(skills: Skill[]): CustomCommand[] {
   return out
 }
 
-function permitted(cmd: CustomCommand, caller: Caller | undefined): boolean {
+function permitted(permission: CommandPermission, caller: Caller | undefined): boolean {
   if (!caller) return true // the terminal: the owner is typing
-  if (cmd.permission === 'everyone') return true
-  if (cmd.permission === 'allowed') return caller.allowed || caller.owner
+  if (permission === 'everyone') return true
+  if (permission === 'allowed') return caller.allowed || caller.owner
   return caller.owner
 }
+
+const locked = (cmd: string, permission: CommandPermission): CommandResult =>
+  reply(`🔒 /${cmd} is for ${permission === 'owner' ? 'the owner' : 'allowed users'}`)
 
 /** The turn a custom command becomes. The skill body rides along so a small model cannot miss it. */
 function expandCommand(cmd: CustomCommand, skill: Skill, arg: string): string {
@@ -220,11 +228,13 @@ function settingsCommand(scope: CommandScope): CommandResult {
 }
 
 function helpCommand(scope: CommandScope): CommandResult {
+  const gate = scope.builtinPermission ?? 'everyone'
+  const mark = scope.caller && gate !== 'everyone' ? ` (${gate})` : ''
   const lines = [
-    '🧠 /think <on|off|default> — thinking for this session',
-    '🟢 /status — busy or idle, context, thinking',
-    '📊 /context — how full the window is',
-    '⚙️ /settings — current settings',
+    `🧠 /think <on|off|default> — thinking for this session${mark}`,
+    `🟢 /status — busy or idle, context, thinking${mark}`,
+    `📊 /context — how full the window is${mark}`,
+    `⚙️ /settings — current settings${mark}`,
   ]
   for (const c of customCommands(scope.skills ?? [])) {
     const who = c.permission === 'everyone' ? '' : ` (${c.permission})`
@@ -254,16 +264,17 @@ export async function handleCommand(input: string, scope: CommandScope): Promise
   if (!BUILTIN.has(cmd)) {
     const custom = customCommands(scope.skills ?? []).find((c) => c.name === cmd)
     if (custom) {
-      if (!permitted(custom, scope.caller)) {
-        return reply(
-          `🔒 /${custom.name} is for ${custom.permission === 'owner' ? 'the owner' : 'allowed users'}`,
-        )
-      }
+      if (!permitted(custom.permission, scope.caller)) return locked(custom.name, custom.permission)
       const skill = (scope.skills ?? []).find((sk) => sk.name === custom.skill)
       if (!skill) return reply(`⚠️ /${custom.name}: its skill is no longer loaded`)
       return { handled: true, turn: expandCommand(custom, skill, arg) }
     }
   }
+
+  // /help stays open: it is how a stranger finds out what the talent does.
+  const builtin = scope.builtinPermission ?? 'everyone'
+  if (BUILTIN.has(cmd) && cmd !== 'help' && !permitted(builtin, scope.caller))
+    return locked(cmd, builtin)
 
   switch (cmd) {
     case 'think':

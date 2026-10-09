@@ -1,6 +1,6 @@
 import type { AgentLoop } from '../agent'
 import type { ReplyBroker } from '../report/broker'
-import { type Caller, handleCommand } from '../session/commands'
+import { type Caller, type CommandPermission, handleCommand } from '../session/commands'
 import type { Skill } from '../skills/types'
 import { errorMessage } from '../util/errors'
 import { log } from '../util/logger'
@@ -67,6 +67,8 @@ export interface TurnScope {
   skills?: Skill[]
   /** Who is asking, for command permissions. Absent means the terminal, i.e. the owner. */
   caller?: Caller
+  /** Who may run the session built-ins on this channel (see CommandScope). */
+  builtinPermission?: CommandPermission
 }
 
 export async function runTurn(
@@ -76,7 +78,12 @@ export async function runTurn(
   broker?: ReplyBroker,
   scope: TurnScope = {},
 ): Promise<void> {
-  const command = await handleCommand(text, { agent, skills: scope.skills, caller: scope.caller })
+  const command = await handleCommand(text, {
+    agent,
+    skills: scope.skills,
+    caller: scope.caller,
+    builtinPermission: scope.builtinPermission,
+  })
   if (command.handled && !command.turn) {
     await deliver(surface, command.message ?? 'ok').catch(() => {})
     return

@@ -299,3 +299,55 @@ describe('custom commands from skills', () => {
     expect(r.message).toMatch(/unknown/i)
   })
 })
+
+describe('built-in command permission', () => {
+  // A public Discord server: strangers must not change the session's thinking level or read
+  // its context, but /help is how they find out what the talent does.
+  const guest = { userId: 'g', allowed: true, owner: false }
+  const owner = { userId: 'o', allowed: true, owner: true }
+
+  test('a channel can make the session built-ins owner-only; /help stays open', async () => {
+    const agent = fakeAgent()
+    for (const c of ['/think on', '/status', '/context', '/settings']) {
+      const r = await handleCommand(c, { agent, caller: guest, builtinPermission: 'owner' })
+      expect(r.message).toMatch(/🔒/)
+    }
+    expect(agent.getThinking()).toEqual({ level: 'medium', source: 'config' })
+    const help = await handleCommand('/help', { agent, caller: guest, builtinPermission: 'owner' })
+    expect(help.message).not.toMatch(/🔒/)
+    const st = await handleCommand('/status', { agent, caller: owner, builtinPermission: 'owner' })
+    expect(st.message).not.toMatch(/🔒/)
+    await handleCommand('/think off', { agent, caller: owner, builtinPermission: 'owner' })
+    expect(agent.getThinking().level).toBe('off')
+  })
+
+  test('without a policy, and on the terminal, built-ins stay open as before', async () => {
+    expect(
+      (await handleCommand('/status', { agent: fakeAgent(), caller: guest })).message,
+    ).not.toMatch(/🔒/)
+    expect(
+      (await handleCommand('/status', { agent: fakeAgent(), builtinPermission: 'owner' })).message,
+    ).not.toMatch(/🔒/)
+  })
+
+  test('allowed lets the allowed list in and keeps everyone else out', async () => {
+    const stranger = { userId: 's', allowed: false, owner: false }
+    const scope = (caller: typeof guest) => ({
+      agent: fakeAgent(),
+      caller,
+      builtinPermission: 'allowed' as const,
+    })
+    expect((await handleCommand('/status', scope(guest))).message).not.toMatch(/🔒/)
+    expect((await handleCommand('/status', scope(stranger))).message).toMatch(/🔒/)
+  })
+
+  test('/help marks the restricted built-ins', async () => {
+    const help = await handleCommand('/help', {
+      agent: fakeAgent(),
+      caller: guest,
+      builtinPermission: 'owner',
+    })
+    expect(help.message).toMatch(/\/think .*\(owner\)/)
+    expect(help.message).not.toMatch(/\/help.*\(owner\)/)
+  })
+})

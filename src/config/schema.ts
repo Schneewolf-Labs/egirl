@@ -167,6 +167,12 @@ const baseProperties = {
           // URL prefixes whose markdown images are uploaded as attachments (e.g. a loopback image
           // server Discord cannot reach). Empty: images stay as links.
           attach_images_from: Type.Array(Type.String(), { default: [] }),
+          // Who may run /think, /status, /context and /settings (not /help). Set "owner" on a
+          // public server so strangers cannot change or read the session.
+          builtin_permission: Type.Union(
+            [Type.Literal('everyone'), Type.Literal('allowed'), Type.Literal('owner')],
+            { default: 'everyone' },
+          ),
         }),
       ),
       claude_code: Type.Optional(
@@ -647,6 +653,7 @@ export interface RuntimeConfig {
       passiveChannels: string[]
       batchWindowMs: number
       attachImagesFrom: string[]
+      builtinPermission: 'everyone' | 'allowed' | 'owner'
     }
     claudeCode?: {
       permissionMode: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan'

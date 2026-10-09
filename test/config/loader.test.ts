@@ -128,6 +128,34 @@ ${skills}
     expect(loadConfig().skills.bundled).toBe(false)
   })
 
+  test('a Discord channel can make the built-in commands owner-only', async () => {
+    process.chdir(tmpDir)
+    process.env.DISCORD_TOKEN = 'test-token'
+    const toml = (discord: string) => `
+[workspace]
+path = "${tmpDir}/workspace"
+
+[local]
+endpoint = "http://localhost:8080"
+model = "test-model"
+context_length = 8192
+max_concurrent = 1
+
+[channels.discord]
+allowed_channels = ["1"]
+${discord}
+`
+    const { loadConfig } = await import('../../src/config/index')
+    try {
+      writeFileSync(join(tmpDir, 'egirl.toml'), toml(''))
+      expect(loadConfig().channels.discord?.builtinPermission).toBe('everyone')
+      writeFileSync(join(tmpDir, 'egirl.toml'), toml('builtin_permission = "owner"'))
+      expect(loadConfig().channels.discord?.builtinPermission).toBe('owner')
+    } finally {
+      delete process.env.DISCORD_TOKEN
+    }
+  })
+
   test('loads the acp provider and its agent command', async () => {
     process.chdir(tmpDir)
     writeFileSync(

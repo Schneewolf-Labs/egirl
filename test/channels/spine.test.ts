@@ -207,6 +207,26 @@ describe('custom commands through the spine', () => {
     expect(prompts[0]).toMatch(/a fox/)
     expect(sent).toEqual(['here you go'])
   })
+  test("the channel's built-in policy reaches the dispatcher: a stranger's /think is locked", async () => {
+    const { agent, prompts } = fakeAgent('unused')
+    const sent: string[] = []
+    const surface: Surface = {
+      channel: 'test',
+      target: 't',
+      maxLength: 2000,
+      format: 'markdown',
+      send: async (c) => {
+        sent.push(c)
+      },
+    }
+    await runTurn(agent, surface, '/think off', undefined, {
+      caller: { userId: 'u', allowed: true, owner: false },
+      builtinPermission: 'owner',
+    })
+    expect(prompts).toHaveLength(0)
+    expect(sent.join('')).toMatch(/🔒 \/think is for the owner/)
+  })
+
   test('a denied caller gets the lock message and the model is never run', async () => {
     const { agent, prompts } = fakeAgent('never')
     const sent: string[] = []

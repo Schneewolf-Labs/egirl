@@ -40,6 +40,7 @@ export interface DiscordConfig {
   passiveChannels: string[] // Channel IDs to passively monitor (respond without being tagged)
   batchWindowMs: number // Debounce window before evaluating a batch (ms)
   attachImagesFrom?: string[] // URL prefixes whose markdown images are uploaded as attachments
+  builtinPermission?: 'everyone' | 'allowed' | 'owner' // who may run /think, /status, /context, /settings
 }
 
 const DISCORD_MAX_MESSAGE_LENGTH = 2000
@@ -361,7 +362,11 @@ export class DiscordChannel implements ChatChannel {
       },
       content,
       this.broker,
-      { skills: this.skills, caller: this.callerOf(message.author.id) },
+      {
+        skills: this.skills,
+        caller: this.callerOf(message.author.id),
+        builtinPermission: this.config.builtinPermission,
+      },
     )
   }
 
@@ -407,7 +412,11 @@ export class DiscordChannel implements ChatChannel {
       },
       text,
       this.broker,
-      { skills: this.skills, caller: this.callerOf(interaction.user.id) },
+      {
+        skills: this.skills,
+        caller: this.callerOf(interaction.user.id),
+        builtinPermission: this.config.builtinPermission,
+      },
     )
   }
 
