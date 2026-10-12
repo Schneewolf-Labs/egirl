@@ -1,4 +1,4 @@
-import type { AgentLoop } from '../agent'
+import type { Operator } from '../operator/types'
 import type { ReplyBroker } from '../report/broker'
 import { log } from '../util/logger'
 import { deliver, resolveTarget, runTurn } from './spine'
@@ -74,7 +74,7 @@ function sleep(ms: number, signal: AbortSignal): Promise<void> {
 
 export class TelegramChannel implements ChatChannel {
   readonly name = 'telegram'
-  private agent: AgentLoop
+  private agent: Operator
   private config: TelegramConfig
   private broker: ReplyBroker | undefined
   private fetchFn: FetchLike
@@ -84,7 +84,7 @@ export class TelegramChannel implements ChatChannel {
   /** Most recent chat that talked to us -- where "self" notifications go. */
   private lastChatId: string | undefined
 
-  constructor(agent: AgentLoop, config: TelegramConfig, broker?: ReplyBroker, fetchFn?: FetchLike) {
+  constructor(agent: Operator, config: TelegramConfig, broker?: ReplyBroker, fetchFn?: FetchLike) {
     this.agent = agent
     this.config = config
     this.broker = broker
@@ -218,7 +218,7 @@ export class TelegramChannel implements ChatChannel {
 }
 
 export function createTelegramChannel(
-  agent: AgentLoop,
+  agent: Operator,
   config: TelegramConfig,
   broker?: ReplyBroker,
 ): TelegramChannel {

@@ -1,7 +1,7 @@
 /**
  * Session event bus — the one place a live run announces itself and narrates what it is doing.
  *
- * Every AgentLoop run publishes here regardless of who started it (a chat request, a background
+ * Every Operator run publishes here regardless of who started it (a chat request, a background
  * task, a peer message, the CLI), so anything that wants to watch a session — the SSE spectator
  * route, the trace journal, a future channel — subscribes here instead of being threaded into
  * the loop's `events` handler by each caller. The wire shape is `{ t, v }` end to end: the same
@@ -12,12 +12,12 @@
  * about a bus.
  */
 
-import type { AgentLoop } from './loop'
+import type { Operator } from '../operator/types'
 
 export type SessionEvent =
   /** A run began on this session. */
   | { t: 'run_start'; v: { message: string } }
-  /** An operator message was queued into the running turn (AgentLoop.inject). */
+  /** An operator message was queued into the running turn (Operator.inject). */
   | { t: 'inject'; v: string }
   | { t: 'reasoning'; v: string }
   | { t: 'token'; v: string }
@@ -63,7 +63,7 @@ export type SessionListener = (event: SessionEvent) => void
 export type GlobalListener = (sessionId: string, event: SessionEvent) => void
 
 interface RunningEntry {
-  loop: AgentLoop
+  loop: Operator
   startedAt: number
 }
 
@@ -111,7 +111,7 @@ export function subscribeAll(listener: GlobalListener): () => void {
  * Mark a run as live and announce it. The loop handle is what interrupt/inject reach for by
  * session id, wherever the run was started from.
  */
-export function startRun(sessionId: string, loop: AgentLoop, message: string): void {
+export function startRun(sessionId: string, loop: Operator, message: string): void {
   running.set(sessionId, { loop, startedAt: Date.now() })
   publish(sessionId, { t: 'run_start', v: { message } })
 }
@@ -138,7 +138,7 @@ export function runningSessions(): string[] {
 }
 
 /** The loop driving a session's in-flight run, if any. */
-export function runningLoop(sessionId: string): AgentLoop | undefined {
+export function runningLoop(sessionId: string): Operator | undefined {
   return running.get(sessionId)?.loop
 }
 

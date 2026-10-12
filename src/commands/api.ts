@@ -1,9 +1,9 @@
 import { join } from 'node:path'
-import type { AgentLoop } from '../agent'
 import { startAPIServer } from '../api'
 import { createMatrixOutbound } from '../channels/matrix'
 import type { OutboundChannel } from '../channels/types'
 import type { RuntimeConfig } from '../config'
+import type { Operator } from '../operator/types'
 import { createPushNotifier, generateVapidKeys, PushStore } from '../push'
 import { createReplyBroker } from '../report/broker'
 import { ConsoleInbox } from '../report/console-channel'
@@ -33,7 +33,7 @@ export async function runAPI(config: RuntimeConfig, args: string[]): Promise<voi
     statelessAgentFactory,
   } = rt
 
-  const agents = new Map<string, AgentLoop>()
+  const agents = new Map<string, Operator>()
 
   // The console is a real report target. Without this, an instance whose only surface is the
   // browser had nowhere to escalate to -- a peer supervisor worked, but "this one is the

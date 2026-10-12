@@ -1,7 +1,7 @@
 import * as acp from '@agentclientprotocol/sdk'
 import { isAbsolute } from 'path'
 import type { AgentEventHandler } from '../agent/events'
-import type { AgentLoop } from '../agent/loop'
+import type { Operator } from '../operator/types'
 import { log } from '../util/logger'
 
 /**
@@ -14,7 +14,7 @@ import { log } from '../util/logger'
  */
 
 /** The part of AgentLoop a session needs. A seam for tests; the command passes real loops. */
-export type AcpSessionLoop = Pick<AgentLoop, 'run' | 'interrupt'>
+export type AcpSessionLoop = Pick<Operator, 'run' | 'interrupt'>
 
 /** Builds the loop behind a new ACP session. `cwd` is the editor's project directory. */
 export type AcpLoopFactory = (sessionId: string, cwd: string) => AcpSessionLoop

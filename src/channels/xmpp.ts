@@ -1,6 +1,6 @@
 import { client, type Client as XMPPClient, xml } from '@xmpp/client'
 import type { Element } from '@xmpp/xml'
-import type { AgentLoop } from '../agent'
+import type { Operator } from '../operator/types'
 import type { ReplyBroker } from '../report/broker'
 import { log } from '../util/logger'
 import { deliver, resolveTarget, runTurn } from './spine'
@@ -28,11 +28,11 @@ const MAX_MESSAGE_LENGTH = 8000
 export class XMPPChannel implements ChatChannel {
   readonly name = 'xmpp'
   private xmpp: XMPPClient
-  private agent: AgentLoop
+  private agent: Operator
   private config: XMPPConfig
   private broker: ReplyBroker | undefined
 
-  constructor(agent: AgentLoop, config: XMPPConfig, broker?: ReplyBroker) {
+  constructor(agent: Operator, config: XMPPConfig, broker?: ReplyBroker) {
     this.agent = agent
     this.config = config
     this.broker = broker
@@ -157,7 +157,7 @@ export class XMPPChannel implements ChatChannel {
 }
 
 export function createXMPPChannel(
-  agent: AgentLoop,
+  agent: Operator,
   config: XMPPConfig,
   broker?: ReplyBroker,
 ): XMPPChannel {

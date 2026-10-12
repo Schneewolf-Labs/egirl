@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import type { AgentFactory, AgentLoop } from './agent'
+import type { AgentFactory } from './agent'
 import type { AgentContext } from './agent/context'
 import { buildLearnPrompt } from './agent/learn-prompt'
 import {
@@ -14,6 +14,7 @@ import type { RuntimeConfig } from './config'
 import type { SessionInfo } from './conversation'
 import type { MemoryCategory, MemoryManager } from './memory'
 import { handleChatCompletions, modelsResponse, type StatelessAgentFactory } from './openai-compat'
+import type { Operator } from './operator/types'
 import {
   formatInboundPeerMessage,
   formatOperatorMessage,
@@ -59,7 +60,7 @@ export interface APIDeps {
   /** Build an agent for a given session ID. Sessions are persisted if conversations is enabled. */
   agentFactory: AgentFactory
   /** In-process cache of per-session agents so each POST /chat reuses the same context. */
-  agents: Map<string, AgentLoop>
+  agents: Map<string, Operator>
   memory?: MemoryManager
   taskStore?: TaskStore
   taskRunner?: TaskRunner
@@ -119,7 +120,7 @@ async function readJson(req: Request): Promise<Record<string, unknown>> {
 }
 
 /** The session's own thinking level, or null when it follows config. */
-function thinkingOverride(agent: AgentLoop): ThinkingConfig['level'] | null {
+function thinkingOverride(agent: Operator): ThinkingConfig['level'] | null {
   const t = agent.getThinking()
   return t.source === 'session' ? t.level : null
 }
@@ -136,7 +137,7 @@ function getOrCreateAgent(
   deps: APIDeps,
   maxSessions?: number,
   isIdle?: (sessionId: string) => boolean,
-): AgentLoop {
+): Operator {
   const agent = deps.agents.get(sessionId) ?? deps.agentFactory(sessionId)
   deps.agents.delete(sessionId)
   deps.agents.set(sessionId, agent)
@@ -227,7 +228,7 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
     return { done, position }
   }
 
-  const agentFor = (sessionId: string): AgentLoop =>
+  const agentFor = (sessionId: string): Operator =>
     getOrCreateAgent(sessionId, deps, config.maxSessions, (id) => !isRunning(id) && !chains.has(id))
 
   const selfName = deps.selfName ?? 'egirl'
@@ -478,7 +479,7 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
             // session never relays the earlier run's events) and forwards every frame as-is.
             // `queued` is the request's own; everything else is the bus shape. The bus ends a
             // run with `run_end` or `error`; only an agent that never published (a stub, or
-            // something other than AgentLoop behind the factory) gets one synthesized here from
+            // something other than Operator behind the factory) gets one synthesized here from
             // its return value, so the client always sees the run close.
             let unsubscribe: (() => void) | undefined
             let send: (frame: unknown) => void = () => {}
@@ -934,6 +935,8 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
           if (m) {
             const sessionId = decodeURIComponent(m[1] as string)
             const agent = agentFor(sessionId)
+            if (!agent.compactNow)
+              return err("this operator's harness owns its context window", 409)
             const r = await agent.compactNow()
             return json({
               ok: true,

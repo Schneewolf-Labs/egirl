@@ -106,6 +106,40 @@ Optional. If omitted, the memory system is disabled entirely.
 | `api_key` | string | — | API key (only used by the `openai` provider) |
 | `base_url` | string | — | Custom base URL (only used by the `openai` provider) |
 
+### `[operator]`
+
+Which model drives this instance's sessions. Omit it for the local loop, which is the default and
+the one the rest of this document describes.
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `provider` | `"local"` \| `"claude"` | `"local"` | `local` runs sessions on the llama.cpp loop. `claude` runs each session as a Claude Code session through the Claude Agent SDK on your own Claude subscription (`claude login`), with egirl's tools |
+| `model` | string | (SDK default) | Claude model override, e.g. `"sonnet"` or `"opus"`. Ignored by `local` |
+
+```toml
+[operator]
+provider = "claude"
+model = "opus"
+```
+
+This is identity, not routing: an instance has one operator and never falls back to the other
+for a turn. A Claude instance and a local instance are two instances (see
+[Multi-Instance Config](#multi-instance-config)), each with its own workspace, memory and
+persona, that can talk to each other as peers.
+
+What a Claude instance keeps from egirl: the system prompt built from the workspace files
+(for a Claude instance, `SOUL.md` is usually a few lines: who it is, who its principal is), the
+whole tool registry served to Claude over an in-process MCP server and run through the same
+executor and safety layer, proactive memory recall on each turn and memory extraction after it,
+the conversation mirror the web console and `egirl sessions` read, and the Claude session id so
+a restart resumes the same conversation (`<workspace>/claude-sessions.json`).
+
+What it leaves to Claude Code: the loop, the transcript and the context window. The local
+loop's nudges, spiral and repetition guards, compaction and rollover do not run; `/context`
+reports the SDK's own token usage against a 200k window, and `/compact` is not available.
+`[local]` is still required: memory extraction, the permission supervisor and background tasks
+run on the local model as before.
+
 ### `[channels.discord]`
 
 Required only when running `discord` (or `serve`). The Discord token itself goes in `.env`.
