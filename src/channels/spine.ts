@@ -1,4 +1,4 @@
-import type { AgentLoop } from '../agent'
+import type { Operator } from '../operator/types'
 import type { ReplyBroker } from '../report/broker'
 import { type Caller, type CommandPermission, handleCommand } from '../session/commands'
 import type { Skill } from '../skills/types'
@@ -72,7 +72,7 @@ export interface TurnScope {
 }
 
 export async function runTurn(
-  agent: AgentLoop,
+  agent: Operator,
   surface: Surface,
   text: string,
   broker?: ReplyBroker,

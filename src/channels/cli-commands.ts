@@ -1,10 +1,10 @@
-import type { AgentLoop } from '../agent'
+import { canCompact, type Operator } from '../operator/types'
 import { colors, DIM, RESET } from '../ui/theme'
 import { errorMessage } from '../util/errors'
 import { createCLIEventHandler, printReply } from './cli-events'
 
 export interface CommandContext {
-  agent: AgentLoop
+  agent: Operator
   showThinking: boolean
   askApproval: () => Promise<boolean>
 }
@@ -49,6 +49,14 @@ export async function handlePlanCommand(message: string, ctx: CommandContext): P
 
 export async function handleCompactCommand(ctx: CommandContext): Promise<void> {
   const c = colors()
+  // Compaction is a local-loop capability; an operator that owns its context window has
+  // nothing to compact, and the command says so instead of failing.
+  if (!canCompact(ctx.agent)) {
+    console.log(
+      `\n${c.muted}This operator manages its own context window — nothing to compact.${RESET}\n`,
+    )
+    return
+  }
   try {
     const result = await ctx.agent.compactNow()
     if (result.messagesBefore === result.messagesAfter) {

@@ -1,5 +1,6 @@
-import type { AgentLoop, AgentResponse } from './agent'
+import type { AgentResponse } from './agent'
 import { subscribe } from './agent/session-events'
+import type { Operator } from './operator/types'
 import type { ChatMessage } from './providers/types'
 import { sseResponse } from './sse'
 import { errorMessage } from './util/errors'
@@ -18,7 +19,7 @@ import { errorMessage } from './util/errors'
  * The `model` field is ignored. There is one operator; this is not a router.
  */
 
-export type StatelessAgentFactory = (opts: { history: ChatMessage[]; note?: string }) => AgentLoop
+export type StatelessAgentFactory = (opts: { history: ChatMessage[]; note?: string }) => Operator
 
 export interface ParsedChatRequest {
   history: ChatMessage[]

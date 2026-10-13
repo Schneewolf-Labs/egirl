@@ -12,7 +12,7 @@
  * about a bus.
  */
 
-import type { AgentLoop } from './loop'
+import type { Operator } from '../operator/types'
 
 export type SessionEvent =
   /** A run began on this session. */
@@ -63,7 +63,7 @@ export type SessionListener = (event: SessionEvent) => void
 export type GlobalListener = (sessionId: string, event: SessionEvent) => void
 
 interface RunningEntry {
-  loop: AgentLoop
+  loop: Operator
   startedAt: number
 }
 
@@ -111,7 +111,7 @@ export function subscribeAll(listener: GlobalListener): () => void {
  * Mark a run as live and announce it. The loop handle is what interrupt/inject reach for by
  * session id, wherever the run was started from.
  */
-export function startRun(sessionId: string, loop: AgentLoop, message: string): void {
+export function startRun(sessionId: string, loop: Operator, message: string): void {
   running.set(sessionId, { loop, startedAt: Date.now() })
   publish(sessionId, { t: 'run_start', v: { message } })
 }
@@ -137,8 +137,8 @@ export function runningSessions(): string[] {
   return [...running.keys()]
 }
 
-/** The loop driving a session's in-flight run, if any. */
-export function runningLoop(sessionId: string): AgentLoop | undefined {
+/** The operator driving a session's in-flight run, if any. */
+export function runningLoop(sessionId: string): Operator | undefined {
   return running.get(sessionId)?.loop
 }
 
