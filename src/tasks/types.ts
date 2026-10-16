@@ -32,6 +32,13 @@ export interface Task {
    * proven work after a compaction is the failure mode.
    */
   stateFile: string | undefined
+  /**
+   * Files the run must leave behind (relative to the workspace, or absolute; `~/` allowed).
+   * Checked after the run: each must exist, be non-empty and be written during the task. A
+   * missing one gets the agent one corrective turn; still missing, the result is marked. A
+   * reply saying "written to X" is not evidence that X exists.
+   */
+  deliverables: string[] | undefined
   nextRunAt: number | undefined
   lastRunAt: number | undefined
   runCount: number
@@ -62,6 +69,7 @@ export interface NewTask {
   maxTurns?: number
   unbounded?: boolean
   stateFile?: string
+  deliverables?: string[]
   maxRuns?: number
   notify?: TaskNotify
   channel: string

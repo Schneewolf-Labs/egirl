@@ -325,6 +325,7 @@ describe('API task lifecycle', () => {
   let tasks: Map<string, { id: string; status: string }>
   let updates: Array<{ id: string; changes: Record<string, unknown>; reason?: string }>
   let aborted: string[]
+  let created: Array<Record<string, unknown>>
   let activated: string[]
 
   const taskStore = {
@@ -335,6 +336,10 @@ describe('API task lifecycle', () => {
       if (t && typeof changes.status === 'string') t.status = changes.status
     },
     delete: (id: string) => tasks.delete(id),
+    create: (input: Record<string, unknown>) => {
+      created.push(input)
+      return { id: 'new1', status: 'active', ...input }
+    },
   }
   const taskRunner = {
     abortTask: (id: string) => {
@@ -353,6 +358,7 @@ describe('API task lifecycle', () => {
       ['running1', { id: 'running1', status: 'active' }],
     ])
     updates = []
+    created = []
     aborted = []
     activated = []
     server = startAPIServer(
@@ -368,6 +374,28 @@ describe('API task lifecycle', () => {
 
   afterEach(() => {
     server.stop(true)
+  })
+
+  test('POST /tasks stores deliverables and returns them', async () => {
+    const res = await fetch(`${base}/tasks`, {
+      method: 'POST',
+      body: JSON.stringify({ name: 'r', prompt: 'p', deliverables: ['~/work/reviews/r.md'] }),
+    })
+    expect(res.status).toBe(200)
+    expect(created[0]?.deliverables).toEqual(['~/work/reviews/r.md'])
+    const body = (await res.json()) as { deliverables: string[] | null }
+    expect(body.deliverables).toEqual(['~/work/reviews/r.md'])
+  })
+
+  test('POST /tasks rejects deliverables that are not a list of paths', async () => {
+    for (const deliverables of ['r.md', [''], [3]]) {
+      const res = await fetch(`${base}/tasks`, {
+        method: 'POST',
+        body: JSON.stringify({ name: 'r', prompt: 'p', deliverables }),
+      })
+      expect(res.status).toBe(400)
+    }
+    expect(created).toHaveLength(0)
   })
 
   test('POST /tasks/:id/pause pauses the task', async () => {
