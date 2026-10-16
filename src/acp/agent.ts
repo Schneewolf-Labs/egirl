@@ -1,7 +1,7 @@
 import * as acp from '@agentclientprotocol/sdk'
 import { isAbsolute } from 'path'
 import type { AgentEventHandler } from '../agent/events'
-import type { AgentLoop } from '../agent/loop'
+import type { Operator } from '../operator/types'
 import { log } from '../util/logger'
 
 /**
@@ -13,14 +13,11 @@ import { log } from '../util/logger'
  * the client's fs/terminal capabilities: egirl's own tools do the work, in its own process.
  */
 
-/** The part of AgentLoop a session needs. A seam for tests; the command passes real loops. */
-export type AcpSessionLoop = Pick<AgentLoop, 'run' | 'interrupt'>
-
-/** Builds the loop behind a new ACP session. `cwd` is the editor's project directory. */
-export type AcpLoopFactory = (sessionId: string, cwd: string) => AcpSessionLoop
+/** Builds the operator behind a new ACP session. `cwd` is the editor's project directory. */
+export type AcpLoopFactory = (sessionId: string, cwd: string) => Operator
 
 interface AcpSession {
-  loop: AcpSessionLoop
+  loop: Operator
   cwd: string
   /** Set while a prompt is running; `session/cancel` aborts it. */
   controller?: AbortController
