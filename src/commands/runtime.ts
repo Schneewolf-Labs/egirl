@@ -4,6 +4,7 @@ import { type AppServices, createAppServices } from '../bootstrap'
 import type { OutboundChannel } from '../channels/types'
 import type { RuntimeConfig } from '../config'
 import type { StatelessAgentFactory } from '../openai-compat'
+import { createOperatorFactory } from '../operator'
 import { MAIL_CHANNEL } from '../peers/mailbox-poll'
 import { createMailbox, type Mailbox } from '../peers/mailbox-setup'
 import { gatherStandup } from '../standup'
@@ -37,19 +38,19 @@ export async function createCommandRuntime(config: RuntimeConfig): Promise<Comma
   const standup = await gatherStandup(config.workspace.path)
   const sessionMutex = new SessionMutex()
 
-  const agentFactory: AgentFactory = (sessionId: string) =>
-    createAgentLoop({
-      config,
-      toolExecutor: services.toolExecutor,
-      localProvider: services.providers.local,
-      auxProvider: services.providers.auxiliary,
-      sessionId,
-      memory: services.memory,
-      conversationStore: services.conversations,
-      skills: services.skills,
-      additionalContext: standup || undefined,
-      sessionMutex,
-    })
+  // The operator this instance runs on, chosen once from [operator]: the local loop, or a
+  // hosted harness driving egirl's tools (src/operator).
+  const agentFactory: AgentFactory = createOperatorFactory({
+    config,
+    toolExecutor: services.toolExecutor,
+    localProvider: services.providers.local,
+    auxProvider: services.providers.auxiliary,
+    memory: services.memory,
+    conversationStore: services.conversations,
+    skills: services.skills,
+    additionalContext: standup || undefined,
+    sessionMutex,
+  })
 
   // One throwaway loop per OpenAI-compatible request: the client owns the transcript, so there
   // is no conversation store. Recall stays wired -- memory is instance-wide, not a property of

@@ -346,6 +346,17 @@ const baseProperties = {
     ),
   ),
 
+  // Which model drives this instance's sessions. `local` is the llama.cpp loop; `claude` runs
+  // each session as a Claude Code session on the user's subscription, with egirl's tools
+  // (src/operator). One per instance: this is identity, not routing.
+  operator: Type.Optional(
+    Type.Object({
+      provider: Type.Union([Type.Literal('local'), Type.Literal('claude')], { default: 'local' }),
+      // Claude model override, e.g. "sonnet" or "opus"; the SDK's default when unset.
+      model: Type.Optional(Type.String()),
+    }),
+  ),
+
   // Shadow tutor (docs/shadow-tutor.md): a stronger OpenAI-compatible model shown every operator
   // turn of a transcribed one-shot run, whose answer is recorded next to the operator's for
   // training data. It never drives. API key from .env: EGIRL_TUTOR_API_KEY.
@@ -795,6 +806,11 @@ export interface RuntimeConfig {
     apiKey?: string
     vision?: boolean
   }>
+  /** The operator this instance runs on. Unset means the local loop. */
+  operator?: {
+    provider: 'local' | 'claude'
+    model?: string
+  }
   /** Shadow tutor: labels each transcribed operator turn with a stronger model's answer. */
   tutor?: {
     endpoint: string

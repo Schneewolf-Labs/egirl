@@ -1,6 +1,6 @@
 import * as readline from 'readline'
-import type { AgentLoop } from '../agent'
 import { buildLearnPrompt } from '../agent/learn-prompt'
+import type { Operator } from '../operator/types'
 import { handleCommand } from '../session/commands'
 import { SessionController } from '../session/controller'
 import { colors, DIM, RESET } from '../ui/theme'
@@ -22,7 +22,7 @@ import type { Channel } from './types'
 export class CLIChannel implements Channel {
   readonly name = 'cli'
   private rl: readline.Interface | null = null
-  private agent: AgentLoop
+  private agent: Operator
   private running = false
   private showThinking: boolean
   /** Queue, abort handle and mutable settings -- everything that outlives a single turn. */
@@ -30,7 +30,7 @@ export class CLIChannel implements Channel {
   /** Target directory for /learn-authored skills; undefined disables the command. */
   private skillsDir: string | undefined
 
-  constructor(agent: AgentLoop, options?: { showThinking?: boolean; skillsDir?: string }) {
+  constructor(agent: Operator, options?: { showThinking?: boolean; skillsDir?: string }) {
     this.agent = agent
     this.showThinking = options?.showThinking ?? true
     this.skillsDir = options?.skillsDir
@@ -254,7 +254,7 @@ export class CLIChannel implements Channel {
 }
 
 export function createCLIChannel(
-  agent: AgentLoop,
+  agent: Operator,
   options?: { showThinking?: boolean; skillsDir?: string },
 ): CLIChannel {
   return new CLIChannel(agent, options)

@@ -11,7 +11,8 @@ import {
   type PartialUser,
   type User,
 } from 'discord.js'
-import type { AgentFactory, AgentLoop } from '../agent'
+import type { AgentFactory } from '../agent'
+import type { Operator } from '../operator/types'
 import type { LLMProvider } from '../providers/types'
 import type { ReplyBroker } from '../report/broker'
 import { type Caller, customCommands, isCommand } from '../session/commands'
@@ -74,7 +75,7 @@ export class DiscordChannel implements ChatChannel {
   private agentFactory: AgentFactory
   /** Skills the agent was built with; the ones declaring `egirl.command` become slash commands. */
   private readonly skills: Skill[]
-  private sessions: Map<string, AgentLoop> = new Map()
+  private sessions: Map<string, Operator> = new Map()
   private config: DiscordConfig
   private ready = false
   private reactionHandlers: ReactionHandler[] = []
@@ -217,7 +218,7 @@ export class DiscordChannel implements ChatChannel {
     return `discord:channel:${message.channel.id}`
   }
 
-  private getOrCreateAgent(sessionKey: string): AgentLoop {
+  private getOrCreateAgent(sessionKey: string): Operator {
     let agent = this.sessions.get(sessionKey)
     if (!agent) {
       agent = this.agentFactory(sessionKey)
@@ -286,7 +287,7 @@ export class DiscordChannel implements ChatChannel {
 
     // A command answers at once, ahead of whatever turn the queue is waiting on -- asking
     // whether she is busy must not itself wait until she is not. A custom command that expands
-    // into a turn queues behind the turn in flight on the loop itself (AgentLoop.run).
+    // into a turn queues behind the turn in flight on the loop itself (Operator.run).
     if (isCommand(content)) {
       this.processMessage(message, content).catch((error) => {
         log.error('discord', 'Command failed:', error)
@@ -294,7 +295,7 @@ export class DiscordChannel implements ChatChannel {
       return
     }
 
-    // Enqueue to prevent concurrent access to shared AgentLoop context
+    // Enqueue to prevent concurrent access to shared Operator context
     this.enqueueMessage(() => this.processMessage(message, content))
   }
 

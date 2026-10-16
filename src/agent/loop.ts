@@ -1,6 +1,7 @@
 import type { RuntimeConfig } from '../config'
 import type { ConversationStore } from '../conversation'
 import type { MemoryManager } from '../memory'
+import type { Operator } from '../operator/types'
 import { createLlamaCppTokenizer } from '../providers/llamacpp-tokenizer'
 import type {
   ChatMessage,
@@ -61,9 +62,10 @@ import type { AgentLoopDeps, AgentLoopOptions, AgentResponse } from './types'
  */
 const UNBOUNDED_SAFETY_CEILING = 10_000
 
-export type AgentFactory = (sessionId: string) => AgentLoop
+/** Per-session operators; see src/operator. Kept under this name for the surfaces that use it. */
+export type AgentFactory = (sessionId: string) => Operator
 
-export class AgentLoop {
+export class AgentLoop implements Operator {
   private config: RuntimeConfig
   private toolExecutor: ToolExecutor
   private localProvider: LLMProvider

@@ -1,10 +1,10 @@
-import type { AgentLoop } from '../agent'
+import type { Operator } from '../operator/types'
 import { colors, DIM, RESET } from '../ui/theme'
 import { errorMessage } from '../util/errors'
 import { createCLIEventHandler, printReply } from './cli-events'
 
 export interface CommandContext {
-  agent: AgentLoop
+  agent: Operator
   showThinking: boolean
   askApproval: () => Promise<boolean>
 }
@@ -49,6 +49,12 @@ export async function handlePlanCommand(message: string, ctx: CommandContext): P
 
 export async function handleCompactCommand(ctx: CommandContext): Promise<void> {
   const c = colors()
+  if (!ctx.agent.compactNow) {
+    console.log(
+      `\n${c.muted}This operator's harness owns its context window; nothing to compact here.${RESET}\n`,
+    )
+    return
+  }
   try {
     const result = await ctx.agent.compactNow()
     if (result.messagesBefore === result.messagesAfter) {

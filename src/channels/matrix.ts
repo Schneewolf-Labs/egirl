@@ -1,4 +1,4 @@
-import type { AgentLoop } from '../agent'
+import type { Operator } from '../operator/types'
 import type { ReplyBroker } from '../report/broker'
 import { log } from '../util/logger'
 import { createMatrixApi, type MatrixApi, MatrixApiError, type MatrixEvent } from './matrix/api'
@@ -48,7 +48,7 @@ export function extractText(event: MatrixEvent): string | undefined {
 export class MatrixChannel implements ChatChannel {
   readonly name = 'matrix'
   private api: MatrixApi
-  private agent: AgentLoop
+  private agent: Operator
   private config: MatrixConfig
   private broker: ReplyBroker | undefined
   private userId = ''
@@ -58,7 +58,7 @@ export class MatrixChannel implements ChatChannel {
   /** Where a "self"-targeted notification goes when no allowed_rooms are configured. */
   private lastRoomId: string | undefined
 
-  constructor(agent: AgentLoop, config: MatrixConfig, broker?: ReplyBroker, api?: MatrixApi) {
+  constructor(agent: Operator, config: MatrixConfig, broker?: ReplyBroker, api?: MatrixApi) {
     this.agent = agent
     this.config = config
     this.broker = broker
@@ -264,7 +264,7 @@ export function createMatrixOutbound(config: MatrixConfig, api?: MatrixApi): Mat
 }
 
 export function createMatrixChannel(
-  agent: AgentLoop,
+  agent: Operator,
   config: MatrixConfig,
   broker?: ReplyBroker,
 ): MatrixChannel {
