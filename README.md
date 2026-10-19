@@ -11,7 +11,7 @@
 
 ## What This Is
 
-egirl is the person a code agent needs around it: something that sets intent, approves or refuses risky actions, notices drift, remembers yesterday, hands work to other agents, and keeps whoever it answers to informed. It runs on your hardware as a long-running local AI agent and **delegates real engineering work to a code agent**. The local LLM plans and supervises; Claude Code or Codex executes.
+egirl is the person a code agent needs around it: something that sets intent, approves or refuses risky actions, notices drift, remembers yesterday, hands work to other agents, and keeps whoever it answers to informed. It runs on your hardware as a long-running local AI agent and **delegates real engineering work to a code agent**. The local LLM plans and supervises; Claude Code, Codex, opencode, or an ACP-compatible agent executes.
 
 Think of it as a competent colleague who lives in your cluster, knows your projects, and drives your coding agent so you don't have to write every prompt by hand.
 
@@ -21,14 +21,14 @@ Think of it as a competent colleague who lives in your cluster, knows your proje
 
 Everything flows through one idea:
 
-> The local LLM is the operator. It escalates to **tools**, not to other models. The most important tool is `code_agent` — a wrapper around Claude Code or Codex.
+> The local LLM is the operator. It escalates to **tools**, not to other models. The most important tool is `code_agent` — a wrapper around Claude Code, Codex, opencode, or any ACP-compatible agent.
 
 No multi-model routing. No per-message cloud escalation. The local model solves it itself or calls a tool.
 
 ## Features
 
 - **Local-first** — llama.cpp on your box, zero API cost for coordination
-- **Code agent integration** — first-class `code_agent` tool that delegates engineering work to Claude Code or Codex using your local CLI/subscription auth
+- **Code agent integration** — first-class `code_agent` tool that delegates engineering work to Claude Code, Codex, opencode, or an ACP-compatible agent using your local CLI auth
 - **Long-running memory** — hybrid keyword + semantic search, SQLite-backed, with auto-extraction and temporal recall
 - **Conversation persistence** — picks up where you left off across restarts
 - **Background tasks** — cron-scheduled work with business-hours awareness and dependency ordering
@@ -104,7 +104,7 @@ EGIRL_API_TOKEN=...   # optional bearer token for the HTTP API (required if expo
 GITHUB_TOKEN=...      # for gh_* tools
 ```
 
-No `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` needed for egirl itself. Claude Code and Codex use their own local CLI subscription auth.
+No `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` needed for egirl itself. The code-agent backends use their own local CLI auth.
 
 ## Commands
 

@@ -409,6 +409,29 @@ checkpoint, see [autonomy-loop.md](autonomy-loop.md)) and get neither. The wrap-
 names both tools when the run has them. Config: `extensions`, `max_extensions`,
 `max_extension_ratio` under `[tasks]`.
 
+#### Deliverables: checked on disk
+
+A task can declare the files its run must leave behind: `deliverables` on `POST /tasks`, a
+list of paths (relative to the workspace, absolute, or `~/`). A reply that says "review written
+to ~/work/reviews/x.md" is a claim, and a long run that loses the thread near its end still
+writes that sentence: the case this exists for is a one-shot PR review that reported its file
+written, with no file there. After the run's final answer the runner checks each path
+(`src/tasks/deliverables.ts`): it must exist, be non-empty, and have been modified during this
+run (since the task was created, for a run resuming one that hit its time limit), so a file
+left by an earlier run doesn't count.
+
+- **All present:** nothing changes.
+- **Something missing:** the agent gets one corrective turn on the same conversation (up to 8
+  turns), naming each path and what is wrong with it as checked on disk, and the check runs again.
+  If the files are there now, the result is the original reply plus a line saying which were
+  missing and were written on the corrective turn, plus that turn's reply.
+- **Still missing:** the run is booked as before (not failed, so the retry policy doesn't redo
+  the whole run), but the result opens with `[Deliverable check FAILED: ...]` and the paths,
+  above the reply. Whoever reads the result sees the disk's answer first.
+
+Skipped when the run was aborted, is awaiting a reply, or ended with `end_task` (the agent
+declared its own outcome). Tasks without `deliverables` are unaffected.
+
 **Execution flow per task:**
 
 ```
@@ -435,7 +458,9 @@ names both tools when the run has them. Config: `extensions`, `max_extensions`,
 
 7. Run the agent with the prompt
 
-8. Capture the final response content
+8. Capture the final response content; if the task declares
+   deliverables, check them on disk (one corrective turn on a miss,
+   see Deliverables above)
 
 9. Auto-extract memories from the task conversation (fire-and-forget,
    same as interactive — uses extractMemories() with source='auto',

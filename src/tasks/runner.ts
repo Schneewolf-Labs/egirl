@@ -16,6 +16,7 @@ import { log } from '../util/logger'
 import { resolveUserPath } from '../util/paths'
 import { parseScheduleExpression } from './cron'
 import { RunDeadline } from './deadline'
+import { checkDeliverables, deliverableNotice, deliverableNudge } from './deliverables'
 import { classifyError, getRetryPolicy } from './error-classify'
 import { HEARTBEAT_TASK_NAME, heartbeatPreCheck } from './heartbeat'
 import { MAILBOX_TASK_NAME } from './mailbox-task'
@@ -51,6 +52,9 @@ const CLAIM_LEASE_MARGIN_MS = 10 * 60_000
  */
 const SHUTDOWN_REARM_DELAY_MS = 30_000
 
+/** Turn budget for the one corrective turn after a deliverable check fails. */
+const DELIVERABLE_FIX_TURNS = 8
+
 /** How one execution is run: its abort signal, moving deadline, and per-run tools. */
 interface ExecutionPlan {
   signal: AbortSignal
@@ -61,6 +65,8 @@ interface ExecutionPlan {
   extraTools?: TaskControls['tools']
   /** Set when this run continues a bounded run that hit its time limit (its length, in min). */
   resumeAfterMinutes?: number
+  /** Whether the agent declared its own outcome with end_task (then nothing is second-guessed). */
+  ended?: () => boolean
 }
 
 /** What one execution produced, as the runner needs it to book the run. */
@@ -374,6 +380,7 @@ export class TaskRunner {
       wrapupMarginMs,
       extraTools: controls?.tools,
       resumeAfterMinutes,
+      ended: () => controls?.endRequest() !== undefined,
     })
     try {
       const outcome = await Promise.race([execution, deadline.expired])
@@ -737,6 +744,7 @@ export class TaskRunner {
 
   private async executePrompt(task: Task, plan: ExecutionPlan): Promise<ExecutionOutcome> {
     const cwd = this.deps.config.workspace.path
+    const startedAt = Date.now()
     const standup = await gatherStandup(cwd)
 
     const contextParts: string[] = []
@@ -875,12 +883,69 @@ export class TaskRunner {
       }).catch((err) => log.warn('tasks', `Self-review failed for ${task.name}: ${err}`))
     }
 
-    return {
+    const outcome: ExecutionOutcome = {
       content: response.content,
       awaitingInput: response.awaitingInput === true,
       aborted: response.aborted === true,
       tokensUsed: response.usage.input_tokens + response.usage.output_tokens,
     }
+    if (
+      task.deliverables?.length &&
+      !outcome.aborted &&
+      !outcome.awaitingInput &&
+      !plan.ended?.()
+    ) {
+      await this.enforceDeliverables(task, agent, plan, outcome, startedAt)
+    }
+    return outcome
+  }
+
+  /**
+   * Check the task's declared deliverables on disk; on a miss, give the agent one corrective
+   * turn on the same conversation and check again. A reply saying a file was written is not
+   * evidence that it was (the failure this exists for: a long review run that ended with the
+   * file "written" and no file). Still missing → the result is marked at the top, so whoever
+   * reads it sees the disk's answer before the reply's. Mutates `outcome`.
+   */
+  private async enforceDeliverables(
+    task: Task,
+    agent: AgentLoop,
+    plan: ExecutionPlan,
+    outcome: ExecutionOutcome,
+    startedAt: number,
+  ): Promise<void> {
+    const cwd = this.deps.config.workspace.path
+    const paths = task.deliverables ?? []
+    // A resumed run continues one that may already have written them.
+    const since = plan.resumeAfterMinutes !== undefined ? task.createdAt : startedAt
+    let issues = checkDeliverables(paths, cwd, since)
+    if (issues.length === 0) return
+
+    log.warn(
+      'tasks',
+      `Task ${task.name}: deliverable check failed (${issues.map((i) => `${i.path}: ${i.problem}`).join(', ')}); corrective turn`,
+    )
+    const fix = await agent.run(deliverableNudge(issues), {
+      maxTurns: DELIVERABLE_FIX_TURNS,
+      signal: plan.signal,
+      deadline: plan.deadline,
+      wrapupMarginMs: plan.wrapupMarginMs,
+      ...(plan.extraTools && { extraTools: plan.extraTools }),
+    })
+    outcome.tokensUsed =
+      (outcome.tokensUsed ?? 0) + fix.usage.input_tokens + fix.usage.output_tokens
+    if (fix.aborted) outcome.aborted = true
+    if (fix.awaitingInput) outcome.awaitingInput = true
+
+    const missingBefore = issues.map((i) => i.path).join(', ')
+    issues = checkDeliverables(paths, cwd, since)
+    if (issues.length === 0) {
+      log.info('tasks', `Task ${task.name}: deliverables written on the corrective turn`)
+      outcome.content = `${outcome.content}\n\n[Deliverable check: ${missingBefore} missing after the run; written on a corrective turn]\n${fix.content}`
+      return
+    }
+    log.warn('tasks', `Task ${task.name}: deliverables still missing after the corrective turn`)
+    outcome.content = `${deliverableNotice(issues)}\n\n${outcome.content}\n\n[Corrective turn reply]\n${fix.content}`
   }
 
   /**

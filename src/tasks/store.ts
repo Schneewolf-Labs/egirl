@@ -35,6 +35,7 @@ function rowToTask(row: Record<string, unknown>): Task {
     maxTurns: (row.max_turns as number) ?? undefined,
     unbounded: (row.unbounded as number) === 1,
     stateFile: (row.state_file as string) ?? undefined,
+    deliverables: row.deliverables ? JSON.parse(row.deliverables as string) : undefined,
     nextRunAt: (row.next_run_at as number) ?? undefined,
     lastRunAt: (row.last_run_at as number) ?? undefined,
     runCount: (row.run_count as number) ?? 0,
@@ -196,6 +197,7 @@ export class TaskStore {
       ['unbounded', 'ALTER TABLE tasks ADD COLUMN unbounded INTEGER DEFAULT 0'],
       ['state_file', 'ALTER TABLE tasks ADD COLUMN state_file TEXT'],
       ['lease_until', 'ALTER TABLE tasks ADD COLUMN lease_until INTEGER'],
+      ['deliverables', 'ALTER TABLE tasks ADD COLUMN deliverables TEXT'],
     ]
 
     for (const [col, sql] of migrations) {
@@ -240,10 +242,10 @@ export class TaskStore {
         id, name, description, kind, status, prompt,
         memory_context, memory_category, interval_ms,
         cron_expression, business_hours, depends_on,
-        persist_conversation, max_turns, unbounded, state_file,
+        persist_conversation, max_turns, unbounded, state_file, deliverables,
         next_run_at, max_runs, notify, channel, channel_target,
         created_by, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
       [
         id,
@@ -262,6 +264,7 @@ export class TaskStore {
         input.maxTurns ?? null,
         input.unbounded ? 1 : 0,
         input.stateFile ?? null,
+        input.deliverables?.length ? JSON.stringify(input.deliverables) : null,
         nextRunAt ?? null,
         input.maxRuns ?? null,
         input.notify ?? 'on_change',
@@ -334,6 +337,10 @@ export class TaskStore {
     if ('memoryContext' in changes) {
       sets.push('memory_context = ?')
       values.push(changes.memoryContext ? JSON.stringify(changes.memoryContext) : null)
+    }
+    if ('deliverables' in changes) {
+      sets.push('deliverables = ?')
+      values.push(changes.deliverables?.length ? JSON.stringify(changes.deliverables) : null)
     }
     // Boolean field — handle separately to avoid false ?? null → null
     if ('persistConversation' in changes) {

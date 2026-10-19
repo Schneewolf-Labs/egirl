@@ -174,6 +174,7 @@ function taskToJson(t: Task): JSONValue {
     max_turns: t.maxTurns ?? null,
     unbounded: t.unbounded,
     persist_conversation: t.persistConversation,
+    deliverables: t.deliverables ?? null,
     interval_ms: t.intervalMs ?? null,
     cron: t.cronExpression ?? null,
     next_run_at: t.nextRunAt ?? null,
@@ -1044,6 +1045,15 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
           if (typeof body.name !== 'string' || typeof body.prompt !== 'string') {
             return err('name and prompt required')
           }
+          // Files the run must leave behind, checked on disk after it (src/tasks/deliverables.ts).
+          const deliverables = body.deliverables
+          if (
+            deliverables !== undefined &&
+            (!Array.isArray(deliverables) ||
+              !deliverables.every((d) => typeof d === 'string' && d.trim() !== ''))
+          ) {
+            return err('deliverables must be an array of non-empty paths')
+          }
           const task = deps.taskStore.create({
             name: body.name,
             description: (body.description as string) ?? body.name,
@@ -1054,6 +1064,7 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
             maxTurns: body.max_turns as number | undefined,
             unbounded: body.unbounded === true,
             persistConversation: body.persist_conversation === true,
+            ...(deliverables !== undefined && { deliverables: deliverables as string[] }),
             notify: 'always',
             channel: 'api',
             channelTarget: (body.session_id as string) ?? 'api:default',
