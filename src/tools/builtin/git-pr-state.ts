@@ -127,7 +127,7 @@ export const gitPrStateTool: Tool = {
   async execute(params: Record<string, unknown>, cwd: string): Promise<ToolResult> {
     const dir = params.repo_dir ? resolveUserPath(params.repo_dir as string, cwd) : cwd
     const top = await runGit(['rev-parse', '--show-toplevel'], dir)
-    if (top.code !== 0) return { success: false, output: 'Not a git repository' }
+    if (top.code !== 0) return { success: false, output: `${dir} is not a git repository` }
 
     const notes: string[] = []
     const hasOrigin = (await gitStdout(['remote'], dir))?.split('\n').includes('origin')
@@ -194,6 +194,10 @@ export const gitPrStateTool: Tool = {
           return onBase.has(sha) ? `${line}  [already on ${base} as an equivalent patch]` : line
         }),
       ),
+    )
+
+    out.push(
+      `The PR's own changes: git_diff with ref "${base}...${head}" (three dots: from the merge base; add files to narrow it).`,
     )
 
     const prFiles = lines(await gitStdout(['diff', '--name-only', mb, head], dir))

@@ -4,6 +4,7 @@ import { existsSync } from 'fs'
 import { mkdir, rm, writeFile } from 'fs/promises'
 import { tmpdir } from 'os'
 import { join } from 'path'
+import { gitDiffTool } from '../../src/tools/builtin/git'
 import { gitPrStateTool } from '../../src/tools/builtin/git-pr-state'
 
 describe('git_pr_state', () => {
@@ -52,6 +53,7 @@ describe('git_pr_state', () => {
     expect(r.output).toContain('main has 2 commit(s) since the merge base')
     expect(r.output).toContain('CONFLICTS in 1 file(s)')
     expect(r.output).toContain('main edits a')
+    expect(r.output).toContain('git_diff with ref "main...conflict"')
     expect(git('status --porcelain')).toBe('')
     expect(git('worktree list').trim().split('\n')).toHaveLength(1)
   })
@@ -77,6 +79,12 @@ describe('git_pr_state', () => {
   test('says when the branch is already merged', async () => {
     const r = await run({ head: 'merged' })
     expect(r.output).toContain('Already merged')
+  })
+
+  test("git_diff takes the three-dot range it points to: only the PR's own changes", async () => {
+    const r = await gitDiffTool.execute({ ref: 'main...clean' }, dir)
+    expect(r.output).toContain('b.txt')
+    expect(r.output).not.toContain('a.txt')
   })
 
   test('unknown ref fails', async () => {
