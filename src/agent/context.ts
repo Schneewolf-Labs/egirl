@@ -116,6 +116,7 @@ You have access to these tools:
 - \`git_log\` - Show commit history
 - \`git_commit\` - Stage files and create a commit
 - \`git_show\` - Show a specific commit's contents and diff
+- \`git_pr_state\` - Where a PR branch stands against main: merge base, conflicts from a real trial merge, files main also changed, patches already on main. Use it first when reviewing a PR
 
 **Memory:**
 - \`working_memory\` - Curate MEMORY.md, your always-loaded working memory (add/replace/remove/list under a hard character budget — when full, consolidate before adding)

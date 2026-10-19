@@ -16,6 +16,7 @@ export {
   gitCommitTool,
   gitDiffTool,
   gitLogTool,
+  gitPrStateTool,
   gitShowTool,
   gitStatusTool,
   globTool,
@@ -65,6 +66,7 @@ import {
   gitCommitTool,
   gitDiffTool,
   gitLogTool,
+  gitPrStateTool,
   gitShowTool,
   gitStatusTool,
   globTool,
@@ -182,7 +184,14 @@ export function createDefaultToolExecutor(
 
   // Git tools
   if (t.git) {
-    executor.registerAll([gitStatusTool, gitDiffTool, gitLogTool, gitCommitTool, gitShowTool])
+    executor.registerAll([
+      gitStatusTool,
+      gitDiffTool,
+      gitLogTool,
+      gitCommitTool,
+      gitShowTool,
+      gitPrStateTool,
+    ])
   }
 
   // Screenshot. Explicit true/false in the toml always wins; unset means auto — register

@@ -94,7 +94,8 @@ export const gitDiffTool: Tool = {
         ref: {
           type: 'string',
           description:
-            'Diff against a specific ref (branch, tag, commit hash). Overrides staged flag.',
+            'Diff the working tree against a ref (branch, tag, commit hash), or diff a range: "A..B" compares two ' +
+            'commits, "A...B" shows what B changed since it branched from A (a PR\'s own changes). Overrides staged flag.',
         },
         context_lines: {
           type: 'number',
