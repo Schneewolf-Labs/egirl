@@ -139,6 +139,9 @@ loop's nudges, spiral and repetition guards, compaction and rollover do not run;
 reports the SDK's own token usage against a 200k window, and `/compact` is not available.
 `[local]` is still required: memory extraction, the permission supervisor and background tasks
 run on the local model as before.
+So does the OpenAI-compatible endpoint (`POST /v1/chat/completions`): its client owns the
+transcript, and a Claude session cannot yet be seeded with one, so on a Claude instance those
+requests are answered by the local model.
 
 ### `[channels.discord]`
 
