@@ -73,6 +73,8 @@ export interface ClaudeOperatorDeps {
 
 /** The window the SDK reports against. An estimate for /context; the harness is the authority. */
 const CLAUDE_CONTEXT_TOKENS = 200_000
+/** What the CLI says when asked to resume a session it has no transcript for. */
+const STALE_RESUME = 'No conversation found with session ID'
 
 export class ClaudeOperator implements Operator {
   private config: RuntimeConfig
@@ -192,39 +194,55 @@ export class ClaudeOperator implements Operator {
     this.activeRun = { controller }
     startRun(sessionId, this, userMessage)
     const startedAt = Date.now()
-
-    const toolCtx: ToolCallContext = { sessionId }
-    let text = userMessage
-    if (options.images?.length) {
-      const saved = saveImageAttachments(this.context.workspaceDir, sessionId, options.images)
-      toolCtx.images = saved.map((s) => s.path)
-      const note = attachmentNote(saved)
-      if (note) text = `${text}\n\n${note}`
-    }
-    addMessage(this.context, { role: 'user', content: text })
-    const body = await this.withRecall(userMessage, text)
+    let persisted = false
 
     try {
+      const toolCtx: ToolCallContext = { sessionId }
+      let text = userMessage
+      if (options.images?.length) {
+        const saved = saveImageAttachments(this.context.workspaceDir, sessionId, options.images)
+        toolCtx.images = saved.map((s) => s.path)
+        const note = attachmentNote(saved)
+        if (note) text = `${text}\n\n${note}`
+      }
+      addMessage(this.context, { role: 'user', content: text })
+      const body = await this.withRecall(userMessage, text)
+
       let outcome = await this.runQuery(body, options, events, controller, toolCtx)
-      // A resume id that no longer has a transcript behind it (a cleaned ~/.claude, another
-      // machine) fails before anything runs. Start over once rather than stay stuck on it.
-      if (outcome.error && !outcome.sawAssistant && this.sessions.get(sessionId)) {
+      // A resume id with no transcript behind it (a cleaned ~/.claude, another machine) fails
+      // before anything runs. Start over once rather than stay stuck on it. Only that error:
+      // dropping the id on a network or login failure would lose the conversation for good.
+      if (
+        outcome.error?.includes(STALE_RESUME) &&
+        !outcome.sawAssistant &&
+        !controller.signal.aborted &&
+        this.sessions.get(sessionId)
+      ) {
         log.warn('operator', `Claude session for ${sessionId} would not resume; starting fresh`)
         this.sessions.delete(sessionId)
         outcome = await this.runQuery(body, options, events, controller, toolCtx)
       }
-      if (outcome.error && !controller.signal.aborted) throw new Error(outcome.error)
+      if (outcome.error && !outcome.turnLimitReached && !controller.signal.aborted) {
+        throw new Error(outcome.error)
+      }
 
       const aborted = controller.signal.aborted
-      addMessage(this.context, { role: 'assistant', content: outcome.content })
+      // Out of turns: what Claude last said stands, as the local loop's forced final reply does.
+      const content =
+        outcome.content ||
+        (outcome.turnLimitReached
+          ? `(Stopped at the ${outcome.turns}-turn limit before writing a reply.)`
+          : '')
+      addMessage(this.context, { role: 'assistant', content })
       this.history.persistNew(this.context.messages)
+      persisted = true
       this.lastContextTokens = outcome.contextTokens || this.lastContextTokens
       events.onResponseComplete?.()
       this.maybeRunAutoExtraction()
       endRun(sessionId, {
         t: 'run_end',
         v: {
-          content: outcome.content,
+          content,
           input_tokens: outcome.usage.input_tokens,
           output_tokens: outcome.usage.output_tokens,
           turns: outcome.turns,
@@ -234,17 +252,20 @@ export class ClaudeOperator implements Operator {
         },
       })
       return {
-        content: outcome.content,
+        content,
         provider: 'claude',
         usage: outcome.usage,
         turns: outcome.turns,
         ...(outcome.thinking && { thinking: outcome.thinking }),
         ...(aborted && { aborted: true }),
+        ...(outcome.turnLimitReached && { turnLimitReached: true }),
       }
     } catch (error) {
       endRun(sessionId, { t: 'error', v: errorMessage(error) })
       throw error
     } finally {
+      // A failed turn's user message is kept, as on the local loop.
+      if (!persisted) this.history.persistNew(this.context.messages)
       external?.removeEventListener('abort', forwardAbort)
       this.activeRun = null
     }
@@ -285,7 +306,10 @@ export class ClaudeOperator implements Operator {
       permissionMode: 'bypassPermissions',
       allowDangerouslySkipPermissions: true,
       cwd: this.context.workspaceDir,
-      maxTurns: options.maxTurns ?? this.config.conversation.maxTurns ?? 10,
+      // An unbounded run (a task) ends on its own; the harness's guards stand in for the cap.
+      ...(!options.unbounded && {
+        maxTurns: options.maxTurns ?? this.config.conversation.maxTurns ?? 10,
+      }),
       includePartialMessages: true,
       abortController: controller,
       ...(operator?.model && { model: operator.model }),

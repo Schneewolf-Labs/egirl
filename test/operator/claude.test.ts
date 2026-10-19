@@ -114,6 +114,7 @@ describe('ClaudeOperator', () => {
             { type: 'tool_use', id: 'tu1', name: 'mcp__egirl__noop', input: { a: 1 } },
             { type: 'text', text: 'hello' },
           ],
+          usage: { input_tokens: 10, cache_read_input_tokens: 5990, output_tokens: 5 },
         },
       }),
       result('hello from claude'),
@@ -154,7 +155,8 @@ describe('ClaudeOperator', () => {
     ])
     const status = await op.contextStatus()
     expect(status.contextLength).toBe(200_000)
-    expect(status.totalUsed).toBe(1000)
+    // the last call's prompt, not the run's summed usage
+    expect(status.totalUsed).toBe(6000)
   })
 
   test('the next turn resumes the session the first one started', async () => {
@@ -192,13 +194,32 @@ describe('ClaudeOperator', () => {
     expect(sessions.entries.get('discord:channel:1')).toBe('fresh')
   })
 
-  test('an error result after the session ran is the run failing, and the bus hears it', async () => {
+  test('only a missing transcript drops the resume id; any other early failure keeps it', async () => {
+    const { query, calls } = fakeQuery(() => [
+      msg({
+        type: 'result',
+        subtype: 'error_during_execution',
+        errors: ['API Error: Connection error.'],
+        num_turns: 0,
+        usage: { input_tokens: 0, output_tokens: 0 },
+      }),
+    ])
+    const { op, sessions } = operator(query)
+    sessions.set('discord:channel:1', 'kept')
+    await expect(op.run('hi')).rejects.toThrow('Connection error')
+    expect(calls).toHaveLength(1)
+    expect(sessions.entries.get('discord:channel:1')).toBe('kept')
+    // the failed turn's message is still stored, as on the local loop
+    expect(op.getContext().messages).toEqual([{ role: 'user', content: 'hi' }])
+  })
+
+  test('running out of turns returns what Claude last said, not an error', async () => {
     const { query } = fakeQuery(() => [
       msg({ type: 'system', subtype: 'init', session_id: 'sdk-1' }),
       msg({
         type: 'assistant',
         parent_tool_use_id: null,
-        message: { role: 'assistant', content: [{ type: 'text', text: 'half' }] },
+        message: { role: 'assistant', content: [{ type: 'text', text: 'checked three of five' }] },
       }),
       msg({
         type: 'result',
@@ -209,10 +230,41 @@ describe('ClaudeOperator', () => {
       }),
     ])
     const { op } = operator(query)
+    const res = await op.run('go')
+    expect(res.content).toBe('checked three of five')
+    expect(res.turnLimitReached).toBe(true)
+  })
+
+  test('an unbounded run (a task) sets no turn cap', async () => {
+    const { query, calls } = fakeQuery(() => [result('ok')])
+    const { op } = operator(query)
+    await op.run('x', { unbounded: true })
+    expect(calls[0]?.options.maxTurns).toBeUndefined()
+    await op.run('y')
+    expect(calls[1]?.options.maxTurns).toBe(10)
+  })
+
+  test('an error result after the session ran is the run failing, and the bus hears it', async () => {
+    const { query } = fakeQuery(() => [
+      msg({ type: 'system', subtype: 'init', session_id: 'sdk-1' }),
+      msg({
+        type: 'assistant',
+        parent_tool_use_id: null,
+        message: { role: 'assistant', content: [{ type: 'text', text: 'half' }] },
+      }),
+      msg({
+        type: 'result',
+        subtype: 'error_during_execution',
+        errors: ['overloaded'],
+        num_turns: 3,
+        usage: { input_tokens: 1, output_tokens: 1 },
+      }),
+    ])
+    const { op } = operator(query)
     resetSessionEvents()
     const seen: string[] = []
     subscribe('discord:channel:1', (e) => void seen.push(e.t))
-    await expect(op.run('go')).rejects.toThrow('error_max_turns')
+    await expect(op.run('go')).rejects.toThrow('overloaded')
     expect(seen).toEqual(['run_start', 'error'])
   })
 

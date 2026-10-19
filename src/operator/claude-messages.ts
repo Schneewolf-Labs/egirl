@@ -115,6 +115,8 @@ export interface QueryOutcome {
   contextTokens: number
   /** At least one assistant message arrived: the session resumed and ran. */
   sawAssistant: boolean
+  /** The run used up its turns: not a failure, the reply is whatever Claude said last. */
+  turnLimitReached?: boolean
   error?: string
 }
 
@@ -154,6 +156,12 @@ export async function consumeQuery(
       if (message.type === 'assistant') {
         if (message.parent_tool_use_id !== null) continue
         outcome.sawAssistant = true
+        // Each model call's prompt size; the result's usage is summed over every call in the run.
+        const u = (message.message as { usage?: Partial<Record<string, number>> }).usage
+        if (u?.input_tokens) {
+          outcome.contextTokens =
+            u.input_tokens + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0)
+        }
         const read = readAssistant(message.message)
         if (read.text) lastText = read.text
         if (read.thinking) thinkingParts.push(read.thinking)
@@ -169,9 +177,11 @@ export async function consumeQuery(
           input_tokens: usage.input_tokens + cached,
           output_tokens: usage.output_tokens,
         }
-        outcome.contextTokens = usage.input_tokens + cached
         if (message.subtype === 'success') {
           outcome.content = message.result || lastText
+        } else if (message.subtype === 'error_max_turns') {
+          outcome.turnLimitReached = true
+          outcome.error = message.subtype
         } else {
           outcome.error = message.errors.join('; ') || message.subtype
         }
@@ -179,7 +189,8 @@ export async function consumeQuery(
     }
   } catch (error) {
     // Our own abort surfaces as the SDK's "process aborted by user" error.
-    if (!controller.signal.aborted) outcome.error = errorMessage(error)
+    // The SDK also throws after an error result; the result already said what went wrong.
+    if (!controller.signal.aborted && !outcome.error) outcome.error = errorMessage(error)
   }
   if (!outcome.content) outcome.content = lastText
   outcome.thinking = thinkingParts.join('\n\n')
