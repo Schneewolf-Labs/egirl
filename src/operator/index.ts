@@ -9,7 +9,8 @@ import type { LLMProvider } from '../providers/types'
 import type { Skill } from '../skills/types'
 import type { ToolExecutor } from '../tools'
 import { ClaudeOperator } from './claude'
-import { openClaudeSessionMap } from './claude-sessions'
+import { CodexOperator } from './codex'
+import { openSessionMap } from './session-map'
 import type { Operator, OperatorFactory } from './types'
 
 export type { Operator, OperatorFactory } from './types'
@@ -29,13 +30,15 @@ export type OperatorBuilder = (deps: OperatorDeps) => Operator
  * Operators of the one kind `[operator]` names. The choice is made once per instance, here, at
  * startup: chat sessions, background tasks and discovery all build through the same builder,
  * and nothing downstream knows or picks which kind it got. Build it once per process and pass
- * it down, so every Claude session in the process goes through one session map.
+ * it down, so every hosted session in the process goes through one session map.
  */
 export function createOperatorBuilder(config: RuntimeConfig): OperatorBuilder {
-  if ((config.operator?.provider ?? 'local') === 'local') {
+  const provider = config.operator?.provider ?? 'local'
+  if (provider === 'local') {
     return ({ isFresh: _, ...deps }) => createAgentLoop(deps)
   }
-  const sessions = openClaudeSessionMap(join(config.workspace.path, 'claude-sessions.json'))
+  const sessions = openSessionMap(join(config.workspace.path, `${provider}-sessions.json`))
+  if (provider === 'codex') return (deps) => new CodexOperator({ ...deps, sessions })
   return (deps) => new ClaudeOperator({ ...deps, sessions })
 }
 

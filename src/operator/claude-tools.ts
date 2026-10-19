@@ -4,8 +4,9 @@ import {
   type CallToolResult,
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js'
-import type { ToolExecutor } from '../tools'
-import type { Tool, ToolCallContext, ToolResult } from '../tools/types'
+import type { ToolDefinition } from '../providers/types'
+import type { ToolResult } from '../tools/types'
+import type { ServedTool } from './hosted-types'
 
 /** The Claude SDK names an MCP tool `mcp__<server>__<tool>`; egirl's server is `egirl`. */
 export const MCP_SERVER_NAME = 'egirl'
@@ -16,46 +17,27 @@ export function stripToolPrefix(name: string): string {
   return name.startsWith(TOOL_PREFIX) ? name.slice(TOOL_PREFIX.length) : name
 }
 
-export interface EgirlMcpServerArgs {
-  executor: ToolExecutor
-  cwd: string
-  ctx: ToolCallContext
-  /** Runs a tool call under the shared-state lock (SessionMutex), or inline without one. */
-  exclusive: <T>(fn: () => Promise<T>) => Promise<T>
-  /**
-   * Tools this run alone offers (a task's request_extension and end_task). Served beside the
-   * registry and run inline, never through the shared executor, as the local loop runs them.
-   */
-  extraTools?: Map<string, Tool>
-  /**
-   * A tool finished; what the harness does not tell us because the call ran on our side.
-   * Returning text appends it to what Claude sees of the result: the one channel into a turn
-   * that is already running.
-   */
-  onResult?: (name: string, args: Record<string, unknown>, result: ToolResult) => string | undefined
-}
-
 /**
- * egirl's tool registry as an in-process MCP server for the Claude Agent SDK.
+ * egirl's tools as an in-process MCP server for the Claude Agent SDK.
  *
  * The SDK takes a `McpServer` instance and connects it over an in-memory transport, so Claude
  * calls `read_file`, `execute_command`, `memory_search` and the rest exactly as the local
- * operator does: through the one ToolExecutor, with its safety checks, fuzzy name matching and
- * parameter remapping. The handlers go on the low-level server rather than through
+ * operator does: each call is served by the hosted session, through the one ToolExecutor and
+ * its safety checks. The handlers go on the low-level server rather than through
  * `registerTool`, which wants a Zod shape; a ToolDefinition already carries JSON Schema, which
  * is what the wire format is, so passing it through is a rename, not a translation.
  */
-export function createEgirlMcpServer(args: EgirlMcpServerArgs): McpServer {
-  const { executor, cwd, ctx, exclusive, onResult, extraTools } = args
+export function createEgirlMcpServer(
+  tools: ToolDefinition[],
+  call: (name: string, args: Record<string, unknown>) => Promise<ServedTool>,
+): McpServer {
   const mcp = new McpServer(
     { name: MCP_SERVER_NAME, version: '1' },
     { capabilities: { tools: {} } },
   )
-  let next = 0
 
-  const extraDefs = [...(extraTools?.values() ?? [])].map((t) => t.definition)
   mcp.server.setRequestHandler(ListToolsRequestSchema, async () => ({
-    tools: [...executor.getDefinitions(), ...extraDefs].map((d) => ({
+    tools: tools.map((d) => ({
       name: d.name,
       description: d.description,
       inputSchema: d.parameters as { type: 'object'; [key: string]: unknown },
@@ -63,15 +45,8 @@ export function createEgirlMcpServer(args: EgirlMcpServerArgs): McpServer {
   }))
 
   mcp.server.setRequestHandler(CallToolRequestSchema, async (request) => {
-    const name = request.params.name
-    const callArgs = (request.params.arguments ?? {}) as Record<string, unknown>
-    const extra = extraTools?.get(name)
-    const result = extra
-      ? await extra.execute(callArgs, cwd, ctx)
-      : await exclusive(() =>
-          executor.execute({ id: `call_${next++}`, name, arguments: callArgs }, cwd, ctx),
-        )
-    const note = onResult?.(name, callArgs, result)
+    const args = (request.params.arguments ?? {}) as Record<string, unknown>
+    const { result, note } = await call(request.params.name, args)
     return toCallToolResult(result, note)
   })
 

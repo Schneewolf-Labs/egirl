@@ -648,8 +648,8 @@ export function loadConfig(options: LoadConfigOptions = {}): RuntimeConfig {
 
   if (toml.operator) {
     const provider = toml.operator.provider ?? 'local'
-    if (provider !== 'local' && provider !== 'claude') {
-      throw new Error(`[operator] provider must be "local" or "claude", got "${provider}"`)
+    if (provider !== 'local' && provider !== 'claude' && provider !== 'codex') {
+      throw new Error(`[operator] provider must be "local", "claude" or "codex", got "${provider}"`)
     }
     config.operator = {
       provider,

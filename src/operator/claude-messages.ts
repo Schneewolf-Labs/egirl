@@ -7,6 +7,7 @@ import type { AgentEventHandler } from '../agent/events'
 import type { ThinkingConfig, ToolCall } from '../providers/types'
 import { errorMessage } from '../util/errors'
 import { parseDataUrl, stripToolPrefix } from './claude-tools'
+import { emptyOutcome, type HarnessOutcome } from './hosted-types'
 
 /** What goes over the wire to the Claude Agent SDK and what comes back, in egirl's terms. */
 
@@ -106,20 +107,6 @@ export async function* userTurnWithImages(
   }
 }
 
-export interface QueryOutcome {
-  content: string
-  thinking: string
-  turns: number
-  usage: { input_tokens: number; output_tokens: number }
-  /** Prompt tokens of the last model call: what the context window holds now. */
-  contextTokens: number
-  /** At least one assistant message arrived: the session resumed and ran. */
-  sawAssistant: boolean
-  /** The run used up its turns: not a failure, the reply is whatever Claude said last. */
-  turnLimitReached?: boolean
-  error?: string
-}
-
 /**
  * Drain one SDK query into an outcome, narrating as it goes: streamed text and thinking as
  * token events, each batch of tool calls as the surfaces expect them, the session id the SDK
@@ -130,15 +117,8 @@ export async function consumeQuery(
   controller: AbortController,
   events: AgentEventHandler,
   onSession: (claudeSessionId: string) => void,
-): Promise<QueryOutcome> {
-  const outcome: QueryOutcome = {
-    content: '',
-    thinking: '',
-    turns: 0,
-    usage: { input_tokens: 0, output_tokens: 0 },
-    contextTokens: 0,
-    sawAssistant: false,
-  }
+): Promise<HarnessOutcome> {
+  const outcome = emptyOutcome()
   const thinkingParts: string[] = []
   let lastText = ''
 

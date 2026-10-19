@@ -225,10 +225,16 @@ egirl/
 │   ├── operator/
 │   │   ├── types.ts          # Operator: what every surface needs from whatever drives a session
 │   │   ├── index.ts          # Per-instance choice: the local loop or a hosted harness
+│   │   ├── hosted.ts         # The egirl half of a hosted operator: prompt, mirror, recall, tools
+│   │   ├── hosted-types.ts   # The turn contract between the hosted session and a harness
+│   │   ├── run-signals.ts    # Awaiting input, end_task and the wrap-up warning, from tool results
+│   │   ├── session-map.ts    # Which harness session resumes which egirl session
 │   │   ├── claude.ts         # Claude Code session (Agent SDK) as the operator
-│   │   ├── claude-tools.ts   # egirl's tool registry as an in-process MCP server
+│   │   ├── claude-tools.ts   # egirl's tools as an in-process MCP server
 │   │   ├── claude-messages.ts # SDK messages <-> egirl events
-│   │   └── claude-sessions.ts # Which Claude session resumes which egirl session
+│   │   ├── codex.ts          # Codex app-server thread as the operator
+│   │   ├── codex-turn.ts     # One Codex turn: thread, turn, tool calls over JSON-RPC
+│   │   └── codex-protocol.ts # app-server request shapes, tool switches, tool results
 │   ├── memory/
 │   │   ├── index.ts          # MemoryManager (public API)
 │   │   ├── files.ts          # MEMORY.md + daily logs + images

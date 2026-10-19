@@ -6,19 +6,32 @@ import {
   stripToolPrefix,
   toCallToolResult,
 } from '../../src/operator/claude-tools'
-import { createToolExecutor } from '../../src/tools/executor'
-import type { ToolResult } from '../../src/tools/types'
+import type { ServedTool } from '../../src/operator/hosted-types'
+import type { ToolDefinition } from '../../src/providers/types'
 
 /**
- * egirl's tools reach Claude over MCP. What matters is that the registry is served as-is
- * (names, descriptions, JSON Schema) and that a call lands on the one executor, under the
- * lock, with its result in MCP's shape.
+ * egirl's tools reach Claude over MCP. What matters is that the turn's tools are served as-is
+ * (names, descriptions, JSON Schema), that a call lands on the hosted session's server, and
+ * that what comes back is in MCP's shape, with the session's note after it.
  */
 
 const PNG = 'iVBORw0KGgoAAAANSUhEUg=='
 
-async function connected(args: Parameters<typeof createEgirlMcpServer>[0]): Promise<Client> {
-  const server = createEgirlMcpServer(args)
+const greet: ToolDefinition = {
+  name: 'greet',
+  description: 'Say hi',
+  parameters: {
+    type: 'object',
+    properties: { name: { type: 'string', description: 'who' } },
+    required: ['name'],
+  },
+}
+
+async function connected(
+  tools: ToolDefinition[],
+  call: (name: string, args: Record<string, unknown>) => Promise<ServedTool>,
+): Promise<Client> {
+  const server = createEgirlMcpServer(tools, call)
   const [clientSide, serverSide] = InMemoryTransport.createLinkedPair()
   await server.connect(serverSide)
   const client = new Client({ name: 'test', version: '1' })
@@ -27,42 +40,11 @@ async function connected(args: Parameters<typeof createEgirlMcpServer>[0]): Prom
 }
 
 describe('createEgirlMcpServer', () => {
-  test('lists the executor tools with their schemas and runs a call through the executor', async () => {
-    const executor = createToolExecutor()
-    const seen: unknown[] = []
-    executor.register({
-      definition: {
-        name: 'greet',
-        description: 'Say hi',
-        parameters: {
-          type: 'object',
-          properties: { name: { type: 'string', description: 'who' } },
-          required: ['name'],
-        },
-      },
-      execute: async (params, cwd, ctx) => {
-        seen.push({ params, cwd, ctx })
-        return { success: true, output: `hi ${params.name}` }
-      },
-    })
-    const locked: string[] = []
-    const results: Array<{ name: string; result: ToolResult }> = []
-    const client = await connected({
-      executor,
-      cwd: '/work',
-      ctx: { sessionId: 'discord:1' },
-      exclusive: async (fn) => {
-        locked.push('in')
-        try {
-          return await fn()
-        } finally {
-          locked.push('out')
-        }
-      },
-      onResult: (name, _args, result) => {
-        results.push({ name, result })
-        return undefined
-      },
+  test('lists the turn tools with their schemas and hands each call to the session', async () => {
+    const calls: unknown[] = []
+    const client = await connected([greet], async (name, args) => {
+      calls.push({ name, args })
+      return { result: { success: true, output: `hi ${args.name}` } }
     })
 
     const { tools } = await client.listTools()
@@ -73,25 +55,26 @@ describe('createEgirlMcpServer', () => {
     const res = await client.callTool({ name: 'greet', arguments: { name: 'nina' } })
     expect(res.content).toEqual([{ type: 'text', text: 'hi nina' }])
     expect(res.isError).toBeUndefined()
-    expect(seen).toEqual([
-      { params: { name: 'nina' }, cwd: '/work', ctx: { sessionId: 'discord:1' } },
+    expect(calls).toEqual([{ name: 'greet', args: { name: 'nina' } }])
+  })
+
+  test("the session's note rides after the result", async () => {
+    const client = await connected([greet], async () => ({
+      result: { success: true, output: 'ok' },
+      note: 'wrap up now',
+    }))
+    const res = await client.callTool({ name: 'greet', arguments: { name: 'x' } })
+    expect(res.content).toEqual([
+      { type: 'text', text: 'ok' },
+      { type: 'text', text: 'wrap up now' },
     ])
-    expect(locked).toEqual(['in', 'out'])
-    expect(results).toEqual([{ name: 'greet', result: { success: true, output: 'hi nina' } }])
   })
 
   test('a failed tool is an MCP error result, not a thrown request', async () => {
-    const executor = createToolExecutor()
-    executor.register({
-      definition: {
-        name: 'boom',
-        description: 'fails',
-        parameters: { type: 'object', properties: {} },
-      },
-      execute: async () => ({ success: false, output: 'nope' }),
-    })
-    const client = await connected({ executor, cwd: '/w', ctx: {}, exclusive: (fn) => fn() })
-    const res = await client.callTool({ name: 'boom', arguments: {} })
+    const client = await connected([greet], async () => ({
+      result: { success: false, output: 'nope' },
+    }))
+    const res = await client.callTool({ name: 'greet', arguments: {} })
     expect(res.isError).toBe(true)
     expect(res.content).toEqual([{ type: 'text', text: 'nope' }])
   })

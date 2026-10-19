@@ -42,6 +42,11 @@ describe('[operator] config', () => {
     expect(loadConfig({ instance: 'claude' }).operator).toEqual({ provider: 'claude' })
   })
 
+  test('names the Codex operator', () => {
+    write('\n[operator]\nprovider = "codex"\n')
+    expect(loadConfig().operator).toEqual({ provider: 'codex' })
+  })
+
   test('an unknown provider is rejected', () => {
     write('\n[operator]\nprovider = "gpt"\n')
     expect(() => loadConfig()).toThrow()
