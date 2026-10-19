@@ -25,6 +25,7 @@ Available tools and their usage. `code_agent` is the primary tool — default to
 - `git_log` — Show commit history
 - `git_commit` — Stage files and create a commit
 - `git_show` — Show a specific commit's contents and diff
+- `git_pr_state` — Where a PR branch stands against main: merge base, conflicts from a real trial merge, files main also changed, patches already on main. Use it first when reviewing a PR
 
 ## GitHub (if `GITHUB_TOKEN` is set)
 
