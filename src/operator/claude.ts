@@ -33,6 +33,7 @@ import {
 } from './claude-messages'
 import type { ClaudeSessionMap } from './claude-sessions'
 import { createEgirlMcpServer, MCP_SERVER_NAME } from './claude-tools'
+import { createRunSignals, noteResult, type RunSignals, wrapupNote } from './run-signals'
 import type { Operator } from './types'
 
 /**
@@ -48,8 +49,9 @@ import type { Operator } from './types'
  * here: the harness has its own, and the model needs less.
  *
  * Not routing. An instance configured with `[operator] provider = "claude"` is a Claude
- * instance; it never falls back to the local model for a turn. The local model still does
- * the side work it always did (memory extraction, the supervisor, background tasks).
+ * instance; it never falls back to the local model for a turn, and its background tasks run
+ * here too. The local model still does the side work it always did (memory extraction, the
+ * permission supervisor, a task's self-review).
  */
 
 export type QueryFn = typeof query
@@ -67,6 +69,11 @@ export interface ClaudeOperatorDeps {
   additionalContext?: string
   sessionMutex?: SessionMutex
   sessions: ClaudeSessionMap
+  /**
+   * Start a new Claude session rather than resume the stored one: a task run that begins
+   * clean, as the local loop does when the runner hands it no transcript.
+   */
+  isFresh?: boolean
   /** The SDK entry point; tests hand in a fake. */
   queryFn?: QueryFn
 }
@@ -104,6 +111,7 @@ export class ClaudeOperator implements Operator {
     this.context = createAgentContext(deps.config, deps.sessionId, this.promptOptions)
     this.history = new ConversationHistory(deps.conversationStore ?? null, deps.sessionId)
     this.history.hydrate(this.context)
+    if (deps.isFresh) this.sessions.delete(deps.sessionId)
   }
 
   interrupt(): boolean {
@@ -194,6 +202,7 @@ export class ClaudeOperator implements Operator {
     this.activeRun = { controller }
     startRun(sessionId, this, userMessage)
     const startedAt = Date.now()
+    const signals = createRunSignals()
     let persisted = false
 
     try {
@@ -208,7 +217,7 @@ export class ClaudeOperator implements Operator {
       addMessage(this.context, { role: 'user', content: text })
       const body = await this.withRecall(userMessage, text)
 
-      let outcome = await this.runQuery(body, options, events, controller, toolCtx)
+      let outcome = await this.runQuery(body, options, events, controller, toolCtx, signals)
       // A resume id with no transcript behind it (a cleaned ~/.claude, another machine) fails
       // before anything runs. Start over once rather than stay stuck on it. Only that error:
       // dropping the id on a network or login failure would lose the conversation for good.
@@ -220,19 +229,21 @@ export class ClaudeOperator implements Operator {
       ) {
         log.warn('operator', `Claude session for ${sessionId} would not resume; starting fresh`)
         this.sessions.delete(sessionId)
-        outcome = await this.runQuery(body, options, events, controller, toolCtx)
+        outcome = await this.runQuery(body, options, events, controller, toolCtx, signals)
       }
       if (outcome.error && !outcome.turnLimitReached && !controller.signal.aborted) {
         throw new Error(outcome.error)
       }
 
-      const aborted = controller.signal.aborted
+      // end_task stops the SDK by aborting it; that is the run ending, not being cancelled.
+      const aborted = controller.signal.aborted && signals.ended === undefined
       // Out of turns: what Claude last said stands, as the local loop's forced final reply does.
       const content =
-        outcome.content ||
-        (outcome.turnLimitReached
-          ? `(Stopped at the ${outcome.turns}-turn limit before writing a reply.)`
-          : '')
+        signals.ended ??
+        (outcome.content ||
+          (outcome.turnLimitReached
+            ? `(Stopped at the ${outcome.turns}-turn limit before writing a reply.)`
+            : ''))
       addMessage(this.context, { role: 'assistant', content })
       this.history.persistNew(this.context.messages)
       persisted = true
@@ -248,7 +259,7 @@ export class ClaudeOperator implements Operator {
           turns: outcome.turns,
           duration_ms: Date.now() - startedAt,
           aborted,
-          awaiting: false,
+          awaiting: signals.awaitingInput,
         },
       })
       return {
@@ -258,6 +269,7 @@ export class ClaudeOperator implements Operator {
         turns: outcome.turns,
         ...(outcome.thinking && { thinking: outcome.thinking }),
         ...(aborted && { aborted: true }),
+        ...(signals.awaitingInput && { awaitingInput: true }),
         ...(outcome.turnLimitReached && { turnLimitReached: true }),
       }
     } catch (error) {
@@ -278,6 +290,7 @@ export class ClaudeOperator implements Operator {
     events: AgentEventHandler,
     controller: AbortController,
     toolCtx: ToolCallContext,
+    signals: RunSignals,
   ): Promise<QueryOutcome> {
     const sessionId = this.context.sessionId
     const resumeId = this.sessions.get(sessionId)
@@ -286,12 +299,16 @@ export class ClaudeOperator implements Operator {
       cwd: this.context.workspaceDir,
       ctx: toolCtx,
       exclusive: (fn) => (this.mutex ? this.mutex.run(fn) : fn()),
+      ...(options.extraTools && { extraTools: options.extraTools }),
       onResult: (name, args, result) => {
         events.onToolCallComplete?.(name, name, result)
         publish(sessionId, {
           t: 'tool_done',
           v: { name, success: result.success, args: JSON.stringify(args), output: result.output },
         })
+        // No further turns after end_task: stop the SDK once this result is on its way back.
+        if (noteResult(signals, result)) setTimeout(() => controller.abort('end_task'), 0)
+        return wrapupNote(signals, options)
       },
     })
     const operator = this.config.operator

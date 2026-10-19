@@ -8,6 +8,7 @@ import type { ConversationStore } from '../conversation'
 import type { MemoryManager } from '../memory'
 import { extractLessonsFromTask, extractMemories } from '../memory/extractor'
 import { retrieveForContext } from '../memory/retrieval'
+import type { Operator, OperatorBuilder } from '../operator'
 import type { LLMProvider } from '../providers/types'
 import { gatherStandup } from '../standup'
 import type { ToolExecutor } from '../tools'
@@ -125,6 +126,8 @@ export interface TaskRunnerDeps {
   onAwaitingInput?: (task: Task) => void
   /** One pass over the Wald mailbox, for the seeded `mailbox` task. Absent = mailbox off here. */
   pollMailbox?: () => Promise<string>
+  /** Builds the operator a run drives: the instance's own kind. Absent = the local loop. */
+  buildOperator?: OperatorBuilder
 }
 
 export class TaskRunner {
@@ -799,7 +802,11 @@ export class TaskRunner {
       sessionMutex: this.deps.sessionMutex,
     }
 
-    const agent = new AgentLoop(deps)
+    // A fresh run starts a fresh conversation, by the same rule as the transcript above: kept
+    // only for persist_conversation, or to continue a run that hit its time limit.
+    const isFresh =
+      !task.persistConversation && (task.unbounded || plan.resumeAfterMinutes === undefined)
+    const agent = this.deps.buildOperator?.({ ...deps, isFresh }) ?? new AgentLoop(deps)
     // A run continuing one that hit its time limit opens on the resume note, not the prompt
     // again: the prompt and everything the first run did are already in the conversation.
     const message =
@@ -909,7 +916,7 @@ export class TaskRunner {
    */
   private async enforceDeliverables(
     task: Task,
-    agent: AgentLoop,
+    agent: Operator,
     plan: ExecutionPlan,
     outcome: ExecutionOutcome,
     startedAt: number,

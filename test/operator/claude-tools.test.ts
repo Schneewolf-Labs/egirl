@@ -59,7 +59,10 @@ describe('createEgirlMcpServer', () => {
           locked.push('out')
         }
       },
-      onResult: (name, _args, result) => results.push({ name, result }),
+      onResult: (name, _args, result) => {
+        results.push({ name, result })
+        return undefined
+      },
     })
 
     const { tools } = await client.listTools()
