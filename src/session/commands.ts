@@ -3,7 +3,7 @@
  *
  * `/think off` typed in a terminal, sent from a Matrix room, or posted by the console has to
  * mean one thing, so the parsing lives in one place and acts on the one object all of those
- * share: the session's AgentLoop. The terminal has state a chat channel does not (a queue, a
+ * share: the session's Operator. The terminal has state a chat channel does not (a queue, a
  * turn cap, a run mode); those commands take the SessionController and are refused, not
  * silently ignored, where there isn't one.
  *
@@ -13,7 +13,7 @@
  * Matrix body and in a Discord message.
  */
 
-import type { AgentLoop } from '../agent'
+import type { Operator } from '../operator/types'
 import type { ThinkingConfig } from '../providers/types'
 import type { Skill } from '../skills/types'
 import type { SessionController } from './controller'
@@ -41,7 +41,7 @@ export interface Caller {
 }
 
 export interface CommandScope {
-  agent: AgentLoop
+  agent: Operator
   /** Terminal-only state. Absent on a chat channel. */
   session?: SessionController
   /** Skills that may declare commands (see `egirl.command` in SKILL.md). */
@@ -163,7 +163,7 @@ function parseThinking(arg: string): ThinkingLevel | 'default' | undefined {
   return THINKING_LEVELS.find((l) => l === word)
 }
 
-function describeThinking(agent: AgentLoop): string {
+function describeThinking(agent: Operator): string {
   const { level, source } = agent.getThinking()
   return `${level} (${source})`
 }
@@ -176,7 +176,7 @@ function terminalOnly(cmd: string): CommandResult {
   return reply(`🖥️ /${cmd} is only available in the terminal`)
 }
 
-function thinkCommand(arg: string, agent: AgentLoop): CommandResult {
+function thinkCommand(arg: string, agent: Operator): CommandResult {
   if (!arg) return reply(`🧠 thinking: ${describeThinking(agent)}\n${THINK_USAGE}`)
   const level = parseThinking(arg)
   if (!level) return reply(`🧠 ${THINK_USAGE}`)
@@ -193,7 +193,7 @@ function bar(fraction: number): string {
 
 const t = (n: number) => `${n.toLocaleString()}t`
 
-async function contextCommand(agent: AgentLoop): Promise<CommandResult> {
+async function contextCommand(agent: Operator): Promise<CommandResult> {
   const s = await agent.contextStatus()
   const pct = Math.round(s.utilization * 100)
   const lines = [
@@ -206,7 +206,7 @@ async function contextCommand(agent: AgentLoop): Promise<CommandResult> {
 }
 
 /** The harness at a glance: is she busy, and where does this session stand. */
-async function statusCommand(agent: AgentLoop): Promise<CommandResult> {
+async function statusCommand(agent: Operator): Promise<CommandResult> {
   const s = await agent.contextStatus()
   const state = agent.isRunning() ? '⏳ running' : '🟢 idle'
   return reply(

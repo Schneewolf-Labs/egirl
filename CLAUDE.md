@@ -8,9 +8,9 @@ Around that core sits memory, a toolbelt shaped like a human's hands (shell, fil
 
 ## The Mental Model
 
-> **One local LLM is the operator. It escalates to tools, not to other models. The most important tool is `code_agent`.**
+> **One LLM is the operator. It escalates to tools, not to other models. The most important tool is `code_agent`.**
 
-If you ever catch yourself adding "what if we route this to a bigger model" logic, stop. That's not what this is. If the local model can't do something itself, it calls `code_agent` for code work, `peer_message` for another agent, `report` for its principal, or `execute_command` / `browser_*` / `web_research` / `git_*` for everything else.
+By default the operator is a local model. An instance can instead be a Claude instance (`[operator] provider = "claude"`: a Claude Code session on the user's subscription, with egirl's tools; see `src/operator/`). That is a choice made once per instance, never per message. If you ever catch yourself adding "what if we route this to a bigger model" logic, stop. That's not what this is. If the operator can't do something itself, it calls `code_agent` for code work, `peer_message` for another agent, `report` for its principal, or `execute_command` / `browser_*` / `web_research` / `git_*` for everything else.
 
 ## What a Human in the Loop Does
 
@@ -35,7 +35,7 @@ Skip: generic assistant features (weather, jokes, trivia), multi-model routing, 
 
 ## Design Philosophy
 
-1. **The operator is local; executors are tools.** One local model decides. It escalates to tools (`code_agent`, shell, browser, peers), never to other models.
+1. **One operator per instance; executors are tools.** One model decides, the local one by default. It escalates to tools (`code_agent`, shell, browser, peers), never to other models. A hosted model as the operator is a different instance, not a fallback.
 2. **One principal per instance.** An instance answers to one principal and holds one identity and one memory. A principal can be a person or another agent. More principals means more instances talking as peers, not a multi-tenant instance.
 3. **A human is a slow peer.** Reporting up to a person and to a supervising agent share one contract (`report`); only the latency differs. Supervision stacks as deep as the work warrants, with a person at the top.
 4. **Authority is bounded and legible.** Every stop is mechanical (the system handles it) or semantic (it goes up to the principal). No arbitrary caps.
@@ -93,6 +93,7 @@ This list is load-bearing. When you catch yourself about to add one of these, st
 
 - **No model routing.** The local LLM is the only chooser. "Escalate" means "call a tool." If you find yourself writing a `Router` class, you've lost the plot.
 - **No remote LLM providers** (Anthropic API, OpenAI, etc.) for per-message routing. Code agents are invoked through local CLI/SDK integrations with subscription auth; they are tools, not chat providers.
+  - *Carve-out: a hosted operator.* `[operator] provider = "claude"` makes the whole instance a Claude instance through the same subscription-auth SDK (`src/operator/claude.ts`). It is chosen once per instance and the local model still does the side work. A per-turn or per-message choice between operators is routing, and is out.
   - *Carve-out: training-data capture.* The shadow tutor ([docs/shadow-tutor.md](docs/shadow-tutor.md)) sends each operator turn to a hosted model so its answer can be recorded next to the operator's. It is off by default, runs only on transcribed one-shot runs, and never decides anything: the local operator still drives every turn. Anything that lets the tutor's answer change what the operator does is a new decision, not an extension of this one.
 - **No internal plugin system.** Channels, providers, tools are hardcoded. CLI, Discord, XMPP, Telegram and Matrix are concrete `Channel` implementations, each optional via config. No dynamic registration, no discovery, no capability negotiation. If another is genuinely wanted, hardcode it too and add it to the list in `serve.ts`; don't build a pluggable layer. Shared *plumbing* is fine and expected — `src/channels/spine.ts` runs the same turn (broker, typing, narration, chunking, error reply) for every chat transport — but a shared *registry* is not. Extensibility lives at the HTTP API boundary, not inside the process.
 - **External HTTP API is encouraged.** A small `Bun.serve` in `src/api.ts` lets scripts, mobile apps, automations, LAN clients, and external UIs talk to egirl without running in-process. Keep it tiny — no OpenAPI spec generation, no versioned routes, no tiered rate limits, no framework. Each endpoint should pay for itself; when in doubt delete rather than add.

@@ -222,6 +222,13 @@ egirl/
 │   │   └── index.ts          # Config loading + validation
 │   ├── conversation/
 │   │   └── store.ts          # SQLite conversation persistence
+│   ├── operator/
+│   │   ├── types.ts          # Operator: what every surface needs from whatever drives a session
+│   │   ├── index.ts          # Per-instance choice: the local loop or a hosted harness
+│   │   ├── claude.ts         # Claude Code session (Agent SDK) as the operator
+│   │   ├── claude-tools.ts   # egirl's tool registry as an in-process MCP server
+│   │   ├── claude-messages.ts # SDK messages <-> egirl events
+│   │   └── claude-sessions.ts # Which Claude session resumes which egirl session
 │   ├── memory/
 │   │   ├── index.ts          # MemoryManager (public API)
 │   │   ├── files.ts          # MEMORY.md + daily logs + images
