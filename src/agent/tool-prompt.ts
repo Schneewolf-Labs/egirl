@@ -68,6 +68,13 @@ const GROUPS: ToolGroup[] = [
     },
   },
   {
+    title: 'Math',
+    lines: {
+      calculate:
+        'Evaluate arithmetic exactly (percentages, unit conversions, compound growth, multi-step sums). Use it for anything beyond trivial mental math instead of computing in your head, and answer from its result.',
+    },
+  },
+  {
     title: 'Skills',
     lines: {
       skill_manage:

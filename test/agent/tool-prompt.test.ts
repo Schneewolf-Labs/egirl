@@ -67,11 +67,18 @@ describe('tools section', () => {
   test('a registered tool without curated guidance is listed with its own description', () => {
     const section = buildToolsSection('/ws', [
       def('web_search'),
-      def('calculate', 'Evaluate an arithmetic expression exactly. Supports units and dates.'),
+      def('wald_lookup', 'Look up an entry in the org state store. Returns JSON with history.'),
     ])
     expect(section).toContain('**Other:**')
-    expect(section).toContain('- `calculate` - Evaluate an arithmetic expression exactly.')
-    expect(section).not.toContain('Supports units')
+    expect(section).toContain('- `wald_lookup` - Look up an entry in the org state store.')
+    expect(section).not.toContain('Returns JSON')
+  })
+
+  test('calculate gets its curated "use it instead of mental math" line', () => {
+    const section = buildToolsSection('/ws', [def('web_search'), def('calculate', 'Evaluate.')])
+    expect(section).toContain('**Math:**')
+    expect(section).toContain('instead of computing in your head')
+    expect(section).not.toContain('**Other:**')
   })
 
   test('no tools, no section', () => {
