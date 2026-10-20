@@ -118,7 +118,8 @@ describe('buildSystemPrompt', () => {
     writeFileSync(join(workspace, 'IDENTITY.md'), 'I am Kira')
 
     const config = makeConfig(workspace)
-    const parts = buildSystemPrompt(config)
+    const tools = [{ name: 'read_file', description: 'Read a file.', parameters: {} }]
+    const parts = buildSystemPrompt(config, { tools })
 
     expect(parts.stable).toContain('Available Tools')
     expect(parts.stable).toContain('read_file')

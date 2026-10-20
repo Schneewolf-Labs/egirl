@@ -90,7 +90,10 @@ export class HostedSession {
     this.memory = deps.memory ?? null
     this.sideProvider = deps.auxProvider ?? deps.localProvider
     this.promptOptions = { skills: deps.skills, additionalContext: deps.additionalContext }
-    this.context = createAgentContext(deps.config, deps.sessionId, this.promptOptions)
+    this.context = createAgentContext(deps.config, deps.sessionId, {
+      ...this.promptOptions,
+      tools: deps.toolExecutor.getDefinitions(),
+    })
     this.history = new ConversationHistory(deps.conversationStore ?? null, deps.sessionId)
     this.history.hydrate(this.context)
   }
@@ -142,7 +145,10 @@ export class HostedSession {
 
   /** Forget the live conversation; the operator forgets its harness session alongside. */
   clear(): void {
-    this.context = createAgentContext(this.config, this.context.sessionId, this.promptOptions)
+    this.context = createAgentContext(this.config, this.context.sessionId, {
+      ...this.promptOptions,
+      tools: this.executor.getDefinitions(),
+    })
     this.history.reset()
     this.lastContextTokens = 0
   }
