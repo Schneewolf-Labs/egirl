@@ -581,6 +581,7 @@ Enable / disable tool groups.
 |-----|------|---------|-------------|
 | `files` | bool | `true` | `read_file`, `write_file`, `edit_file`, `glob_files` |
 | `exec` | bool | `true` | `execute_command` |
+| `calculate` | bool | `true` | `calculate` — exact arithmetic, no I/O; safe on a [public instance](public-instance.md) |
 | `git` | bool | `true` | `git_*` |
 | `memory` | bool | `true` | `memory_*` |
 | `browser` | bool | `false` | `browser_*` (requires `bunx playwright install`) |

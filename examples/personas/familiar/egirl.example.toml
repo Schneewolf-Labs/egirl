@@ -1,0 +1,67 @@
+# Familiar: an egirl instance served as an OpenAI-compatible model.
+#
+# Clients call POST /v1/chat/completions like any chat model. Behind it, egirl runs its agent loop
+# with web search, page reading and a calculator, and returns only the final answer.
+#
+# Give it its own directory so no other egirl.d/ fragment merges in (a fragment can't unset
+# [local.embeddings], and embeddings would give every caller a shared memory):
+#   ~/.egirl/familiar/egirl.toml        <- this file
+#   ~/.egirl/familiar/workspace/        <- IDENTITY.md, SOUL.md, AGENTS.md from this directory
+# Run one process per edition:
+#   EGIRL_CONFIG=~/.egirl/familiar/egirl.toml bun run start --instance familiar-spark api
+# The instance name is the model id clients see in GET /v1/models.
+
+[workspace]
+path = "~/.egirl/familiar/workspace"
+
+[local]
+# llama-server serving the edition's weights (set per instance below), with --jinja and
+# --parallel slots to match max_concurrent.
+max_concurrent = 4
+# No [local.embeddings]: without them there is no memory system, so nothing one caller says can
+# reach another.
+
+[thinking]
+level = "off"                            # answers come from tools, not long deliberation
+
+[conversation]
+max_turns = 8                            # tool rounds per request: plenty for search -> read -> answer
+max_age_days = 7                         # API transcripts are kept this long
+
+[channels.api]
+host = "127.0.0.1"                       # put a gateway with auth and rate limits in front of it
+openai_extract = false                   # stateless: never write memory from API traffic
+
+# Only the tools a public "model" needs. Everything that touches the host is off.
+[tools]
+files = false
+exec = false
+process = false
+git = false
+memory = false
+browser = false
+github = false
+tasks = false
+code_agent = false
+peers = false
+consult = false
+consult_files = false
+screenshot = false
+session_search = false
+skill_manage = false
+web_search = true
+web_research = true
+web_research_private = false             # callers must not be able to read the internal network
+calculate = true
+
+[searxng]
+url = "http://127.0.0.1:8888"
+
+# One table per edition: each runs as its own process, on its own port, against its own weights.
+[instances.familiar-spark]
+local = { endpoint = "http://127.0.0.1:8080" }      # the 9B
+channels = { api = { port = 3101 } }
+
+[instances.familiar-ember]
+local = { endpoint = "http://127.0.0.1:8081" }      # the 27B
+channels = { api = { port = 3102 } }

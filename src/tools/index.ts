@@ -50,6 +50,7 @@ import type { Skill } from '../skills/types'
 import { log } from '../util/logger'
 import {
   type CodeAgentConfig,
+  calculateTool,
   createBrowserTools,
   createCodeAgentTool,
   createConsultTool,
@@ -155,6 +156,11 @@ export function createDefaultToolExecutor(
     } else {
       executor.registerAll([readTool, writeTool, editTool, globTool])
     }
+  }
+
+  // Arithmetic. Harmless (no I/O), so it stays on even where exec is off.
+  if (t.calculate) {
+    executor.register(calculateTool)
   }
 
   // Shell execution
