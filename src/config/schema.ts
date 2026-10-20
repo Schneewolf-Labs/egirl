@@ -531,6 +531,8 @@ const baseProperties = {
     Type.Object({
       files: Type.Boolean({ default: true }),
       exec: Type.Boolean({ default: true }),
+      // calculate: exact arithmetic, no I/O. Safe on a public instance.
+      calculate: Type.Boolean({ default: true }),
       process: Type.Boolean({ default: false }),
       git: Type.Boolean({ default: true }),
       memory: Type.Boolean({ default: true }),
@@ -899,6 +901,7 @@ export interface RuntimeConfig {
   tools: {
     files: boolean
     exec: boolean
+    calculate: boolean
     process: boolean
     git: boolean
     memory: boolean
