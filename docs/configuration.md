@@ -113,8 +113,8 @@ the one the rest of this document describes.
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `provider` | `"local"` \| `"claude"` | `"local"` | `local` runs sessions on the llama.cpp loop. `claude` runs each session as a Claude Code session through the Claude Agent SDK on your own Claude subscription (`claude login`), with egirl's tools |
-| `model` | string | (SDK default) | Claude model override, e.g. `"sonnet"` or `"opus"`. Ignored by `local` |
+| `provider` | `"local"` \| `"claude"` \| `"codex"` | `"local"` | `local` runs sessions on the llama.cpp loop. `claude` runs each session as a Claude Code session through the Claude Agent SDK on your own Claude subscription (`claude login`). `codex` runs each session as a thread on `codex app-server` on your own ChatGPT login (`codex login`). Both hosted operators get egirl's tools and only those |
+| `model` | string | (harness default) | Model override, e.g. `"opus"` for Claude or a Codex model name. Ignored by `local` |
 
 ```toml
 [operator]
@@ -127,12 +127,12 @@ for a turn. A Claude instance and a local instance are two instances (see
 [Multi-Instance Config](#multi-instance-config)), each with its own workspace, memory and
 persona, that can talk to each other as peers.
 
-What a Claude instance keeps from egirl: the system prompt built from the workspace files
-(for a Claude instance, `SOUL.md` is usually a few lines: who it is, who its principal is), the
-whole tool registry served to Claude over an in-process MCP server and run through the same
-executor and safety layer, proactive memory recall on each turn and memory extraction after it,
-the conversation mirror the web console and `egirl sessions` read, and the Claude session id so
-a restart resumes the same conversation (`<workspace>/claude-sessions.json`).
+What a hosted instance (Claude or Codex) keeps from egirl: the system prompt built from the workspace files
+(for a hosted instance, `SOUL.md` is usually a few lines: who it is, who its principal is), the
+whole tool registry run through the same executor and safety layer, proactive memory recall on
+each turn and memory extraction after it, the conversation mirror the web console and
+`egirl sessions` read, and the harness's session id so a restart resumes the same conversation
+(`<workspace>/claude-sessions.json` or `<workspace>/codex-sessions.json`).
 
 What it leaves to Claude Code: the loop, the transcript and the context window. The local
 loop's nudges, spiral and repetition guards, compaction and rollover do not run; `/context`
@@ -152,6 +152,31 @@ self-review run on the local model as before.
 So does the OpenAI-compatible endpoint (`POST /v1/chat/completions`): its client owns the
 transcript, and a Claude session cannot yet be seeded with one, so on a Claude instance those
 requests are answered by the local model.
+
+#### Codex as the operator
+
+egirl's tools reach Codex as app-server "dynamic tools": Codex calls them back over the same
+JSON-RPC pipe egirl spawned it on, so there is no MCP server to run. Codex's own tools are
+switched off for the thread (the shell, sub-agents, goals, asking the user directly, hosted web
+search), every turn runs with no environment, and the sandbox is read-only with no approvals,
+so the only way it can act is through egirl. The workspace prompt replaces Codex's own as base
+instructions and is resent on every resume, so an edited `SOUL.md` applies to a continuing
+thread.
+
+Differences from the Claude operator:
+
+- A message sent into a running turn (`POST /sessions/:id/interrupt` with `action = "inject"`)
+  is steered in with `turn/steer`, as on the local loop. The Claude SDK cannot take one.
+- The turn cap counts tool calls: after `max_turns` of them the turn is interrupted and what
+  Codex last said stands. app-server has no cap of its own.
+- `/think off` sends no reasoning effort and leaves the model's default, since Codex models
+  always reason. `low`, `medium` and `high` pass through.
+- `/context` measures against the window Codex reports for the model after the first turn.
+- The tool list is fixed when a thread starts. A tool added later (a new MCP server, a skill)
+  reaches Codex in new sessions, not in one that is already running.
+- Codex still injects its own skills catalog into the prompt; there is no switch for it.
+
+Needs the `codex` CLI on `PATH` (or `EGIRL_CODEX_BIN`), version 0.163 or later.
 
 ### `[channels.discord]`
 

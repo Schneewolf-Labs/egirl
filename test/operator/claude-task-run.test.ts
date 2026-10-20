@@ -3,8 +3,9 @@ import type { Options, SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-a
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import type { SessionMutex } from '../../src/agent/session-mutex'
 import { ClaudeOperator, type QueryFn } from '../../src/operator/claude'
-import type { ClaudeSessionMap } from '../../src/operator/claude-sessions'
+import type { SessionMap } from '../../src/operator/session-map'
 import type { LLMProvider } from '../../src/providers/types'
 import type { Tool } from '../../src/tools/types'
 import { makeConfig, makeExecutorWithNoop, makeWorkspace } from '../agent/helpers'
@@ -67,7 +68,7 @@ function scriptedClaude(play: (callTool: CallTool, signal: AbortSignal) => Promi
   return { query, calls, listed }
 }
 
-function memorySessions(): ClaudeSessionMap & { entries: Map<string, string> } {
+function memorySessions(): SessionMap & { entries: Map<string, string> } {
   const entries = new Map<string, string>()
   return {
     entries,
@@ -148,6 +149,30 @@ describe('ClaudeOperator on a task run', () => {
     expect(res.content).toBe('Finished: notes written.')
     expect(res.aborted).toBeUndefined()
     expect(op.isRunning()).toBe(false)
+  })
+
+  test("registry tools run under the shared-state lock; the run's own tools do not", async () => {
+    const locked: string[] = []
+    const sessionMutex = {
+      async run<T>(fn: () => Promise<T>): Promise<T> {
+        locked.push('lock')
+        return fn()
+      },
+    } as unknown as SessionMutex
+    const extraTools = new Map([
+      [
+        'request_extension',
+        tool('request_extension', async () => ({ success: true, output: 'ok' })),
+      ],
+    ])
+    const { query } = scriptedClaude(async (callTool) => {
+      await callTool('noop')
+      await callTool('request_extension')
+      return [done('ok')]
+    })
+    const { op } = taskOperator(query, { sessionMutex })
+    await op.run('go', { extraTools })
+    expect(locked).toEqual(['lock'])
   })
 
   test('a report ask that got no answer parks the run as awaiting input', async () => {

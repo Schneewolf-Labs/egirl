@@ -347,12 +347,15 @@ const baseProperties = {
   ),
 
   // Which model drives this instance's sessions. `local` is the llama.cpp loop; `claude` runs
-  // each session as a Claude Code session on the user's subscription, with egirl's tools
-  // (src/operator). One per instance: this is identity, not routing.
+  // each session as a Claude Code session on the user's subscription, `codex` as a Codex
+  // app-server thread on the user's ChatGPT login, both with egirl's tools (src/operator).
+  // One per instance: this is identity, not routing.
   operator: Type.Optional(
     Type.Object({
-      provider: Type.Union([Type.Literal('local'), Type.Literal('claude')], { default: 'local' }),
-      // Claude model override, e.g. "sonnet" or "opus"; the SDK's default when unset.
+      provider: Type.Union([Type.Literal('local'), Type.Literal('claude'), Type.Literal('codex')], {
+        default: 'local',
+      }),
+      // Model override, e.g. "opus" for Claude or a Codex model name; the harness default when unset.
       model: Type.Optional(Type.String()),
     }),
   ),
@@ -808,7 +811,7 @@ export interface RuntimeConfig {
   }>
   /** The operator this instance runs on. Unset means the local loop. */
   operator?: {
-    provider: 'local' | 'claude'
+    provider: 'local' | 'claude' | 'codex'
     model?: string
   }
   /** Shadow tutor: labels each transcribed operator turn with a stronger model's answer. */

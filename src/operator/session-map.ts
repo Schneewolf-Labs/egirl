@@ -3,23 +3,24 @@ import { dirname } from 'path'
 import { log } from '../util/logger'
 
 /**
- * Which Claude Code session continues which egirl session.
+ * Which hosted-harness session continues which egirl session: a Claude Code session id, or a
+ * Codex thread id, one file per harness.
  *
- * The SDK keeps the transcript; egirl keeps only the id that resumes it, so a restart picks the
- * conversation back up instead of starting a stranger. One small JSON file in the workspace.
+ * The harness keeps the transcript; egirl keeps only the id that resumes it, so a restart picks
+ * the conversation back up instead of starting a stranger. One small JSON file in the workspace.
  *
  * Every access reads the file, and every change is a read-modify-write: chat runs in one
  * process (`serve`) and tasks in another (`api`), both on this file, and a copy held in memory
  * would write back the other process's entries as they were when it started. A handful of
  * entries, read once per turn, so the cost is nothing.
  */
-export interface ClaudeSessionMap {
+export interface SessionMap {
   get(sessionId: string): string | undefined
   set(sessionId: string, claudeSessionId: string): void
   delete(sessionId: string): void
 }
 
-export function openClaudeSessionMap(path: string): ClaudeSessionMap {
+export function openSessionMap(path: string): SessionMap {
   const read = (): Record<string, string> => {
     const entries: Record<string, string> = {}
     try {
@@ -31,7 +32,7 @@ export function openClaudeSessionMap(path: string): ClaudeSessionMap {
         }
       }
     } catch (error) {
-      log.warn('operator', `Could not read ${path}; Claude sessions start fresh:`, error)
+      log.warn('operator', `Could not read ${path}; sessions start fresh:`, error)
     }
     return entries
   }

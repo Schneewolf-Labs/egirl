@@ -5,7 +5,7 @@ import { join } from 'path'
 import type { AgentEventHandler } from '../../src/agent/events'
 import { resetSessionEvents, subscribe } from '../../src/agent/session-events'
 import { ClaudeOperator, type QueryFn } from '../../src/operator/claude'
-import type { ClaudeSessionMap } from '../../src/operator/claude-sessions'
+import type { SessionMap } from '../../src/operator/session-map'
 import type { LLMProvider, ToolCall } from '../../src/providers/types'
 import { makeConfig, makeExecutorWithNoop, makeWorkspace } from '../agent/helpers'
 
@@ -21,7 +21,7 @@ interface Call {
   options: Options
 }
 
-function memorySessions(): ClaudeSessionMap & { entries: Map<string, string> } {
+function memorySessions(): SessionMap & { entries: Map<string, string> } {
   const entries = new Map<string, string>()
   return {
     entries,
