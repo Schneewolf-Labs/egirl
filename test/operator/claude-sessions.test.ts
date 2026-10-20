@@ -27,4 +27,19 @@ describe('openClaudeSessionMap', () => {
     map.set('x', 'y')
     expect(openClaudeSessionMap(path).get('x')).toBe('y')
   })
+
+  test("two processes on one file keep each other's entries", () => {
+    const path = join(mkdtempSync(join(tmpdir(), 'egirl-claude-sessions-')), 'claude-sessions.json')
+    const chat = openClaudeSessionMap(path)
+    const tasks = openClaudeSessionMap(path)
+    chat.set('discord:1', 'chat-session')
+    tasks.set('task:heartbeat', 'task-session')
+    chat.set('discord:2', 'other-chat')
+    expect(tasks.get('discord:2')).toBe('other-chat')
+    expect(JSON.parse(readFileSync(path, 'utf-8'))).toEqual({
+      'discord:1': 'chat-session',
+      'task:heartbeat': 'task-session',
+      'discord:2': 'other-chat',
+    })
+  })
 })

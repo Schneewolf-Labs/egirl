@@ -3,6 +3,7 @@ import type { AgentLoopDeps } from '../agent/types'
 import type { RuntimeConfig } from '../config'
 import type { MemoryManager } from '../memory'
 import { retrieveForContext } from '../memory/retrieval'
+import type { OperatorBuilder } from '../operator'
 import type { LLMProvider } from '../providers/types'
 import { gatherStandup } from '../standup'
 import type { ToolExecutor } from '../tools'
@@ -38,6 +39,8 @@ export interface DiscoveryDeps {
   localProvider: LLMProvider
   auxProvider?: LLMProvider
   memory: MemoryManager | undefined
+  /** Builds the operator a pass drives: the instance's own kind. Absent = the local loop. */
+  buildOperator?: OperatorBuilder
 }
 
 export class Discovery {
@@ -127,7 +130,9 @@ export class Discovery {
         additionalContext: contextParts.join('\n\n'),
       }
 
-      const agent = new AgentLoop(agentDeps)
+      // Every pass starts clean: discovery keeps no transcript of its own.
+      const agent =
+        this.deps.buildOperator?.({ ...agentDeps, isFresh: true }) ?? new AgentLoop(agentDeps)
       await agent.run(DISCOVERY_PROMPT, { maxTurns: 5 })
 
       log.info('tasks', 'Discovery complete')

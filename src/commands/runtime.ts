@@ -4,7 +4,7 @@ import { type AppServices, createAppServices } from '../bootstrap'
 import type { OutboundChannel } from '../channels/types'
 import type { RuntimeConfig } from '../config'
 import type { StatelessAgentFactory } from '../openai-compat'
-import { createOperatorFactory } from '../operator'
+import { createOperatorBuilder, createOperatorFactory, type OperatorBuilder } from '../operator'
 import { MAIL_CHANNEL } from '../peers/mailbox-poll'
 import { createMailbox, type Mailbox } from '../peers/mailbox-setup'
 import { gatherStandup } from '../standup'
@@ -31,6 +31,8 @@ export interface CommandRuntime extends AppServices {
   sessionMutex: SessionMutex
   agentFactory: AgentFactory
   statelessAgentFactory: StatelessAgentFactory
+  /** Builds an operator of this instance's kind; background tasks build theirs through it. */
+  buildOperator: OperatorBuilder
 }
 
 export async function createCommandRuntime(config: RuntimeConfig): Promise<CommandRuntime> {
@@ -39,18 +41,23 @@ export async function createCommandRuntime(config: RuntimeConfig): Promise<Comma
   const sessionMutex = new SessionMutex()
 
   // The operator this instance runs on, chosen once from [operator]: the local loop, or a
-  // hosted harness driving egirl's tools (src/operator).
-  const agentFactory: AgentFactory = createOperatorFactory({
-    config,
-    toolExecutor: services.toolExecutor,
-    localProvider: services.providers.local,
-    auxProvider: services.providers.auxiliary,
-    memory: services.memory,
-    conversationStore: services.conversations,
-    skills: services.skills,
-    additionalContext: standup || undefined,
-    sessionMutex,
-  })
+  // hosted harness driving egirl's tools (src/operator). One builder for the process, so chat
+  // and background tasks share it.
+  const buildOperator = createOperatorBuilder(config)
+  const agentFactory: AgentFactory = createOperatorFactory(
+    {
+      config,
+      toolExecutor: services.toolExecutor,
+      localProvider: services.providers.local,
+      auxProvider: services.providers.auxiliary,
+      memory: services.memory,
+      conversationStore: services.conversations,
+      skills: services.skills,
+      additionalContext: standup || undefined,
+      sessionMutex,
+    },
+    buildOperator,
+  )
 
   // One throwaway loop per OpenAI-compatible request: the client owns the transcript, so there
   // is no conversation store. Recall stays wired -- memory is instance-wide, not a property of
@@ -73,7 +80,7 @@ export async function createCommandRuntime(config: RuntimeConfig): Promise<Comma
       isMemoryReadOnly: !config.channels.api?.openaiExtract,
     })
 
-  return { ...services, sessionMutex, agentFactory, statelessAgentFactory }
+  return { ...services, sessionMutex, agentFactory, statelessAgentFactory, buildOperator }
 }
 
 export interface BackgroundTasksOptions {
@@ -123,6 +130,7 @@ export function createBackgroundTasks(
     localProvider: rt.providers.local,
     auxProvider: rt.providers.auxiliary,
     memory: rt.memory,
+    buildOperator: rt.buildOperator,
   }
 
   // The poll closes over the mailbox, which needs the runner to exist first.

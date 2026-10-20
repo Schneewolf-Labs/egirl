@@ -5,7 +5,7 @@ import {
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js'
 import type { ToolExecutor } from '../tools'
-import type { ToolCallContext, ToolResult } from '../tools/types'
+import type { Tool, ToolCallContext, ToolResult } from '../tools/types'
 
 /** The Claude SDK names an MCP tool `mcp__<server>__<tool>`; egirl's server is `egirl`. */
 export const MCP_SERVER_NAME = 'egirl'
@@ -22,8 +22,17 @@ export interface EgirlMcpServerArgs {
   ctx: ToolCallContext
   /** Runs a tool call under the shared-state lock (SessionMutex), or inline without one. */
   exclusive: <T>(fn: () => Promise<T>) => Promise<T>
-  /** A tool finished; what the harness does not tell us because the call ran on our side. */
-  onResult?: (name: string, args: Record<string, unknown>, result: ToolResult) => void
+  /**
+   * Tools this run alone offers (a task's request_extension and end_task). Served beside the
+   * registry and run inline, never through the shared executor, as the local loop runs them.
+   */
+  extraTools?: Map<string, Tool>
+  /**
+   * A tool finished; what the harness does not tell us because the call ran on our side.
+   * Returning text appends it to what Claude sees of the result: the one channel into a turn
+   * that is already running.
+   */
+  onResult?: (name: string, args: Record<string, unknown>, result: ToolResult) => string | undefined
 }
 
 /**
@@ -37,15 +46,16 @@ export interface EgirlMcpServerArgs {
  * is what the wire format is, so passing it through is a rename, not a translation.
  */
 export function createEgirlMcpServer(args: EgirlMcpServerArgs): McpServer {
-  const { executor, cwd, ctx, exclusive, onResult } = args
+  const { executor, cwd, ctx, exclusive, onResult, extraTools } = args
   const mcp = new McpServer(
     { name: MCP_SERVER_NAME, version: '1' },
     { capabilities: { tools: {} } },
   )
   let next = 0
 
+  const extraDefs = [...(extraTools?.values() ?? [])].map((t) => t.definition)
   mcp.server.setRequestHandler(ListToolsRequestSchema, async () => ({
-    tools: executor.getDefinitions().map((d) => ({
+    tools: [...executor.getDefinitions(), ...extraDefs].map((d) => ({
       name: d.name,
       description: d.description,
       inputSchema: d.parameters as { type: 'object'; [key: string]: unknown },
@@ -55,26 +65,35 @@ export function createEgirlMcpServer(args: EgirlMcpServerArgs): McpServer {
   mcp.server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const name = request.params.name
     const callArgs = (request.params.arguments ?? {}) as Record<string, unknown>
-    const result = await exclusive(() =>
-      executor.execute({ id: `call_${next++}`, name, arguments: callArgs }, cwd, ctx),
-    )
-    onResult?.(name, callArgs, result)
-    return toCallToolResult(result)
+    const extra = extraTools?.get(name)
+    const result = extra
+      ? await extra.execute(callArgs, cwd, ctx)
+      : await exclusive(() =>
+          executor.execute({ id: `call_${next++}`, name, arguments: callArgs }, cwd, ctx),
+        )
+    const note = onResult?.(name, callArgs, result)
+    return toCallToolResult(result, note)
   })
 
   return mcp
 }
 
-/** A tool result in MCP's shape. An image result becomes an image block Claude can look at. */
-export function toCallToolResult(result: ToolResult): CallToolResult {
+/**
+ * A tool result in MCP's shape. An image result becomes an image block Claude can look at; a
+ * note from the operator rides as a text block after it.
+ */
+export function toCallToolResult(result: ToolResult, note?: string): CallToolResult {
+  const tail = note ? [{ type: 'text' as const, text: note }] : []
   if (result.isImage) {
     const image = parseDataUrl(result.output)
     if (image) {
-      return { content: [{ type: 'image', data: image.data, mimeType: image.mimeType }] }
+      return {
+        content: [{ type: 'image', data: image.data, mimeType: image.mimeType }, ...tail],
+      }
     }
   }
   return {
-    content: [{ type: 'text', text: result.output || '(no output)' }],
+    content: [{ type: 'text', text: result.output || '(no output)' }, ...tail],
     ...(result.success ? {} : { isError: true }),
   }
 }

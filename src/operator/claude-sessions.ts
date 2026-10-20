@@ -6,8 +6,12 @@ import { log } from '../util/logger'
  * Which Claude Code session continues which egirl session.
  *
  * The SDK keeps the transcript; egirl keeps only the id that resumes it, so a restart picks the
- * conversation back up instead of starting a stranger. One small JSON file in the workspace,
- * read once and rewritten on every change: a handful of entries, changed a few times a day.
+ * conversation back up instead of starting a stranger. One small JSON file in the workspace.
+ *
+ * Every access reads the file, and every change is a read-modify-write: chat runs in one
+ * process (`serve`) and tasks in another (`api`), both on this file, and a copy held in memory
+ * would write back the other process's entries as they were when it started. A handful of
+ * entries, read once per turn, so the cost is nothing.
  */
 export interface ClaudeSessionMap {
   get(sessionId: string): string | undefined
@@ -16,25 +20,26 @@ export interface ClaudeSessionMap {
 }
 
 export function openClaudeSessionMap(path: string): ClaudeSessionMap {
-  let entries: Record<string, string> = {}
-  try {
-    if (existsSync(path)) {
+  const read = (): Record<string, string> => {
+    const entries: Record<string, string> = {}
+    try {
+      if (!existsSync(path)) return entries
       const parsed: unknown = JSON.parse(readFileSync(path, 'utf-8'))
       if (parsed && typeof parsed === 'object') {
         for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
           if (typeof v === 'string') entries[k] = v
         }
       }
+    } catch (error) {
+      log.warn('operator', `Could not read ${path}; Claude sessions start fresh:`, error)
     }
-  } catch (error) {
-    log.warn('operator', `Could not read ${path}; Claude sessions start fresh:`, error)
-    entries = {}
+    return entries
   }
 
-  const flush = (): void => {
+  const write = (entries: Record<string, string>): void => {
     try {
       mkdirSync(dirname(path), { recursive: true })
-      const tmp = `${path}.tmp`
+      const tmp = `${path}.${process.pid}.tmp`
       writeFileSync(tmp, `${JSON.stringify(entries, null, 2)}\n`)
       renameSync(tmp, path)
     } catch (error) {
@@ -43,16 +48,18 @@ export function openClaudeSessionMap(path: string): ClaudeSessionMap {
   }
 
   return {
-    get: (sessionId) => entries[sessionId],
+    get: (sessionId) => read()[sessionId],
     set(sessionId, claudeSessionId) {
+      const entries = read()
       if (entries[sessionId] === claudeSessionId) return
       entries[sessionId] = claudeSessionId
-      flush()
+      write(entries)
     },
     delete(sessionId) {
+      const entries = read()
       if (!(sessionId in entries)) return
       delete entries[sessionId]
-      flush()
+      write(entries)
     },
   }
 }

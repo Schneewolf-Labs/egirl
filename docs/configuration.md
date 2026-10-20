@@ -137,8 +137,18 @@ a restart resumes the same conversation (`<workspace>/claude-sessions.json`).
 What it leaves to Claude Code: the loop, the transcript and the context window. The local
 loop's nudges, spiral and repetition guards, compaction and rollover do not run; `/context`
 reports the SDK's own token usage against a 200k window, and `/compact` is not available.
-`[local]` is still required: memory extraction, the permission supervisor and background tasks
-run on the local model as before.
+
+Background tasks, the heartbeat and discovery run on the Claude operator too, each task run in
+its own Claude session (`task:<id>`). A run starts a new session by the same rule the local
+loop starts from an empty transcript: it continues only with `persist_conversation`, or to pick
+up a bounded run that hit its time limit. `request_extension`, `end_task`, a report ask that
+parks the task, and the deadline wrap-up warning all work. The warning rides on the first tool
+result inside the wrap-up margin rather than as a turn of its own, so a run that calls no tool
+in that window meets the hard timeout unwarned. Context rollover and consolidation breaks are
+local-loop features and do not apply.
+
+`[local]` is still required: memory extraction, the permission supervisor and a task's
+self-review run on the local model as before.
 So does the OpenAI-compatible endpoint (`POST /v1/chat/completions`): its client owns the
 transcript, and a Claude session cannot yet be seeded with one, so on a Claude instance those
 requests are answered by the local model.

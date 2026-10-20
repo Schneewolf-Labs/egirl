@@ -1,6 +1,7 @@
 import { join } from 'path'
 import { createAgentLoop } from '../agent/loop'
 import type { SessionMutex } from '../agent/session-mutex'
+import type { AgentLoopDeps } from '../agent/types'
 import type { RuntimeConfig } from '../config'
 import type { ConversationStore } from '../conversation'
 import type { MemoryManager } from '../memory'
@@ -12,6 +13,31 @@ import { openClaudeSessionMap } from './claude-sessions'
 import type { Operator, OperatorFactory } from './types'
 
 export type { Operator, OperatorFactory } from './types'
+
+/** What it takes to build one operator for one session. */
+export interface OperatorDeps extends AgentLoopDeps {
+  /**
+   * Begin a new conversation rather than continue the stored one. The local loop starts from
+   * whatever transcript it is handed, so this only matters to an operator that keeps its own.
+   */
+  isFresh?: boolean
+}
+
+export type OperatorBuilder = (deps: OperatorDeps) => Operator
+
+/**
+ * Operators of the one kind `[operator]` names. The choice is made once per instance, here, at
+ * startup: chat sessions, background tasks and discovery all build through the same builder,
+ * and nothing downstream knows or picks which kind it got. Build it once per process and pass
+ * it down, so every Claude session in the process goes through one session map.
+ */
+export function createOperatorBuilder(config: RuntimeConfig): OperatorBuilder {
+  if ((config.operator?.provider ?? 'local') === 'local') {
+    return ({ isFresh: _, ...deps }) => createAgentLoop(deps)
+  }
+  const sessions = openClaudeSessionMap(join(config.workspace.path, 'claude-sessions.json'))
+  return (deps) => new ClaudeOperator({ ...deps, sessions })
+}
 
 export interface OperatorFactoryDeps {
   config: RuntimeConfig
@@ -25,15 +51,10 @@ export interface OperatorFactoryDeps {
   sessionMutex: SessionMutex
 }
 
-/**
- * Per-session operators for this instance, of the one kind `[operator]` names. The choice is
- * made once per instance here, at startup: nothing downstream knows or picks which it got.
- */
-export function createOperatorFactory(deps: OperatorFactoryDeps): OperatorFactory {
-  const provider = deps.config.operator?.provider ?? 'local'
-  if (provider === 'local') {
-    return (sessionId: string): Operator => createAgentLoop({ ...deps, sessionId })
-  }
-  const sessions = openClaudeSessionMap(join(deps.config.workspace.path, 'claude-sessions.json'))
-  return (sessionId: string): Operator => new ClaudeOperator({ ...deps, sessionId, sessions })
+/** Per-session operators for the chat surfaces. */
+export function createOperatorFactory(
+  deps: OperatorFactoryDeps,
+  build: OperatorBuilder = createOperatorBuilder(deps.config),
+): OperatorFactory {
+  return (sessionId: string): Operator => build({ ...deps, sessionId })
 }
