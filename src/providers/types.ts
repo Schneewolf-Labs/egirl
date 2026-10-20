@@ -34,6 +34,20 @@ export interface ThinkingConfig {
   budgetTokens?: number
 }
 
+/**
+ * Per-request sampling, from a client of the OpenAI-compatible surface. Every model call of
+ * that request's run gets the same values; a field left unset keeps the provider's default.
+ */
+export interface SamplingParams {
+  temperature?: number
+  top_p?: number
+  /** A cap on each generation, not on the run: see src/openai-params.ts for why. */
+  max_tokens?: number
+  seed?: number
+  presence_penalty?: number
+  frequency_penalty?: number
+}
+
 export interface ChatRequest {
   messages: ChatMessage[]
   tools?: ToolDefinition[]
@@ -51,6 +65,8 @@ export interface ChatRequest {
   thinking?: ThinkingConfig
   /** Abort signal — cancels the in-flight HTTP request / generation */
   signal?: AbortSignal
+  /** Client sampling overrides; they win over `temperature` / `max_tokens` above. */
+  sampling?: SamplingParams
   /** Stable/volatile split for system prompt caching (Anthropic prefix caching) */
   systemPromptParts?: {
     stable: string

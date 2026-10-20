@@ -222,6 +222,9 @@ const baseProperties = {
           // instance serving many visitors (see docs/public-instance.md).
           max_sessions: Type.Optional(Type.Number({ minimum: 1 })),
           openai_extract: Type.Boolean({ default: false }),
+          // Stream the run's reasoning, tool activity and pre-tool text on /v1/chat/completions
+          // as reasoning_content. Off: a client sees only the answer, like any other model.
+          expose_progress: Type.Boolean({ default: false }),
         }),
       ),
     }),
@@ -714,6 +717,8 @@ export interface RuntimeConfig {
       maxSessions?: number
       /** Whether /v1/chat/completions turns may write memories. Recall works either way. */
       openaiExtract: boolean
+      /** Whether /v1/chat/completions streams progress as reasoning_content. */
+      exposeProgress: boolean
     }
   }
   conversation: {

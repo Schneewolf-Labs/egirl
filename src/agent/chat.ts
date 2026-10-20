@@ -3,6 +3,7 @@ import type {
   ChatMessage,
   ChatResponse,
   LLMProvider,
+  SamplingParams,
   ThinkingConfig,
   Tokenizer,
   ToolDefinition,
@@ -66,6 +67,7 @@ export async function chatWithRetry(args: {
   signal?: AbortSignal
   maxRetries?: number
   cacheSlot?: number
+  sampling?: SamplingParams
 }): Promise<ChatResponse> {
   const {
     provider,
@@ -76,6 +78,7 @@ export async function chatWithRetry(args: {
     thinking,
     signal,
     cacheSlot,
+    sampling,
     maxRetries = 2,
   } = args
   let lastError: unknown
@@ -91,6 +94,7 @@ export async function chatWithRetry(args: {
         thinking,
         signal,
         cacheSlot,
+        sampling,
       })
     } catch (error) {
       lastError = error
@@ -156,6 +160,7 @@ export async function chatWithContextWindow(args: {
   thinking?: ThinkingConfig
   signal?: AbortSignal
   cacheSlot?: number
+  sampling?: SamplingParams
   /**
    * Context rollover instead of drop-and-summarize: when fitting would drop messages, the
    * whole history is replaced by one handoff record (see ./handoff.ts) and the request is
@@ -257,6 +262,7 @@ export async function chatWithContextWindow(args: {
       thinking: args.thinking,
       signal: args.signal,
       cacheSlot: args.cacheSlot,
+      sampling: args.sampling,
     })
     return { response, ...prepared, sentMessages: fitted }
   }

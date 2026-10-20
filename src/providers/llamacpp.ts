@@ -263,6 +263,7 @@ export class LlamaCppProvider implements LLMProvider {
     // consumer's long generation legitimately waits longer than that for its first byte —
     // observed as periodic "The operation timed out" transient retries once the review fork
     // began sharing the operator endpoint. Our own timeouts govern; Bun's must not.
+    const { temperature, max_tokens, ...sampling } = req.sampling ?? {}
     const response = await this.postChat({
       // @ts-expect-error Bun extension: disable fetch's built-in timeout
       timeout: false,
@@ -278,8 +279,10 @@ export class LlamaCppProvider implements LLMProvider {
         // An agent turn routinely issues several calls at once; without this the server's
         // tool grammar stops the model after one.
         ...(tools && { tools, parallel_tool_calls: true }),
-        temperature: req.temperature ?? this.defaultTemperature,
-        max_tokens: req.max_tokens,
+        temperature: temperature ?? req.temperature ?? this.defaultTemperature,
+        max_tokens: max_tokens ?? req.max_tokens,
+        // top_p, seed and the penalties; unset fields are undefined and drop out of the JSON.
+        ...sampling,
         stream: shouldStream,
         // A streamed response carries no usage unless it's explicitly requested — without this
         // the final chunk omits token counts and every streamed turn reports output_tokens: 0,

@@ -1,5 +1,6 @@
 import type { AgentLoop, AgentResponse } from './agent'
 import { subscribe } from './agent/session-events'
+import { applyStop, parseRequestParams } from './openai-params'
 import type { ChatMessage } from './providers/types'
 import { sseResponse } from './sse'
 import { errorMessage } from './util/errors'
@@ -91,20 +92,6 @@ export function parseChatRequest(body: Record<string, unknown>): ParsedChatReque
   }
 }
 
-/**
- * What still has to be sent once the run ends. Tokens stream live, but the final content can
- * differ from what streamed (a guard's abort notice, a turn that produced no tokens), so the
- * difference is sent as a last delta instead of trusting the stream to be the whole answer.
- */
-export function streamTail(content: string, turnText: string, hasEmitted: boolean): string {
-  if (!content) return ''
-  if (!hasEmitted) return content
-  if (turnText === '') return `\n\n${content}`
-  if (content.startsWith(turnText)) return content.slice(turnText.length)
-  if (turnText.trim() === content.trim()) return ''
-  return `\n\n${content}`
-}
-
 function usageOf(res: AgentResponse): Record<string, number> {
   const { input_tokens, output_tokens } = res.usage
   return {
@@ -125,31 +112,50 @@ export function modelsResponse(model: string): Response {
   })
 }
 
+export interface ChatCompletionsOptions {
+  /** The instance name, reported as the model. */
+  model: string
+  /** Stream reasoning, tool activity and pre-tool text as reasoning_content. */
+  exposeProgress: boolean
+}
+
+/** Cut at a stop sequence, and say why the answer ended the way OpenAI clients expect. */
+function finalAnswer(res: AgentResponse, stop: string[] | undefined) {
+  const content = applyStop(res.content, stop)
+  const finish = res.truncated && content === res.content ? 'length' : 'stop'
+  return { content, finish }
+}
+
 export async function handleChatCompletions(
   req: Request,
   body: Record<string, unknown>,
   factory: StatelessAgentFactory,
-  model: string,
+  opts: ChatCompletionsOptions,
 ): Promise<Response> {
   const parsed = parseChatRequest(body)
   if (typeof parsed === 'string') return openaiError(parsed, 400)
+  const params = parseRequestParams(body)
+  if (typeof params === 'string') return openaiError(params, 400)
 
+  const { model } = opts
   const agent = factory({ history: parsed.history, note: parsed.note })
   const id = `chatcmpl-${crypto.randomUUID()}`
   const created = Math.floor(Date.now() / 1000)
-  const images = parsed.images.length > 0 ? { images: parsed.images } : {}
+  const runOpts = {
+    ...(parsed.images.length > 0 && { images: parsed.images }),
+    ...(params.sampling && { sampling: params.sampling }),
+  }
 
   if (body.stream !== true) {
     try {
-      const res = await agent.run(parsed.message, { ...images, signal: req.signal })
+      const res = await agent.run(parsed.message, { ...runOpts, signal: req.signal })
+      const { content, finish } = finalAnswer(res, params.stop)
       return Response.json({
         id,
         object: 'chat.completion',
         created,
         model,
-        choices: [
-          { index: 0, message: { role: 'assistant', content: res.content }, finish_reason: 'stop' },
-        ],
+        choices: [{ index: 0, message: { role: 'assistant', content }, finish_reason: finish }],
         usage: usageOf(res),
       })
     } catch (e) {
@@ -171,30 +177,29 @@ export async function handleChatCompletions(
         })
       chunk({ role: 'assistant', content: '' })
 
-      // Reasoning and tool activity go out as reasoning_content, which clients fold into a
-      // thinking block; only her words are content. Text written before a tool call stays in
-      // the answer, separated from what comes after.
+      // Only the answer is content, and a turn's text can't be known to be the answer until
+      // the turn ends without a tool call -- so tokens are never streamed as content. The
+      // answer goes out whole when the run ends (the SSE keepalive holds the connection
+      // meanwhile): no token-by-token answer, in exchange for never showing a "let me look
+      // that up" preamble as if it were the reply. With exposeProgress, a UI gets the run as
+      // reasoning_content instead: thinking, each tool call, and the text written before it.
       let turnText = ''
-      let hasEmitted = false
-      let needsBreak = false
-      const unsubscribe = subscribe(sessionId, (ev) => {
-        if (ev.t === 'reasoning') chunk({ reasoning_content: ev.v })
-        else if (ev.t === 'tool') {
-          turnText = ''
-          needsBreak = hasEmitted
-          chunk({ reasoning_content: ev.v.map((c) => `\n→ ${c.name}\n`).join('') })
-        } else if (ev.t === 'token') {
-          chunk({ content: needsBreak ? `\n\n${ev.v}` : ev.v })
-          needsBreak = false
-          turnText += ev.v
-          hasEmitted = true
-        }
-      })
+      const unsubscribe = opts.exposeProgress
+        ? subscribe(sessionId, (ev) => {
+            if (ev.t === 'reasoning') chunk({ reasoning_content: ev.v })
+            else if (ev.t === 'token') turnText += ev.v
+            else if (ev.t === 'tool') {
+              const calls = ev.v.map((c) => `\n→ ${c.name}\n`).join('')
+              chunk({ reasoning_content: turnText + calls })
+              turnText = ''
+            }
+          })
+        : () => {}
       try {
-        const res = await agent.run(parsed.message, { ...images, signal: closed })
-        const tail = streamTail(res.content, turnText, hasEmitted)
-        if (tail) chunk({ content: tail })
-        chunk({}, 'stop')
+        const res = await agent.run(parsed.message, { ...runOpts, signal: closed })
+        const { content, finish } = finalAnswer(res, params.stop)
+        if (content) chunk({ content })
+        chunk({}, finish)
         if (streamOptions.include_usage === true) {
           send({
             id,
