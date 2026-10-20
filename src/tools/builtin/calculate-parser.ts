@@ -11,43 +11,9 @@
  *   primary   := number | name | name '(' expr (',' expr)* ')' | '(' expr ')'
  */
 
+import { CONSTANTS, FUNCTIONS } from './calculate-functions'
+
 const MAX_DEPTH = 64
-
-const CONSTANTS = new Map<string, number>([
-  ['pi', Math.PI],
-  ['e', Math.E],
-])
-
-type Fn = { arity: [number, number]; apply: (args: number[]) => number }
-
-const unary = (f: (x: number) => number): Fn => ({ arity: [1, 1], apply: (a) => f(a[0] as number) })
-
-const FUNCTIONS = new Map<string, Fn>([
-  ['sqrt', unary(Math.sqrt)],
-  ['abs', unary(Math.abs)],
-  ['floor', unary(Math.floor)],
-  ['ceil', unary(Math.ceil)],
-  ['log', unary(Math.log)],
-  ['ln', unary(Math.log)],
-  ['log10', unary(Math.log10)],
-  ['log2', unary(Math.log2)],
-  ['exp', unary(Math.exp)],
-  ['sin', unary(Math.sin)],
-  ['cos', unary(Math.cos)],
-  ['tan', unary(Math.tan)],
-  [
-    'round',
-    {
-      arity: [1, 2],
-      apply: ([x, digits = 0]) => {
-        const f = 10 ** Math.trunc(digits as number)
-        return Math.round((x as number) * f) / f
-      },
-    },
-  ],
-  ['min', { arity: [1, Number.POSITIVE_INFINITY], apply: (a) => Math.min(...a) }],
-  ['max', { arity: [1, Number.POSITIVE_INFINITY], apply: (a) => Math.max(...a) }],
-])
 
 interface Token {
   kind: 'num' | 'name' | 'op'
@@ -114,6 +80,10 @@ export function evaluateStatement(src: string, vars: Map<string, number>): numbe
     }
   }
 
+  // What can begin an operand. A '%' followed by anything else is a percent sign, not modulo
+  const startsOperand = (t: Token | undefined): boolean =>
+    t !== undefined && (t.kind !== 'op' || ['(', '-', '+'].includes(t.text))
+
   const expr = (): number =>
     nest(() => {
       let v = term()
@@ -125,6 +95,11 @@ export function evaluateStatement(src: string, vars: Map<string, number>): numbe
     let v = unaryExpr()
     while (isOp('*') || isOp('/') || isOp('%')) {
       const op = tokens[i++]?.text
+      if (op === '%' && !startsOperand(peek())) {
+        throw new CalcError(
+          "'%' is modulo, not percent: write percentages as decimals (15% of 80 is 0.15 * 80)",
+        )
+      }
       const r = unaryExpr()
       if (op === '*') v *= r
       else if (r === 0) throw new CalcError(op === '/' ? 'division by zero' : 'modulo by zero')

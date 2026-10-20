@@ -111,4 +111,17 @@ describe('calculate', () => {
     // Prototype names are ordinary variable names: assignable, never resolved to JavaScript
     expect(await value('constructor = 1; constructor + 1')).toBe('2')
   })
+  test('a trailing percent sign explains itself instead of a bare syntax error', async () => {
+    expect(await error('15%')).toContain('write percentages as decimals')
+    expect(await error('80 * 15%')).toContain('write percentages as decimals')
+    expect(await error('(15%) * 80')).toContain('write percentages as decimals')
+    expect(await value('17 % 5')).toBe('2')
+    expect(await value('17 % (2 + 3)')).toBe('2')
+  })
+
+  test('round goes half away from zero', async () => {
+    expect(await value('round(2.5)')).toBe('3')
+    expect(await value('round(-2.5)')).toBe('-3')
+    expect(await value('round(-1.25, 1)')).toBe('-1.3')
+  })
 })
