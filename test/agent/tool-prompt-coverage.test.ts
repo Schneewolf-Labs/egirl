@@ -15,8 +15,8 @@ import { createDefaultToolExecutor } from '../../src/tools'
  * specifics. That is precisely the failure web search exists to prevent.
  *
  * Nothing catches this on its own: the tool registers, the schema validates, no error is raised,
- * and the feature silently does nothing. Two lists maintained by hand will drift again, so this
- * asserts they agree.
+ * and the feature silently does nothing. The prompt's list is now built from the registered
+ * definitions (src/agent/tool-prompt.ts); this asserts the wiring stays that way.
  *
  * The config is built explicitly rather than read from disk — a test that loads the developer's
  * own egirl.toml passes or fails based on the machine it runs on, not the code.
@@ -43,7 +43,7 @@ describe('system prompt tool coverage', () => {
     const config = testConfig()
     const executor = createDefaultToolExecutor(config)
     const registered = executor.getDefinitions().map((d) => d.name)
-    const { full: prompt } = buildSystemPrompt(config)
+    const { full: prompt } = buildSystemPrompt(config, { tools: executor.getDefinitions() })
 
     expect(registered.length).toBeGreaterThan(0)
     const undocumented = registered.filter((name) => !prompt.includes(`\`${name}\``))
@@ -54,6 +54,7 @@ describe('system prompt tool coverage', () => {
     // Called out separately because this is the one that actually broke, and the regression is
     // silent: the agent keeps working and merely stops being able to look anything up.
     const config = testConfig()
-    expect(buildSystemPrompt(config).full).toContain('`web_search`')
+    const tools = createDefaultToolExecutor(config).getDefinitions()
+    expect(buildSystemPrompt(config, { tools }).full).toContain('`web_search`')
   })
 })

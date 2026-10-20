@@ -112,7 +112,10 @@ export class AgentLoop implements Operator {
     this.conversationStore = deps.conversationStore ?? null
     this.mutex = deps.sessionMutex ?? null
     this.promptOptions = { skills: deps.skills, additionalContext: deps.additionalContext }
-    this.context = createAgentContext(deps.config, deps.sessionId, this.promptOptions)
+    this.context = createAgentContext(deps.config, deps.sessionId, {
+      ...this.promptOptions,
+      tools: deps.toolExecutor.getDefinitions(),
+    })
     const local = deps.config.local
     this.tokenizer = createLlamaCppTokenizer(() => local.endpoint, local.apiKey)
     this.history = new ConversationHistory(this.conversationStore, deps.sessionId)
@@ -764,7 +767,10 @@ export class AgentLoop implements Operator {
   }
 
   clearContext(): void {
-    this.context = createAgentContext(this.config, this.context.sessionId, this.promptOptions)
+    this.context = createAgentContext(this.config, this.context.sessionId, {
+      ...this.promptOptions,
+      tools: this.toolExecutor.getDefinitions(),
+    })
     this.history.reset()
     this.compactor.reset()
   }

@@ -1,9 +1,10 @@
 import { existsSync, readFileSync } from 'fs'
 import { join } from 'path'
 import type { RuntimeConfig } from '../config'
-import type { ChatMessage } from '../providers/types'
+import type { ChatMessage, ToolDefinition } from '../providers/types'
 import type { Skill } from '../skills/types'
 import { log } from '../util/logger'
+import { buildToolsSection } from './tool-prompt'
 
 export interface AgentContext {
   systemPrompt: string
@@ -39,6 +40,8 @@ export interface SystemPromptOptions {
   additionalContext?: string
   /** Clock for the date line; tests pin it. */
   now?: Date
+  /** The tools the model is handed; the prompt describes exactly these. */
+  tools?: ToolDefinition[]
 }
 
 export interface SystemPromptParts {
@@ -93,54 +96,9 @@ export function buildSystemPrompt(
     volatileSections.push(`## Working Memory\n\n${memory.trim()}`)
   }
 
-  // Add tool capabilities
-  stableSections.push(`## Available Tools
-
-Your workspace directory is \`${workspaceDir}\`. All relative file paths are resolved against this directory — not the user's shell cwd. When you write or read files with relative paths, they go in the workspace. Use absolute paths when working outside of it.
-
-You have access to these tools:
-
-**Files:**
-- \`read_file\` - Read file contents (supports line ranges)
-- \`write_file\` - Write content to a file (creates directories)
-- \`edit_file\` - Edit a file with exact string replacement
-- \`glob_files\` - Find files matching a glob pattern
-
-**System:**
-- \`execute_command\` - Run shell commands
-- \`screenshot\` - Capture a screenshot of the current display
-
-**Git:**
-- \`git_status\` - Show repository state (branch, staged/unstaged/untracked)
-- \`git_diff\` - Show diffs (staged, unstaged, or between refs)
-- \`git_log\` - Show commit history
-- \`git_commit\` - Stage files and create a commit
-- \`git_show\` - Show a specific commit's contents and diff
-- \`git_pr_state\` - Where a PR branch stands against main: merge base, conflicts from a real trial merge, files main also changed, patches already on main. Use it first when reviewing a PR
-
-**Memory:**
-- \`working_memory\` - Curate MEMORY.md, your always-loaded working memory (add/replace/remove/list under a hard character budget — when full, consolidate before adding)
-- \`memory_search\` - Search memories (hybrid keyword + semantic, with category and time filters)
-- \`memory_get\` - Retrieve a specific memory by key
-- \`memory_set\` - Store a memory with optional category (fact, preference, decision, project, entity)
-- \`memory_delete\` - Delete a memory by key
-- \`memory_list\` - List stored memories (filterable by category and source)
-- \`memory_recall\` - Recall memories from a time period ("last week", "3 days ago", etc.)
-
-**Web:**
-- \`web_search\` - Search the web; returns titles, URLs and snippets. Use it whenever the answer depends on anything after your training data or anything that changes — releases, versions, prices, news, "latest", "current", "today". Search and answer from the results; do not answer from memory and then offer to check.
-- \`web_research\` - Fetch a URL and return its text content
-
-**Skills:**
-- \`skill_manage\` - Create, patch, or archive a skill (SKILL.md). When you develop a reusable procedure, save it as a skill; prefer patching an existing skill you used over creating a near-duplicate.
-
-**Delegation (primary):**
-- \`code_agent\` - Delegate coding work to the configured code agent (multi-file edits, refactoring, debugging, test writing, reading unfamiliar code). This is your main tool for project work. Refer to this as "the code agent" when talking to the user — never say "code_agent".
-- \`consult\` - Ask a configured consultant model (much larger context window) for a read-only second opinion. Attach whole files; use it when stuck or before committing to a direction.
-
-Use tools proactively to gather information rather than asking. Use git tools directly instead of running git via execute_command. **Delegate coding work to the code agent by default — you're the human-in-the-loop, not a code generator.** Only use edit_file directly for trivial single-line changes you're certain about.
-
-**Important:** When you decide to use a tool, call it immediately in the same response — do not narrate your intention first. Never say "I'll use X tool" or "Let me run Y" and then stop. Just call the tool.`)
+  // Add tool capabilities: exactly the tools this session hands the model
+  const toolsSection = buildToolsSection(workspaceDir, options.tools ?? [])
+  if (toolsSection) stableSections.push(toolsSection)
 
   // Add skills (stable — loaded once from skill files)
   if (skills && skills.length > 0) {
@@ -152,7 +110,7 @@ Use tools proactively to gather information rather than asking. Use git tools di
     volatileSections.push(additionalContext)
   }
 
-  const allSections = [...stableSections, ...volatileSections]
+  const hasPromptContent = stableSections.length + volatileSections.length > (toolsSection ? 1 : 0)
 
   // Today's date. Without it the model dates changelogs, notes and reports by guesswork (a
   // deployment shipped a release section dated eleven days early and a report dated six weeks
@@ -160,9 +118,11 @@ Use tools proactively to gather information rather than asking. Use git tools di
   const dateLine = `Current date: ${formatCurrentDate(options.now ?? new Date())}`
 
   // Fallback if no personality files loaded
-  if (allSections.length === 1) {
+  if (!hasPromptContent) {
     log.warn('context', 'No personality files found, using minimal prompt')
-    const stable = `You are Kira, a helpful AI assistant. Be concise, direct, and use tools when needed.\n\n${allSections[0]}`
+    const minimal =
+      'You are Kira, a helpful AI assistant. Be concise, direct, and use tools when needed.'
+    const stable = toolsSection ? `${minimal}\n\n${toolsSection}` : minimal
     return { full: `${stable}\n\n---\n\n${dateLine}`, stable, volatile: dateLine }
   }
   volatileSections.push(dateLine)
