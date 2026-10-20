@@ -1,7 +1,7 @@
 import type { RuntimeConfig } from '../config'
 import type { ConversationStore } from '../conversation'
 import type { MemoryManager } from '../memory'
-import type { ChatMessage, LLMProvider } from '../providers/types'
+import type { ChatMessage, LLMProvider, SamplingParams } from '../providers/types'
 import type { Skill } from '../skills/types'
 import type { ToolExecutor } from '../tools'
 import type { Tool } from '../tools/types'
@@ -59,6 +59,12 @@ export interface AgentLoopOptions {
    * only inside task runs. A result with `endRun` ends the run after its batch.
    */
   extraTools?: Map<string, Tool>
+  /**
+   * Sampling from an OpenAI-compatible request, applied to every model call of this run. A
+   * `max_tokens` here also turns off continuation stitching: the client asked for a cap, and
+   * stitching a truncated answer back together would hand it more than that.
+   */
+  sampling?: SamplingParams
 }
 
 export interface AgentResponse {
@@ -81,6 +87,8 @@ export interface AgentResponse {
   awaitingInput?: boolean
   /** True if the turn cap ended the run and the reply is the forced no-tools summary */
   turnLimitReached?: boolean
+  /** True if the generation that produced the answer stopped at max_tokens (finish_reason: length) */
+  truncated?: boolean
 }
 
 export interface AgentLoopDeps {

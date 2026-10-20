@@ -54,6 +54,8 @@ export interface APIConfig {
   bearerToken?: string
   /** Most sessions kept in memory; least recently used idle ones are dropped past it. */
   maxSessions?: number
+  /** /v1/chat/completions streams reasoning and tool activity as reasoning_content. */
+  exposeProgress?: boolean
 }
 
 export interface APIDeps {
@@ -543,12 +545,10 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
         if (method === 'GET' && path === '/v1/models') return modelsResponse(selfName)
         if (method === 'POST' && path === '/v1/chat/completions') {
           if (!deps.statelessAgentFactory) return err('chat completions not available', 503)
-          return handleChatCompletions(
-            req,
-            await readJson(req),
-            deps.statelessAgentFactory,
-            selfName,
-          )
+          return handleChatCompletions(req, await readJson(req), deps.statelessAgentFactory, {
+            model: selfName,
+            exposeProgress: config.exposeProgress === true,
+          })
         }
 
         // --- Introspection -------------------------------------------------

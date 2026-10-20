@@ -7,6 +7,7 @@ import type {
   ChatMessage,
   ChatResponse,
   LLMProvider,
+  SamplingParams,
   ThinkingConfig,
   Tokenizer,
 } from '../providers/types'
@@ -269,7 +270,10 @@ export class AgentLoop implements Operator {
 
     // Every counter and flag scoped to this run — the loop's state machine, made explicit.
     const state = createRunState()
-    const recoveryCaps = resolveRecoveryCaps(this.config.recovery)
+    const recoveryCaps = resolveRecoveryCaps({
+      ...this.config.recovery,
+      ...(options.sampling?.max_tokens !== undefined && { continuationRetries: 0 }),
+    })
     const totalUsage = { input_tokens: 0, output_tokens: 0 }
     let finalContent = ''
     const provider = this.localProvider
@@ -317,6 +321,7 @@ export class AgentLoop implements Operator {
     // Set when the cap, not the model, ended the run -- surfaced so a caller can tell a cut-off
     // run from one that chose to stop.
     let turnLimitReached = false
+    let truncated = false
     startRun(this.context.sessionId, this, userMessage)
     try {
       while (state.turns < maxTurns) {
@@ -403,6 +408,7 @@ export class AgentLoop implements Operator {
             signal,
             cacheSlot: this.cacheSlot(),
             rollover: rolloverEnabled ? {} : undefined,
+            sampling: options.sampling,
           })
           response = result.response
           events?.onModelTurn?.({ messages: result.sentMessages, tools, thinking, response })
@@ -554,6 +560,7 @@ export class AgentLoop implements Operator {
           : response.content
 
         finalContent = state.accumulatedContent + finalPiece
+        truncated = response.finish_reason === 'length'
         addMessage(this.context, { role: 'assistant', content: finalPiece })
 
         if (events?.onPostResponseValidation && !state.validationRetried) {
@@ -598,7 +605,13 @@ export class AgentLoop implements Operator {
           log.warn('agent', `Exhausted max turns (${maxTurns}) without a final response`)
         }
         turnLimitReached = true
-        finalContent = await this.forceFinalResponse(totalUsage, thinking, events, signal)
+        finalContent = await this.forceFinalResponse(
+          totalUsage,
+          thinking,
+          events,
+          signal,
+          options.sampling,
+        )
         events?.onResponseComplete?.()
       }
 
@@ -614,6 +627,7 @@ export class AgentLoop implements Operator {
         aborted: signal?.aborted ? true : undefined,
         awaitingInput: state.awaitingInput ? true : undefined,
         turnLimitReached: turnLimitReached ? true : undefined,
+        truncated: truncated ? true : undefined,
       }
     } catch (error) {
       runError = error
@@ -656,6 +670,7 @@ export class AgentLoop implements Operator {
     thinking?: ThinkingConfig,
     events?: AgentEventHandler,
     signal?: AbortSignal,
+    sampling?: SamplingParams,
   ): Promise<string> {
     addMessage(this.context, { role: 'user', content: MAX_TURNS_SUMMARY_NUDGE })
 
@@ -673,6 +688,7 @@ export class AgentLoop implements Operator {
         onThinkingToken: events?.onThinkingToken,
         thinking,
         signal,
+        sampling,
       })
       events?.onModelTurn?.({
         messages: result.sentMessages,
