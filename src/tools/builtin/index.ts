@@ -1,4 +1,5 @@
 export { createBrowserTools } from './browser'
+export { calculateTool } from './calculate'
 export { type CodeAgentConfig, type CodeAgentProvider, createCodeAgentTool } from './code-agent'
 export { type ConsultantEntry, createConsultTool } from './consult'
 export { editTool } from './edit'

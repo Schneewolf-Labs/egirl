@@ -454,6 +454,36 @@ Search the web via a SearxNG instance. Pairs with `web_research` for a search-th
 
 ---
 
+## calculate
+
+Evaluate arithmetic exactly. On by default and safe on a [public instance](public-instance.md): it does no I/O, so it is how an instance with `exec` off computes.
+
+**Source:** `src/tools/builtin/calculate.ts` (evaluator in `calculate-parser.ts`)
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `expression` | string | Yes | One or more statements, separated by newlines or `;` |
+
+**Behavior:**
+- Operators `+ - * / %` (modulo), `^` or `**` (power, right-associative; `-2^2` is `-4`), parentheses
+- Functions `sqrt abs round(x, digits) floor ceil min max log ln log10 log2 exp sin cos tan` (radians); constants `pi`, `e`
+- `name = expr` stores a value for later statements in the same call
+- A hand-written parser, no `eval`: names resolve only to the functions, constants and variables above
+- Results are shown to 12 significant digits (`0.1 + 0.2` gives `0.3`)
+- Errors (unknown name, division by zero, overflow, syntax with its position) return `success: false`; input is capped at 500 characters
+
+**Example:**
+```json
+{"name": "calculate", "arguments": {"expression": "rate = 0.05; 1000 * (1 + rate)^10"}}
+```
+Returns:
+```
+rate = 0.05 → 0.05
+1000 * (1 + rate)^10 → 1628.89462678
+```
+
+---
+
 ## peer_message
 
 Send a message to another egirl agent (a "peer") and wait for its reply. The peer runs the message through its own agent loop — its own memory, tools, and machine — and the loop's final reply is returned. See [peers.md](peers.md) for the protocol.

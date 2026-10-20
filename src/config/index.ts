@@ -461,6 +461,7 @@ export function loadConfig(options: LoadConfigOptions = {}): RuntimeConfig {
     tools: {
       files: toml.tools?.files ?? true,
       exec: toml.tools?.exec ?? true,
+      calculate: toml.tools?.calculate ?? true,
       process: toml.tools?.process ?? false,
       git: toml.tools?.git ?? true,
       memory: toml.tools?.memory ?? true,

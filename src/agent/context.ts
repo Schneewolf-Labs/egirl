@@ -109,6 +109,7 @@ You have access to these tools:
 **System:**
 - \`execute_command\` - Run shell commands
 - \`screenshot\` - Capture a screenshot of the current display
+- \`calculate\` - Evaluate arithmetic exactly. Use it for any non-trivial calculation instead of working it out in your head
 
 **Git:**
 - \`git_status\` - Show repository state (branch, staged/unstaged/untracked)

@@ -45,6 +45,7 @@ consult_files = false                  # the workspace holds every visitor's con
 web_research = true
 web_research_private = false           # no loopback / private / link-local / CGNAT targets
 web_search = true
+calculate = true                       # exact arithmetic; exec is off, so this is how it computes
 
 [searxng]
 url = "http://127.0.0.1:8888"
