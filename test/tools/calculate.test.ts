@@ -124,4 +124,45 @@ describe('calculate', () => {
     expect(await value('round(-2.5)')).toBe('-3')
     expect(await value('round(-1.25, 1)')).toBe('-1.3')
   })
+
+  describe('dates', () => {
+    test('days_between counts whole days in UTC', async () => {
+      expect(await value('days_between("2026-03-03", "2026-10-20")')).toBe('231')
+      expect(await value('days_between("2026-10-20", "2026-03-03")')).toBe('-231')
+      expect(await value('days_between("2026-01-01", "2026-01-01")')).toBe('0')
+      // spans a leap day: 2024 is a leap year
+      expect(await value('days_between("2024-02-28", "2024-03-01")')).toBe('2')
+    })
+
+    test('add_days returns the date and its weekday', async () => {
+      expect(await value('add_days("2026-01-01", 90)')).toBe('2026-04-01 (Wednesday)')
+      expect(await value('add_days("2026-01-01", -1)')).toBe('2025-12-31 (Wednesday)')
+    })
+
+    test('weekday names the day', async () => {
+      expect(await value('weekday("1776-07-04")')).toBe('Thursday')
+      expect(await value('weekday("2000-01-01")')).toBe('Saturday')
+    })
+
+    test('today() resolves and "today" works as a date argument', async () => {
+      const now = new Date()
+      const iso = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}-${String(now.getUTCDate()).padStart(2, '0')}`
+      expect(await value('today()')).toContain(iso)
+      expect(await value('days_between("today", "today")')).toBe('0')
+    })
+
+    test('date functions coexist with arithmetic in one call', async () => {
+      const r = await calc('0.17 * 2340\ndays_between("2026-03-03", "2026-10-20")')
+      expect(r.success).toBe(true)
+      expect(r.output).toContain('397.8')
+      expect(r.output).toContain('231')
+    })
+
+    test('bad dates explain themselves', async () => {
+      expect(await error('weekday("2026-13-01")')).toContain('not a real calendar date')
+      expect(await error('days_between("2026-03-03", "nope")')).toContain('not a date')
+      expect(await error('add_days("2026-01-01", 1.5)')).toContain('whole number')
+      expect(await error('weekday()')).toContain('takes 1 argument')
+    })
+  })
 })
