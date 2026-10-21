@@ -1,4 +1,5 @@
 import type { Tool, ToolResult } from '../types'
+import { evaluateDateStatement, isDateStatement } from './calculate-dates'
 import { CalcError, evaluateStatement, formatNumber } from './calculate-parser'
 
 const MAX_INPUT = 500
@@ -18,7 +19,10 @@ export const calculateTool: Tool = {
       'parentheses. Functions: sqrt abs round(x, digits) floor ceil min max log (natural) log10 ' +
       'log2 exp sin cos tan (radians). Constants: pi, e. Write percentages as decimals ' +
       '("15% of 80" is 0.15 * 80). Several statements may be separated by newlines or ";", and ' +
-      '"name = expr" stores a value for later statements, e.g. "rate = 0.05; 1000 * (1 + rate)^10".',
+      '"name = expr" stores a value for later statements, e.g. "rate = 0.05; 1000 * (1 + rate)^10". ' +
+      'Dates (use these instead of counting days by hand; "today" works as a date): ' +
+      'days_between("2026-03-03", "2026-10-20"), add_days("2026-01-01", 90), ' +
+      'weekday("1776-07-04"), today(). Dates are YYYY-MM-DD, computed in UTC.',
     parameters: {
       type: 'object',
       properties: {
@@ -46,7 +50,10 @@ export const calculateTool: Tool = {
     const lines: string[] = []
     for (const statement of statements) {
       try {
-        lines.push(`${statement} → ${formatNumber(evaluateStatement(statement, vars))}`)
+        const result = isDateStatement(statement)
+          ? evaluateDateStatement(statement)
+          : formatNumber(evaluateStatement(statement, vars))
+        lines.push(`${statement} → ${result}`)
       } catch (error) {
         if (!(error instanceof CalcError)) throw error
         const where = statements.length > 1 ? ` in "${statement}"` : ''
