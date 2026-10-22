@@ -12,8 +12,13 @@ There are two editions, one process each:
 
 | model id | weights | role |
 |---|---|---|
-| `familiar-spark` | a 9B | fast, cheap, runs anywhere |
-| `familiar-ember` | a 27B | the stronger one |
+| `familiar-spark` | [B4-9B](https://huggingface.co/schneewolflabs/B4-9B) | fast, cheap, runs anywhere |
+| `familiar-ember` | [B4-27B](https://huggingface.co/schneewolflabs/B4-27B) | the stronger one |
+
+B4 is B2 trained on this instance's own API context to search and calculate before answering with thinking
+off, the mode this config runs in. Other models work, but with thinking off they tend to answer current-info
+questions and arithmetic from memory. B4 was trained with `[skills] bundled = false` and an empty `MEMORY.md`;
+keep both so the prompt matches.
 
 ## Files
 
@@ -29,6 +34,7 @@ There are two editions, one process each:
 ```bash
 mkdir -p ~/.egirl/familiar/workspace
 cp IDENTITY.md SOUL.md AGENTS.md ~/.egirl/familiar/workspace/
+: > ~/.egirl/familiar/workspace/MEMORY.md                # empty: no working-memory template in the prompt
 cp egirl.example.toml ~/.egirl/familiar/egirl.toml      # set the llama-server endpoints and SearXNG url
 echo "EGIRL_API_TOKEN=$(openssl rand -hex 24)" > ~/.egirl/familiar/.env && chmod 600 ~/.egirl/familiar/.env
 
