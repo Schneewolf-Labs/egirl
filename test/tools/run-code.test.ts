@@ -145,6 +145,19 @@ describe.skipIf(!canSandbox)('run_code in the sandbox', () => {
     expect(r.output.length).toBeLessThan(MAX_OUTPUT + 200)
   })
 
+  test.skipIf(!Bun.which('hemlock'))('runs hemlock with its stdlib', async () => {
+    const cfg = { ...CONFIG, languages: ['python', 'hemlock'] }
+    const tool = createRunCodeTool(cfg, readyLanguages(cfg))
+    const r = await tool.execute(
+      {
+        language: 'hemlock',
+        code: 'import { time_ms } from "@stdlib/time";\nlet t = 0;\nfor (let i = 1; i <= 100; i = i + 1) { t = t + i; }\nprint(t);\nprint(time_ms() > 0);',
+      },
+      '/',
+    )
+    expect(r).toEqual({ success: true, output: '5050\ntrue' })
+  })
+
   test('registers when the flag is on', () => {
     const cfg = { tools: { runCode: true }, runCode: CONFIG } as unknown as RuntimeConfig
     expect(createDefaultToolExecutor(cfg).listTools()).toContain('run_code')

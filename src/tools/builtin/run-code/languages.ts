@@ -28,4 +28,13 @@ export const LANGUAGES: Record<string, Language> = {
     readPaths: [],
     note: 'Python 3 with the standard library and whatever is installed system-wide',
   },
+  hemlock: {
+    binary: 'hemlock',
+    args: (script) => [script],
+    extension: '.hml',
+    // The stdlib ("@stdlib/...") installs next to the binary's prefix; under /usr it is
+    // already visible, and try-binds skip a path that does not exist.
+    readPaths: ['/usr/local/lib/hemlock', '/opt/hemlock'],
+    note: 'Hemlock (let/fn/print, imports from "@stdlib/...")',
+  },
 }

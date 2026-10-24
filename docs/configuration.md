@@ -505,7 +505,7 @@ Optional. Configures the sandboxed interpreter behind `[tools] run_code`.
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `languages` | string[] | `["python"]` | Languages offered, from the table in `src/tools/builtin/run-code/languages.ts`; the first is the default |
+| `languages` | string[] | `["python"]` | Languages offered (`python`, `hemlock`), from the table in `src/tools/builtin/run-code/languages.ts`; the first is the default |
 | `timeout_ms` | number | `10000` | Wall-clock limit per program |
 | `memory_mb` | number | `512` | Address-space limit per program |
 | `binaries` | table | `{}` | Interpreter path per language, e.g. `{ python = "/usr/bin/python3" }`; otherwise found on `PATH` |

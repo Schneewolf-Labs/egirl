@@ -500,7 +500,7 @@ Run a short program in a sandbox and return what it prints. It is for exact answ
 - Limits: `timeout_ms` wall clock (default 10s), `memory_mb` address space (default 512), 64 MB per written file, 20,000 characters per output stream
 - A non-zero exit or a timeout returns `success: false` with whatever was printed and the reason
 - Checked at startup: without `bwrap`, without user namespaces, or with no interpreter for any configured language, the tool is not registered and the log says why
-- Languages come from a fixed table in `languages.ts` (binary, arguments, extension, extra read-only paths). `python` is the only entry today; a new language is one entry there
+- Languages come from a fixed table in `languages.ts` (binary, arguments, extension, extra read-only paths). `python` and `hemlock` today; a new language is one entry there
 
 **Example:**
 ```json
