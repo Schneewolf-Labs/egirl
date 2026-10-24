@@ -13,7 +13,7 @@ egirl ships with ~50 built-in tools across 8 categories that the agent can invok
 | Tasks | 8 | `task_add`, `task_propose`, `task_list`, `task_pause`, `task_resume`, `task_cancel`, `task_run_now`, `task_history` |
 | Delegation | 1 | `code_agent` — drive the configured code agent (the primary tool) |
 | Peers | 2 | `peer_message`, `peer_list` — agent-to-agent messaging with other egirl instances |
-| Other | 3 | `screenshot`, `web_research`, `web_search` |
+| Other | 5 | `screenshot`, `web_research`, `web_search`, `calculate`, `run_code` |
 
 ## Tool Architecture
 
@@ -480,6 +480,35 @@ Returns:
 ```
 rate = 0.05 → 0.05
 1000 * (1 + rate)^10 → 1628.89462678
+```
+
+---
+
+## run_code
+
+Run a short program in a sandbox and return what it prints. It is for exact answers that need real computation `calculate` can't do: loops, enumeration, search, number theory, big integers, parsing. Off by default. With no network and no host files it is safe on a [public instance](public-instance.md), where `exec` is off.
+
+**Source:** `src/tools/builtin/run-code/` (languages in `languages.ts`, sandbox in `sandbox.ts`)
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `code` | string | Yes | The complete program; print what you want back |
+| `language` | string | No | One of `[run_code] languages` (default: the first) |
+
+**Behavior:**
+- Runs under bubblewrap (`bwrap`, Linux only) with every namespace unshared: no network, a read-only `/usr`, `/bin` and `/lib`, an empty `/tmp`, and a scratch `/work` deleted afterwards. `/home`, `/root` and the rest of `/etc` are not there
+- Limits: `timeout_ms` wall clock (default 10s), `memory_mb` address space (default 512), 64 MB per written file, 20,000 characters per output stream
+- A non-zero exit or a timeout returns `success: false` with whatever was printed and the reason
+- Checked at startup: without `bwrap`, without user namespaces, or with no interpreter for any configured language, the tool is not registered and the log says why
+- Languages come from a fixed table in `languages.ts` (binary, arguments, extension, extra read-only paths). `python` and `hemlock` today; a new language is one entry there
+
+**Example:**
+```json
+{"name": "run_code", "arguments": {"code": "n = 1234567\ns = bytearray([1]) * n\ns[0] = s[1] = 0\nfor i in range(2, int(n ** .5) + 1):\n    if s[i]: s[i*i::i] = bytearray(len(range(i*i, n, i)))\nprint(sum(i for i in range(n) if s[i]))"}}
+```
+Returns:
+```
+56381686561
 ```
 
 ---

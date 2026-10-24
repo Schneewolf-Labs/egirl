@@ -462,6 +462,7 @@ export function loadConfig(options: LoadConfigOptions = {}): RuntimeConfig {
       files: toml.tools?.files ?? true,
       exec: toml.tools?.exec ?? true,
       calculate: toml.tools?.calculate ?? true,
+      runCode: toml.tools?.run_code ?? false,
       process: toml.tools?.process ?? false,
       git: toml.tools?.git ?? true,
       memory: toml.tools?.memory ?? true,
@@ -486,6 +487,17 @@ export function loadConfig(options: LoadConfigOptions = {}): RuntimeConfig {
     skills: {
       dirs: (toml.skills?.dirs ?? defaultToml.skills.dirs).map((d) => expandPath(d, workspacePath)),
       bundled: toml.skills?.bundled ?? true,
+    },
+    runCode: {
+      languages: toml.run_code?.languages ?? ['python'],
+      timeoutMs: toml.run_code?.timeout_ms ?? 10_000,
+      memoryMb: toml.run_code?.memory_mb ?? 512,
+      binaries: Object.fromEntries(
+        Object.entries(toml.run_code?.binaries ?? {}).map(([k, v]) => [
+          k,
+          expandPath(v, workspacePath),
+        ]),
+      ),
     },
   }
 

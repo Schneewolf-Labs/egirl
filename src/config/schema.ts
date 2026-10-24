@@ -316,6 +316,18 @@ const baseProperties = {
     }),
   ),
 
+  // The sandboxed interpreter behind [tools] run_code. Languages come from the built-in table
+  // in src/tools/builtin/run-code/languages.ts; the first is the default.
+  run_code: Type.Optional(
+    Type.Object({
+      languages: Type.Optional(Type.Array(Type.String())),
+      timeout_ms: Type.Optional(Type.Number({ minimum: 1000 })),
+      memory_mb: Type.Optional(Type.Number({ minimum: 64 })),
+      // Interpreter path per language, overriding the PATH lookup.
+      binaries: Type.Optional(Type.Record(Type.String(), Type.String())),
+    }),
+  ),
+
   // Other egirl instances this one can message over the egirl-peer HTTP
   // protocol (see docs/peers.md). Bearer tokens come from .env, not here:
   // EGIRL_PEER_<NAME>_TOKEN must hold the peer's EGIRL_API_TOKEN.
@@ -536,6 +548,8 @@ const baseProperties = {
       exec: Type.Boolean({ default: true }),
       // calculate: exact arithmetic, no I/O. Safe on a public instance.
       calculate: Type.Boolean({ default: true }),
+      // run_code: a short program in a sandbox (no network, no host files). Needs bwrap (Linux).
+      run_code: Type.Boolean({ default: false }),
       process: Type.Boolean({ default: false }),
       git: Type.Boolean({ default: true }),
       memory: Type.Boolean({ default: true }),
@@ -794,6 +808,12 @@ export interface RuntimeConfig {
     url: string
     apiKey?: string
   }
+  runCode: {
+    languages: string[]
+    timeoutMs: number
+    memoryMb: number
+    binaries: Record<string, string>
+  }
   /** The human operating this instance, when named in config. */
   user?: { name?: string }
   peers?: Array<{
@@ -907,6 +927,7 @@ export interface RuntimeConfig {
     files: boolean
     exec: boolean
     calculate: boolean
+    runCode: boolean
     process: boolean
     git: boolean
     memory: boolean
