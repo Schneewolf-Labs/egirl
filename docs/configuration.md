@@ -499,6 +499,17 @@ Optional. Powers the `web_search` tool.
 
 `SEARXNG_API_KEY` may be set in `.env` if your instance requires it.
 
+### `[run_code]`
+
+Optional. Configures the sandboxed interpreter behind `[tools] run_code`.
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `languages` | string[] | `["python"]` | Languages offered, from the table in `src/tools/builtin/run-code/languages.ts`; the first is the default |
+| `timeout_ms` | number | `10000` | Wall-clock limit per program |
+| `memory_mb` | number | `512` | Address-space limit per program |
+| `binaries` | table | `{}` | Interpreter path per language, e.g. `{ python = "/usr/bin/python3" }`; otherwise found on `PATH` |
+
 ### `[tasks]`
 
 Optional. Configures the [background task framework](background-tasks.md).
@@ -583,6 +594,7 @@ Enable / disable tool groups.
 | `files` | bool | `true` | `read_file`, `write_file`, `edit_file`, `glob_files` |
 | `exec` | bool | `true` | `execute_command` |
 | `calculate` | bool | `true` | `calculate` — exact arithmetic, no I/O; safe on a [public instance](public-instance.md) |
+| `run_code` | bool | `false` | `run_code` — a short program in a sandbox (requires `bwrap`, Linux); see `[run_code]` |
 | `git` | bool | `true` | `git_*` |
 | `memory` | bool | `true` | `memory_*` |
 | `browser` | bool | `false` | `browser_*` (requires `bunx playwright install`) |

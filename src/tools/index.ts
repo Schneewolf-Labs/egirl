@@ -75,6 +75,7 @@ import {
   screenshotTool,
   writeTool,
 } from './builtin'
+import { createRunCodeTool, readyLanguages, sandboxUnavailable } from './builtin/run-code'
 import { createSessionSearchTool } from './builtin/session-search'
 import { createSkillReadTool as buildSkillReadTool } from './builtin/skill'
 import { createSkillManageTool } from './builtin/skill-manage'
@@ -161,6 +162,17 @@ export function createDefaultToolExecutor(
   // Arithmetic. Harmless (no I/O), so it stays on even where exec is off.
   if (t.calculate) {
     executor.register(calculateTool)
+  }
+
+  // Sandboxed interpreter. No network and no host files, so like calculate it suits an
+  // instance where exec is off; it needs bwrap, which is checked here rather than on first use.
+  if (t.runCode) {
+    const unavailable = sandboxUnavailable()
+    const ready = unavailable ? [] : readyLanguages(config.runCode)
+    if (unavailable) missingDep('run_code', unavailable)
+    else if (ready.length === 0)
+      missingDep('run_code', 'none of [run_code] languages has an interpreter')
+    else executor.register(createRunCodeTool(config.runCode, ready))
   }
 
   // Shell execution

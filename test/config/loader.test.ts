@@ -188,6 +188,55 @@ dirs = ["{workspace}/skills"]
     expect(config.channels.codeAgent?.acpCommand).toEqual(['gemini', '--acp'])
   })
 
+  test('run_code is off by default and reads its [run_code] section', async () => {
+    process.chdir(tmpDir)
+    const base = `
+[workspace]
+path = "${tmpDir}/workspace"
+
+[local]
+endpoint = "http://localhost:8080"
+model = "test-model"
+context_length = 8192
+max_concurrent = 1
+
+[skills]
+dirs = ["{workspace}/skills"]
+`
+    writeFileSync(join(tmpDir, 'egirl.toml'), base)
+    const { loadConfig } = await import('../../src/config/index')
+    const defaults = loadConfig()
+    expect(defaults.tools.runCode).toBe(false)
+    expect(defaults.runCode).toEqual({
+      languages: ['python'],
+      timeoutMs: 10_000,
+      memoryMb: 512,
+      binaries: {},
+    })
+
+    writeFileSync(
+      join(tmpDir, 'egirl.toml'),
+      `${base}
+[tools]
+run_code = true
+
+[run_code]
+languages = ["python"]
+timeout_ms = 5000
+memory_mb = 256
+binaries = { python = "/opt/py/bin/python3" }
+`,
+    )
+    const config = loadConfig()
+    expect(config.tools.runCode).toBe(true)
+    expect(config.runCode).toEqual({
+      languages: ['python'],
+      timeoutMs: 5000,
+      memoryMb: 256,
+      binaries: { python: '/opt/py/bin/python3' },
+    })
+  })
+
   test('falls back to claude_code for code_agent when explicit config is absent', async () => {
     process.chdir(tmpDir)
     writeFileSync(
