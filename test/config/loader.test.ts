@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { mkdtempSync, rmSync, writeFileSync } from 'fs'
 import { homedir, tmpdir } from 'os'
-import { join, sep } from 'path'
+import { join, resolve, sep } from 'path'
 
 describe('Config loading', () => {
   let tmpDir: string
@@ -233,7 +233,8 @@ binaries = { python = "/opt/py/bin/python3" }
       languages: ['python'],
       timeoutMs: 5000,
       memoryMb: 256,
-      binaries: { python: '/opt/py/bin/python3' },
+      // Paths are resolved, so on Windows this is C:\\opt\\py\\bin\\python3
+      binaries: { python: resolve('/opt/py/bin/python3') },
     })
   })
 
