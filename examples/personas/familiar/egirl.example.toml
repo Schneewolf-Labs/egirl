@@ -53,6 +53,10 @@ web_search = true
 web_research = true
 web_research_private = false             # callers must not be able to read the internal network
 calculate = true
+run_code = true                          # sandboxed with bubblewrap (Linux); see docs/tools.md
+
+[run_code]
+languages = ["python"]
 
 [skills]
 bundled = false                          # operator skills (code review, CI triage ...) are not for strangers

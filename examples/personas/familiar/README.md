@@ -4,9 +4,9 @@ Kira works alongside you, Zero disappears into a binary, and Emma answers the qu
 different from all three: it isn't anyone's agent. It's egirl dressed as an ordinary chat model.
 
 Clients talk to it through the OpenAI API (`POST /v1/chat/completions`). Behind the API, egirl runs its agent loop
-with three tools: web search, page reading and a calculator. The client gets back one answer. A small local model
-that checks recent facts and works out arithmetic before it answers is a better model than its weights alone, and
-from the outside it is just a model.
+with four tools: web search, page reading, a calculator and a sandboxed Python interpreter (`run_code`). The
+client gets back one answer. A small local model that checks recent facts and works out arithmetic before it
+answers is a better model than its weights alone, and from the outside it is just a model.
 
 There are two editions, one process each:
 
@@ -18,7 +18,8 @@ There are two editions, one process each:
 B4 is B2 trained on this instance's own API context to search and calculate before answering with thinking
 off, the mode this config runs in. Other models work, but with thinking off they tend to answer current-info
 questions and arithmetic from memory. B4 was trained with `[skills] bundled = false` and an empty `MEMORY.md`;
-keep both so the prompt matches.
+keep both so the prompt matches. `run_code` came after B4's training; B4 picks it up from the tool
+description and these prompt files without further training.
 
 ## Files
 
