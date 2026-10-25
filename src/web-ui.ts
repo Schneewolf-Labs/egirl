@@ -37,6 +37,7 @@ export function renderChatPage(opts: {
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="color-scheme" content="dark light">
 <link rel="manifest" href="manifest.webmanifest">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="${esc(name)}">
 <style>
@@ -660,7 +661,7 @@ function liveBubble(mine){
       else if(ev.t==='run_start'){status.textContent='thinking…';}
       else if(ev.t==='reasoning'){reasoning+=ev.v;think.hidden=false;think.textContent=reasoning;think.scrollTop=think.scrollHeight;mine?.classList.remove('queued');status.textContent='thinking… '+Math.round((Date.now()-t0)/1000)+'s';}
       else if(ev.t==='token'){startAnswer();answer+=ev.v;bodyEl.textContent=answer;log.scrollTop=log.scrollHeight;status.textContent='writing… '+(++ntok)+' tok';}
-      else if(ev.t==='tool'){const names=(ev.v||[]).map(function(c){return c.name});toolline.hidden=false;toolline.textContent='· '+names.join(', ')+' …';toolline.title=(ev.v||[]).map(function(c){return c.name+' '+c.args}).join('\n');status.textContent='running '+names.join(', ');}
+      else if(ev.t==='tool'){const names=(ev.v||[]).map(function(c){return c.name});toolline.hidden=false;toolline.textContent='· '+names.join(', ')+' …';toolline.title=(ev.v||[]).map(function(c){return c.name+' '+c.args}).join('\\n');status.textContent='running '+names.join(', ');}
       else if(ev.t==='tool_done'){toolline.textContent='· '+(ev.v&&ev.v.name)+(ev.v&&ev.v.success===false?' ✗':' ✓');}
       else if(ev.t==='inject'){add('↳ '+ev.v,'me queued');}
       else if(ev.t==='error'){throw new Error(ev.v||'stream error');}
