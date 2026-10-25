@@ -87,6 +87,54 @@ describe('renderChatPage', () => {
   })
 })
 
+describe('the inline script', () => {
+  /**
+   * The console's client JS lives inside a server-side template literal, so a single-escaped
+   * `'\n'` in the source is emitted as a raw newline in the middle of a client string literal.
+   * Every substring assertion in this file still passed when that happened (38c3ebd): the page
+   * looked complete, and the browser threw `SyntaxError: Invalid or unexpected token` and ran
+   * none of it. So compile what is actually served.
+   *
+   * Extraction ends at the first `</script>`, as the HTML parser does -- so a stray `</script>`
+   * inside a JS string truncates the script here too, which almost always leaves it unparseable.
+   */
+  const inlineScripts = (page: string): string[] =>
+    [...page.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)].map((m) => m[1] ?? '')
+
+  // new Function parses without executing, so the page's DOM calls never run.
+  const compiles = (src: string) => () => new Function(src)
+
+  test('the check itself rejects the shape of the original bug', () => {
+    // A guard that cannot fail is decoration. This is the emitted form of `.join('\n')` after
+    // the template literal ate the escape: a raw newline inside a single-quoted string.
+    const broken = "<script>toolline.title=names.join('\n');</script>"
+    const [src] = inlineScripts(broken)
+    expect(src).toBe("toolline.title=names.join('\n');")
+    expect(compiles(src ?? '')).toThrow(SyntaxError)
+    // ...and accepts the correctly escaped form, so the throw above is about the newline.
+    const [ok] = inlineScripts("<script>toolline.title=names.join('\\n');</script>")
+    expect(compiles(ok ?? '')).not.toThrow()
+  })
+
+  for (const [label, opts] of [
+    ['without a token', { hasToken: false }],
+    ['with a token', { hasToken: true }],
+    ['with a CSP nonce', { hasToken: true, nonce: 'abc123' }],
+  ] as const) {
+    test(`parses as JavaScript ${label}`, () => {
+      // hasToken switches which code is interpolated into the script, so both branches compile.
+      const page = renderChatPage({ name: 'zero', theme: egirlish, ...opts })
+      const scripts = inlineScripts(page)
+      // Zero scripts would make the loop below vacuously green.
+      expect(scripts.length).toBeGreaterThan(0)
+      for (const src of scripts) {
+        expect(src.length).toBeGreaterThan(1000) // the real console script, not a truncated stub
+        expect(compiles(src)).not.toThrow()
+      }
+    })
+  }
+})
+
 describe('console panels', () => {
   const html = () => renderChatPage({ name: 'zero', theme: egirlish, hasToken: false })
 
