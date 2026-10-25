@@ -3,6 +3,7 @@ import type { Element } from '@xmpp/xml'
 import type { Operator } from '../operator/types'
 import type { ReplyBroker } from '../report/broker'
 import { log } from '../util/logger'
+import { describeAllowList, isAllowedByList } from './allowlist'
 import { deliver, resolveTarget, runTurn } from './spine'
 import type { ChatChannel } from './types'
 
@@ -63,10 +64,12 @@ export class XMPPChannel implements ChatChannel {
 
     this.xmpp.on('online', async (address: { toString(): string }) => {
       log.info('xmpp', `Connected as ${address.toString()}`)
-      if (this.config.allowedJids.length > 0) {
-        log.info('xmpp', `Allowed JIDs: ${this.config.allowedJids.join(', ')}`)
-      } else {
-        log.info('xmpp', 'All JIDs allowed')
+      log.info('xmpp', `JIDs allowed: ${describeAllowList(this.config.allowedJids)}`)
+      if (this.config.allowedJids.length === 0) {
+        log.warn(
+          'xmpp',
+          'Empty allow-list: refusing every sender. Set [channels.xmpp].allowed_jids (or "*" to allow anyone).',
+        )
       }
       // Send initial presence to indicate availability
       await this.xmpp.send(xml('presence'))
@@ -150,9 +153,8 @@ export class XMPPChannel implements ChatChannel {
   }
 
   private isAllowed(fullJid: string): boolean {
-    if (this.config.allowedJids.length === 0) return true
     const bare = bareJid(fullJid)
-    return this.config.allowedJids.includes(bare)
+    return isAllowedByList(this.config.allowedJids, (entry) => entry === bare)
   }
 }
 

@@ -18,6 +18,7 @@ import type { ReplyBroker } from '../report/broker'
 import { type Caller, customCommands, isCommand } from '../session/commands'
 import type { Skill } from '../skills/types'
 import { log } from '../util/logger'
+import { describeAllowList, isAllowedByList } from './allowlist'
 import {
   type BufferedMessage,
   evaluateRelevance,
@@ -142,10 +143,12 @@ export class DiscordChannel implements ChatChannel {
         buildApplicationCommands(customCommands(this.skills)),
       )
       log.info('discord', `Allowed channels: ${this.config.allowedChannels.join(', ')}`)
-      if (this.config.allowedUsers.length > 0) {
-        log.info('discord', `Allowed users: ${this.config.allowedUsers.join(', ')}`)
-      } else {
-        log.info('discord', 'All users allowed')
+      log.info('discord', `Users allowed: ${describeAllowList(this.config.allowedUsers)}`)
+      if (this.config.allowedUsers.length === 0) {
+        log.warn(
+          'discord',
+          'Empty allow-list: refusing every sender. Set [channels.discord].allowed_users (or "*" to allow anyone).',
+        )
       }
     })
 
@@ -422,9 +425,7 @@ export class DiscordChannel implements ChatChannel {
   }
 
   private isUserAllowed(userId: string): boolean {
-    // Empty allowedUsers = allow all
-    if (this.config.allowedUsers.length === 0) return true
-    return this.config.allowedUsers.includes(userId)
+    return isAllowedByList(this.config.allowedUsers, (entry) => entry === userId)
   }
 
   private isChannelAllowed(message: Message): boolean {

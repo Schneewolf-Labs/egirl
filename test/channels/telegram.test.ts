@@ -72,8 +72,12 @@ async function until(check: () => boolean, ms = 2000): Promise<void> {
 }
 
 describe('isAllowedTelegramUser', () => {
-  test('empty allow-list admits everyone', () => {
-    expect(isAllowedTelegramUser([], { id: 42 })).toBe(true)
+  test('empty allow-list denies everyone (fail closed)', () => {
+    expect(isAllowedTelegramUser([], { id: 42 })).toBe(false)
+  })
+
+  test('"*" admits everyone (explicit opt-in)', () => {
+    expect(isAllowedTelegramUser(['*'], { id: 42 })).toBe(true)
   })
 
   test('matches numeric IDs and usernames, with or without @', () => {

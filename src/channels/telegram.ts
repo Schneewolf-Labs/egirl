@@ -1,6 +1,7 @@
 import type { Operator } from '../operator/types'
 import type { ReplyBroker } from '../report/broker'
 import { log } from '../util/logger'
+import { describeAllowList, isAllowedByList } from './allowlist'
 import { deliver, resolveTarget, runTurn } from './spine'
 import type { ChatChannel } from './types'
 
@@ -51,10 +52,9 @@ interface TelegramResponse<T> {
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>
 
 export function isAllowedTelegramUser(allowedUsers: string[], user: TelegramUser): boolean {
-  if (allowedUsers.length === 0) return true
   const id = String(user.id)
   const username = user.username?.toLowerCase()
-  return allowedUsers.some((entry) => {
+  return isAllowedByList(allowedUsers, (entry) => {
     const normalized = entry.trim().replace(/^@/, '').toLowerCase()
     return normalized === id || (username !== undefined && normalized === username)
   })
@@ -96,10 +96,12 @@ export class TelegramChannel implements ChatChannel {
     // endless stream of polling errors.
     const me = await this.call<TelegramUser>('getMe')
     log.info('telegram', `Connected as @${me.username ?? me.id}`)
-    if (this.config.allowedUsers.length > 0) {
-      log.info('telegram', `Allowed users: ${this.config.allowedUsers.join(', ')}`)
-    } else {
-      log.warn('telegram', 'All users allowed -- anyone who finds the bot can talk to it')
+    log.info('telegram', `Users allowed: ${describeAllowList(this.config.allowedUsers)}`)
+    if (this.config.allowedUsers.length === 0) {
+      log.warn(
+        'telegram',
+        'Empty allow-list: refusing every sender. Set [channels.telegram].allowed_users (or "*" to allow anyone).',
+      )
     }
 
     this.abort = new AbortController()

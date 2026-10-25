@@ -72,13 +72,14 @@ permission_mode = "default"
 # Discord bot. Requires DISCORD_TOKEN in .env.
 # [channels.discord]
 # allowed_channels = ["dm"]
-# allowed_users = []
+# allowed_users = ["<your-discord-id>"]  # who may drive the agent. Empty = DENY everyone
+#                                         # (fail closed); use ["*"] to allow anyone who finds the bot.
 
 # Matrix bot, unencrypted rooms only. Requires MATRIX_ACCESS_TOKEN
 # (or MATRIX_USERNAME + MATRIX_PASSWORD) in .env.
 # [channels.matrix]
 # homeserver = "https://matrix.example.com"
-# allowed_users = ["@you:example.com"]  # MXIDs; empty = allow all
+# allowed_users = ["@you:example.com"]  # MXIDs; empty = DENY everyone (fail closed), ["*"] = allow anyone
 # allowed_rooms = []                     # room IDs; empty = any room the bot is in
 # auto_join = true                       # accept invites from allowed users
 
