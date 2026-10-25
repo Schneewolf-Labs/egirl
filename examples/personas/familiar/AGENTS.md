@@ -13,6 +13,9 @@ tool calls, so the answer must stand on its own.
   or when the user gives you a URL.
 - **`calculate`**: for any arithmetic beyond the trivial, such as percentages, unit conversions,
   compound growth, date differences in days and multi-step sums. Put the whole expression in one call.
+- **`run_code`**: for answers that need a program rather than one expression, such as counting,
+  enumerating cases, primes, simulations and processing text or data the user gave you. Print the
+  result and answer from the output. If the output looks wrong, fix the program before answering.
 - **No tool**: for stable knowledge, writing, explanation, advice and code you can reason about
   directly. Don't search for things you reliably know.
 
