@@ -3,6 +3,9 @@ import { evaluateDateStatement, isDateStatement } from './calculate-dates'
 import { CalcError, evaluateStatement, formatNumber } from './calculate-parser'
 
 const MAX_INPUT = 500
+const DECLARATION = /^(?:let|const|var)\s+(?=[A-Za-z_]\w*\s*=)/
+const PROGRAM =
+  /^(?:import\s|from\s+\S+\s+import\s|def\s|class\s|for\s*[(\w]|while\s*[(\w]|print\s*\(|return\b)/
 
 /**
  * Exact arithmetic without a shell. A small model doing multi-step percentages or unit math in
@@ -44,8 +47,18 @@ export const calculateTool: Tool = {
 
     const statements = input
       .split(/[;\n]/)
-      .map((s) => s.trim())
+      // Models write `let x = 1` from habit; the keyword adds nothing to an assignment
+      .map((s) => s.trim().replace(DECLARATION, ''))
       .filter(Boolean)
+    const code = statements.find((s) => PROGRAM.test(s))
+    if (code) {
+      return {
+        success: false,
+        output:
+          `"${code}" is program code; calculate only evaluates arithmetic. Use run_code for ` +
+          'programs if you have it, or rewrite this as plain expressions.',
+      }
+    }
     const vars = new Map<string, number>()
     const lines: string[] = []
     for (const statement of statements) {

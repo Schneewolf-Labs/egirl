@@ -67,6 +67,27 @@ describe('calculate', () => {
     expect(await value('a = 3\nb = 4\nsqrt(a^2 + b^2)')).toBe('5')
   })
 
+  test('let/const/var before an assignment is ignored', async () => {
+    const r = await calc('let price = 80000; const fee = 0.1; var total = price * (1 + fee); total')
+    expect(r.success).toBe(true)
+    expect(r.output).toContain('total = price * (1 + fee) → 88000')
+    expect(r.output.split(' → ').pop()).toBe('88000')
+  })
+
+  test('program code is pointed at run_code instead of a parse error', async () => {
+    for (const code of [
+      'import math\nmath.sqrt(2)',
+      'for i in range(3): print(i)',
+      'def f(x): return x',
+      'print(2 + 2)',
+    ]) {
+      const out = await error(code)
+      expect(out).toContain('is program code')
+      expect(out).toContain('run_code')
+    }
+    expect(await error('letter + 1')).toContain("unknown name 'letter'")
+  })
+
   test('percent-style questions written as decimals', async () => {
     expect(await value('0.15 * 80')).toBe('12')
     expect(await value('(1200 - 950) / 950 * 100')).toBe('26.3157894737')
