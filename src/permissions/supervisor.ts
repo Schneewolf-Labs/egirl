@@ -315,11 +315,16 @@ export class PermissionSupervisor {
       if (config.memoryWrite) await writeMemory(this.deps.memory, request, decision)
       return decision
     } catch (error) {
-      log.warn('permissions', `Local model decision failed: ${error}`)
+      // Fail closed. A supervisor that cannot produce a decision must not grant
+      // the request: falling back to config.defaultAction (which defaults to
+      // 'allow') let a crafted prompt auto-approve a risky action simply by
+      // making the local model error or emit non-JSON. Deny instead, with a
+      // reason the agent can re-steer on.
+      log.warn('permissions', `Local model decision failed, denying (fail closed): ${error}`)
       return fallbackDecision(
         request,
-        config.defaultAction,
-        'Local model decision failed; used default permission action',
+        'deny',
+        'Permission supervisor could not evaluate this request (local model error); denied by default. Narrow the action or retry.',
       )
     }
   }

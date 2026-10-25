@@ -1,6 +1,7 @@
 import type { Operator } from '../operator/types'
 import type { ReplyBroker } from '../report/broker'
 import { log } from '../util/logger'
+import { describeAllowList, isAllowedByList } from './allowlist'
 import { createMatrixApi, type MatrixApi, MatrixApiError, type MatrixEvent } from './matrix/api'
 import { deliver, resolveTarget, runTurn } from './spine'
 import type { ChatChannel, OutboundChannel } from './types'
@@ -77,10 +78,12 @@ export class MatrixChannel implements ChatChannel {
       throw new Error('Matrix needs MATRIX_ACCESS_TOKEN or MATRIX_USERNAME + MATRIX_PASSWORD')
     }
     log.info('matrix', `Connected as ${this.userId}`)
-    if (this.config.allowedUsers.length > 0) {
-      log.info('matrix', `Allowed users: ${this.config.allowedUsers.join(', ')}`)
-    } else {
-      log.info('matrix', 'All users allowed')
+    log.info('matrix', `Users allowed: ${describeAllowList(this.config.allowedUsers)}`)
+    if (this.config.allowedUsers.length === 0) {
+      log.warn(
+        'matrix',
+        'Empty allow-list: refusing every sender. Set [channels.matrix].allowed_users (or "*" to allow anyone).',
+      )
     }
 
     this.abort = new AbortController()
@@ -190,7 +193,7 @@ export class MatrixChannel implements ChatChannel {
   }
 
   private isAllowedUser(userId: string): boolean {
-    return this.config.allowedUsers.length === 0 || this.config.allowedUsers.includes(userId)
+    return isAllowedByList(this.config.allowedUsers, (entry) => entry === userId)
   }
 
   private isAllowedRoom(roomId: string): boolean {

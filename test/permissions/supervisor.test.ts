@@ -87,6 +87,35 @@ describe('PermissionSupervisor', () => {
     expect(decision.reason).toBe('risky')
   })
 
+  test('fails closed (denies) when the model throws, not using defaultAction', async () => {
+    const throwing: LLMProvider = {
+      name: 'fake',
+      async chat() {
+        throw new Error('model unavailable')
+      },
+    }
+    const supervisor = createPermissionSupervisor({
+      // defaultAction 'allow' must NOT be used on an evaluation error.
+      config: config({ defaultAction: 'allow' }),
+      localProvider: throwing,
+    })
+
+    const decision = await supervisor.decide(request)
+
+    expect(decision.action === 'deny' || decision.optionId === '2').toBe(true)
+  })
+
+  test('fails closed (denies) on unparseable model output', async () => {
+    const supervisor = createPermissionSupervisor({
+      config: config({ defaultAction: 'allow' }),
+      localProvider: provider('sure, that looks fine to me'),
+    })
+
+    const decision = await supervisor.decide(request)
+
+    expect(decision.action === 'deny' || decision.optionId === '2').toBe(true)
+  })
+
   test('escalates low-confidence decisions when configured', async () => {
     const supervisor = createPermissionSupervisor({
       config: config({ askUserBelowConfidence: true, minConfidence: 0.8 }),
