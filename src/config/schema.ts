@@ -164,6 +164,12 @@ const baseProperties = {
           owner_users: Type.Array(Type.String(), { default: [] }),
           passive_channels: Type.Array(Type.String(), { default: [] }),
           batch_window_ms: Type.Number({ default: 3000 }),
+          // Engagement policy for passive channels (src/session/engagement.ts). With wake_words
+          // set (or require_wake = false), deterministic wake-word + conversation-window rules
+          // replace the relevance-model gate. Empty wake_words keeps the legacy local-model gate.
+          wake_words: Type.Array(Type.String(), { default: [] }),
+          conversation_window_ms: Type.Number({ default: 120000 }),
+          require_wake: Type.Boolean({ default: true }),
           // URL prefixes whose markdown images are uploaded as attachments (e.g. a loopback image
           // server Discord cannot reach). Empty: images stay as links.
           attach_images_from: Type.Array(Type.String(), { default: [] }),
@@ -685,6 +691,9 @@ export interface RuntimeConfig {
       ownerUsers: string[]
       passiveChannels: string[]
       batchWindowMs: number
+      wakeWords: string[]
+      conversationWindowMs: number
+      requireWake: boolean
       attachImagesFrom: string[]
       builtinPermission: 'everyone' | 'allowed' | 'owner'
     }

@@ -511,6 +511,9 @@ export function loadConfig(options: LoadConfigOptions = {}): RuntimeConfig {
       ownerUsers: toml.channels.discord.owner_users ?? [],
       passiveChannels: toml.channels.discord.passive_channels ?? [],
       batchWindowMs: toml.channels.discord.batch_window_ms ?? 3000,
+      wakeWords: toml.channels.discord.wake_words ?? [],
+      conversationWindowMs: toml.channels.discord.conversation_window_ms ?? 120000,
+      requireWake: toml.channels.discord.require_wake ?? true,
       attachImagesFrom: toml.channels.discord.attach_images_from ?? [],
       builtinPermission: toml.channels.discord.builtin_permission ?? 'everyone',
     }
