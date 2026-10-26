@@ -17,6 +17,7 @@ import type { Operator } from '../operator/types'
 import type { ThinkingConfig } from '../providers/types'
 import type { Skill } from '../skills/types'
 import type { SessionController } from './controller'
+import type { VerbosityStore } from './verbosity'
 
 /** A command and what it did, or why it did nothing. */
 export interface CommandResult {
@@ -52,6 +53,8 @@ export interface CommandScope {
    * channel. Unset means everyone, as before; a public server sets `owner`.
    */
   builtinPermission?: CommandPermission
+  /** Per-conversation display verbosity, for /tools, /reasoning, /verbose, /quiet. */
+  verbosity?: VerbosityStore
 }
 
 export type CommandPermission = NonNullable<
@@ -77,6 +80,9 @@ const BUILTIN = new Set([
   'auto',
   'maxturns',
   'reasoning',
+  'tools',
+  'verbose',
+  'quiet',
   'queue',
   'clear',
   'quit',
@@ -163,6 +169,15 @@ function parseThinking(arg: string): ThinkingLevel | 'default' | undefined {
   return THINKING_LEVELS.find((l) => l === word)
 }
 
+/** Parse an on/off/toggle argument for a display switch; empty or "toggle" flips `current`. */
+function parseOnOff(arg: string, current: boolean): boolean | undefined {
+  const word = arg.toLowerCase().trim()
+  if (word === '' || word === 'toggle') return !current
+  if (word === 'on' || word === 'show') return true
+  if (word === 'off' || word === 'hide') return false
+  return undefined
+}
+
 function describeThinking(agent: Operator): string {
   const { level, source } = agent.getThinking()
   return `${level} (${source})`
@@ -224,6 +239,10 @@ function settingsCommand(scope: CommandScope): CommandResult {
       `💭 reasoning ${s.showReasoning ? 'on' : 'off'}`,
     )
   }
+  if (scope.verbosity) {
+    const v = scope.verbosity.get()
+    parts.push(`🛠️ tools ${v.tools ? 'on' : 'off'}`, `💭 reasoning ${v.thinking ? 'on' : 'off'}`)
+  }
   return reply(parts.join(' · '))
 }
 
@@ -239,6 +258,13 @@ function helpCommand(scope: CommandScope): CommandResult {
   for (const c of customCommands(scope.skills ?? [])) {
     const who = c.permission === 'everyone' ? '' : ` (${c.permission})`
     lines.push(`✨ /${c.name}${c.args ? ` <${c.args}>` : ''} — ${c.description}${who}`)
+  }
+  if (scope.verbosity) {
+    lines.push(
+      `🛠️ /tools <on|off> — show or hide tool-call lines${mark}`,
+      `💭 /reasoning <on|off> — show or hide her reasoning${mark}`,
+      `📢 /verbose · 🔇 /quiet — both at once${mark}`,
+    )
   }
   if (scope.session) {
     lines.push(
@@ -303,9 +329,36 @@ export async function handleCommand(input: string, scope: CommandScope): Promise
       return reply(`🔢 ${session.set('maxTurns', n)}`)
     }
 
-    case 'reasoning':
-      if (!session) return terminalOnly(cmd)
-      return reply(`💭 ${session.set('showReasoning', !session.get().showReasoning)}`)
+    case 'reasoning': {
+      if (session) return reply(`💭 ${session.set('showReasoning', !session.get().showReasoning)}`)
+      if (scope.verbosity) {
+        const next = parseOnOff(arg, scope.verbosity.get().thinking)
+        if (next === undefined) return reply('💭 usage: /reasoning <on|off>')
+        scope.verbosity.set({ thinking: next })
+        return reply(`💭 reasoning ${next ? 'shown' : 'hidden'}`)
+      }
+      return terminalOnly(cmd)
+    }
+
+    case 'tools': {
+      if (!scope.verbosity) return reply('🛠️ /tools is not available here')
+      const next = parseOnOff(arg, scope.verbosity.get().tools)
+      if (next === undefined) return reply('🛠️ usage: /tools <on|off>')
+      scope.verbosity.set({ tools: next })
+      return reply(`🛠️ tool-call lines ${next ? 'shown' : 'hidden'}`)
+    }
+
+    case 'verbose':
+      if (!scope.verbosity && !session) return reply('📢 /verbose is not available here')
+      scope.verbosity?.set({ tools: true, thinking: true })
+      session?.set('showReasoning', true)
+      return reply('📢 verbose — tool-call lines and reasoning shown')
+
+    case 'quiet':
+      if (!scope.verbosity && !session) return reply('🔇 /quiet is not available here')
+      scope.verbosity?.set({ tools: false, thinking: false })
+      session?.set('showReasoning', false)
+      return reply('🔇 quiet — tool-call lines and reasoning hidden')
 
     case 'queue': {
       if (!session) return terminalOnly(cmd)

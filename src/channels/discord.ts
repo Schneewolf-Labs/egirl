@@ -2,6 +2,7 @@ import {
   ChannelType,
   type ChatInputCommandInteraction,
   Client,
+  EmbedBuilder,
   Events,
   GatewayIntentBits,
   type Message,
@@ -16,6 +17,8 @@ import type { Operator } from '../operator/types'
 import type { LLMProvider } from '../providers/types'
 import type { ReplyBroker } from '../report/broker'
 import { type Caller, customCommands, isCommand } from '../session/commands'
+import { EngagementTracker } from '../session/engagement'
+import { makeVerbosityStore, type VerbosityStore } from '../session/verbosity'
 import type { Skill } from '../skills/types'
 import { log } from '../util/logger'
 import { describeAllowList, isAllowedByList } from './allowlist'
@@ -31,8 +34,9 @@ import {
   registerApplicationCommands,
 } from './discord-commands'
 import { type DiscordFile, withImages } from './discord-images'
-import { deliver, runTurn } from './spine'
-import type { ChatChannel } from './types'
+import { CARD_COLORS } from './rich'
+import { deliver, runTurn, type Surface } from './spine'
+import type { ChatChannel, RichCard } from './types'
 
 export interface DiscordConfig {
   token: string
@@ -42,7 +46,14 @@ export interface DiscordConfig {
   passiveChannels: string[] // Channel IDs to passively monitor (respond without being tagged)
   batchWindowMs: number // Debounce window before evaluating a batch (ms)
   attachImagesFrom?: string[] // URL prefixes whose markdown images are uploaded as attachments
+  workspacePath?: string // Her workspace dir; markdown images pointing inside it are attached
   builtinPermission?: 'everyone' | 'allowed' | 'owner' // who may run /think, /status, /context, /settings
+  // Engagement policy for passive channels (see src/session/engagement.ts). When wakeWords is
+  // non-empty or requireWake is false, these replace the relevance-model gate with deterministic
+  // wake-word + conversation-window rules; otherwise the legacy local-model gate is used.
+  wakeWords?: string[] // Names that wake her in a passive channel (empty = use the relevance model)
+  conversationWindowMs?: number // How long a reply keeps the conversation open without a wake word
+  requireWake?: boolean // false: engage on every message in a passive channel (it is hers alone)
 }
 
 const DISCORD_MAX_MESSAGE_LENGTH = 2000
@@ -70,6 +81,26 @@ function channelListed(message: Message, list: string[], dmMarker: string | unde
   return false
 }
 
+/** Build a Discord embed from a transport-agnostic card, clamped to Discord's field limits. */
+function buildEmbed(card: RichCard): EmbedBuilder {
+  const embed = new EmbedBuilder()
+  if (card.title) embed.setTitle(card.title.slice(0, 256))
+  if (card.text) embed.setDescription(card.text.slice(0, 4096))
+  if (card.url) embed.setURL(card.url)
+  if (card.status) embed.setColor(CARD_COLORS[card.status])
+  if (card.footer) embed.setFooter({ text: card.footer.slice(0, 2048) })
+  if (card.fields?.length) {
+    embed.addFields(
+      card.fields.slice(0, 25).map((f) => ({
+        name: f.name.slice(0, 256) || '​',
+        value: f.value.slice(0, 1024) || '​',
+        inline: f.inline ?? false,
+      })),
+    )
+  }
+  return embed
+}
+
 export class DiscordChannel implements ChatChannel {
   readonly name = 'discord'
   private client: Client
@@ -77,12 +108,14 @@ export class DiscordChannel implements ChatChannel {
   /** Skills the agent was built with; the ones declaring `egirl.command` become slash commands. */
   private readonly skills: Skill[]
   private sessions: Map<string, Operator> = new Map()
+  private verbosity: Map<string, VerbosityStore> = new Map()
   private config: DiscordConfig
   private ready = false
   private reactionHandlers: ReactionHandler[] = []
   private messageQueue: Array<() => Promise<void>> = []
   private processing = false
   private batcher: MessageBatcher | null = null
+  private engagement: EngagementTracker | null = null
   private localProvider: LLMProvider | null = null
   private broker: ReplyBroker | undefined
 
@@ -98,15 +131,37 @@ export class DiscordChannel implements ChatChannel {
     this.broker = broker
     this.skills = skills
 
-    if (config.passiveChannels.length > 0 && localProvider) {
-      this.localProvider = localProvider
+    if (config.passiveChannels.length > 0) {
       this.batcher = new MessageBatcher({ windowMs: config.batchWindowMs }, (channelId, messages) =>
         this.handleBatch(channelId, messages),
       )
-      log.info(
-        'discord',
-        `Passive monitoring enabled for ${config.passiveChannels.length} channel(s), batch window ${config.batchWindowMs}ms`,
-      )
+      const engagementEnabled = (config.wakeWords?.length ?? 0) > 0 || config.requireWake === false
+      if (engagementEnabled) {
+        // Deterministic wake-word + conversation-window gating. No model call; see engagement.ts.
+        const conversationWindowMs = config.conversationWindowMs ?? 120_000
+        const requireWake = config.requireWake ?? true
+        this.engagement = new EngagementTracker({
+          wakeWords: config.wakeWords ?? [],
+          conversationWindowMs,
+          requireWake,
+        })
+        log.info(
+          'discord',
+          `Engagement policy on ${config.passiveChannels.length} channel(s): wake=[${(config.wakeWords ?? []).join(', ')}], window=${conversationWindowMs}ms, requireWake=${requireWake}`,
+        )
+      } else if (localProvider) {
+        // Legacy behavior: a local model decides whether to join each buffered batch.
+        this.localProvider = localProvider
+        log.info(
+          'discord',
+          `Passive monitoring (relevance model) enabled for ${config.passiveChannels.length} channel(s), batch window ${config.batchWindowMs}ms`,
+        )
+      } else {
+        log.warn(
+          'discord',
+          `passive_channels set but neither wake_words nor a local model is available — nothing will trigger in them`,
+        )
+      }
     }
 
     this.client = new Client({
@@ -253,13 +308,50 @@ export class DiscordChannel implements ChatChannel {
       return
     }
 
-    // For guild channels without a mention
-    if (message.guild && !isMentioned) {
-      // Buffer for passive channels
-      if (isPassive && this.batcher) {
-        const content = message.content.trim()
-        if (!content) return
+    // Get the message content (strip bot mention if present)
+    const content = this.extractContent(message)
 
+    // A command answers at once, ahead of whatever turn the queue is waiting on -- asking
+    // whether she is busy must not itself wait until she is not. A custom command that expands
+    // into a turn queues behind the turn in flight on the loop itself (Operator.run). Commands
+    // are handled even in a passive channel, so the engagement gate never swallows one.
+    if (content.trim() && isCommand(content)) {
+      this.processMessage(message, content).catch((error) => {
+        log.error('discord', 'Command failed:', error)
+      })
+      return
+    }
+
+    // Passive channel: decide engagement, then buffer so a burst coalesces into one turn.
+    if (isPassive && this.batcher) {
+      if (this.engagement) {
+        // Scan the raw text for a wake word; a direct @mention counts as addressed.
+        const decision = this.engagement.consider({
+          conversationId: message.channel.id,
+          text: message.content,
+          addressed: isMentioned,
+        })
+        if (!decision.engage) {
+          log.debug('discord', `Staying quiet in ${message.channel.id} (${decision.reason})`)
+          return
+        }
+        const buffered = content.trim()
+        if (!buffered) return
+        log.debug('discord', `Engaging in ${message.channel.id} (${decision.reason}); buffering`)
+        this.batcher.add(message.channel.id, {
+          author: message.author.displayName ?? message.author.username,
+          authorId: message.author.id,
+          content: buffered,
+          timestamp: message.createdAt,
+          message,
+        })
+        return
+      }
+
+      // Legacy relevance-model path: buffer non-mentions; a mention flushes and runs now.
+      if (message.guild && !isMentioned) {
+        const buffered = content.trim()
+        if (!buffered) return
         log.debug(
           'discord',
           `Buffering passive message from ${message.author.tag} in ${message.channel.id}`,
@@ -267,36 +359,19 @@ export class DiscordChannel implements ChatChannel {
         this.batcher.add(message.channel.id, {
           author: message.author.displayName ?? message.author.username,
           authorId: message.author.id,
-          content,
+          content: buffered,
           timestamp: message.createdAt,
           message,
         })
         return
       }
-
-      // Non-passive channels require a mention
-      return
-    }
-
-    // Direct mention in a passive channel — flush any buffered messages
-    // so they become part of the conversation history
-    if (isPassive && this.batcher) {
       this.batcher.flushNow(message.channel.id)
     }
 
-    // Get the message content (strip bot mention if present)
-    const content = this.extractContent(message)
-    if (!content.trim()) return
+    // A non-passive guild channel only responds when mentioned; DMs always respond.
+    if (!isPassive && message.guild && !isMentioned) return
 
-    // A command answers at once, ahead of whatever turn the queue is waiting on -- asking
-    // whether she is busy must not itself wait until she is not. A custom command that expands
-    // into a turn queues behind the turn in flight on the loop itself (Operator.run).
-    if (isCommand(content)) {
-      this.processMessage(message, content).catch((error) => {
-        log.error('discord', 'Command failed:', error)
-      })
-      return
-    }
+    if (!content.trim()) return
 
     // Enqueue to prevent concurrent access to shared Operator context
     this.enqueueMessage(() => this.processMessage(message, content))
@@ -327,7 +402,7 @@ export class DiscordChannel implements ChatChannel {
   private async payload(
     chunk: string,
   ): Promise<string | { content?: string; files: DiscordFile[] }> {
-    const p = await withImages(chunk, this.config.attachImagesFrom ?? [])
+    const p = await withImages(chunk, this.config.attachImagesFrom ?? [], this.config.workspacePath)
     if (p.files.length === 0) return chunk
     return { ...(p.content ? { content: p.content } : {}), files: p.files }
   }
@@ -363,6 +438,7 @@ export class DiscordChannel implements ChatChannel {
             if (on && 'sendTyping' in channel) await channel.sendTyping()
           },
         },
+        ack: this.reactionAck(message),
       },
       content,
       this.broker,
@@ -370,12 +446,48 @@ export class DiscordChannel implements ChatChannel {
         skills: this.skills,
         caller: this.callerOf(message.author.id),
         builtinPermission: this.config.builtinPermission,
+        verbosity: this.verbosityFor(sessionKey),
       },
     )
   }
 
   private callerOf(userId: string): Caller {
     return callerFor(userId, this.config)
+  }
+
+  /** The per-conversation verbosity store, created on first use and kept for the session. */
+  private verbosityFor(sessionKey: string): VerbosityStore {
+    let store = this.verbosity.get(sessionKey)
+    if (!store) {
+      store = makeVerbosityStore()
+      this.verbosity.set(sessionKey, store)
+    }
+    return store
+  }
+
+  /**
+   * Acknowledgement reactions on the triggering message: 👀 while she works, swapped for ✅ when
+   * the reply lands or ⚠️ if the turn errored. A cheap, wordless "I saw you / I'm done" cue. All
+   * cosmetic — a missing permission or a deleted message must never fail the turn.
+   */
+  private reactionAck(message: Message): Surface['ack'] {
+    const EMOJI = { working: '👀', done: '✅', failed: '⚠️' } as const
+    const clear = async (emoji: string): Promise<void> => {
+      const uid = this.client.user?.id
+      if (!uid) return
+      await message.reactions.cache.get(emoji)?.users.remove(uid)
+    }
+    return {
+      working: () => message.react(EMOJI.working).then(() => {}),
+      done: async () => {
+        await clear(EMOJI.working).catch(() => {})
+        await message.react(EMOJI.done)
+      },
+      failed: async () => {
+        await clear(EMOJI.working).catch(() => {})
+        await message.react(EMOJI.failed)
+      },
+    }
   }
 
   /**
@@ -395,9 +507,10 @@ export class DiscordChannel implements ChatChannel {
     }
     const channelId = interaction.channelId
     // Same session the typed form would land in (see resolveSessionKey).
-    const agent = this.getOrCreateAgent(
-      interaction.inGuild() ? `discord:channel:${channelId}` : `discord:dm:${interaction.user.id}`,
-    )
+    const sessionKey = interaction.inGuild()
+      ? `discord:channel:${channelId}`
+      : `discord:dm:${interaction.user.id}`
+    const agent = this.getOrCreateAgent(sessionKey)
     await interaction.deferReply()
     let first = true
     await runTurn(
@@ -420,6 +533,7 @@ export class DiscordChannel implements ChatChannel {
         skills: this.skills,
         caller: this.callerOf(interaction.user.id),
         builtinPermission: this.config.builtinPermission,
+        verbosity: this.verbosityFor(sessionKey),
       },
     )
   }
@@ -438,15 +552,30 @@ export class DiscordChannel implements ChatChannel {
   }
 
   /**
-   * Called when the batcher's debounce timer fires for a passive channel.
-   * Evaluates whether the bot should respond, and if so, sends the batch
-   * through the agent loop.
+   * Called when the batcher's debounce timer fires for a passive channel. Under the engagement
+   * policy the decision to respond was already made deterministically when the messages were
+   * buffered, so the batch just runs; the window is reopened once she replies so follow-ups
+   * carry on without a fresh wake word. Without engagement, the legacy relevance model decides.
    */
   private async handleBatch(channelId: string, messages: BufferedMessage[]): Promise<void> {
-    if (!this.localProvider || messages.length === 0) return
+    if (messages.length === 0) return
 
+    // The last message is the reply target; its author sees the response threaded to them.
+    const lastMessage = messages[messages.length - 1]?.message
+    if (!lastMessage) return
+
+    if (this.engagement) {
+      const input = this.engagedInput(messages)
+      this.enqueueMessage(() =>
+        this.processMessage(lastMessage, input).finally(() => {
+          this.engagement?.noteReply(channelId)
+        }),
+      )
+      return
+    }
+
+    if (!this.localProvider) return
     const botName = this.client.user?.displayName ?? this.client.user?.username ?? 'Kira'
-
     log.debug(
       'discord',
       `Evaluating batch of ${messages.length} message(s) in channel ${channelId}`,
@@ -459,15 +588,18 @@ export class DiscordChannel implements ChatChannel {
     }
 
     log.info('discord', `Responding to batch in ${channelId}: ${decision.reason}`)
-
-    // Use the last message in the batch as the reply target
-    const lastMessage = messages[messages.length - 1]?.message
     const agentInput = formatBatchForAgent(messages)
+    this.enqueueMessage(() => this.processMessage(lastMessage, agentInput))
+  }
 
-    // Process through the normal agent pipeline
-    if (lastMessage) {
-      this.enqueueMessage(() => this.processMessage(lastMessage, agentInput))
-    }
+  /**
+   * Turn an engaged batch into one agent input. A single message is passed verbatim — in her
+   * own channel she is simply being spoken to, not "monitoring" one. Several messages are
+   * labelled by author so she can tell a burst apart.
+   */
+  private engagedInput(messages: BufferedMessage[]): string {
+    if (messages.length === 1) return messages[0]?.content ?? ''
+    return messages.map((m) => `${m.author}: ${m.content}`).join('\n')
   }
 
   private isMentioned(message: Message): boolean {
@@ -511,6 +643,24 @@ export class DiscordChannel implements ChatChannel {
       }
     } catch (err) {
       log.error('discord', `Failed to send outbound message to ${target}: ${err}`)
+    }
+  }
+
+  /** Outbound: deliver a structured card as a Discord embed (see rich.ts / sendCardOrText). */
+  async sendCard(target: string, card: RichCard): Promise<void> {
+    if (!this.ready) {
+      log.warn('discord', 'Cannot send outbound card: client not ready')
+      return
+    }
+    try {
+      const channel = await this.client.channels.fetch(target)
+      if (channel?.isTextBased() && 'send' in channel) {
+        await channel.send({ embeds: [buildEmbed(card)] })
+      } else {
+        log.warn('discord', `Channel ${target} not found or not text-based`)
+      }
+    } catch (err) {
+      log.error('discord', `Failed to send card to ${target}: ${err}`)
     }
   }
 

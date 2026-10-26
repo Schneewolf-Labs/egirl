@@ -3,6 +3,8 @@ import { AgentLoop } from '../agent/loop'
 import { subscribeAll } from '../agent/session-events'
 import type { SessionMutex } from '../agent/session-mutex'
 import type { AgentLoopDeps } from '../agent/types'
+import { sendCardOrText } from '../channels/rich'
+import type { OutboundChannel } from '../channels/types'
 import type { RuntimeConfig } from '../config'
 import type { ConversationStore } from '../conversation'
 import type { MemoryManager } from '../memory'
@@ -101,9 +103,8 @@ export function formatStateBrief(content: string, sourcePath: string): string | 
   ].join('\n')
 }
 
-export interface OutboundChannel {
-  send(target: string, message: string): Promise<void>
-}
+// Re-exported from the canonical definition in channels/types so tasks can deliver cards too.
+export type { OutboundChannel }
 
 export interface TaskRunnerDeps {
   config: RuntimeConfig
@@ -996,7 +997,12 @@ export class TaskRunner {
       return
     }
     try {
-      await channel.send(task.channelTarget, message)
+      await sendCardOrText(channel, task.channelTarget, {
+        title: task.name,
+        text: message,
+        status: 'info',
+        footer: 'background task',
+      })
     } catch (err) {
       log.error('tasks', `Failed to send notification for ${task.name}: ${err}`)
     }

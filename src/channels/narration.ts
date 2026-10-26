@@ -17,6 +17,8 @@ export type NarrationFormat = 'plain' | 'markdown'
 
 export interface NarrationState {
   lines: string[]
+  /** Her reasoning for the turn, collected only when the surface asked for it. */
+  thinking?: string
 }
 
 interface ToolMeta {
@@ -97,7 +99,10 @@ export function formatToolCallCompact(call: ToolCall): string {
   return arg ? `${meta.icon} ${meta.label}: ${arg}` : `${meta.icon} ${meta.label}`
 }
 
-export function createNarration(): { handler: AgentEventHandler; state: NarrationState } {
+export function createNarration(opts: { captureThinking?: boolean } = {}): {
+  handler: AgentEventHandler
+  state: NarrationState
+} {
   const state: NarrationState = { lines: [] }
 
   const handler: AgentEventHandler = {
@@ -106,6 +111,15 @@ export function createNarration(): { handler: AgentEventHandler; state: Narratio
         state.lines.push(formatToolCallCompact(call))
       }
     },
+  }
+
+  // onThinking fires once per turn with the completed reasoning block. Only hook it when the
+  // surface will show it, so a turn that hides reasoning does not retain it at all.
+  if (opts.captureThinking) {
+    handler.onThinking = (text: string) => {
+      const t = text.trim()
+      if (t) state.thinking = state.thinking ? `${state.thinking}\n${t}` : t
+    }
   }
 
   return { handler, state }
@@ -117,4 +131,22 @@ export function buildToolCallPrefix(state: NarrationState, format: NarrationForm
   const body = state.lines.join('\n')
   if (format === 'markdown') return `\`\`\`\n${body}\n\`\`\`\n`
   return `${body}\n\n`
+}
+
+/** Longest reasoning shown inline before it is truncated — chat is not a trace viewer. */
+const THINKING_CAP = 1200
+
+/** A reasoning block to put in front of a reply; empty when there is none or it was not shown. */
+export function buildThinkingBlock(thinking: string | undefined, format: NarrationFormat): string {
+  const text = thinking?.trim()
+  if (!text) return ''
+  const body = text.length > THINKING_CAP ? `${text.slice(0, THINKING_CAP)}…` : text
+  if (format === 'markdown') {
+    const quoted = body
+      .split('\n')
+      .map((line) => `> ${line}`)
+      .join('\n')
+    return `💭 **reasoning**\n${quoted}\n\n`
+  }
+  return `💭 reasoning:\n${body}\n\n`
 }

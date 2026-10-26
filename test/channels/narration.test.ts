@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import {
+  buildThinkingBlock,
   buildToolCallPrefix,
   createNarration,
   formatToolCallCompact,
@@ -57,6 +58,40 @@ describe('createNarration', () => {
     ])
     handler.onToolCallComplete?.('1', 'read_file', { success: true, output: 'secret contents' })
     expect(state.lines).toEqual(['📄 Read: "a.ts"', '📄 Read: "b.ts"'])
+  })
+
+  test('does not hook thinking unless asked', () => {
+    const { handler } = createNarration()
+    expect(handler.onThinking).toBeUndefined()
+  })
+
+  test('captures the thinking block when asked', () => {
+    const { handler, state } = createNarration({ captureThinking: true })
+    handler.onThinking?.('weighing the options')
+    expect(state.thinking).toBe('weighing the options')
+  })
+})
+
+describe('buildThinkingBlock', () => {
+  test('is empty when there is no reasoning', () => {
+    expect(buildThinkingBlock(undefined, 'markdown')).toBe('')
+    expect(buildThinkingBlock('   ', 'plain')).toBe('')
+  })
+
+  test('markdown surfaces get a blockquoted reasoning aside', () => {
+    expect(buildThinkingBlock('line one\nline two', 'markdown')).toBe(
+      '💭 **reasoning**\n> line one\n> line two\n\n',
+    )
+  })
+
+  test('plain surfaces get a labelled block', () => {
+    expect(buildThinkingBlock('thinking hard', 'plain')).toBe('💭 reasoning:\nthinking hard\n\n')
+  })
+
+  test('long reasoning is truncated', () => {
+    const block = buildThinkingBlock('x'.repeat(5000), 'plain')
+    expect(block).toContain('…')
+    expect(block.length).toBeLessThan(1400)
   })
 })
 

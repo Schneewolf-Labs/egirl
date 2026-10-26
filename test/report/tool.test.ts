@@ -63,7 +63,8 @@ describe('report tool — channel target', () => {
     expect(sent).toHaveLength(1)
     expect(sent[0]?.target).toBe('boss@example.com')
     expect(sent[0]?.message).toContain('goal exhausted')
-    expect(sent[0]?.message).toContain('[report from zero]')
+    // A channel without sendCard gets the card rendered to markdown (see rich.ts).
+    expect(sent[0]?.message).toContain('Report from zero')
   })
 
   test('ask blocks until the broker delivers the reply', async () => {
@@ -73,7 +74,7 @@ describe('report tool — channel target', () => {
     // Let the send happen, then answer as the human would.
     await new Promise((r) => setTimeout(r, 10))
     expect(sent).toHaveLength(1)
-    expect(sent[0]?.message).toContain('(awaiting your reply)')
+    expect(sent[0]?.message).toContain('awaiting your reply')
     expect(broker.tryDeliver('xmpp', 'boss@example.com', 'DX9')).toBe(true)
     const result = await pending
     expect(result.success).toBe(true)

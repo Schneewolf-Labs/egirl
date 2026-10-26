@@ -1,3 +1,5 @@
+import { sendCardOrText } from '../channels/rich'
+import type { RichCard } from '../channels/types'
 import { postPeerMessage } from '../peers/client'
 import type { PeerEntry } from '../peers/protocol'
 import type { Tool, ToolResult } from '../tools/types'
@@ -139,10 +141,15 @@ export function createReportTool(deps: ReportToolDeps): Tool {
           output: `Report target ${toRaw} is configured but channel "${to.channel}" is not connected in this process.`,
         }
       }
-      const framed = `[report from ${selfName}]${mode === 'ask' ? ' (awaiting your reply)' : ''}\n${message}`
+      const card: RichCard = {
+        title: `Report from ${selfName}`,
+        text: message,
+        status: mode === 'ask' ? 'warn' : 'info',
+        ...(mode === 'ask' ? { footer: 'awaiting your reply' } : {}),
+      }
       if (mode === 'notify') {
         try {
-          await channel.send(to.target, framed)
+          await sendCardOrText(channel, to.target, card)
           return { success: true, output: `Report sent to ${toRaw}.` }
         } catch (e) {
           return { success: false, output: `Failed to send report to ${toRaw}: ${e}` }
@@ -157,7 +164,7 @@ export function createReportTool(deps: ReportToolDeps): Tool {
       // Park BEFORE sending so a fast reply cannot race past the broker.
       const reply = deps.broker.awaitReply(to.channel, to.target, timeoutMs)
       try {
-        await channel.send(to.target, framed)
+        await sendCardOrText(channel, to.target, card)
       } catch (e) {
         return { success: false, output: `Failed to send report to ${toRaw}: ${e}` }
       }
