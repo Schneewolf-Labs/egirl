@@ -515,6 +515,7 @@ export function loadConfig(options: LoadConfigOptions = {}): RuntimeConfig {
       conversationWindowMs: toml.channels.discord.conversation_window_ms ?? 120000,
       requireWake: toml.channels.discord.require_wake ?? true,
       attachImagesFrom: toml.channels.discord.attach_images_from ?? [],
+      workspacePath,
       builtinPermission: toml.channels.discord.builtin_permission ?? 'everyone',
     }
   }

@@ -52,6 +52,17 @@ export interface Surface {
   send(chunk: string): Promise<void>
   /** Typing indicator primitive; the spine handles cadence and cleanup. Cosmetic, may reject. */
   typing?: { refreshMs: number; set(on: boolean): Promise<void> }
+  /**
+   * Acknowledgement reactions on the triggering message — a cheap liveness cue that the message
+   * was seen (`working`), handled (`done`), or failed (`failed`). Transport-agnostic: a surface
+   * that cannot react (CLI, a chat without reactions) simply omits this. The spine drives the
+   * phases; each call is cosmetic, may reject, and never fails a turn.
+   */
+  ack?: {
+    working(): Promise<void>
+    done(): Promise<void>
+    failed(): Promise<void>
+  }
 }
 
 /**
@@ -93,15 +104,18 @@ export async function runTurn(
   else if (broker?.tryDeliver(surface.channel, surface.target, text)) return
 
   const stopTyping = keepTyping(surface)
+  await surface.ack?.working().catch(() => {})
   try {
     const { handler, state } = createNarration()
     const response = await agent.run(text, { events: handler })
     await deliver(surface, buildToolCallPrefix(state, surface.format) + response.content)
     log.debug(surface.channel, `Responded via ${response.provider}`)
+    await surface.ack?.done().catch(() => {})
   } catch (error) {
     const message = errorMessage(error)
     log.error(surface.channel, 'Error processing message:', error)
     await deliver(surface, `Error: ${message}`).catch(() => {})
+    await surface.ack?.failed().catch(() => {})
   } finally {
     await stopTyping()
   }

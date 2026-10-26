@@ -32,7 +32,7 @@ import {
   registerApplicationCommands,
 } from './discord-commands'
 import { type DiscordFile, withImages } from './discord-images'
-import { deliver, runTurn } from './spine'
+import { deliver, runTurn, type Surface } from './spine'
 import type { ChatChannel } from './types'
 
 export interface DiscordConfig {
@@ -43,6 +43,7 @@ export interface DiscordConfig {
   passiveChannels: string[] // Channel IDs to passively monitor (respond without being tagged)
   batchWindowMs: number // Debounce window before evaluating a batch (ms)
   attachImagesFrom?: string[] // URL prefixes whose markdown images are uploaded as attachments
+  workspacePath?: string // Her workspace dir; markdown images pointing inside it are attached
   builtinPermission?: 'everyone' | 'allowed' | 'owner' // who may run /think, /status, /context, /settings
   // Engagement policy for passive channels (see src/session/engagement.ts). When wakeWords is
   // non-empty or requireWake is false, these replace the relevance-model gate with deterministic
@@ -377,7 +378,7 @@ export class DiscordChannel implements ChatChannel {
   private async payload(
     chunk: string,
   ): Promise<string | { content?: string; files: DiscordFile[] }> {
-    const p = await withImages(chunk, this.config.attachImagesFrom ?? [])
+    const p = await withImages(chunk, this.config.attachImagesFrom ?? [], this.config.workspacePath)
     if (p.files.length === 0) return chunk
     return { ...(p.content ? { content: p.content } : {}), files: p.files }
   }
@@ -413,6 +414,7 @@ export class DiscordChannel implements ChatChannel {
             if (on && 'sendTyping' in channel) await channel.sendTyping()
           },
         },
+        ack: this.reactionAck(message),
       },
       content,
       this.broker,
@@ -426,6 +428,31 @@ export class DiscordChannel implements ChatChannel {
 
   private callerOf(userId: string): Caller {
     return callerFor(userId, this.config)
+  }
+
+  /**
+   * Acknowledgement reactions on the triggering message: 👀 while she works, swapped for ✅ when
+   * the reply lands or ⚠️ if the turn errored. A cheap, wordless "I saw you / I'm done" cue. All
+   * cosmetic — a missing permission or a deleted message must never fail the turn.
+   */
+  private reactionAck(message: Message): Surface['ack'] {
+    const EMOJI = { working: '👀', done: '✅', failed: '⚠️' } as const
+    const clear = async (emoji: string): Promise<void> => {
+      const uid = this.client.user?.id
+      if (!uid) return
+      await message.reactions.cache.get(emoji)?.users.remove(uid)
+    }
+    return {
+      working: () => message.react(EMOJI.working).then(() => {}),
+      done: async () => {
+        await clear(EMOJI.working).catch(() => {})
+        await message.react(EMOJI.done)
+      },
+      failed: async () => {
+        await clear(EMOJI.working).catch(() => {})
+        await message.react(EMOJI.failed)
+      },
+    }
   }
 
   /**

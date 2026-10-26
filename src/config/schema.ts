@@ -695,6 +695,7 @@ export interface RuntimeConfig {
       conversationWindowMs: number
       requireWake: boolean
       attachImagesFrom: string[]
+      workspacePath?: string
       builtinPermission: 'everyone' | 'allowed' | 'owner'
     }
     claudeCode?: {
