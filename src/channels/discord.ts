@@ -2,6 +2,7 @@ import {
   ChannelType,
   type ChatInputCommandInteraction,
   Client,
+  EmbedBuilder,
   Events,
   GatewayIntentBits,
   type Message,
@@ -32,8 +33,9 @@ import {
   registerApplicationCommands,
 } from './discord-commands'
 import { type DiscordFile, withImages } from './discord-images'
+import { CARD_COLORS } from './rich'
 import { deliver, runTurn, type Surface } from './spine'
-import type { ChatChannel } from './types'
+import type { ChatChannel, RichCard } from './types'
 
 export interface DiscordConfig {
   token: string
@@ -76,6 +78,26 @@ function channelListed(message: Message, list: string[], dmMarker: string | unde
     return list.includes(message.channel.parentId)
   }
   return false
+}
+
+/** Build a Discord embed from a transport-agnostic card, clamped to Discord's field limits. */
+function buildEmbed(card: RichCard): EmbedBuilder {
+  const embed = new EmbedBuilder()
+  if (card.title) embed.setTitle(card.title.slice(0, 256))
+  if (card.text) embed.setDescription(card.text.slice(0, 4096))
+  if (card.url) embed.setURL(card.url)
+  if (card.status) embed.setColor(CARD_COLORS[card.status])
+  if (card.footer) embed.setFooter({ text: card.footer.slice(0, 2048) })
+  if (card.fields?.length) {
+    embed.addFields(
+      card.fields.slice(0, 25).map((f) => ({
+        name: f.name.slice(0, 256) || '​',
+        value: f.value.slice(0, 1024) || '​',
+        inline: f.inline ?? false,
+      })),
+    )
+  }
+  return embed
 }
 
 export class DiscordChannel implements ChatChannel {
@@ -606,6 +628,24 @@ export class DiscordChannel implements ChatChannel {
       }
     } catch (err) {
       log.error('discord', `Failed to send outbound message to ${target}: ${err}`)
+    }
+  }
+
+  /** Outbound: deliver a structured card as a Discord embed (see rich.ts / sendCardOrText). */
+  async sendCard(target: string, card: RichCard): Promise<void> {
+    if (!this.ready) {
+      log.warn('discord', 'Cannot send outbound card: client not ready')
+      return
+    }
+    try {
+      const channel = await this.client.channels.fetch(target)
+      if (channel?.isTextBased() && 'send' in channel) {
+        await channel.send({ embeds: [buildEmbed(card)] })
+      } else {
+        log.warn('discord', `Channel ${target} not found or not text-based`)
+      }
+    } catch (err) {
+      log.error('discord', `Failed to send card to ${target}: ${err}`)
     }
   }
 
