@@ -440,6 +440,19 @@ Master switch and per-feature toggles for the safety layer. See [safety.md](safe
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `enabled` | bool | `true` | Master switch for all safety features |
+| `notify_user` | bool | `true` | Append security events (egress blocks, injected instructions found in tool output) to the reply |
+
+#### `[safety.egress]`
+
+Blocks tool calls that would send the operator's identity or secrets off the machine (URLs, search queries,
+request headers and bodies, form fields, published issue/PR text). See [safety.md](safety.md#egress-guard).
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `enabled` | bool | `true` | Turn the egress guard on |
+| `protect` | string[] | `[]` | The operator's identifiers: emails, full names, handles |
+| `secrets_from_env` | bool | `true` | Also protect values of env vars named like `*_API_KEY`, `*_TOKEN`, `*SECRET*`, `*PASSWORD*` |
+| `block_from_header` | bool | `true` | Block a model-written `From:` header naming an email |
 
 #### `[safety.command_filter]`
 

@@ -11,6 +11,7 @@ import type {
   ThinkingConfig,
   Tokenizer,
 } from '../providers/types'
+import { securityFooter } from '../safety/egress-guard'
 import type { ToolExecutor } from '../tools'
 import { hasStrandedToolCall, stripStrandedToolCalls } from '../tools/format'
 import type { Tool } from '../tools/types'
@@ -239,6 +240,7 @@ export class AgentLoop implements Operator {
     const userContent = planningMode ? planningModePrompt(userMessage) : userMessage
 
     this.context.runImages = undefined
+    this.context.runUserText = userMessage
     // Attached images ride the same message as the text, in the content-part shape the
     // provider already renders for the screenshot tool. They are also saved to disk, with a
     // note naming them, so the operator can hand them to a code agent or consultant.
@@ -512,6 +514,7 @@ export class AgentLoop implements Operator {
             }),
           )
           if (toolOutcome.awaitingInput) state.awaitingInput = true
+          state.securityNotices.push(...toolOutcome.security)
 
           state.toolsRan = true
 
@@ -617,6 +620,14 @@ export class AgentLoop implements Operator {
 
       this.maybeRunAutoExtraction()
 
+      // Security events reach the user whatever the model said about them: an egress block
+      // or injected instructions are appended to the reply (and streamed, for live channels).
+      if (state.securityNotices.length > 0 && this.config.safety.notifyUser) {
+        const footer = securityFooter(state.securityNotices)
+        events?.onToken?.(footer)
+        finalContent += footer
+      }
+
       return {
         content: finalContent,
         provider: provider.name,
@@ -628,6 +639,7 @@ export class AgentLoop implements Operator {
         awaitingInput: state.awaitingInput ? true : undefined,
         turnLimitReached: turnLimitReached ? true : undefined,
         truncated: truncated ? true : undefined,
+        securityNotices: state.securityNotices.length > 0 ? state.securityNotices : undefined,
       }
     } catch (error) {
       runError = error
@@ -635,6 +647,7 @@ export class AgentLoop implements Operator {
     } finally {
       this.activeRun = null
       this.context.runImages = undefined
+      this.context.runUserText = undefined
       externalSignal?.removeEventListener('abort', forwardAbort)
       this.history.persistNew(this.context.messages)
       if (runError !== undefined) {

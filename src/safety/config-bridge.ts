@@ -1,5 +1,6 @@
 import type { RuntimeConfig } from '../config'
 import { buildCommandFilterConfig, compilePatterns } from './command-filter'
+import { buildProtectedValues } from './egress-guard'
 import type { SafetyConfig } from './index'
 import { getDefaultSensitivePatterns } from './path-guard'
 import { compilePermissionRules } from './permission-rules'
@@ -36,5 +37,13 @@ export function buildSafetyConfig(config: RuntimeConfig): SafetyConfig {
       safety.permissionRules.allow,
       safety.permissionRules.deny,
     ),
+    egress: {
+      enabled: safety.egress.enabled,
+      protect: buildProtectedValues(
+        safety.egress.protect,
+        safety.egress.secretsFromEnv ? process.env : {},
+      ),
+      blockFromHeader: safety.egress.blockFromHeader,
+    },
   }
 }

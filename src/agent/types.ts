@@ -89,6 +89,8 @@ export interface AgentResponse {
   turnLimitReached?: boolean
   /** True if the generation that produced the answer stopped at max_tokens (finish_reason: length) */
   truncated?: boolean
+  /** Security events from this run's tools, already appended to `content` when safety.notify_user is on. */
+  securityNotices?: string[]
 }
 
 export interface AgentLoopDeps {

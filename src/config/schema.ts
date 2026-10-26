@@ -300,6 +300,22 @@ const baseProperties = {
           deny: Type.Array(Type.String(), { default: [] }),
         }),
       ),
+      // Egress guard (src/safety/egress-guard.ts): blocks tool calls that would carry these
+      // values, or secrets from the environment, off the machine (URLs, search queries,
+      // request headers and bodies, form fields, published issue/PR text).
+      egress: Type.Optional(
+        Type.Object({
+          enabled: Type.Boolean({ default: true }),
+          // The operator's identifiers: email addresses, full names, handles.
+          protect: Type.Optional(Type.Array(Type.String())),
+          // Also protect values of env vars named like *_API_KEY, *_TOKEN, *SECRET*, *PASSWORD*.
+          secrets_from_env: Type.Optional(Type.Boolean({ default: true })),
+          // Block a model-written From header naming an email (RFC 9110 says only the user configures it).
+          block_from_header: Type.Optional(Type.Boolean({ default: true })),
+        }),
+      ),
+      // Append security events (egress blocks, injected instructions found in tool output) to the reply.
+      notify_user: Type.Optional(Type.Boolean({ default: true })),
     }),
   ),
 
@@ -798,6 +814,13 @@ export interface RuntimeConfig {
       allow: string[]
       deny: string[]
     }
+    egress: {
+      enabled: boolean
+      protect: string[]
+      secretsFromEnv: boolean
+      blockFromHeader: boolean
+    }
+    notifyUser: boolean
   }
   github?: {
     token: string

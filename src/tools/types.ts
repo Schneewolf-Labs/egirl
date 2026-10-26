@@ -19,6 +19,11 @@ export interface ToolResult {
    * run's final reply. Set by a task run's end_task. See src/tasks/task-controls.ts.
    */
   endRun?: { content: string }
+  /**
+   * Security events the user should hear about (an egress block, injected instructions in
+   * fetched content). Collected over the run and shown to the user; see src/safety.
+   */
+  security?: string[]
 }
 
 /**
@@ -29,6 +34,11 @@ export interface ToolCallContext {
   sessionId?: string
   /** Files saved from the images attached to the current run's user message (agent/attachments). */
   images?: string[]
+  /**
+   * The user message this run is answering. The egress guard lets a value through that the
+   * user typed here themselves; content the agent read cannot put anything in it.
+   */
+  userText?: string
 }
 
 export interface Tool {
