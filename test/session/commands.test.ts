@@ -11,6 +11,7 @@ import type { AgentLoop } from '../../src/agent'
 import type { ThinkingConfig } from '../../src/providers/types'
 import { handleCommand, isCommand } from '../../src/session/commands'
 import { SessionController } from '../../src/session/controller'
+import { makeVerbosityStore } from '../../src/session/verbosity'
 
 function fakeAgent(configLevel: ThinkingConfig['level'] = 'medium', running = false): AgentLoop {
   let override: ThinkingConfig['level'] | undefined
@@ -184,6 +185,64 @@ describe('terminal-only commands', () => {
     expect(room).not.toContain('/maxturns')
     const tty = (await handleCommand('/help', { agent, session: new SessionController() })).message
     expect(tty).toContain('/maxturns')
+  })
+})
+
+describe('verbosity commands (/tools, /reasoning, /verbose, /quiet)', () => {
+  test('/tools toggles the tool-call lines via the store', async () => {
+    const verbosity = makeVerbosityStore()
+    const r = await handleCommand('/tools off', { agent: fakeAgent(), verbosity })
+    expect(r.handled).toBe(true)
+    expect(r.message).toContain('hidden')
+    expect(verbosity.get().tools).toBe(false)
+    await handleCommand('/tools on', { agent: fakeAgent(), verbosity })
+    expect(verbosity.get().tools).toBe(true)
+    await handleCommand('/tools', { agent: fakeAgent(), verbosity }) // bare toggles
+    expect(verbosity.get().tools).toBe(false)
+  })
+
+  test('/reasoning on a chat surface uses the verbosity store', async () => {
+    const verbosity = makeVerbosityStore()
+    await handleCommand('/reasoning on', { agent: fakeAgent(), verbosity })
+    expect(verbosity.get().thinking).toBe(true)
+    await handleCommand('/reasoning off', { agent: fakeAgent(), verbosity })
+    expect(verbosity.get().thinking).toBe(false)
+  })
+
+  test('/reasoning still prefers the terminal session when present', async () => {
+    const session = new SessionController()
+    await handleCommand('/reasoning', { agent: fakeAgent(), session })
+    expect(session.get().showReasoning).toBe(false)
+  })
+
+  test('/verbose and /quiet set both switches at once', async () => {
+    const verbosity = makeVerbosityStore()
+    await handleCommand('/verbose', { agent: fakeAgent(), verbosity })
+    expect(verbosity.get()).toEqual({ tools: true, thinking: true })
+    await handleCommand('/quiet', { agent: fakeAgent(), verbosity })
+    expect(verbosity.get()).toEqual({ tools: false, thinking: false })
+  })
+
+  test('/tools is refused where there is no verbosity store', async () => {
+    const r = await handleCommand('/tools on', { agent: fakeAgent() })
+    expect(r.handled).toBe(true)
+    expect(r.message).toContain('not available here')
+  })
+
+  test('/help lists verbosity commands only where the store exists', async () => {
+    const withStore =
+      (await handleCommand('/help', { agent: fakeAgent(), verbosity: makeVerbosityStore() }))
+        .message ?? ''
+    expect(withStore).toContain('/tools')
+    const without = (await handleCommand('/help', { agent: fakeAgent() })).message ?? ''
+    expect(without).not.toContain('/tools')
+  })
+
+  test('/settings shows the verbosity state when present', async () => {
+    const verbosity = makeVerbosityStore({ thinking: true })
+    const r = await handleCommand('/settings', { agent: fakeAgent(), verbosity })
+    expect(r.message).toContain('tools on')
+    expect(r.message).toContain('reasoning on')
   })
 })
 

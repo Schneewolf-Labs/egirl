@@ -1,11 +1,18 @@
 import type { Operator } from '../operator/types'
 import type { ReplyBroker } from '../report/broker'
 import { type Caller, type CommandPermission, handleCommand } from '../session/commands'
+import type { VerbosityStore } from '../session/verbosity'
+import { DEFAULT_VERBOSITY } from '../session/verbosity'
 import type { Skill } from '../skills/types'
 import { errorMessage } from '../util/errors'
 import { log } from '../util/logger'
 import { splitMessage } from './chunk'
-import { buildToolCallPrefix, createNarration, type NarrationFormat } from './narration'
+import {
+  buildThinkingBlock,
+  buildToolCallPrefix,
+  createNarration,
+  type NarrationFormat,
+} from './narration'
 
 /**
  * The shared half of every chat channel: what happens between "a human said something" and
@@ -80,6 +87,8 @@ export interface TurnScope {
   caller?: Caller
   /** Who may run the session built-ins on this channel (see CommandScope). */
   builtinPermission?: CommandPermission
+  /** Per-conversation display verbosity (tool-call lines, reasoning). Default when absent. */
+  verbosity?: VerbosityStore
 }
 
 export async function runTurn(
@@ -94,6 +103,7 @@ export async function runTurn(
     skills: scope.skills,
     caller: scope.caller,
     builtinPermission: scope.builtinPermission,
+    verbosity: scope.verbosity,
   })
   if (command.handled && !command.turn) {
     await deliver(surface, command.message ?? 'ok').catch(() => {})
@@ -103,12 +113,15 @@ export async function runTurn(
   if (command.turn) text = command.turn
   else if (broker?.tryDeliver(surface.channel, surface.target, text)) return
 
+  const verbosity = scope.verbosity?.get() ?? DEFAULT_VERBOSITY
   const stopTyping = keepTyping(surface)
   await surface.ack?.working().catch(() => {})
   try {
-    const { handler, state } = createNarration()
+    const { handler, state } = createNarration({ captureThinking: verbosity.thinking })
     const response = await agent.run(text, { events: handler })
-    await deliver(surface, buildToolCallPrefix(state, surface.format) + response.content)
+    const reasoning = verbosity.thinking ? buildThinkingBlock(state.thinking, surface.format) : ''
+    const tools = verbosity.tools ? buildToolCallPrefix(state, surface.format) : ''
+    await deliver(surface, reasoning + tools + response.content)
     log.debug(surface.channel, `Responded via ${response.provider}`)
     await surface.ack?.done().catch(() => {})
   } catch (error) {

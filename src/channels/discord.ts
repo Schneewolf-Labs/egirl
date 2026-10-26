@@ -18,6 +18,7 @@ import type { LLMProvider } from '../providers/types'
 import type { ReplyBroker } from '../report/broker'
 import { type Caller, customCommands, isCommand } from '../session/commands'
 import { EngagementTracker } from '../session/engagement'
+import { makeVerbosityStore, type VerbosityStore } from '../session/verbosity'
 import type { Skill } from '../skills/types'
 import { log } from '../util/logger'
 import { describeAllowList, isAllowedByList } from './allowlist'
@@ -107,6 +108,7 @@ export class DiscordChannel implements ChatChannel {
   /** Skills the agent was built with; the ones declaring `egirl.command` become slash commands. */
   private readonly skills: Skill[]
   private sessions: Map<string, Operator> = new Map()
+  private verbosity: Map<string, VerbosityStore> = new Map()
   private config: DiscordConfig
   private ready = false
   private reactionHandlers: ReactionHandler[] = []
@@ -444,12 +446,23 @@ export class DiscordChannel implements ChatChannel {
         skills: this.skills,
         caller: this.callerOf(message.author.id),
         builtinPermission: this.config.builtinPermission,
+        verbosity: this.verbosityFor(sessionKey),
       },
     )
   }
 
   private callerOf(userId: string): Caller {
     return callerFor(userId, this.config)
+  }
+
+  /** The per-conversation verbosity store, created on first use and kept for the session. */
+  private verbosityFor(sessionKey: string): VerbosityStore {
+    let store = this.verbosity.get(sessionKey)
+    if (!store) {
+      store = makeVerbosityStore()
+      this.verbosity.set(sessionKey, store)
+    }
+    return store
   }
 
   /**
@@ -494,9 +507,10 @@ export class DiscordChannel implements ChatChannel {
     }
     const channelId = interaction.channelId
     // Same session the typed form would land in (see resolveSessionKey).
-    const agent = this.getOrCreateAgent(
-      interaction.inGuild() ? `discord:channel:${channelId}` : `discord:dm:${interaction.user.id}`,
-    )
+    const sessionKey = interaction.inGuild()
+      ? `discord:channel:${channelId}`
+      : `discord:dm:${interaction.user.id}`
+    const agent = this.getOrCreateAgent(sessionKey)
     await interaction.deferReply()
     let first = true
     await runTurn(
@@ -519,6 +533,7 @@ export class DiscordChannel implements ChatChannel {
         skills: this.skills,
         caller: this.callerOf(interaction.user.id),
         builtinPermission: this.config.builtinPermission,
+        verbosity: this.verbosityFor(sessionKey),
       },
     )
   }
