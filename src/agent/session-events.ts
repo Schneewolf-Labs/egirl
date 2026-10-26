@@ -29,6 +29,8 @@ export type SessionEvent =
     }
   /** The repeat detector flagged calls in a batch as a likely loop (names of the calls). */
   | { t: 'repeat_warning'; v: string[] }
+  /** A security event the user should hear about: an egress block, injected instructions. */
+  | { t: 'security'; v: string }
   /** One completed inference, with everything the journal keeps. */
   | {
       t: 'turn'

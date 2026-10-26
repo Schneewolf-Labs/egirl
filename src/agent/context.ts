@@ -18,6 +18,8 @@ export interface AgentContext {
   conversationSummary?: string
   /** Paths of the images attached to the message this run is answering; cleared when it ends. */
   runImages?: string[]
+  /** Text of the user message this run is answering (the egress guard reads it); cleared when it ends. */
+  runUserText?: string
 }
 
 /**

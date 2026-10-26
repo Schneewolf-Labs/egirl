@@ -1,6 +1,7 @@
 import { HANDLE_RE } from '../agent/attachments'
 import { type AuditEntry, appendAuditLog } from './audit-log'
 import { buildCommandFilterConfig, type CommandFilterConfig, checkCommand } from './command-filter'
+import { buildProtectedValues, type EgressConfig } from './egress-guard'
 import { getDefaultSensitivePatterns, isPathAllowed, isSensitivePath } from './path-guard'
 import { checkPermissionRules, type PermissionRule } from './permission-rules'
 
@@ -11,6 +12,15 @@ export {
   type CommandFilterConfig,
   compilePatterns,
 } from './command-filter'
+export {
+  buildProtectedValues,
+  checkEgress,
+  type EgressConfig,
+  type EgressViolation,
+  egressBlockMessage,
+  egressNotice,
+  securityFooter,
+} from './egress-guard'
 export { type ScanResult, sanitizeContent, scanForInjection } from './injection-scanner'
 export { getDefaultSensitivePatterns } from './path-guard'
 export {
@@ -41,6 +51,8 @@ export interface SafetyConfig {
   }
   /** Pattern-based permission rules — evaluated before other checks. First match wins. */
   permissionRules: PermissionRule[]
+  /** Outbound tool calls checked for the operator's identity and secrets. See egress-guard.ts. */
+  egress: EgressConfig
 }
 
 // consult reads the files it attaches and ships them to a consultant model, so its `files`
@@ -75,6 +87,7 @@ export function getDefaultSafetyConfig(): SafetyConfig {
     // to execute commands autonomously. Enable via egirl.toml if you want
     // interactive approval before execute_command/write_file/edit_file.
     permissionRules: [],
+    egress: { enabled: true, protect: buildProtectedValues([]), blockFromHeader: true },
   }
 }
 

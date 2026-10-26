@@ -12,9 +12,11 @@ import { publish } from './session-events'
 const MAX_TOOL_RESULT_TOKENS = 8000
 
 function toolContext(context: AgentContext): ToolCallContext {
-  return context.runImages?.length
-    ? { sessionId: context.sessionId, images: context.runImages }
-    : { sessionId: context.sessionId }
+  return {
+    sessionId: context.sessionId,
+    ...(context.runImages?.length && { images: context.runImages }),
+    ...(context.runUserText && { userText: context.runUserText }),
+  }
 }
 
 /**
@@ -61,7 +63,7 @@ export async function runToolCalls(args: {
   seenToolCalls: RepeatDetector
   events?: AgentEventHandler
   signal?: AbortSignal
-}): Promise<{ awaitingInput: boolean; endRun?: { content: string } }> {
+}): Promise<{ awaitingInput: boolean; endRun?: { content: string }; security: string[] }> {
   const { response, context, executor, intrinsic, seenToolCalls, events, signal } = args
   const calls = response.tool_calls ?? []
 
@@ -78,6 +80,7 @@ export async function runToolCalls(args: {
 
   let awaitingInput = false
   let endRun: { content: string } | undefined
+  const security: string[] = []
   const toolResults = await executeToolsWithHooks({
     toolCalls: calls,
     context,
@@ -90,6 +93,10 @@ export async function runToolCalls(args: {
   for (const [callId, result] of toolResults) {
     if (result.awaitingInput) awaitingInput = true
     if (result.endRun && !endRun) endRun = result.endRun
+    for (const notice of result.security ?? []) {
+      security.push(notice)
+      publish(context.sessionId, { t: 'security', v: notice })
+    }
     log.debug(
       'agent',
       `Tool ${callId}: ${result.output.substring(0, 100)}${result.output.length > 100 ? '...' : ''}`,
@@ -127,7 +134,7 @@ export async function runToolCalls(args: {
     publish(context.sessionId, { t: 'repeat_warning', v: [...new Set(duplicateNames)] })
   }
 
-  return endRun ? { awaitingInput, endRun } : { awaitingInput }
+  return endRun ? { awaitingInput, endRun, security } : { awaitingInput, security }
 }
 
 async function executeToolsWithHooks(args: {

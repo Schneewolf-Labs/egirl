@@ -31,6 +31,8 @@ export interface RunState {
   lastContextBreakTurn: number
   /** Whether the one-time wall-clock wrap-up warning has been injected. */
   wrapupWarned: boolean
+  /** Security events from this run's tools (egress blocks, injected instructions), for the user. */
+  securityNotices: string[]
 }
 
 export function createRunState(): RunState {
@@ -48,5 +50,6 @@ export function createRunState(): RunState {
     lastInputTokens: 0,
     lastContextBreakTurn: -Infinity,
     wrapupWarned: false,
+    securityNotices: [],
   }
 }

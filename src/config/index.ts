@@ -409,6 +409,13 @@ export function loadConfig(options: LoadConfigOptions = {}): RuntimeConfig {
         allow: toml.safety?.permission_rules?.allow ?? [],
         deny: toml.safety?.permission_rules?.deny ?? [],
       },
+      egress: {
+        enabled: toml.safety?.egress?.enabled ?? true,
+        protect: toml.safety?.egress?.protect ?? [],
+        secretsFromEnv: toml.safety?.egress?.secrets_from_env ?? true,
+        blockFromHeader: toml.safety?.egress?.block_from_header ?? true,
+      },
+      notifyUser: toml.safety?.notify_user ?? true,
     },
     memory: {
       proactiveRetrieval: toml.memory?.proactive_retrieval ?? true,
