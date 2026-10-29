@@ -1,4 +1,5 @@
 import { gitStdout } from '../../../util/git'
+import { execTool } from '../exec'
 import { boundLines } from './timeout-report'
 
 /**
@@ -14,6 +15,10 @@ import { boundLines } from './timeout-report'
  */
 
 const GIT_TIMEOUT_MS = 3000
+/** A test suite gets far longer than an ad-hoc execute_command. */
+const VERIFY_TIMEOUT_MS = 10 * 60 * 1000
+/** Failures print at the end; the tail is what the operator needs. */
+const VERIFY_TAIL_CHARS = 2000
 
 export interface GitBaseline {
   /** Commit checked out at the start; undefined on an unborn branch. */
@@ -105,5 +110,33 @@ export async function gitEvidence(
     return `${parts.join('\n\n')}]`
   } catch {
     return `${header}: git failed, so its changes were not checked.]`
+  }
+}
+
+export interface VerifyResult {
+  passed: boolean
+  report: string
+}
+
+/**
+ * Run the operator's check command (`verify`) in the working dir after the agent finishes. The
+ * exit code is the evidence; the agent's "tests pass" is not. Runs through execute_command's
+ * spawn, so a hung suite is killed the same way.
+ */
+export async function runVerify(
+  command: string,
+  workingDir: string,
+  timeoutMs = VERIFY_TIMEOUT_MS,
+): Promise<VerifyResult> {
+  const result = await execTool.execute(
+    { command, working_dir: workingDir, timeout: timeoutMs },
+    workingDir,
+  )
+  const output = result.output.trimEnd()
+  const tail = output.length > VERIFY_TAIL_CHARS ? `…${output.slice(-VERIFY_TAIL_CHARS)}` : output
+  const verdict = result.success ? 'passed' : 'FAILED'
+  return {
+    passed: result.success,
+    report: `[Check run by egirl after the agent: \`${command}\` ${verdict}]\n${tail}`,
   }
 }
