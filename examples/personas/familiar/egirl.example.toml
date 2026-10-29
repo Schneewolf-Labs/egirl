@@ -18,6 +18,7 @@ path = "~/.egirl/familiar/workspace"
 # llama-server serving the edition's weights (set per instance below), with --jinja and
 # --parallel slots to match max_concurrent.
 max_concurrent = 4
+cache_slots = 0                          # never pin callers to slots: see docs/public-instance.md, Known Gaps
 # No [local.embeddings]: without them there is no memory system, so nothing one caller says can
 # reach another.
 
