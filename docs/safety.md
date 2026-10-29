@@ -32,7 +32,7 @@ enabled = false                         # opt-in: restrict file ops to dirs
 
 `[safety.command_filter]`
 
-Checks every `execute_command` call against regex patterns before running it. Built-in patterns block:
+Checks every `execute_command` call, and the `verify` command on a `code_agent` call, against regex patterns before running it. Built-in patterns block:
 
 | Pattern | What it catches |
 |---------|----------------|
@@ -140,6 +140,7 @@ What is checked, before the tool runs:
 | `web_search` | the query (it goes to a third-party engine) |
 | `browser_fill`, `browser_select`, `browser_eval` | values and page scripts (a `fetch` with headers) |
 | `execute_command` | commands that touch the network (`curl`, `wget`, `nc`, `ssh`, a URL, ...) |
+| `code_agent` | its `verify` command, under the same network test as `execute_command` |
 | `gh_issue_comment`, `gh_issue_update`, `gh_pr_create`, `gh_pr_comment`, `gh_pr_review` | text that gets published |
 
 It looks for each protected value plain, URL-encoded (repeatedly), base64 (standard and URL-safe), hex, and for

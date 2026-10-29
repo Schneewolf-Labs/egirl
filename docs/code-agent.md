@@ -170,7 +170,26 @@ New untracked files:
 
 The diff is taken against the starting commit, so work the agent committed counts even though it leaves the tree clean. A run that wrote nothing says `nothing changed since the run started`. Untracked files that were already there are left out. If tracked files already had uncommitted changes, a note says so, because those changes show in the diff whether or not the agent touched them. Outside a git work tree the block says the changes were not checked. The tool description tells the operator to believe the disk when it disagrees with the summary.
 
-This is the first piece of the verification duty ([human-in-the-loop.md](human-in-the-loop.md)). It shows what changed, not whether the change is right: tests are not run.
+This is the first piece of the verification duty ([human-in-the-loop.md](human-in-the-loop.md)). It shows what changed, not whether the change is right; `verify` covers that.
+
+### Running the repo's checks: `verify`
+
+Pass `verify` with the check the repo documents, and egirl runs it in `working_dir` once the agent finishes:
+
+```json
+{
+  "name": "code_agent",
+  "arguments": {
+    "task": "Fix the date parsing bug in src/parser.ts",
+    "working_dir": "/home/user/projects/app",
+    "verify": "bun run typecheck && bun test"
+  }
+}
+```
+
+The exit code decides: a failing check makes the call fail, whatever the agent reported. The last 2000 characters of output follow a `[Check run by egirl after the agent: ... passed|FAILED]` line. The check runs only after a successful run, through `execute_command`'s spawn (sanitized env, process-group kill), with a 10-minute timeout.
+
+Because egirl runs the command itself, it answers to the same safety rules as `execute_command`: `execute_command(...)` permission rules, the command filter, and the egress guard all apply to `verify`.
 
 ## When the code agent times out
 

@@ -36,7 +36,7 @@ The duties sort by who they face.
 | **Down** | Intent | agent loop writing `code_agent` prompts |
 | | Authority | `src/permissions/supervisor.ts` answers the code agent's permission, question, trust and confirmation prompts |
 | | Steering | `spiral-guard`, `repetition-guard`, `nudges` |
-| | Verification | `code_agent` results carry a git check of what changed on disk during the run (`src/tools/builtin/code-agent/evidence.ts`); the "authoritative artifact" rule in `CLAUDE.md` |
+| | Verification | `code_agent` results carry a git check of what changed on disk during the run, and `verify` runs the repo's checks afterwards (`src/tools/builtin/code-agent/evidence.ts`); the "authoritative artifact" rule in `CLAUDE.md` |
 | **Sideways** | Delegation | `peer_message` / `peer_list` over `egirl-peer/1`, synchronous; `delegate` through the Wald mailbox, asynchronous and to any registered agent ([peers.md](peers.md)); peer addresses resolved from a Wald registry (`src/peers/discovery.ts`) |
 | **Self** | Autonomy | unbounded task runs, cron, the autonomy loop ([autonomy-loop.md](autonomy-loop.md)) |
 | | Continuity | memory, `NOTES.md`, handoff, rollover, compaction |
@@ -80,9 +80,10 @@ engine; the local operator still decides what to send, to whom, and when.
 
 In rough order of what they would change:
 
-1. **Verification stops at the diff.** A `code_agent` result now carries what git saw change
-   during the run, so a summary claiming work that never hit the disk is visible. Nothing
-   yet runs the tests or checks that the change does what the summary says; a human would.
+1. **Verification stops at the checks.** A `code_agent` result carries what git saw change
+   during the run, and `verify` runs the repo's checks and fails the call when they fail. The
+   operator has to remember to pass `verify`, and nothing yet checks that the change does
+   what the task asked; a human would read the diff against the request.
 2. **Suggesting doesn't exist.** egirl can notify and ask but never proposes: "this branch
    has been idle a week, close it?", "the task I finished unblocks X, start it?". A
    suggestion is an `ask` the principal may ignore; it probably needs its own lightweight

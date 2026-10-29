@@ -6,7 +6,7 @@ import type { Tool, ToolCallContext, ToolResult } from '../../types'
 import { runAcpCodeAgent } from './acp'
 import { runClaudeCodeAgent } from './claude'
 import { runCodexCodeAgent } from './codex'
-import { captureGitBaseline, gitEvidence } from './evidence'
+import { captureGitBaseline, gitEvidence, runVerify } from './evidence'
 import { resolveProviderChain, shouldFailover } from './failover'
 import { runOpencodeCodeAgent } from './opencode'
 import { parseResumeSession } from './timeout-report'
@@ -41,6 +41,8 @@ export function createCodeAgentTool(config: CodeAgentConfig): Tool {
         "Provide a clear, specific task description. Returns the agent's final result,",
         'followed by what egirl found on disk afterwards (commits, changed files). The result is',
         "the agent's claim and the disk check is the evidence: if they disagree, believe the disk.",
+        "Pass verify with the repo's own test or lint command to have egirl run it afterwards;",
+        'the call fails if that check fails, whatever the agent reported.',
         'If it times out, the result is a report of what the agent did and the state of the tree;',
         'read it, then call again with resume_session and a narrower instruction for the next step,',
         'or split the remaining work into smaller tasks. Do not just repeat the same task.',
@@ -68,6 +70,13 @@ export function createCodeAgentTool(config: CodeAgentConfig): Tool {
               'the task concerns a specific project — without it the agent runs in the persona ' +
               'workspace, where the task usually makes no sense.',
           },
+          verify: {
+            type: 'string',
+            description:
+              'Shell command egirl runs in working_dir after the agent finishes, e.g. "bun test" ' +
+              'or "npm run lint && npm test". Use the check the repo itself documents. Its exit ' +
+              'code and output tail are appended to the result; a failing check fails the call.',
+          },
           resume_session: {
             type: 'string',
             description:
@@ -87,6 +96,8 @@ export function createCodeAgentTool(config: CodeAgentConfig): Tool {
       ctx?: ToolCallContext,
     ): Promise<ToolResult> {
       const task = params.task as string
+      const verify =
+        typeof params.verify === 'string' && params.verify.trim() ? params.verify.trim() : undefined
       const { paths: images, missing } = Array.isArray(params.images)
         ? resolveImageRefs(params.images as string[], cwd, ctx?.sessionId)
         : { paths: ctx?.images ?? [], missing: [] }
@@ -147,7 +158,11 @@ export function createCodeAgentTool(config: CodeAgentConfig): Tool {
           const failover =
             attempted.length > 1 ? `\n\n[failed over: ${attempted.join(' -> ')}]` : ''
           const evidence = await gitEvidence(workingDir, baseline)
-          return { ...result, output: `${result.output}${failover}\n\n${evidence}` }
+          const output = `${result.output}${failover}\n\n${evidence}`
+          if (!verify) return { ...result, output }
+          log.info('code-agent', `Verifying: ${verify}`)
+          const check = await runVerify(verify, workingDir)
+          return { ...result, success: check.passed, output: `${output}\n\n${check.report}` }
         }
 
         if (!shouldFailover(result)) return result

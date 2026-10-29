@@ -114,6 +114,18 @@ export function checkToolCall(
 ): SafetyCheckResult {
   if (!config.enabled) return { allowed: true }
 
+  // code_agent's `verify` is a shell command egirl runs itself, so it answers to the same rules as
+  // execute_command: a command must not skip them by riding in on a code_agent call.
+  if (toolName === 'code_agent' && typeof args.verify === 'string' && args.verify.trim()) {
+    const verify = checkToolCall(
+      'execute_command',
+      { command: args.verify, working_dir: args.working_dir },
+      cwd,
+      config,
+    )
+    if (!verify.allowed) return verify
+  }
+
   // Pattern-based permission rules — first match wins, evaluated before other checks
   if (config.permissionRules.length > 0) {
     const ruleResult = checkPermissionRules(toolName, args, config.permissionRules)

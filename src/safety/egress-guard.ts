@@ -24,12 +24,16 @@ const EGRESS_TOOLS: Record<string, string[]> = {
   browser_select: ['*'],
   browser_eval: ['*'],
   execute_command: ['command'],
+  code_agent: ['verify'],
   gh_pr_create: ['*'],
   gh_pr_comment: ['*'],
   gh_pr_review: ['*'],
   gh_issue_comment: ['*'],
   gh_issue_update: ['*'],
 }
+
+/** Tools whose payload is a shell command egirl runs (code_agent's `verify`). */
+const SHELL_TOOLS = new Set(['execute_command', 'code_agent'])
 
 /** A shell command that talks to the network. A local `echo $EMAIL > notes` is not egress. */
 const NETWORK_COMMAND =
@@ -177,7 +181,7 @@ export function checkEgress(
   if (!config.enabled) return undefined
   const payload = payloadOf(tool, args)
   if (!payload) return undefined
-  if (tool === 'execute_command' && !NETWORK_COMMAND.test(payload)) return undefined
+  if (SHELL_TOOLS.has(tool) && !NETWORK_COMMAND.test(payload)) return undefined
 
   const destination = destinationOf(payload)
   const userForms = decodedForms(userText).map((f) => f.form)
@@ -191,7 +195,7 @@ export function checkEgress(
     }
   }
 
-  if (config.blockFromHeader && (tool === 'execute_command' || tool === 'browser_eval')) {
+  if (config.blockFromHeader && (SHELL_TOOLS.has(tool) || tool === 'browser_eval')) {
     const m = payload.match(FROM_HEADER)
     const email = m?.[1]
     if (email && !userText.toLowerCase().includes(email.toLowerCase())) {
