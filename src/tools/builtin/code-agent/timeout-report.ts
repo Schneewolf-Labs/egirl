@@ -82,7 +82,7 @@ export class ActionLog {
   }
 }
 
-function boundLines(text: string, max = MAX_GIT_LINES): string {
+export function boundLines(text: string, max = MAX_GIT_LINES): string {
   const lines = text.replace(/\s+$/, '').split('\n')
   if (lines.length <= max) return lines.join('\n')
   return `${lines.slice(0, max).join('\n')}\n… (+${lines.length - max} more lines)`
