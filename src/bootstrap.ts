@@ -7,6 +7,7 @@ import {
   createEmbeddingProvider,
   createMemoryManager,
   createWorkingMemory,
+  GC_INTERVAL_MS,
   indexDailyLogs,
   type MemoryManager,
   type WorkingMemory,
@@ -239,6 +240,17 @@ export async function createAppServices(config: RuntimeConfig): Promise<AppServi
     indexDailyLogs(memory, memory.getFiles()).catch((error) => {
       log.warn('main', 'Daily log indexing failed:', error)
     })
+
+    // Prune stale extracted memories now and daily; unref'd so a one-shot run still exits.
+    const runGc = (): void => {
+      try {
+        memory.collectGarbage()
+      } catch (error) {
+        log.warn('main', 'Memory GC failed:', error)
+      }
+    }
+    runGc()
+    setInterval(runGc, GC_INTERVAL_MS).unref()
   }
 
   // Working memory (transient context with TTL)

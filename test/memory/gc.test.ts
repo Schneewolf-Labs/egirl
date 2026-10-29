@@ -51,34 +51,45 @@ describe('Memory GC', () => {
     expect(indexer.get('auto/recent')).not.toBeNull()
   })
 
-  test('deletes old conversation-source memories', () => {
+  test('never deletes conversation-log chunks: the log indexer would re-add them', () => {
     indexer.set('log:2025-01-01:chunk0', 'old log chunk', {
       source: 'conversation',
       category: 'conversation',
     })
 
-    const result = collectGarbage(indexer, { conversationMaxAge: 0 })
-
-    expect(result.deleted).toContain('log:2025-01-01:chunk0')
-    expect(indexer.get('log:2025-01-01:chunk0')).toBeNull()
-  })
-
-  test('preserves recent conversation memories', () => {
-    indexer.set('log:today:chunk0', 'recent log', {
-      source: 'conversation',
-      category: 'conversation',
-    })
-
-    const result = collectGarbage(indexer, { conversationMaxAge: 999_999_999 })
+    const result = collectGarbage(indexer, { autoMaxAge: 0 })
 
     expect(result.deleted).toHaveLength(0)
-    expect(indexer.get('log:today:chunk0')).not.toBeNull()
+    expect(indexer.get('log:2025-01-01:chunk0')).not.toBeNull()
+  })
+
+  test('never deletes lessons, though they are written with source auto', () => {
+    indexer.set('lesson/task/deploy/retry', 'retry the push once', {
+      source: 'auto',
+      category: 'lesson',
+    })
+
+    const result = collectGarbage(indexer, { autoMaxAge: 0 })
+
+    expect(result.deleted).toHaveLength(0)
+    expect(indexer.get('lesson/task/deploy/retry')).not.toBeNull()
+  })
+
+  test('deletes stale permission supervisor traces', () => {
+    indexer.set('permission:claude:1700000000000', 'claude permission decision: allow', {
+      source: 'auto',
+      category: 'project',
+    })
+
+    const result = collectGarbage(indexer, { autoMaxAge: 0 })
+
+    expect(result.deleted).toEqual(['permission:claude:1700000000000'])
   })
 
   test('never deletes manual memories', () => {
     indexer.set('manual_fact', 'important', { source: 'manual', category: 'fact' })
 
-    const result = collectGarbage(indexer, { autoMaxAge: 0, conversationMaxAge: 0 })
+    const result = collectGarbage(indexer, { autoMaxAge: 0 })
 
     expect(result.deleted).not.toContain('manual_fact')
     expect(indexer.get('manual_fact')).not.toBeNull()
@@ -87,7 +98,7 @@ describe('Memory GC', () => {
   test('never deletes compaction memories', () => {
     indexer.set('compaction/task_state', 'preserved', { source: 'compaction', category: 'project' })
 
-    const result = collectGarbage(indexer, { autoMaxAge: 0, conversationMaxAge: 0 })
+    const result = collectGarbage(indexer, { autoMaxAge: 0 })
 
     expect(result.deleted).not.toContain('compaction/task_state')
     expect(indexer.get('compaction/task_state')).not.toBeNull()
@@ -110,15 +121,15 @@ describe('Memory GC', () => {
     // Old auto, accessed — will be skipped
     indexer.set('auto/accessed', 'accessed', { source: 'auto', category: 'fact' })
     indexer.recordAccess(['auto/accessed'])
-    // Old conversation — will be deleted
+    // Old conversation — kept
     indexer.set('log:old:0', 'old log', { source: 'conversation', category: 'conversation' })
     // Manual — untouched
     indexer.set('keep', 'manual', { source: 'manual', category: 'fact' })
 
-    const result = collectGarbage(indexer, { autoMaxAge: 0, conversationMaxAge: 0 })
+    const result = collectGarbage(indexer, { autoMaxAge: 0 })
 
-    expect(result.deleted).toHaveLength(3)
+    expect(result.deleted).toHaveLength(2)
     expect(result.skipped).toBe(1)
-    expect(indexer.count()).toBe(2) // auto/accessed + keep
+    expect(indexer.count()).toBe(3) // auto/accessed + log:old:0 + keep
   })
 })
