@@ -150,6 +150,28 @@ Tool call shape:
 
 The result includes the backend's final output plus metadata such as duration, session id, turns, or cost when the backend exposes it.
 
+### What changed on disk
+
+A finished run's final message is the agent's claim. egirl takes a git baseline of `working_dir` before the run and, when the run finishes, appends what git saw change since then:
+
+```text
+[On disk, checked by egirl after the run in /home/user/projects/app:
+
+Commits since the run started:
+9a5c8c5 Fix the parser
+
+Changed since the run started (git diff --stat):
+ src/parser.ts | 12 +++++++-----
+ 1 file changed, 7 insertions(+), 5 deletions(-)
+
+New untracked files:
+?? test/parser.test.ts]
+```
+
+The diff is taken against the starting commit, so work the agent committed counts even though it leaves the tree clean. A run that wrote nothing says `nothing changed since the run started`. Untracked files that were already there are left out. If tracked files already had uncommitted changes, a note says so, because those changes show in the diff whether or not the agent touched them. Outside a git work tree the block says the changes were not checked. The tool description tells the operator to believe the disk when it disagrees with the summary.
+
+This is the first piece of the verification duty ([human-in-the-loop.md](human-in-the-loop.md)). It shows what changed, not whether the change is right: tests are not run.
+
 ## When the code agent times out
 
 A delegation that runs past `timeout_ms` is aborted, but the work it did stays in the tree: a merge may be committed, conflicts half-resolved, a venv half-built. A bare "timed out" leaves the operator guessing, so the tool result is a compact report instead:

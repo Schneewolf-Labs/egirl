@@ -6,6 +6,7 @@ import type { Tool, ToolCallContext, ToolResult } from '../../types'
 import { runAcpCodeAgent } from './acp'
 import { runClaudeCodeAgent } from './claude'
 import { runCodexCodeAgent } from './codex'
+import { captureGitBaseline, gitEvidence } from './evidence'
 import { resolveProviderChain, shouldFailover } from './failover'
 import { runOpencodeCodeAgent } from './opencode'
 import { parseResumeSession } from './timeout-report'
@@ -37,7 +38,9 @@ export function createCodeAgentTool(config: CodeAgentConfig): Tool {
         'Use this for complex tasks that require multi-file edits, refactoring,',
         'debugging, running tests, or any task that benefits from deep codebase',
         'exploration. The agent has full access to the filesystem and can run commands.',
-        "Provide a clear, specific task description. Returns the agent's final result.",
+        "Provide a clear, specific task description. Returns the agent's final result,",
+        'followed by what egirl found on disk afterwards (commits, changed files). The result is',
+        "the agent's claim and the disk check is the evidence: if they disagree, believe the disk.",
         'If it times out, the result is a report of what the agent did and the state of the tree;',
         'read it, then call again with resume_session and a narrower instruction for the next step,',
         'or split the remaining work into smaller tasks. Do not just repeat the same task.',
@@ -122,6 +125,7 @@ export function createCodeAgentTool(config: CodeAgentConfig): Tool {
       log.debug('code-agent', `Working dir: ${workingDir}  providers: ${chain.join(' -> ')}`)
       if (images.length > 0) log.info('code-agent', `Attaching ${images.length} image(s)`)
 
+      const baseline = await captureGitBaseline(workingDir)
       const attempted: string[] = []
       let last: ToolResult | undefined
 
@@ -140,9 +144,10 @@ export function createCodeAgentTool(config: CodeAgentConfig): Tool {
         if (result.success) {
           // Say which provider answered when it was not the first choice, so a silent
           // degradation to a cheaper or weaker agent is visible in the transcript.
-          return attempted.length > 1
-            ? { ...result, output: `${result.output}\n\n[failed over: ${attempted.join(' -> ')}]` }
-            : result
+          const failover =
+            attempted.length > 1 ? `\n\n[failed over: ${attempted.join(' -> ')}]` : ''
+          const evidence = await gitEvidence(workingDir, baseline)
+          return { ...result, output: `${result.output}${failover}\n\n${evidence}` }
         }
 
         if (!shouldFailover(result)) return result
