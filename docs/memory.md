@@ -135,6 +135,12 @@ Auto-extraction of notable facts from conversations. After each conversation, th
 
 Indexes stdout logs as searchable memories, enabling the agent to recall information from previous sessions.
 
+### Garbage collection (`src/memory/gc.ts`)
+
+Runs at startup and every 24 hours. It deletes machine-written memories that are older than 14 days and were never recalled (every search hit counts as an access): extracted facts (`auto/` keys) and the permission supervisor's decision traces (`permission:` keys). Each deletion is logged under `gc`.
+
+It never deletes manual or compaction memories, lessons (`lesson/` keys, though they are also written with source `auto`), or conversation-log chunks. The daily log files are the source of truth for the chunks, and the log indexer re-adds any it finds missing.
+
 ### CompactionFlush (`src/memory/compaction-flush.ts`)
 
 Database maintenance for the memory store. Removes stale embeddings, compacts the FTS index, and flushes write-ahead logs.

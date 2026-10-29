@@ -2,6 +2,7 @@ import { join } from 'path'
 import { log } from '../util/logger'
 import type { EmbeddingInput, EmbeddingProvider } from './embeddings/index'
 import { createMemoryFiles, type MemoryFiles } from './files'
+import { collectGarbage, type GCConfig, type GCResult } from './gc'
 import {
   createMemoryIndexer,
   type MemoryCategory,
@@ -27,7 +28,7 @@ export {
 } from './embeddings/index'
 export { type ExtractionResult, extractMemories } from './extractor'
 export { createMemoryFiles, MemoryFiles } from './files'
-export { collectGarbage, type GCConfig, type GCResult } from './gc'
+export { collectGarbage, GC_INTERVAL_MS, type GCConfig, type GCResult } from './gc'
 export {
   type ContentType,
   createMemoryIndexer,
@@ -155,6 +156,11 @@ export class MemoryManager {
     const results = await this.search.findSimilar(key, { limit })
     this.trackAccess(results)
     return results
+  }
+
+  /** Prune stale extracted memories. See gc.ts for what is eligible. */
+  collectGarbage(config?: Partial<GCConfig>): GCResult {
+    return collectGarbage(this.indexer, config)
   }
 
   private trackAccess(results: SearchResult[]): void {

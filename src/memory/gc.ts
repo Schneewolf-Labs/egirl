@@ -2,19 +2,26 @@ import { log } from '../util/logger'
 import type { MemoryIndexer } from './indexer'
 
 export interface GCConfig {
-  /** Max age (ms) for auto-extracted memories with zero accesses before pruning */
+  /** Max age (ms) for an extracted memory that was never recalled before it is pruned */
   autoMaxAge: number
-  /** Max age (ms) for conversation-source memories before pruning */
-  conversationMaxAge: number
   /** Dry run — log what would be deleted without actually deleting */
   dryRun: boolean
 }
 
 const DEFAULT_CONFIG: GCConfig = {
   autoMaxAge: 14 * 24 * 60 * 60 * 1000, // 14 days
-  conversationMaxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
   dryRun: false,
 }
+
+/**
+ * Key prefixes of machine-written memories that may age out: facts the extractor pulled from a
+ * conversation or task (`auto/`), and the permission supervisor's decision traces (`permission:`).
+ * Everything else written with source 'auto' stays — `lesson/` entries are meant to last.
+ */
+const PRUNABLE_PREFIXES = ['auto/', 'permission:']
+
+/** How often a long-running instance collects garbage after the startup pass. */
+export const GC_INTERVAL_MS = 24 * 60 * 60 * 1000
 
 export interface GCResult {
   deleted: string[]
@@ -22,23 +29,22 @@ export interface GCResult {
 }
 
 /**
- * Garbage-collect stale memories.
+ * Garbage-collect stale memories: extracted facts and permission traces that are older than
+ * autoMaxAge and were never recalled (search records an access on every hit).
  *
- * Targets:
- * - auto/* keys with access_count=0 older than autoMaxAge
- * - conversation-source entries older than conversationMaxAge
- *
- * Manual and compaction memories are never pruned.
+ * Never pruned: manual and compaction memories, lessons, and conversation-log chunks. The daily
+ * log files are the source of truth for those chunks, and the log indexer re-adds any chunk
+ * it finds missing, so deleting them would only churn.
  */
 export function collectGarbage(indexer: MemoryIndexer, config: Partial<GCConfig> = {}): GCResult {
-  const { autoMaxAge, conversationMaxAge, dryRun } = { ...DEFAULT_CONFIG, ...config }
+  const { autoMaxAge, dryRun } = { ...DEFAULT_CONFIG, ...config }
   const now = Date.now()
   const deleted: string[] = []
   let skipped = 0
 
-  // Find stale auto-extracted memories (never accessed, old enough)
   const autoMemories = indexer.list(10000, 0, { source: 'auto' })
   for (const mem of autoMemories) {
+    if (!PRUNABLE_PREFIXES.some((prefix) => mem.key.startsWith(prefix))) continue
     const age = now - mem.createdAt
     if (age < autoMaxAge) continue
 
@@ -58,23 +64,7 @@ export function collectGarbage(indexer: MemoryIndexer, config: Partial<GCConfig>
       )
     } else {
       indexer.delete(mem.key)
-    }
-    deleted.push(mem.key)
-  }
-
-  // Find old conversation-source entries
-  const conversationMemories = indexer.list(10000, 0, { source: 'conversation' })
-  for (const mem of conversationMemories) {
-    const age = now - mem.createdAt
-    if (age < conversationMaxAge) continue
-
-    if (dryRun) {
-      log.info(
-        'gc',
-        `Would delete: ${mem.key} (conversation, age=${Math.floor(age / 86_400_000)}d)`,
-      )
-    } else {
-      indexer.delete(mem.key)
+      log.info('gc', `Deleted: ${mem.key} (auto, age=${Math.floor(age / 86_400_000)}d, accesses=0)`)
     }
     deleted.push(mem.key)
   }
