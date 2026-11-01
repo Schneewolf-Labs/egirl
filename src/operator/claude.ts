@@ -137,6 +137,11 @@ export class ClaudeOperator implements Operator {
       // No built-ins. Every tool Claude sees is egirl's, through the one executor and its
       // safety layer, which is why the SDK's own permission gate is bypassed.
       tools: [],
+      // Nothing from the machine's own Claude Code setup: no user or project settings, no
+      // CLAUDE.md, and no MCP servers but egirl's. Without these the session also picks up the
+      // login's claude.ai connectors and the workspace's AGENTS.md a second time.
+      settingSources: [],
+      strictMcpConfig: true,
       mcpServers: {
         [MCP_SERVER_NAME]: {
           type: 'sdk',
