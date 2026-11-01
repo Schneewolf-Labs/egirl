@@ -1,5 +1,5 @@
 import { Database } from 'bun:sqlite'
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, setDefaultTimeout, test } from 'bun:test'
 import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -12,6 +12,11 @@ import {
 } from '../../src/browser/real-profile'
 
 let tmp: string
+
+// The snapshot tests copy a profile tree and run VACUUM INTO on SQLite files: ~200ms on a quiet
+// runner, but a contended Windows runner (antivirus scanning each new file) has taken 6-10s,
+// past bun's 5s default.
+setDefaultTimeout(30_000)
 
 beforeEach(() => {
   tmp = mkdtempSync(join(tmpdir(), 'egirl-real-profile-'))
