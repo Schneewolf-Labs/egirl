@@ -15,6 +15,7 @@ import { loadInstanceEnv } from './config/env-files'
 import { BOLD, colors, DIM, RESET } from './ui/theme'
 import { errorMessage } from './util/errors'
 import { log } from './util/logger'
+import { VERSION } from './version'
 import { bootstrapWorkspace } from './workspace/bootstrap'
 
 interface ParsedArgs {
@@ -71,6 +72,11 @@ async function main() {
       console.error(`${c.error}error${RESET} ${errorMessage(error)}`)
       process.exit(1)
     }
+    return
+  }
+
+  if (command === 'version' || command === '--version') {
+    console.log(VERSION)
     return
   }
 
@@ -163,7 +169,7 @@ function showHelp() {
   const c = colors()
 
   console.log(`
-${c.secondary}${BOLD}egirl${RESET} ${DIM}— Local AI that drives code agents${RESET}
+${c.secondary}${BOLD}egirl${RESET} ${DIM}${VERSION} — Local AI that drives code agents${RESET}
 
 ${c.primary}Usage${RESET}
   egirl ${DIM}[command] [options]${RESET}
@@ -183,6 +189,7 @@ ${c.primary}Commands${RESET}
   ${c.accent}claude-code${RESET}    Bridge to Claude Code with local model supervision ${DIM}(alias: cc)${RESET}
   ${c.accent}status${RESET}         Show current configuration and status
   ${c.accent}update${RESET}         Pull the latest egirl and reinstall deps if needed ${DIM}(alias: upgrade, --check to preview)${RESET}
+  ${c.accent}version${RESET}        Print the egirl version ${DIM}(alias: --version)${RESET}
   ${c.accent}help${RESET}           Show this help message
 
 ${c.primary}Options${RESET} ${DIM}(all commands)${RESET}
