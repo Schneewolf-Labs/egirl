@@ -141,6 +141,8 @@ describe('ClaudeOperator', () => {
     expect(calls[0]?.prompt).toBe('hey')
     expect(opts.systemPrompt).toContain('Nina is your principal')
     expect(opts.tools).toEqual([])
+    expect(opts.settingSources).toEqual([])
+    expect(opts.strictMcpConfig).toBe(true)
     expect(opts.permissionMode).toBe('bypassPermissions')
     expect(opts.cwd).toBe(workspace)
     expect(Object.keys(opts.mcpServers ?? {})).toEqual(['egirl'])

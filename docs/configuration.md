@@ -134,6 +134,12 @@ each turn and memory extraction after it, the conversation mirror the web consol
 `egirl sessions` read, and the harness's session id so a restart resumes the same conversation
 (`<workspace>/claude-sessions.json` or `<workspace>/codex-sessions.json`).
 
+The session sees no settings, `CLAUDE.md` files or MCP servers from the machine's own Claude Code
+setup, only egirl's tools. It does still see the Claude account it runs on: Claude Code adds the
+login's email address and organization to every session, and no SDK option removes them. Don't
+put a Claude instance where untrusted people can talk to it (see
+[Public instance](public-instance.md)); a visitor can ask for the email address and get it.
+
 What it leaves to Claude Code: the loop, the transcript and the context window. The local
 loop's nudges, spiral and repetition guards, compaction and rollover do not run; `/context`
 reports the SDK's own token usage against a 200k window, and `/compact` is not available.
