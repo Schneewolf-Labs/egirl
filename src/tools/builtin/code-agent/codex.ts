@@ -1,3 +1,4 @@
+import { VERSION } from '../../../version'
 import type { ToolResult } from '../../types'
 import type { CodexConnection, CodexEvents, RpcObject } from './codex-rpc'
 import { connectCodex, object } from './codex-rpc'
@@ -144,7 +145,7 @@ export async function runCodexSession(
     // Keep initialization under the same deadline as the turn itself.
     void (async () => {
       await rpc.request('initialize', {
-        clientInfo: { name: 'egirl', version: '0.1.0' },
+        clientInfo: { name: 'egirl', version: VERSION },
         capabilities: {},
       })
       if (settled) return

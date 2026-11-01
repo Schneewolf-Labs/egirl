@@ -37,6 +37,7 @@ import { traceStore } from './tracking/traces'
 import { getTheme } from './ui/theme'
 import { errorMessage } from './util/errors'
 import { log } from './util/logger'
+import { VERSION } from './version'
 import { ansiToHex, renderChatPage } from './web-ui'
 
 /**
@@ -318,7 +319,7 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
               },
             )
           }
-          return json({ service: 'egirl', version: '0.2.0' })
+          return json({ service: 'egirl', version: VERSION })
         }
 
         // --- Escalations waiting on a human ----------------------------------

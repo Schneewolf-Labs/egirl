@@ -3,6 +3,7 @@ import { isAbsolute } from 'path'
 import type { AgentEventHandler } from '../agent/events'
 import type { Operator } from '../operator/types'
 import { log } from '../util/logger'
+import { VERSION } from '../version'
 
 /**
  * egirl as an ACP agent: an editor (Zed, a JetBrains IDE, any ACP client) drives an egirl session
@@ -26,7 +27,7 @@ interface AcpSession {
   controller?: AbortController
 }
 
-export const EGIRL_AGENT_INFO = { name: 'egirl', version: '0.1.0' }
+export const EGIRL_AGENT_INFO = { name: 'egirl', version: VERSION }
 
 // Tool output is shown in the editor's tool-call panel; the agent keeps the full text.
 const TOOL_OUTPUT_PREVIEW_CHARS = 4000

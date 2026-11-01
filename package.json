@@ -1,6 +1,6 @@
 {
   "name": "egirl",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Local AI that drives code agents",
   "type": "module",
   "main": "src/index.ts",

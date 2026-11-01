@@ -1,6 +1,7 @@
 import type { CodexConnection, CodexEvents, RpcObject } from '../tools/builtin/code-agent/codex-rpc'
 import { object } from '../tools/builtin/code-agent/codex-rpc'
 import { errorMessage } from '../util/errors'
+import { VERSION } from '../version'
 import {
   CODEX_CAPABILITIES,
   codexDynamicTools,
@@ -187,7 +188,7 @@ export function runCodexTurn(args: CodexTurnArgs): Promise<CodexTurnResult> {
 
   async function start(): Promise<void> {
     await connection.request('initialize', {
-      clientInfo: { name: 'egirl', title: null, version: '0.1.0' },
+      clientInfo: { name: 'egirl', title: null, version: VERSION },
       capabilities: CODEX_CAPABILITIES,
     })
     connection.notify('initialized', {})

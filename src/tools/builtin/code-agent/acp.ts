@@ -1,6 +1,7 @@
 import * as acp from '@agentclientprotocol/sdk'
 import { errorMessage } from '../../../util/errors'
 import { log } from '../../../util/logger'
+import { VERSION } from '../../../version'
 import type { ToolResult } from '../../types'
 import { type AcpConnect, type AcpTransport, spawnAcpAgent } from './acp-process'
 import { DEFAULT_TIMEOUT_MS, withImagePaths } from './shared'
@@ -151,7 +152,7 @@ export async function runAcpSession(
     await cx.request('initialize', {
       protocolVersion: acp.PROTOCOL_VERSION,
       clientCapabilities: {},
-      clientInfo: { name: 'egirl', version: '0.1.0' },
+      clientInfo: { name: 'egirl', version: VERSION },
     })
     const session = await cx.request('session/new', { cwd: workingDir, mcpServers: [] })
     sessionId = session.sessionId
