@@ -2,7 +2,8 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import { mkdtempSync, rmSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { openDatabase } from '../../src/util/db'
+import { createTaskStore } from '../../src/tasks/store'
+import { openDatabase, schemaVersion, stampSchemaVersion } from '../../src/util/db'
 
 let dir: string | undefined
 
@@ -40,4 +41,62 @@ describe('openDatabase', () => {
     db.close()
     await holder.exited
   }, 15000)
+})
+
+describe('store schema versions', () => {
+  const schema = { name: 'widgets', version: 2 }
+
+  function freshPath(): string {
+    dir = mkdtempSync(join(tmpdir(), 'egirl-db-'))
+    return join(dir, 'store.db')
+  }
+
+  test('a new file reads as v0 until the store stamps it', () => {
+    const db = openDatabase(freshPath(), schema)
+    expect(schemaVersion(db)).toBe(0)
+    stampSchemaVersion(db, schema)
+    expect(schemaVersion(db)).toBe(2)
+    db.close()
+  })
+
+  test('opens a file stamped with an older or equal version', () => {
+    const path = freshPath()
+    const old = openDatabase(path)
+    stampSchemaVersion(old, { name: 'widgets', version: 1 })
+    old.close()
+
+    const db = openDatabase(path, schema)
+    expect(schemaVersion(db)).toBe(1)
+    db.close()
+  })
+
+  test('refuses a file written by newer code, naming the store and the fix', () => {
+    const path = freshPath()
+    const newer = openDatabase(path)
+    stampSchemaVersion(newer, { name: 'widgets', version: 3 })
+    newer.close()
+
+    expect(() => openDatabase(path, schema)).toThrow(/widgets database is schema v3.*egirl update/)
+  })
+
+  test('a real store refuses a newer file instead of touching it', () => {
+    const path = freshPath()
+    const newer = openDatabase(path)
+    stampSchemaVersion(newer, { name: 'tasks', version: 99 })
+    newer.close()
+
+    expect(() => createTaskStore(path)).toThrow('tasks database is schema v99')
+    const after = openDatabase(path)
+    const tables = after.query("SELECT name FROM sqlite_master WHERE type = 'table'").all()
+    after.close()
+    expect(tables).toEqual([])
+  })
+
+  test('a real store stamps its version on first open', () => {
+    const path = freshPath()
+    createTaskStore(path).close()
+    const db = openDatabase(path)
+    expect(schemaVersion(db)).toBeGreaterThanOrEqual(1)
+    db.close()
+  })
 })

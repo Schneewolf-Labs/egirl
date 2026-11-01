@@ -14,8 +14,10 @@
  */
 
 import type { Database } from 'bun:sqlite'
-import { openDatabase } from '../util/db'
+import { openDatabase, type StoreSchema, stampSchemaVersion } from '../util/db'
 import { log } from '../util/logger'
+
+const WORKING_MEMORY_SCHEMA: StoreSchema = { name: 'working memory', version: 1 }
 
 export interface WorkingMemoryEntry {
   id: number
@@ -34,8 +36,9 @@ export class WorkingMemory {
   private db: Database
 
   constructor(dbPath: string) {
-    this.db = openDatabase(dbPath)
+    this.db = openDatabase(dbPath, WORKING_MEMORY_SCHEMA)
     this.initialize()
+    stampSchemaVersion(this.db, WORKING_MEMORY_SCHEMA)
   }
 
   private initialize(): void {

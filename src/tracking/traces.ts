@@ -1,6 +1,8 @@
 import type { Database } from 'bun:sqlite'
-import { openDatabase } from '../util/db'
+import { openDatabase, type StoreSchema, stampSchemaVersion } from '../util/db'
 import { log } from '../util/logger'
+
+const TRACES_SCHEMA: StoreSchema = { name: 'traces', version: 1 }
 
 /**
  * Unified trace store — the forensic record of everything the agent actually did: every
@@ -80,7 +82,7 @@ export class TraceStore {
   private ftsAvailable = true
 
   constructor(path: string, verbosity: TraceVerbosity, retentionDays: number) {
-    this.db = openDatabase(path)
+    this.db = openDatabase(path, TRACES_SCHEMA)
     this.verbosity = verbosity
     this.db.run(`
       CREATE TABLE IF NOT EXISTS traces (
@@ -117,6 +119,7 @@ export class TraceStore {
       this.ftsAvailable = false
       log.warn('traces', `FTS unavailable — trace search falls back to LIKE: ${err}`)
     }
+    stampSchemaVersion(this.db, TRACES_SCHEMA)
     // Retention: prune on open, not on a timer — a long-running process reopens rarely, but
     // pruning per-write would tax the hot path for a bound nobody is watching in real time.
     const cutoff = Date.now() - retentionDays * 24 * 60 * 60 * 1000
