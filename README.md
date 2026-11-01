@@ -124,7 +124,7 @@ bun run src/index.ts acp                  # Agent Client Protocol on stdio (Zed,
 bun run src/index.ts claude-code          # Direct Claude Code bridge (alias: cc)
 bun run src/index.ts cc -m "fix the tests"
 bun run src/index.ts status               # Show config + connection status
-bun run src/index.ts update               # Pull latest + bun install (alias: upgrade; --check to preview)
+bun run src/index.ts update               # Move to the latest release tag + bun install (--edge: follow main; --check to preview)
 bun run src/index.ts help
 ```
 

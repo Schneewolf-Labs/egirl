@@ -1,7 +1,9 @@
 import type { Database } from 'bun:sqlite'
 import type { ChatMessage, ToolCall } from '../providers/types'
-import { openDatabase } from '../util/db'
+import { openDatabase, type StoreSchema, stampSchemaVersion } from '../util/db'
 import { log } from '../util/logger'
+
+const CONVERSATIONS_SCHEMA: StoreSchema = { name: 'conversations', version: 1 }
 
 export interface SessionInfo {
   id: string
@@ -20,8 +22,9 @@ export class ConversationStore {
   private db: Database
 
   constructor(dbPath: string) {
-    this.db = openDatabase(dbPath)
+    this.db = openDatabase(dbPath, CONVERSATIONS_SCHEMA)
     this.initialize()
+    stampSchemaVersion(this.db, CONVERSATIONS_SCHEMA)
   }
 
   private initialize(): void {

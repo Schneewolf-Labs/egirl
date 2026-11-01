@@ -1,5 +1,5 @@
 import type { Database } from 'bun:sqlite'
-import { openDatabase } from '../util/db'
+import { openDatabase, type StoreSchema, stampSchemaVersion } from '../util/db'
 import { log } from '../util/logger'
 import type { TaskErrorKind } from './error-classify'
 import type {
@@ -12,6 +12,8 @@ import type {
   TaskStatus,
   TaskTransition,
 } from './types'
+
+const TASKS_SCHEMA: StoreSchema = { name: 'tasks', version: 1 }
 
 function generateId(): string {
   return crypto.randomUUID().slice(0, 8)
@@ -83,8 +85,9 @@ export class TaskStore {
   private db: Database
 
   constructor(dbPath: string) {
-    this.db = openDatabase(dbPath)
+    this.db = openDatabase(dbPath, TASKS_SCHEMA)
     this.initialize()
+    stampSchemaVersion(this.db, TASKS_SCHEMA)
   }
 
   private initialize(): void {
