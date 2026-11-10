@@ -549,6 +549,7 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
           return handleChatCompletions(req, await readJson(req), deps.statelessAgentFactory, {
             model: selfName,
             exposeProgress: config.exposeProgress === true,
+            verifyDatedClaims: deps.config?.tools.webSearch === true,
           })
         }
 
