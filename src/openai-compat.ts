@@ -1,4 +1,6 @@
 import type { AgentLoop, AgentResponse } from './agent'
+import { datedClaimFeedback, findDatedClaim } from './agent/dated-claim'
+import type { AgentEventHandler } from './agent/events'
 import { subscribe } from './agent/session-events'
 import { applyStop, parseRequestParams } from './openai-params'
 import type { ChatMessage } from './providers/types'
@@ -117,6 +119,26 @@ export interface ChatCompletionsOptions {
   model: string
   /** Stream reasoning, tool activity and pre-tool text as reasoning_content. */
   exposeProgress: boolean
+  /**
+   * The instance can search the web: an answer that dates itself to the present without any tool call in
+   * the run gets one retry told to search first (see agent/dated-claim.ts).
+   */
+  verifyDatedClaims?: boolean
+}
+
+/** The run's validation hook: reject an unverified "as of <now>" answer once, if nothing was checked. */
+function datedClaimGuard(): AgentEventHandler {
+  let usedTool = false
+  return {
+    onToolCallStart() {
+      usedTool = true
+    },
+    async onPostResponseValidation(content) {
+      if (usedTool) return { valid: true }
+      const phrase = findDatedClaim(content)
+      return phrase ? { valid: false, feedback: datedClaimFeedback(phrase) } : { valid: true }
+    },
+  }
 }
 
 /** Cut at a stop sequence, and say why the answer ended the way OpenAI clients expect. */
@@ -144,6 +166,7 @@ export async function handleChatCompletions(
   const runOpts = {
     ...(parsed.images.length > 0 && { images: parsed.images }),
     ...(params.sampling && { sampling: params.sampling }),
+    ...(opts.verifyDatedClaims && { events: datedClaimGuard() }),
   }
 
   if (body.stream !== true) {

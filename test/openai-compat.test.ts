@@ -3,6 +3,7 @@ import type { AgentLoop } from '../src/agent'
 import { endRun, publish, resetSessionEvents, startRun } from '../src/agent/session-events'
 import type { AgentLoopOptions } from '../src/agent/types'
 import { startAPIServer } from '../src/api'
+import type { RuntimeConfig } from '../src/config'
 import { parseChatRequest, type StatelessAgentFactory } from '../src/openai-compat'
 import { applyStop, parseRequestParams } from '../src/openai-params'
 import type { ChatMessage } from '../src/providers/types'
@@ -177,6 +178,38 @@ describe('OpenAI-compatible routes', () => {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body),
     })
+
+  test('with web search on, an unverified "as of <now>" answer gets one retry to search', async () => {
+    server.stop(true)
+    server = startAPIServer(
+      { host: '127.0.0.1', port: 0 },
+      {
+        agentFactory: () => ({}) as AgentLoop,
+        agents: new Map(),
+        statelessAgentFactory: factory,
+        selfName: 'nyx',
+        config: { tools: { webSearch: true } } as unknown as RuntimeConfig,
+      },
+    )
+    base = `http://127.0.0.1:${server.port}`
+    await post({ messages: [{ role: 'user', content: 'is he still CEO?' }] })
+    const guard = lastRunOpts?.events
+    if (!guard?.onPostResponseValidation) throw new Error('no validation hook')
+    const year = new Date().getFullYear()
+    const stale = await guard.onPostResponseValidation(`Yes, as of ${year} he is still CEO.`)
+    expect(stale.valid).toBe(false)
+    expect(stale.feedback).toContain('web_search')
+    expect((await guard.onPostResponseValidation('Yes, he founded it in 1998.')).valid).toBe(true)
+    guard.onToolCallStart?.([{ id: 'c1', name: 'web_search', arguments: { query: 'ceo' } }])
+    expect(
+      (await guard.onPostResponseValidation(`Yes, as of ${year} he is still CEO.`)).valid,
+    ).toBe(true)
+  })
+
+  test('without web search no guard is attached', async () => {
+    await post({ messages: [{ role: 'user', content: 'hi' }] })
+    expect(lastRunOpts?.events).toBeUndefined()
+  })
 
   test('GET /v1/models lists the instance as the one model', async () => {
     const body = (await (await fetch(`${base}/v1/models`)).json()) as { data: { id: string }[] }
