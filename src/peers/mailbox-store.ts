@@ -1,5 +1,7 @@
 import type { Database } from 'bun:sqlite'
-import { openDatabase } from '../util/db'
+import { openDatabase, type StoreSchema, stampSchemaVersion } from '../util/db'
+
+const MAILBOX_SCHEMA: StoreSchema = { name: 'peer mailbox', version: 1 }
 
 /** Work this instance handed to another agent, keyed by the Wald thread it went out on. */
 export interface Delegation {
@@ -28,7 +30,7 @@ export class MailboxStore {
   private db: Database
 
   constructor(dbPath: string) {
-    this.db = openDatabase(dbPath)
+    this.db = openDatabase(dbPath, MAILBOX_SCHEMA)
     this.db.run(`
       CREATE TABLE IF NOT EXISTS mailbox_threads (
         thread_id TEXT PRIMARY KEY,
@@ -46,6 +48,7 @@ export class MailboxStore {
         seen_at INTEGER NOT NULL
       )
     `)
+    stampSchemaVersion(this.db, MAILBOX_SCHEMA)
   }
 
   recordDelegation(d: Omit<Delegation, 'createdAt'>): void {

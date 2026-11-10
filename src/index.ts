@@ -188,7 +188,7 @@ ${c.primary}Commands${RESET}
   ${c.accent}acp${RESET}            Serve the Agent Client Protocol on stdio ${DIM}(for Zed, JetBrains, other ACP editors)${RESET}
   ${c.accent}claude-code${RESET}    Bridge to Claude Code with local model supervision ${DIM}(alias: cc)${RESET}
   ${c.accent}status${RESET}         Show current configuration and status
-  ${c.accent}update${RESET}         Pull the latest egirl and reinstall deps if needed ${DIM}(alias: upgrade, --check to preview)${RESET}
+  ${c.accent}update${RESET}         Move to the latest release and reinstall deps if needed ${DIM}(alias: upgrade; --edge follows main, --check previews)${RESET}
   ${c.accent}version${RESET}        Print the egirl version ${DIM}(alias: --version)${RESET}
   ${c.accent}help${RESET}           Show this help message
 

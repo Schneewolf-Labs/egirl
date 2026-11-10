@@ -1,6 +1,8 @@
 import type { Database } from 'bun:sqlite'
-import { openDatabase } from '../util/db'
+import { openDatabase, type StoreSchema, stampSchemaVersion } from '../util/db'
 import { log } from '../util/logger'
+
+const MEMORY_SCHEMA: StoreSchema = { name: 'memory', version: 1 }
 
 export type ContentType = 'text' | 'image' | 'multimodal'
 
@@ -45,8 +47,9 @@ export class MemoryIndexer {
   private embeddingCache: Map<string, IndexedMemory> | null = null
 
   constructor(dbPath: string, _dimensions = 2048) {
-    this.db = openDatabase(dbPath)
+    this.db = openDatabase(dbPath, MEMORY_SCHEMA)
     this.initialize()
+    stampSchemaVersion(this.db, MEMORY_SCHEMA)
   }
 
   private initialize(): void {

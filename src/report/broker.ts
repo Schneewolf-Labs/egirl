@@ -1,6 +1,8 @@
 import type { Database } from 'bun:sqlite'
-import { openDatabase } from '../util/db'
+import { openDatabase, type StoreSchema, stampSchemaVersion } from '../util/db'
 import { log } from '../util/logger'
+
+const REPORT_ASKS_SCHEMA: StoreSchema = { name: 'report asks', version: 1 }
 
 /**
  * ReplyBroker — the piece that lets a human answer a blocking `report` ask over a normal
@@ -47,7 +49,7 @@ export class ReplyBroker {
   constructor(options: ReplyBrokerOptions = {}) {
     this.pollMs = options.pollMs ?? 1000
     if (options.dbPath) {
-      this.db = openDatabase(options.dbPath)
+      this.db = openDatabase(options.dbPath, REPORT_ASKS_SCHEMA)
       this.db.run(`CREATE TABLE IF NOT EXISTS report_asks (
         id TEXT PRIMARY KEY,
         key TEXT NOT NULL,
@@ -57,6 +59,7 @@ export class ReplyBroker {
         reply TEXT
       )`)
       this.db.run('CREATE INDEX IF NOT EXISTS idx_report_asks_key ON report_asks(key, created_at)')
+      stampSchemaVersion(this.db, REPORT_ASKS_SCHEMA)
       this.db.run('DELETE FROM report_asks WHERE expires_at < ?', [Date.now()])
     }
   }

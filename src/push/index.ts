@@ -12,9 +12,11 @@ import { errorMessage } from '../util/errors'
  */
 
 import type { Database } from 'bun:sqlite'
-import { openDatabase } from '../util/db'
+import { openDatabase, type StoreSchema, stampSchemaVersion } from '../util/db'
 import { log } from '../util/logger'
 import { subscriptionId, type VapidKeys, vapidAuthHeader } from './vapid'
+
+const PUSH_SCHEMA: StoreSchema = { name: 'push', version: 1 }
 
 export interface PushSubscription {
   endpoint: string
@@ -32,7 +34,7 @@ export class PushStore {
   }
 
   constructor(path: string) {
-    this.db = openDatabase(path)
+    this.db = openDatabase(path, PUSH_SCHEMA)
     this.db.run(`CREATE TABLE IF NOT EXISTS push_subscriptions (
       endpoint TEXT PRIMARY KEY,
       p256dh TEXT,
@@ -44,6 +46,7 @@ export class PushStore {
       public_key TEXT NOT NULL,
       private_key TEXT NOT NULL
     )`)
+    stampSchemaVersion(this.db, PUSH_SCHEMA)
   }
 
   /**
