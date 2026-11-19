@@ -1,3 +1,4 @@
+import { statSync } from 'fs'
 import { homedir } from 'os'
 import { resolveImageRefs } from '../../../agent/attachments'
 import type { CodeAgentProvider } from '../../../config/schema'
@@ -116,6 +117,17 @@ export function createCodeAgentTool(config: CodeAgentConfig): Tool {
       })
       if (inferred) {
         log.info('code-agent', `Inferred working_dir from the task text: ${workingDir}`)
+      }
+      // Spawning an agent in a missing directory fails as ENOENT naming the agent's executable,
+      // which reads as "the code agent is not installed". Say what is actually wrong.
+      if (!statSync(workingDir, { throwIfNoEntry: false })?.isDirectory()) {
+        return {
+          success: false,
+          output:
+            `working_dir does not exist: ${workingDir}. Pass an existing directory` +
+            (config.workingDir ? ` (the default is ${config.workingDir})` : '') +
+            '; for a new project, create the directory first.',
+        }
       }
       const configured = resolveProviderChain(config.providers, config.provider, 'claude')
       // A session belongs to the backend that created it: resume runs that one backend only, and
