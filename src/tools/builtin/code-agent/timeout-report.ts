@@ -124,6 +124,25 @@ export interface TimeoutReportInput {
   sessionId?: string
 }
 
+/** What the agent got through: its recent actions and the tail of its last message. */
+export function progressSections(actions: ActionLog, lastMessage?: string): string[] {
+  const out: string[] = []
+  const recent = actions.recent()
+  if (recent.length) {
+    const label =
+      actions.total > recent.length
+        ? `Last ${recent.length} of ${actions.total} actions:`
+        : 'Actions:'
+    out.push(
+      `${label}\n${recent.map((a) => `- ${a.tool}${a.summary ? `: ${a.summary}` : ''}`).join('\n')}`,
+    )
+  }
+  if (lastMessage?.trim()) {
+    out.push(`Last message from the agent:\n${tail(lastMessage, MAX_MESSAGE_CHARS)}`)
+  }
+  return out
+}
+
 export async function formatTimeoutReport(input: TimeoutReportInput): Promise<string> {
   const secs = (input.timeoutMs / 1000).toFixed(0)
   const stats = [
@@ -135,20 +154,7 @@ export async function formatTimeoutReport(input: TimeoutReportInput): Promise<st
     `${TIMEOUT_PREFIX} ${secs}s (${stats.join(', ')}). The work is partial: check the state below before retrying.`,
   ]
 
-  const recent = input.actions.recent()
-  if (recent.length) {
-    const label =
-      input.actions.total > recent.length
-        ? `Last ${recent.length} of ${input.actions.total} actions:`
-        : 'Actions:'
-    out.push(
-      `${label}\n${recent.map((a) => `- ${a.tool}${a.summary ? `: ${a.summary}` : ''}`).join('\n')}`,
-    )
-  }
-
-  if (input.lastMessage?.trim()) {
-    out.push(`Last message from the agent:\n${tail(input.lastMessage, MAX_MESSAGE_CHARS)}`)
-  }
+  out.push(...progressSections(input.actions, input.lastMessage))
 
   const git = await gitSummary(input.workingDir)
   if (git) out.push(git)

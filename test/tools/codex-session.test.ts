@@ -113,6 +113,23 @@ describe('Codex structured lifecycle', () => {
     })
     expect((await f.promise).success).toBe(false)
   })
+  test('an interrupted turn reports what it had done', async () => {
+    const f = fixture((events) => {
+      events.notification('item/started', {
+        threadId: 'thread',
+        turnId: 'turn',
+        item: { type: 'commandExecution', command: 'copy raw.png art\\slime.png' },
+      })
+      message(events, 'Saved art/slime.png; checking its alpha next.', 'commentary')
+      complete(events, 'interrupted')
+    })
+    const result = await f.promise
+    expect(result.success).toBe(false)
+    expect(result.output).toContain('Codex turn interrupted')
+    expect(result.output).toContain('- command: copy raw.png art\\slime.png')
+    expect(result.output).toContain('Saved art/slime.png')
+    expect(result.output).toContain('check the files before running it again')
+  })
   test('empty response and commentary alone are not success', async () => {
     for (const text of ['', '• Completed']) {
       const f = fixture((events) => {

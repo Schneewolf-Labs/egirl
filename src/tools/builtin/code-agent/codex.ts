@@ -3,16 +3,31 @@ import type { ToolResult } from '../../types'
 import type { CodexConnection, CodexEvents, RpcObject } from './codex-rpc'
 import { connectCodex, object } from './codex-rpc'
 import { DEFAULT_TIMEOUT_MS } from './shared'
-import { ActionLog, formatTimeoutReport } from './timeout-report'
+import { ActionLog, formatTimeoutReport, progressSections } from './timeout-report'
 import type { CodeAgentBackend, CodeAgentConfig, CodeAgentRunOptions } from './types'
 
 /** Only explicit protocol completion can report success. */
-export function codexTurnResult(turn: RpcObject, output: string, workingDir: string): ToolResult {
-  if (turn.status !== 'completed')
+export function codexTurnResult(
+  turn: RpcObject,
+  output: string,
+  workingDir: string,
+  progress?: { actions: ActionLog; lastMessage?: string },
+): ToolResult {
+  if (turn.status !== 'completed') {
+    const head = `Codex turn ${String(turn.status)}: ${String(object(turn.error).message ?? '')}\n${output}`
+    // An interrupted turn usually got somewhere first. Without this the operator saw an empty
+    // failure, concluded nothing happened and ran the whole job again over finished files.
+    const done = progress ? progressSections(progress.actions, progress.lastMessage) : []
+    if (!done.length) return { success: false, output: head }
     return {
       success: false,
-      output: `Codex turn ${String(turn.status)}: ${String(object(turn.error).message ?? '')}\n${output}`,
+      output: [
+        head.trimEnd(),
+        ...done,
+        'Its work may be partly or fully done: check the files before running it again.',
+      ].join('\n\n'),
     }
+  }
   if (!output.trim())
     return {
       success: false,
@@ -95,7 +110,7 @@ export async function runCodexSession(
           const turn = object(params.turn)
           if (turnId && turn.id !== turnId) return
           completed = true
-          finish(codexTurnResult(turn, output, workingDir))
+          finish(codexTurnResult(turn, output, workingDir, { actions, lastMessage: lastText }))
         }
       },
       async request(id, method, params) {
