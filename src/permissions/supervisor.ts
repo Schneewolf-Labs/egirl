@@ -134,18 +134,24 @@ function parseDecisionJson(
   if (!match) return undefined
 
   const parsed = JSON.parse(match[0]) as Partial<PermissionDecision>
-  const action = parsed.action
+  const offered = (id: unknown): id is string =>
+    typeof id === 'string' && (request.options?.some((option) => option.id === id) ?? false)
+  let action = parsed.action as string | undefined
+  // Small models often put the option they picked in "action" ({"action":"accept","optionId":
+  // "accept"} for Codex's accept/cancel). That is an unambiguous choice; rejecting it failed closed
+  // and Codex's "cancel" then ended the whole turn.
   if (action !== 'allow' && action !== 'deny' && action !== 'choose' && action !== 'ask_user') {
-    return undefined
+    if (offered(parsed.optionId)) action = 'choose'
+    else if (offered(action)) {
+      parsed.optionId = action
+      action = 'choose'
+    } else return undefined
   }
 
-  const optionId =
-    parsed.optionId && request.options?.some((option) => option.id === parsed.optionId)
-      ? parsed.optionId
-      : undefined
+  const optionId = offered(parsed.optionId) ? parsed.optionId : undefined
 
   return {
-    action,
+    action: action as PermissionDecision['action'],
     ...(optionId && { optionId }),
     ...(parsed.answer && { answer: parsed.answer }),
     reason: parsed.reason ?? 'No reason provided',

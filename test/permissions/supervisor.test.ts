@@ -87,6 +87,39 @@ describe('PermissionSupervisor', () => {
     expect(decision.reason).toBe('risky')
   })
 
+  test('reads an offered option id given as the action', async () => {
+    const codexRequest = {
+      ...request,
+      options: [
+        { id: 'accept', label: 'Allow this action once' },
+        { id: 'cancel', label: 'Deny this action' },
+      ],
+    }
+    for (const content of [
+      '{"action":"accept","optionId":"accept","reason":"scoped cleanup","confidence":0.9}',
+      '{"action":"accept","reason":"scoped cleanup","confidence":0.9}',
+    ]) {
+      const supervisor = createPermissionSupervisor({
+        config: config(),
+        localProvider: provider(content),
+      })
+      const decision = await supervisor.decide(codexRequest)
+      expect(decision.action).toBe('choose')
+      expect(decision.optionId).toBe('accept')
+    }
+  })
+
+  test('still fails closed on an unknown action that names no offered option', async () => {
+    const supervisor = createPermissionSupervisor({
+      config: config({ defaultAction: 'allow' }),
+      localProvider: provider('{"action":"approve","reason":"fine","confidence":0.9}'),
+    })
+
+    const decision = await supervisor.decide(request)
+
+    expect(decision.action === 'deny' || decision.optionId === '2').toBe(true)
+  })
+
   test('fails closed (denies) when the model throws, not using defaultAction', async () => {
     const throwing: LLMProvider = {
       name: 'fake',
