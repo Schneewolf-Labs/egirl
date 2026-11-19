@@ -60,7 +60,10 @@ async function countStringTokens(text: string, tokenizer?: Tokenizer): Promise<n
  * Count tokens for a ChatMessage, using the tokenizer for text content
  * and falling back to estimation for structural overhead.
  */
-async function countMessageTokens(message: ChatMessage, tokenizer?: Tokenizer): Promise<number> {
+export async function countMessageTokens(
+  message: ChatMessage,
+  tokenizer?: Tokenizer,
+): Promise<number> {
   // Per-message framing: role tag, special tokens, separators.
   // Template-dependent but ~7 tokens covers Qwen3/ChatML-style templates.
   let tokens = 7

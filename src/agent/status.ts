@@ -1,6 +1,7 @@
 import type { RuntimeConfig } from '../config'
 import type { Tokenizer } from '../providers/types'
 import type { AgentContext } from './context'
+import { countMessageTokens } from './context-window'
 
 export interface ContextStatus {
   contextLength: number
@@ -25,10 +26,9 @@ export async function computeContextStatus(
   const contextLength = config.local.contextLength
   const systemTokens = await tokenizer.countTokens(context.systemPrompt)
   let messageTokens = 0
-  for (const msg of context.messages) {
-    const text = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)
-    messageTokens += await tokenizer.countTokens(text)
-  }
+  // The context window's own counter: an attached image is IMAGE_TOKENS, not its base64 as text
+  // (a 1.8 MB PNG read that way was 3.2M tokens, and /context said 9995% full).
+  for (const msg of context.messages) messageTokens += await countMessageTokens(msg, tokenizer)
   const summaryTokens = context.conversationSummary
     ? await tokenizer.countTokens(context.conversationSummary)
     : 0
