@@ -20,7 +20,6 @@ export interface TurnDeps {
   agent: Operator
   session: SessionController
   input: CLIInput | undefined
-  showThinking: boolean
   /** Time-to-first-token samples, kept across runs: what "usually" means while waiting. */
   waits: WaitHistory
 }
@@ -104,7 +103,8 @@ async function runOne(text: string, deps: TurnDeps, window: Window): Promise<boo
   status.set('waiting')
   try {
     console.log()
-    const { handler, state } = createCLIEventHandler(deps.showThinking, status, {
+    // Read per run, so /reasoning, /verbose and /quiet take effect from the next one.
+    const { handler, state } = createCLIEventHandler(session.get().showReasoning, status, {
       markdown: session.get().renderMarkdown,
     })
     const response = await deps.agent.run(text, {

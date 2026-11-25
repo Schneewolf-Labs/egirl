@@ -170,6 +170,7 @@ export async function runCLI(config: RuntimeConfig, args: string[]): Promise<voi
     skillsDir: config.skills.dirs[0],
     maxTurns: config.conversation.maxTurns,
     ...(taskStore && { taskStore }),
+    skills: rt.skills,
   })
 
   const tasks = createBackgroundTasks(rt, {
