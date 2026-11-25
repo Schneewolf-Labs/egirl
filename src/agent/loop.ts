@@ -122,7 +122,10 @@ export class AgentLoop implements Operator {
       tools: deps.toolExecutor.getDefinitions(),
     })
     const local = deps.config.local
-    this.tokenizer = createLlamaCppTokenizer(() => local.endpoint, local.apiKey)
+    // A hosted OpenAI-compatible API has no /tokenize: estimate rather than ask and fail.
+    this.tokenizer = createLlamaCppTokenizer(() => local.endpoint, local.apiKey, {
+      estimateOnly: local.isHosted === true,
+    })
     this.history = new ConversationHistory(this.conversationStore, deps.sessionId)
     this.history.hydrate(this.context)
     if (deps.seedMessages) this.history.seed(this.context, deps.seedMessages)

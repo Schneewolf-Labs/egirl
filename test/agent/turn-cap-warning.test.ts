@@ -67,11 +67,23 @@ describe('in the loop', () => {
 
   test('an unbounded run is not told about its safety ceiling', async () => {
     const seen: string[] = []
-    const a = agent(seen, 'test:cap-warn-unbounded')
     const controller = new AbortController()
-    // Stop it well short of the ceiling: what matters is that no warning appeared on the way.
-    setTimeout(() => controller.abort(), 50)
+    // Stop it well short of the ceiling, from inside the provider: a timer would depend on the
+    // loop yielding to the event loop, which a stub that answers at once never makes it do.
+    const provider = busyProvider(seen)
+    const chat = provider.chat.bind(provider)
+    provider.chat = async (req) => {
+      if (seen.length >= 30) controller.abort()
+      return chat(req)
+    }
+    const a = new AgentLoop({
+      config: makeConfig(makeWorkspace()),
+      toolExecutor: makeExecutorWithNoop(),
+      localProvider: provider,
+      sessionId: 'test:cap-warn-unbounded',
+    })
     await a.run('go', { unbounded: true, signal: controller.signal })
+    expect(seen.length).toBeGreaterThanOrEqual(30)
     expect(firstWarned(seen)).toBe(-1)
   })
 })

@@ -43,7 +43,11 @@ export async function runTurns(first: string, deps: TurnDeps): Promise<void> {
   let pending: string | undefined = first
   while (pending !== undefined) {
     const hitCap = await runOne(pending, deps, window)
-    const ctx = await printContext(deps.agent)
+    // The reply is on screen but the prompt is not back yet: say what is still happening
+    // rather than leave a pause that looks like a hang.
+    const after = createStatusLine(input?.isInteractive ? { sink: (t) => input.setStatus(t) } : {})
+    after.set('finishing', 'measuring context')
+    const ctx = await printContext(deps.agent).finally(() => after.stop())
     if (ctx) {
       window.length = ctx.contextLength
       window.lastPrompt = ctx.lastPromptTokens
