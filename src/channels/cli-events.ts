@@ -258,6 +258,21 @@ export function renderDrained(text: string, count: number): string {
   ].join('\n')
 }
 
+/**
+ * A run stopped at its turn cap. Said every time it happens, because the cap is invisible until
+ * then and the ways past it (/continue, /maxturns, /auto) are not things anyone guesses.
+ */
+export function renderTurnCap(maxTurns: number, isContinuing: boolean): string {
+  const c = colors()
+  const head = `${c.warning}⚑ stopped at the ${maxTurns}-turn cap${RESET}`
+  if (isContinuing) return `${head} ${DIM}· /auto is on, continuing · esc interrupts${RESET}\n`
+  const raise = Math.min(500, maxTurns * 3)
+  return (
+    `${head} ${DIM}· /continue keeps going · /maxturns ${raise} raises the cap · ` +
+    `/auto continues without asking${RESET}\n`
+  )
+}
+
 export function renderQueuedMessage(text: string): string {
   const c = colors()
   const shown = text.length > 60 ? `${text.slice(0, 60)}…` : text

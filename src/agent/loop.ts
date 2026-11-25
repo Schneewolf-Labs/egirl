@@ -82,6 +82,8 @@ export class AgentLoop implements Operator {
   private mutex: SessionMutex | null
   private history: ConversationHistory
   private compactor = new CompactionScheduler()
+  /** Prompt tokens of the last model call, kept past the run for the context readout. */
+  private lastPromptTokens: number | undefined
   /**
    * The in-flight run, if any — the handle interrupt() and inject() act through. run() admits
    * one run at a time per loop (see `runChain`), so a single slot suffices.
@@ -441,6 +443,8 @@ export class AgentLoop implements Operator {
         // Input tokens are the whole prompt this turn — the running measure of context fill,
         // used by the context-pressure consolidation trigger next iteration.
         state.lastInputTokens = response.usage.input_tokens
+        // A provider that reports no usage leaves the readout on its estimate rather than at 0%.
+        if (response.usage.input_tokens > 0) this.lastPromptTokens = response.usage.input_tokens
         totalUsage.input_tokens += response.usage.input_tokens
         totalUsage.output_tokens += response.usage.output_tokens
 
@@ -775,7 +779,7 @@ export class AgentLoop implements Operator {
 
   /** Get a snapshot of the current context window usage */
   contextStatus(): Promise<ContextStatus> {
-    return computeContextStatus(this.config, this.tokenizer, this.context)
+    return computeContextStatus(this.config, this.tokenizer, this.context, this.lastPromptTokens)
   }
 
   /** Manually trigger context compaction on the current conversation */
@@ -793,6 +797,8 @@ export class AgentLoop implements Operator {
     const keptMessages = this.context.messages.slice(dropCount)
 
     this.scheduleCompaction(droppedMessages)
+    // The last measured prompt described the window before the cut.
+    this.lastPromptTokens = undefined
 
     this.context.messages = keptMessages
     this.history.replaceAll(keptMessages)
@@ -807,6 +813,7 @@ export class AgentLoop implements Operator {
     })
     this.history.reset()
     this.compactor.reset()
+    this.lastPromptTokens = undefined
   }
 
   resetSession(): void {

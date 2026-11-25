@@ -15,6 +15,29 @@ export interface ContextStatus {
   utilization: number
   hasSummary: boolean
   sessionId: string
+  /**
+   * Prompt tokens the provider reported for the most recent model call: what the model actually
+   * saw. Undefined before the first call and after the context was cut (compaction, wipe).
+   * `totalUsed` is the stored history instead, which still holds stale tool output that is only
+   * cleared from the copy sent to the model, so it can read well past 100% while the model is not.
+   */
+  lastPromptTokens?: number
+}
+
+/**
+ * How full the model's window is, for display: the last measured prompt when there is one,
+ * the stored-history estimate otherwise. Every readout goes through this so they agree.
+ */
+export function windowFill(s: ContextStatus): {
+  used: number
+  fraction: number
+  isMeasured: boolean
+} {
+  if (s.lastPromptTokens === undefined) {
+    return { used: s.totalUsed, fraction: s.utilization, isMeasured: false }
+  }
+  const fraction = s.contextLength > 0 ? s.lastPromptTokens / s.contextLength : 0
+  return { used: s.lastPromptTokens, fraction, isMeasured: true }
 }
 
 /** Get a snapshot of the current context window usage */
@@ -22,6 +45,7 @@ export async function computeContextStatus(
   config: RuntimeConfig,
   tokenizer: Tokenizer,
   context: AgentContext,
+  lastPromptTokens?: number,
 ): Promise<ContextStatus> {
   const contextLength = config.local.contextLength
   const systemTokens = await tokenizer.countTokens(context.systemPrompt)
@@ -46,5 +70,6 @@ export async function computeContextStatus(
     utilization: totalUsed / contextLength,
     hasSummary: !!context.conversationSummary,
     sessionId: context.sessionId,
+    ...(lastPromptTokens !== undefined && { lastPromptTokens }),
   }
 }

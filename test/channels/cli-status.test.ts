@@ -72,6 +72,17 @@ describe('contextBar', () => {
     expect(strip(contextBar(0.1, 900, 9000))).toContain('900/9.0k')
   })
 
+  test('names the stored history when it is well past what was sent', () => {
+    const line = strip(contextBar(0.91, 119000, 131072, 182000))
+    expect(line).toContain('91% 119k/131k')
+    expect(line).toContain('history 182k')
+  })
+
+  test('says nothing about history when it matches what was sent', () => {
+    expect(strip(contextBar(0.5, 65536, 131072, 66000))).not.toContain('history')
+    expect(strip(contextBar(0.5, 65536, 131072))).not.toContain('history')
+  })
+
   test('never renders a bar wider than its width, even past 100%', () => {
     // Utilization can exceed 1 briefly before compaction runs; the bar must not wrap the line.
     const bar = strip(contextBar(1.4, 14000, 10000))

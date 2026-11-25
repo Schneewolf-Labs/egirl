@@ -9,7 +9,7 @@
 import { describe, expect, test } from 'bun:test'
 import type { AgentLoop } from '../../src/agent'
 import type { ThinkingConfig } from '../../src/providers/types'
-import { handleCommand, isCommand } from '../../src/session/commands'
+import { CONTINUE_PROMPT, handleCommand, isCommand } from '../../src/session/commands'
 import { SessionController } from '../../src/session/controller'
 import { makeVerbosityStore } from '../../src/session/verbosity'
 
@@ -111,12 +111,41 @@ describe('/status', () => {
   })
 })
 
+describe('/continue', () => {
+  test('is a turn, not a reply: it carries on a capped run on any surface', async () => {
+    const r = await handleCommand('/continue', { agent: fakeAgent() })
+    expect(r.handled).toBe(true)
+    expect(r.message).toBeUndefined()
+    expect(r.turn).toBe(CONTINUE_PROMPT)
+  })
+
+  test('is listed in /help', async () => {
+    const r = await handleCommand('/help', { agent: fakeAgent() })
+    expect(r.message).toContain('/continue')
+  })
+})
+
 describe('/context and /settings', () => {
   test('/context summarizes the window in plain text', async () => {
     const r = await handleCommand('/context', { agent: fakeAgent() })
     expect(r.message).toContain('📊 context 43% ▓▓▓▓░░░░░░ 14,200 / 32,768')
     expect(r.message).toContain('12 messages')
     expect(r.message).toContain('compacted')
+  })
+
+  test('/context reports the prompt the model last saw, not the stored history', async () => {
+    const base = fakeAgent()
+    const status = await base.contextStatus()
+    const agent = {
+      ...base,
+      contextStatus: async () => ({ ...status, totalUsed: 45000, lastPromptTokens: 29800 }),
+    } as unknown as AgentLoop
+    const r = await handleCommand('/context', { agent })
+    expect(r.message).toContain('📊 context 91% ▓▓▓▓▓▓▓▓▓░ 29,800 / 32,768')
+    expect(r.message).toContain('stored history ~45,000t')
+    expect(r.message).toContain('available ~2,968t')
+    const s = await handleCommand('/status', { agent })
+    expect(s.message).toContain('context 91%')
   })
 
   test('/settings shows only what the surface has', async () => {
