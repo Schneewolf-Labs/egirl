@@ -3,7 +3,14 @@ import { parseToolCalls } from '../tools/format'
 import { log } from '../util/logger'
 import { toApiMessages } from './chat-format'
 import { withReasoningFloor } from './reasoning-floors'
-import type { ChatRequest, ChatResponse, LLMProvider, ToolCall, ToolDefinition } from './types'
+import type {
+  ChatRequest,
+  ChatResponse,
+  LLMProvider,
+  PromptProgress,
+  ToolCall,
+  ToolDefinition,
+} from './types'
 import { ContextSizeError } from './types'
 import { type EndpointReresolver, isConnectionError } from './witchgrid'
 
@@ -386,6 +393,7 @@ export class LlamaCppProvider implements LLMProvider {
         req.onToken ?? (() => {}),
         tools !== undefined,
         req.onThinkingToken,
+        req.onPromptProgress,
       )
       content = result.content
       reasoning = result.reasoning
@@ -500,6 +508,7 @@ export class LlamaCppProvider implements LLMProvider {
     onToken: (token: string) => void,
     hasTools: boolean,
     onThinkingToken: (token: string) => void = () => {},
+    onPromptProgress?: (progress: PromptProgress) => void,
   ): Promise<{
     content: string
     reasoning: string
@@ -596,12 +605,29 @@ export class LlamaCppProvider implements LLMProvider {
               usage?: { prompt_tokens: number; completion_tokens: number }
               model?: string
               timings?: LlamaCppTimings
-              prompt_progress?: { total: number; processed: number }
+              prompt_progress?: {
+                total?: number
+                processed?: number
+                cache?: number
+                time_ms?: number
+              }
             }
 
             // Prefill progress (requested with return_progress): the server is working through
-            // the prompt, which is not a stalled stream.
-            if (parsed.prompt_progress) resetStaleTimer()
+            // the prompt, which is not a stalled stream. Fields are read defensively: builds
+            // differ in which they send.
+            const progress = parsed.prompt_progress
+            if (progress) {
+              resetStaleTimer()
+              if (typeof progress.total === 'number' && typeof progress.processed === 'number') {
+                onPromptProgress?.({
+                  processed: progress.processed,
+                  total: progress.total,
+                  ...(typeof progress.cache === 'number' && { cached: progress.cache }),
+                  ...(typeof progress.time_ms === 'number' && { elapsedMs: progress.time_ms }),
+                })
+              }
+            }
 
             if (parsed.usage) usage = parsed.usage
             if (parsed.model) model = parsed.model

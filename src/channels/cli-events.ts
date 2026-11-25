@@ -1,7 +1,8 @@
 import type { AgentEventHandler } from '../agent/events'
-import type { ToolCall } from '../providers/types'
+import type { PromptProgress, ToolCall } from '../providers/types'
 import type { ToolResult } from '../tools/types'
 import { colors, DIM, RESET } from '../ui/theme'
+import { createPrefillRate, renderPrefill } from './cli-stats'
 import type { StatusLine } from './cli-status'
 
 /** Print the reply unless it already streamed to the terminal. */
@@ -95,9 +96,17 @@ export function createCLIEventHandler(
     return 'other'
   }
 
+  const prefillRate = createPrefillRate()
   const handler: AgentEventHandler = {
     onPhase(phase: 'compacting' | 'waiting') {
       status?.set(phase)
+    },
+
+    // The server's own count through the prompt: during a long prefill, the one number that
+    // moves. Ignored once the prompt is done -- the next phase comes from the tokens.
+    onPromptProgress(progress: PromptProgress) {
+      if (progress.processed >= progress.total) return
+      status?.set('prefill', renderPrefill(progress, prefillRate(progress)))
     },
 
     // Reasoning as it happens. On a reasoning model this is most of the turn, so printing it

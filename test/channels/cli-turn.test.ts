@@ -6,6 +6,7 @@
 import { describe, expect, test } from 'bun:test'
 import type { CLIInput } from '../../src/channels/cli-input'
 import { runTurns } from '../../src/channels/cli-turn'
+import { createWaitHistory } from '../../src/channels/cli-wait'
 import type { Operator } from '../../src/operator/types'
 import { CONTINUE_PROMPT } from '../../src/session/commands'
 import { SessionController } from '../../src/session/controller'
@@ -48,7 +49,9 @@ describe('after a run', () => {
     const { agent, prompts } = fakeAgent(() => true)
     const session = new SessionController()
     const input = fakeInput(suggested)
-    await quiet(() => runTurns('go', { agent, session, input, showThinking: false }))
+    await quiet(() =>
+      runTurns('go', { agent, session, input, showThinking: false, waits: createWaitHistory() }),
+    )
     expect(prompts).toEqual(['go'])
     expect(suggested).toEqual(['/continue'])
   })
@@ -57,7 +60,9 @@ describe('after a run', () => {
     const { agent, prompts } = fakeAgent((t) => t === 'go')
     const session = new SessionController({ mode: 'auto' })
     const input = fakeInput([])
-    await quiet(() => runTurns('go', { agent, session, input, showThinking: false }))
+    await quiet(() =>
+      runTurns('go', { agent, session, input, showThinking: false, waits: createWaitHistory() }),
+    )
     expect(prompts).toEqual(['go', CONTINUE_PROMPT])
   })
 
@@ -66,7 +71,13 @@ describe('after a run', () => {
     const { agent } = fakeAgent(() => false, 0.85)
     const input = fakeInput(suggested)
     await quiet(() =>
-      runTurns('go', { agent, session: new SessionController(), input, showThinking: false }),
+      runTurns('go', {
+        agent,
+        session: new SessionController(),
+        input,
+        showThinking: false,
+        waits: createWaitHistory(),
+      }),
     )
     expect(suggested).toEqual(['/compact'])
   })
@@ -76,7 +87,13 @@ describe('after a run', () => {
     const { agent } = fakeAgent(() => false)
     const input = fakeInput(suggested)
     await quiet(() =>
-      runTurns('go', { agent, session: new SessionController(), input, showThinking: false }),
+      runTurns('go', {
+        agent,
+        session: new SessionController(),
+        input,
+        showThinking: false,
+        waits: createWaitHistory(),
+      }),
     )
     expect(suggested).toEqual([])
   })

@@ -12,14 +12,17 @@ import { errorMessage } from '../util/errors'
 import { log } from '../util/logger'
 import { createCLIEventHandler, printReply, renderDrained, renderTurnCap } from './cli-events'
 import type { CLIInput } from './cli-input'
-import { createRunStats, withStats } from './cli-stats'
+import { createRunStats, withListeners } from './cli-stats'
 import { contextBar, createStatusLine } from './cli-status'
+import { createWaitTracker, type WaitHistory } from './cli-wait'
 
 export interface TurnDeps {
   agent: Operator
   session: SessionController
   input: CLIInput | undefined
   showThinking: boolean
+  /** Time-to-first-token samples, kept across runs: what "usually" means while waiting. */
+  waits: WaitHistory
 }
 
 /** Window fill past which the empty prompt offers `/compact`. Matches the bar's red band. */
@@ -30,18 +33,22 @@ export async function runTurns(first: string, deps: TurnDeps): Promise<void> {
   const { session, input } = deps
   // The window size for the stats' context figure. Fetched alongside the first run rather
   // than before it: on a large history the count is not free, and the run should not wait.
-  const window: { length?: number } = {}
+  const window: Window = {}
   deps.agent
     .contextStatus()
     .then((s) => {
       window.length ??= s.contextLength
+      window.lastPrompt ??= s.lastPromptTokens
     })
     .catch(() => {})
   let pending: string | undefined = first
   while (pending !== undefined) {
     const hitCap = await runOne(pending, deps, window)
     const ctx = await printContext(deps.agent)
-    if (ctx) window.length = ctx.contextLength
+    if (ctx) {
+      window.length = ctx.contextLength
+      window.lastPrompt = ctx.lastPromptTokens
+    }
     const fill = ctx?.fraction
 
     // Anything typed during the turn runs now rather than waiting for another return --
@@ -66,11 +73,21 @@ export async function runTurns(first: string, deps: TurnDeps): Promise<void> {
 }
 
 /** One run. True when the turn cap, not the model, ended it. */
-async function runOne(text: string, deps: TurnDeps, window: { length?: number }): Promise<boolean> {
+/** What the context readouts have told us about the window, for the live line. */
+interface Window {
+  length?: number
+  lastPrompt?: number
+}
+
+async function runOne(text: string, deps: TurnDeps, window: Window): Promise<boolean> {
   const c = colors()
   const { session, input } = deps
   const signal = session.begin()
   const maxTurns = session.get().maxTurns
+  const wait = createWaitTracker({
+    history: deps.waits,
+    initialPromptTokens: () => window.lastPrompt,
+  })
   const stats = createRunStats({
     maxTurns,
     contextLength: () => window.length,
@@ -82,14 +99,14 @@ async function runOne(text: string, deps: TurnDeps, window: { length?: number })
   // Calling that "thinking" would be a guess presented as fact.
   const status = createStatusLine({
     ...(input?.isInteractive && { sink: (t: string) => input.setStatus(t) }),
-    extra: () => stats.render(),
+    extra: () => [wait.render(), stats.render()].filter(Boolean).join(`${DIM} · ${RESET}`),
   })
   status.set('waiting')
   try {
     console.log()
     const { handler, state } = createCLIEventHandler(deps.showThinking, status)
     const response = await deps.agent.run(text, {
-      events: withStats(handler, stats),
+      events: withListeners(handler, [wait.events, stats.events]),
       maxTurns,
       signal,
     })
@@ -116,7 +133,7 @@ async function runOne(text: string, deps: TurnDeps, window: { length?: number })
  */
 async function printContext(
   agent: Operator,
-): Promise<{ fraction: number; contextLength: number } | undefined> {
+): Promise<{ fraction: number; contextLength: number; lastPromptTokens?: number } | undefined> {
   try {
     const ctx = await agent.contextStatus()
     const fill = windowFill(ctx)
@@ -124,7 +141,11 @@ async function printContext(
     console.log(
       `${DIM}context${RESET} ${contextBar(fill.fraction, fill.used, ctx.contextLength, history)}\n`,
     )
-    return { fraction: fill.fraction, contextLength: ctx.contextLength }
+    return {
+      fraction: fill.fraction,
+      contextLength: ctx.contextLength,
+      ...(ctx.lastPromptTokens !== undefined && { lastPromptTokens: ctx.lastPromptTokens }),
+    }
   } catch {
     // A status readout must never break a turn that already succeeded.
     return undefined

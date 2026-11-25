@@ -9,6 +9,7 @@
  */
 
 import type { AgentEventHandler } from '../agent/events'
+import type { PromptProgress } from '../providers/types'
 import { colors, DIM, RESET } from '../ui/theme'
 
 export interface RunStatsOptions {
@@ -77,29 +78,91 @@ export function createRunStats(opts: RunStatsOptions): RunStats {
   }
 }
 
-/**
- * Both handlers' streaming hooks, `primary` first. Only the three hooks stats listen to are
- * merged; everything else is `primary`'s own.
- */
-export function withStats(primary: AgentEventHandler, stats: RunStats): AgentEventHandler {
-  const { onToken, onThinkingToken, onModelTurn } = stats.events
+/** The hooks listeners may add; everything else on the handler is the renderer's own. */
+type Listener = Pick<
+  AgentEventHandler,
+  'onToken' | 'onThinkingToken' | 'onPromptProgress' | 'onToolCallComplete' | 'onModelTurn'
+>
+
+/** `primary` with each listener's hooks called after its own. */
+export function withListeners(
+  primary: AgentEventHandler,
+  listeners: Listener[],
+): AgentEventHandler {
   return {
     ...primary,
     onToken(token) {
       primary.onToken?.(token)
-      onToken?.(token)
+      for (const l of listeners) l.onToken?.(token)
     },
     onThinkingToken(token) {
       primary.onThinkingToken?.(token)
-      onThinkingToken?.(token)
+      for (const l of listeners) l.onThinkingToken?.(token)
+    },
+    onPromptProgress(progress) {
+      primary.onPromptProgress?.(progress)
+      for (const l of listeners) l.onPromptProgress?.(progress)
+    },
+    onToolCallComplete(callId, name, result) {
+      primary.onToolCallComplete?.(callId, name, result)
+      for (const l of listeners) l.onToolCallComplete?.(callId, name, result)
     },
     onModelTurn(turn) {
       primary.onModelTurn?.(turn)
-      onModelTurn?.(turn)
+      for (const l of listeners) l.onModelTurn?.(turn)
     },
   }
 }
 
 function compact(n: number): string {
   return n >= 1000 ? `${(n / 1000).toFixed(n >= 10_000 ? 0 : 1)}k` : String(n)
+}
+
+const BAR_CELLS = 8
+
+/**
+ * The prefill detail: `▰▰▱▱▱▱▱▱ 2.0k/12.1k · 8.2k/s · ~2s left · 70k cached`. Cached tokens
+ * cost nothing, so the bar, the count and the time left cover only the part being computed --
+ * a prompt that is mostly cache would otherwise show a nearly full bar from the start.
+ */
+export function renderPrefill(p: PromptProgress, rate: number | undefined): string {
+  const c = colors()
+  const cached = Math.min(p.cached ?? 0, p.total)
+  const todo = p.total - cached
+  const done = Math.max(0, Math.min(todo, p.processed - cached))
+  const fraction = todo > 0 ? done / todo : 1
+  const filled = Math.round(fraction * BAR_CELLS)
+  const bar = `${c.accent}${'▰'.repeat(filled)}${RESET}${DIM}${'▱'.repeat(BAR_CELLS - filled)}${RESET}`
+  const parts = [`${bar} ${c.info}${compact(done)}/${compact(todo)}${RESET}`]
+  if (rate !== undefined && rate > 0) {
+    parts.push(`${c.info}${compact(Math.round(rate))}/s${RESET}`)
+    const left = Math.ceil((todo - done) / rate)
+    if (left > 0) parts.push(`~${duration(left)} left`)
+  }
+  if (cached > 0) parts.push(`${compact(cached)} cached`)
+  return parts.join(`${DIM} · ${RESET}`)
+}
+
+function duration(secs: number): string {
+  if (secs < 60) return `${secs}s`
+  const m = Math.floor(secs / 60)
+  return m < 60 ? `${m}m${secs % 60 ? ` ${secs % 60}s` : ''}` : `${Math.floor(m / 60)}h ${m % 60}m`
+}
+
+/**
+ * Prefill rate in tokens per second of actual computation (cached tokens are free). Uses the
+ * server's own clock when it sends one; otherwise measures between this request's reports.
+ * A new request (processed going backwards) starts a new measurement.
+ */
+export function createPrefillRate(
+  now: () => number = Date.now,
+): (p: PromptProgress) => number | undefined {
+  let first: { processed: number; at: number } | undefined
+  return (p) => {
+    const computed = p.processed - (p.cached ?? 0)
+    if (p.elapsedMs !== undefined && p.elapsedMs > 0) return (computed / p.elapsedMs) * 1000
+    if (!first || p.processed < first.processed) first = { processed: p.processed, at: now() }
+    const secs = (now() - first.at) / 1000
+    return secs >= 0.5 ? (p.processed - first.processed) / secs : undefined
+  }
 }

@@ -3,6 +3,7 @@ import type {
   ChatMessage,
   ChatResponse,
   LLMProvider,
+  PromptProgress,
   SamplingParams,
   ThinkingConfig,
   Tokenizer,
@@ -63,6 +64,7 @@ export async function chatWithRetry(args: {
   tools: ToolDefinition[]
   onToken?: (token: string) => void
   onThinkingToken?: (token: string) => void
+  onPromptProgress?: (progress: PromptProgress) => void
   thinking?: ThinkingConfig
   signal?: AbortSignal
   maxRetries?: number
@@ -75,6 +77,7 @@ export async function chatWithRetry(args: {
     tools,
     onToken,
     onThinkingToken,
+    onPromptProgress,
     thinking,
     signal,
     cacheSlot,
@@ -91,6 +94,7 @@ export async function chatWithRetry(args: {
         tools,
         onToken,
         onThinkingToken,
+        onPromptProgress,
         thinking,
         signal,
         cacheSlot,
@@ -157,6 +161,7 @@ export async function chatWithContextWindow(args: {
   tokenizer: Tokenizer
   onToken?: (token: string) => void
   onThinkingToken?: (token: string) => void
+  onPromptProgress?: (progress: PromptProgress) => void
   thinking?: ThinkingConfig
   signal?: AbortSignal
   cacheSlot?: number
@@ -259,6 +264,7 @@ export async function chatWithContextWindow(args: {
       tools,
       onToken: args.onToken,
       onThinkingToken: args.onThinkingToken,
+      onPromptProgress: args.onPromptProgress,
       thinking: args.thinking,
       signal: args.signal,
       cacheSlot: args.cacheSlot,

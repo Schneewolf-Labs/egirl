@@ -12,6 +12,7 @@ import { renderDrained, renderQueuedMessage } from './cli-events'
 import { type CLIInput, createCLIInput } from './cli-input'
 import { tasksCommand } from './cli-tasks'
 import { runTurns } from './cli-turn'
+import { createWaitHistory } from './cli-wait'
 import type { Channel } from './types'
 
 export interface CLIChannelOptions {
@@ -38,6 +39,7 @@ export class CLIChannel implements Channel {
   private busy = false
   /** Piped input only: lines read ahead of the turn, each run as its own turn in order. */
   private backlog: string[] = []
+  private waits = createWaitHistory()
   private taskStore: TaskStore | undefined
   /** Set once the background runner is up (it is built after the channel it reports to). */
   private taskRunner: TaskRunner | undefined
@@ -197,6 +199,7 @@ export class CLIChannel implements Channel {
           session: this.session,
           input: this.input,
           showThinking: this.showThinking,
+          waits: this.waits,
         })
       }
     } catch (error) {

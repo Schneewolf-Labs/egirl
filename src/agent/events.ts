@@ -1,6 +1,7 @@
 import type {
   ChatMessage,
   ChatResponse,
+  PromptProgress,
   ThinkingConfig,
   ToolCall,
   ToolDefinition,
@@ -88,6 +89,8 @@ export interface AgentEventHandler {
    * follows when that is over and the model call is next.
    */
   onPhase?(phase: 'compacting' | 'waiting'): void
+  /** Called as the server works through the prompt, before the first token (prefill). */
+  onPromptProgress?(progress: PromptProgress): void
   /** Called when tool calls are about to be executed */
   onToolCallStart?(calls: ToolCall[]): void
   /** Called after each tool finishes executing */

@@ -80,3 +80,21 @@ describe('prefill progress and the stale-stream timer', () => {
     expect(res.content).not.toBe('answer')
   })
 })
+
+describe('prefill progress reaches the caller', () => {
+  test('each prompt_progress chunk is passed to onPromptProgress, with cache and time', async () => {
+    const url = fakeServer([10, 10, 10], true, [])
+    const provider = new LlamaCppProvider(url, 'plain-test-model', 5000)
+    const seen: unknown[] = []
+    const res = await provider.chat({
+      messages: [{ role: 'user', content: 'hi' }],
+      onPromptProgress: (p) => seen.push(p),
+    })
+    expect(res.content).toBe('answer')
+    expect(seen).toEqual([
+      { processed: 100, total: 1000, cached: 0, elapsedMs: 100 },
+      { processed: 200, total: 1000, cached: 0, elapsedMs: 200 },
+      { processed: 300, total: 1000, cached: 0, elapsedMs: 300 },
+    ])
+  })
+})
