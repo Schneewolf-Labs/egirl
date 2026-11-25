@@ -47,9 +47,12 @@ export class ConversationHistory {
     this.sessionId = sessionId
   }
 
-  /** Load persisted messages and summary into a fresh context. */
-  hydrate(context: AgentContext): void {
-    if (!this.store) return
+  /**
+   * Load persisted messages and summary into a fresh context. Returns when the transcript was
+   * last written, when there was one to load.
+   */
+  hydrate(context: AgentContext): { lastActiveAt?: number } | undefined {
+    if (!this.store) return undefined
 
     const stored = this.store.loadMessages(this.sessionId)
     // The transcript is append-only; a rollover record marks where the live window starts.
@@ -76,6 +79,9 @@ export class ConversationHistory {
       context.conversationSummary = summary
       log.info('agent', `Loaded conversation summary (${summary.length} chars)`)
     }
+    if (history.length === 0) return undefined
+    const lastActiveAt = this.store.lastActiveAt(this.sessionId)
+    return lastActiveAt !== undefined ? { lastActiveAt } : {}
   }
 
   /**
