@@ -19,7 +19,10 @@ function endpointUsesBindAddress(endpoint: string): boolean {
 async function checkLocalEndpoint(config: RuntimeConfig): Promise<CheckResult> {
   try {
     const url = new URL('/v1/models', config.local.endpoint)
-    const response = await fetch(url, { signal: AbortSignal.timeout(5000) })
+    const response = await fetch(url, {
+      headers: config.local.apiKey ? { Authorization: `Bearer ${config.local.apiKey}` } : {},
+      signal: AbortSignal.timeout(5000),
+    })
     if (!response.ok) {
       return {
         label: 'local model',

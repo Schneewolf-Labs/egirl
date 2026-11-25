@@ -114,6 +114,11 @@ const baseProperties = {
     // Bearer token for a llama-server started with --api-key (a shared/keyed operator endpoint).
     // Prefer the EGIRL_LOCAL_API_KEY env var over putting the secret in the toml.
     api_key: Type.Optional(Type.String()),
+    // The endpoint is a hosted OpenAI-compatible API rather than a llama-server: name the model
+    // on every request (a hosted API rejects a request without it) and send only standard OpenAI
+    // fields. The llama.cpp extensions (chat_template_kwargs, id_slot, return_progress) are
+    // dropped, so /think cannot switch the model's thinking on such an endpoint.
+    hosted: Type.Optional(Type.Boolean()),
     // Find the operator model through a Witchgrid control plane instead of a fixed endpoint:
     // GET {url}/resolve/{profile} at startup, the auto-spawning {url}/v1/llama/{profile} proxy
     // when nothing is running. `endpoint`, if set, is the fallback for an unreachable CP.
@@ -673,6 +678,8 @@ export interface RuntimeConfig {
     temperature?: number
     /** Bearer token for a keyed llama-server (--api-key). Undefined for the usual open server. */
     apiKey?: string
+    /** A hosted OpenAI-compatible API, not a llama-server: name the model, skip llama.cpp fields. */
+    isHosted?: boolean
     /** Resolve `endpoint` through a Witchgrid control plane at startup (see providers/witchgrid). */
     witchgrid?: {
       url: string

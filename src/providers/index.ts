@@ -51,6 +51,7 @@ export function createProviderRegistry(config: RuntimeConfig): ProviderRegistry 
     config.local.witchgrid
       ? createWitchgridPromoter(config.local.witchgrid, config.local)
       : undefined,
+    config.local.isHosted,
   )
 
   const auxiliary = config.local.auxiliary

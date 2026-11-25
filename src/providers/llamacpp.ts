@@ -160,8 +160,10 @@ export class LlamaCppProvider implements LLMProvider {
   // Set with it: moves off Witchgrid's auto-spawning proxy once the model runs directly.
   private promote: EndpointReresolver | undefined
   // llama-server serves whatever it loaded and never needed the model named; a hosted
-  // OpenAI-compatible API (the shadow tutor's frontier endpoint) rejects a request without it.
+  // OpenAI-compatible API (the shadow tutor's frontier endpoint, a hosted operator) rejects a
+  // request without it, and some reject llama.cpp's own request fields outright.
   private model: string | undefined
+  private isHosted: boolean
 
   constructor(
     endpoint: string,
@@ -172,10 +174,11 @@ export class LlamaCppProvider implements LLMProvider {
     apiKey?: string,
     reresolve?: EndpointReresolver,
     promote?: EndpointReresolver,
-    sendModel?: boolean,
+    isHosted?: boolean,
   ) {
     this.endpoint = endpoint.replace(/\/$/, '')
-    this.model = sendModel ? model : undefined
+    this.isHosted = isHosted ?? false
+    this.model = this.isHosted ? model : undefined
     this.reresolve = reresolve
     this.promote = promote
     this.name = `llamacpp/${model}`
@@ -293,18 +296,20 @@ export class LlamaCppProvider implements LLMProvider {
         // minutes with no token, which the stale-stream timer would otherwise take for a hang
         // (a 15k-token prompt at ~90 tok/s is ~170 s, before any thinking). Servers that don't
         // know the field ignore it.
-        ...(shouldStream && { return_progress: true }),
+        ...(shouldStream && !this.isHosted && { return_progress: true }),
         // The template variable Qwen3-class templates read. llama.cpp only passes template
         // variables from chat_template_kwargs; a top-level enable_thinking is silently ignored,
         // and the template's default is thinking ON -- so `off` was never off. Verified against
         // /apply-template: only this form renders the closed `<think>\n\n</think>` block.
-        ...(isThinkingEnabled !== undefined && {
-          chat_template_kwargs: { enable_thinking: isThinkingEnabled },
-        }),
+        ...(isThinkingEnabled !== undefined &&
+          !this.isHosted && {
+            chat_template_kwargs: { enable_thinking: isThinkingEnabled },
+          }),
         // Servers with per-slot prefix caching reuse this conversation's already-prefilled
         // context. sabrewing reads `cache_slot`; llama.cpp reads `id_slot` (one slot per -np).
         // Each ignores the other's name, so both ride on the request.
-        ...(req.cacheSlot !== undefined && { cache_slot: req.cacheSlot, id_slot: req.cacheSlot }),
+        ...(req.cacheSlot !== undefined &&
+          !this.isHosted && { cache_slot: req.cacheSlot, id_slot: req.cacheSlot }),
       }),
     })
 
@@ -766,7 +771,7 @@ export function createLlamaCppProvider(
   apiKey?: string,
   reresolve?: EndpointReresolver,
   promote?: EndpointReresolver,
-  sendModel?: boolean,
+  isHosted?: boolean,
 ): LLMProvider {
   return new LlamaCppProvider(
     endpoint,
@@ -777,7 +782,7 @@ export function createLlamaCppProvider(
     apiKey,
     reresolve,
     promote,
-    sendModel,
+    isHosted,
   )
 }
 

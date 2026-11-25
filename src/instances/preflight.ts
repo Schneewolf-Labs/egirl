@@ -43,11 +43,28 @@ async function reachable(url: string, path: string): Promise<{ ok: boolean; deta
 export async function checkServedModel(config: RuntimeConfig): Promise<CheckResult> {
   try {
     const url = new URL('/v1/models', config.local.endpoint)
-    const response = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT_MS) })
+    const response = await fetch(url, {
+      headers: config.local.apiKey ? { Authorization: `Bearer ${config.local.apiKey}` } : {},
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    })
     if (!response.ok) {
       return { label: 'served model', level: 'fail', message: `HTTP ${response.status}` }
     }
     const body = (await response.json()) as { data?: Array<{ id?: string }> }
+
+    // A hosted API lists its whole catalogue rather than the one model it loaded, so the
+    // question is whether the configured model is offered at all.
+    if (config.local.isHosted) {
+      const isOffered = body.data?.some((m) => m.id === config.local.model) ?? false
+      return {
+        label: 'served model',
+        level: isOffered ? 'ok' : 'fail',
+        message: isOffered
+          ? config.local.model
+          : `${config.local.model} is not offered by ${config.local.endpoint}`,
+      }
+    }
+
     const served = body.data?.[0]?.id
     if (!served) {
       return { label: 'served model', level: 'warn', message: 'endpoint named no model' }
