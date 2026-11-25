@@ -22,6 +22,8 @@ export interface SessionSettings {
   showReasoning: boolean
   /** Quick-glance run numbers (step, tokens, rate, context, queue) on the live line. */
   showStats: boolean
+  /** Render the reply's markdown (bold, code, headings, tables) in the terminal. */
+  renderMarkdown: boolean
 }
 
 export const DEFAULT_SETTINGS: SessionSettings = {
@@ -29,6 +31,7 @@ export const DEFAULT_SETTINGS: SessionSettings = {
   mode: 'ask',
   showReasoning: true,
   showStats: true,
+  renderMarkdown: true,
 }
 
 export interface QueuedMessage {
