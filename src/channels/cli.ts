@@ -93,7 +93,7 @@ export class CLIChannel implements Channel {
       `\n${c.secondary}✦ egirl${RESET} ${DIM}— enter sends · esc interrupts · typing mid-turn queues · /exit quits${RESET}`,
     )
     console.log(
-      `${DIM}  ${CLI_COMMANDS.map((s) => `/${s.name}`).join(' ')} · tab completes${RESET}\n`,
+      `${DIM}  ${CLI_COMMANDS.map((s) => `/${s.name}`).join(' ')} · tab completes · ctrl-r searches history${RESET}\n`,
     )
     this.input = createCLIInput({
       onLine: (line) => this.onLine(line),
