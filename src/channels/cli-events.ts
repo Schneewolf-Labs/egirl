@@ -61,17 +61,28 @@ export function previewLines(
   return { lines: all.slice(0, maxLines), hidden: all.length - maxLines }
 }
 
-function formatArgs(args: Record<string, unknown>): string {
-  const entries = Object.entries(args)
-  if (entries.length === 0) return ''
-  if (entries.length === 1) {
-    const entry = entries[0]
-    if (!entry) return ''
-    const [key, val] = entry
-    const valStr = typeof val === 'string' ? val : JSON.stringify(val)
-    if (valStr.length < 60) return `${key}: ${valStr}`
+/**
+ * A tool call's arguments, short enough to scan. A multi-line value (a file body, an edit's
+ * old and new text) collapses to its size: `write_file` used to print the whole file it was
+ * writing, which buried the rest of the turn. Long single-line values are cut.
+ */
+export function formatArgs(args: Record<string, unknown>): string {
+  const parts = Object.entries(args).map(([key, val]) => `${key}: ${formatValue(val)}`)
+  const oneLine = parts.join(', ')
+  return oneLine.length <= ARGS_LINE_CHARS ? oneLine : parts.map((p) => `    ${p}`).join('\n')
+}
+
+const ARGS_LINE_CHARS = 100
+const ARG_VALUE_CHARS = 80
+
+function formatValue(val: unknown): string {
+  if (typeof val === 'string') {
+    const lines = val.split('\n').length
+    if (lines > 1) return `‹${lines} lines›`
+    return val.length > ARG_VALUE_CHARS ? `${val.slice(0, ARG_VALUE_CHARS - 1)}…` : val
   }
-  return JSON.stringify(args, null, 2)
+  const json = JSON.stringify(val) ?? String(val)
+  return json.length > ARG_VALUE_CHARS ? `${json.slice(0, ARG_VALUE_CHARS - 1)}…` : json
 }
 
 /**

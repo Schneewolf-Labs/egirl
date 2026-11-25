@@ -51,13 +51,17 @@ export interface Completion {
  * Complete the last word of `line` (the text before the cursor). Only slash input completes:
  * a plain message is prose, and suggesting words into it would be noise.
  */
-export function complete(line: string, taskNames: () => string[] = () => []): Completion {
+export function complete(
+  line: string,
+  taskNames: () => string[] = () => [],
+  skillCommands: () => string[] = () => [],
+): Completion {
   const none = { token: '', candidates: [] }
   if (!line.startsWith('/')) return none
   const words = line.split(' ')
   const token = words.at(-1) ?? ''
   if (words.length === 1) {
-    const names = CLI_COMMANDS.map((c) => `/${c.name}`)
+    const names = [...CLI_COMMANDS.map((c) => `/${c.name}`), ...skillCommands().map((n) => `/${n}`)]
     return { token, candidates: names.filter((n) => n.startsWith(token)) }
   }
   const spec = CLI_COMMANDS.find((c) => `/${c.name}` === words[0])

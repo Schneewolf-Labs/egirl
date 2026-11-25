@@ -1,7 +1,8 @@
 import { buildLearnPrompt } from '../agent/learn-prompt'
 import type { Operator } from '../operator/types'
-import { handleCommand, isCommand } from '../session/commands'
+import { type CommandScope, customCommands, handleCommand, isCommand } from '../session/commands'
 import { SessionController } from '../session/controller'
+import type { Skill } from '../skills/types'
 import type { TaskRunner, TaskStore } from '../tasks'
 import { colors, DIM, RESET } from '../ui/theme'
 import { errorMessage } from '../util/errors'
@@ -22,6 +23,8 @@ export interface CLIChannelOptions {
   maxTurns?: number
   /** The tasks.db this process has open, for /tasks. Absent when tasks are off. */
   taskStore?: TaskStore
+  /** Loaded skills, for the slash commands they declare (`egirl.command` in SKILL.md). */
+  skills?: Skill[]
 }
 
 const EXIT_WORDS = new Set(['/exit', '/quit', 'exit', 'quit'])
@@ -30,7 +33,6 @@ export class CLIChannel implements Channel {
   readonly name = 'cli'
   private input: CLIInput | undefined
   private agent: Operator
-  private showThinking: boolean
   /** Queue, abort handle and mutable settings -- everything that outlives a single turn. */
   private session: SessionController
   /** Target directory for /learn-authored skills; undefined disables the command. */
@@ -41,18 +43,22 @@ export class CLIChannel implements Channel {
   private backlog: string[] = []
   private waits = createWaitHistory()
   private taskStore: TaskStore | undefined
+  private skills: Skill[]
   /** Set once the background runner is up (it is built after the channel it reports to). */
   private taskRunner: TaskRunner | undefined
 
   constructor(agent: Operator, options?: CLIChannelOptions) {
     this.agent = agent
     // The configured cap is the starting point; /maxturns changes it for this session only.
-    this.session = new SessionController(
-      options?.maxTurns !== undefined ? { maxTurns: options.maxTurns } : {},
-    )
-    this.showThinking = options?.showThinking ?? true
+    // The configured cap and reasoning display are the starting point; /maxturns and
+    // /reasoning change them for this session only.
+    this.session = new SessionController({
+      ...(options?.maxTurns !== undefined && { maxTurns: options.maxTurns }),
+      showReasoning: options?.showThinking ?? true,
+    })
     this.skillsDir = options?.skillsDir
     this.taskStore = options?.taskStore
+    this.skills = options?.skills ?? []
   }
 
   useTaskRunner(runner: TaskRunner): void {
@@ -94,7 +100,12 @@ export class CLIChannel implements Channel {
       onClose: () => {
         this.input = undefined
       },
-      complete: (line) => complete(line, () => this.taskStore?.list().map((t) => t.name) ?? []),
+      complete: (line) =>
+        complete(
+          line,
+          () => this.taskStore?.list().map((t) => t.name) ?? [],
+          () => customCommands(this.skills).map((c) => c.name),
+        ),
     })
     this.idle()
   }
@@ -137,7 +148,21 @@ export class CLIChannel implements Channel {
       this.input?.notice(tasks)
       return
     }
-    handleCommand(text, { agent: this.agent, session: this.session })
+    const word = text.split(/\s+/)[0] ?? ''
+    // Read-only terminal commands answer at once; the ones that change the session or start a
+    // run of their own would collide with the turn in flight, so they say so instead of
+    // falling through to "unknown command".
+    if (word === '/prompt' || word === '/debug') {
+      void handleCLICommand(word, this.commandCtx())
+      return
+    }
+    if (['/compact', '/wipe', '/plan', '/learn'].includes(word)) {
+      this.input?.notice(
+        `${c.warning}${word} can't run during a turn${RESET} ${DIM}— run it when this one ends, or press esc to stop it${RESET}`,
+      )
+      return
+    }
+    handleCommand(text, this.commandScope())
       .then((r) => {
         if (r.turn) {
           this.session.enqueue(r.turn)
@@ -148,10 +173,14 @@ export class CLIChannel implements Channel {
       .catch((error) => log.warn('cli', `command failed: ${errorMessage(error)}`))
   }
 
+  private commandScope(): CommandScope {
+    return { agent: this.agent, session: this.session, skills: this.skills }
+  }
+
   private commandCtx(): CommandContext {
     return {
       agent: this.agent,
-      showThinking: this.showThinking,
+      showThinking: this.session.get().showReasoning,
       askApproval: () => this.askApproval(),
     }
   }
@@ -166,7 +195,7 @@ export class CLIChannel implements Channel {
     if (await handleCLICommand(input, this.commandCtx())) return true
     // /learn is a turn, not a command: the caller rewrites it and runs it.
     if (input === '/learn' || input.startsWith('/learn ')) return false
-    const shared = await handleCommand(input, { agent: this.agent, session: this.session })
+    const shared = await handleCommand(input, this.commandScope())
     if (!shared.handled) return false
     if (shared.quit) await this.quit()
     if (shared.turn) return shared.turn
@@ -198,7 +227,6 @@ export class CLIChannel implements Channel {
           agent: this.agent,
           session: this.session,
           input: this.input,
-          showThinking: this.showThinking,
           waits: this.waits,
         })
       }

@@ -49,9 +49,7 @@ describe('after a run', () => {
     const { agent, prompts } = fakeAgent(() => true)
     const session = new SessionController()
     const input = fakeInput(suggested)
-    await quiet(() =>
-      runTurns('go', { agent, session, input, showThinking: false, waits: createWaitHistory() }),
-    )
+    await quiet(() => runTurns('go', { agent, session, input, waits: createWaitHistory() }))
     expect(prompts).toEqual(['go'])
     expect(suggested).toEqual(['/continue'])
   })
@@ -60,9 +58,7 @@ describe('after a run', () => {
     const { agent, prompts } = fakeAgent((t) => t === 'go')
     const session = new SessionController({ mode: 'auto' })
     const input = fakeInput([])
-    await quiet(() =>
-      runTurns('go', { agent, session, input, showThinking: false, waits: createWaitHistory() }),
-    )
+    await quiet(() => runTurns('go', { agent, session, input, waits: createWaitHistory() }))
     expect(prompts).toEqual(['go', CONTINUE_PROMPT])
   })
 
@@ -75,7 +71,6 @@ describe('after a run', () => {
         agent,
         session: new SessionController(),
         input,
-        showThinking: false,
         waits: createWaitHistory(),
       }),
     )
@@ -91,7 +86,6 @@ describe('after a run', () => {
         agent,
         session: new SessionController(),
         input,
-        showThinking: false,
         waits: createWaitHistory(),
       }),
     )
