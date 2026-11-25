@@ -59,7 +59,15 @@ export function install(
   opts: InstallOptions,
   repoDir = REPO_DIR,
   path = process.env.PATH ?? '',
+  platform: NodeJS.Platform = process.platform,
 ): string[] {
+  // The launcher is a POSIX shell script. A Windows one (a .cmd) is untested, so it is refused
+  // plainly rather than written and left to fail.
+  if (platform === 'win32') {
+    throw new Error(
+      `egirl install writes a POSIX shell launcher and does not support Windows yet; run egirl as: bun "${join(repoDir, 'src', 'index.ts')}" cli`,
+    )
+  }
   const c = colors()
   const target = join(opts.binDir, 'egirl')
   if (existsSync(target) && !opts.force && !readFileSync(target, 'utf-8').includes(MARKER)) {
