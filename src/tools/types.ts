@@ -39,6 +39,8 @@ export interface ToolCallContext {
    * user typed here themselves; content the agent read cannot put anything in it.
    */
   userText?: string
+  /** The run's abort signal: a tool that waits (process_wait) stops when the run does. */
+  signal?: AbortSignal
 }
 
 export interface Tool {

@@ -11,9 +11,10 @@ import { publish } from './session-events'
 /** Default max tokens per tool result — matches context-window.ts default */
 const MAX_TOOL_RESULT_TOKENS = 8000
 
-function toolContext(context: AgentContext): ToolCallContext {
+function toolContext(context: AgentContext, signal?: AbortSignal): ToolCallContext {
   return {
     sessionId: context.sessionId,
+    ...(signal && { signal }),
     ...(context.runImages?.length && { images: context.runImages }),
     ...(context.runUserText && { userText: context.runUserText }),
   }
@@ -204,7 +205,7 @@ async function executeToolsWithHooks(args: {
       }
     }
 
-    const result = await executor.execute(call, context.workspaceDir, toolContext(context))
+    const result = await executor.execute(call, context.workspaceDir, toolContext(context, signal))
     events?.onAfterToolExec?.(call, result)
 
     results.set(call.id, result)
