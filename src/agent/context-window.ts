@@ -304,14 +304,63 @@ export function clearStaleToolOutputs(
     if (msg.content.startsWith(CLEARED_MARKER_PREFIX)) return msg
     if ((tokenCounts[i] ?? 0) <= CLEAR_MIN_TOKENS) return msg
     clearedCount++
-    const what = isDataUrl(msg.content) ? 'screenshot' : `~${tokenCounts[i]} tokens`
-    return {
-      ...msg,
-      content: `${CLEARED_MARKER_PREFIX} (${what}) to make room — re-run the tool if you need it again.]`,
+    if (isDataUrl(msg.content)) {
+      return { ...msg, content: `${CLEARED_MARKER_PREFIX} (screenshot) to make room.]` }
     }
+    return { ...msg, content: clearedWithPreview(msg.content, tokenCounts[i] ?? 0) }
   })
 
   return { messages: out, clearedCount }
+}
+
+/** Characters of a cleared result kept as its preview, and the share of it they may take. */
+const PREVIEW_MAX_CHARS = 600
+const PREVIEW_MAX_SHARE = 0.25
+const PREVIEW_LINE_CHARS = 160
+
+/**
+ * The marker a cleared result is replaced with: its first and last lines, inside a budget
+ * small enough that clearing still reclaims most of the space.
+ *
+ * A bare "cleared, re-run it" marker sent an agent back to re-run commands whose answer was in
+ * the first lines of the output (an exit status, a count, the error) -- turns spent recovering
+ * what the context had just thrown away. The ends of an output are where that usually is.
+ */
+function clearedWithPreview(content: string, tokens: number): string {
+  const lines = content.split('\n')
+  const budget = Math.min(PREVIEW_MAX_CHARS, Math.floor(content.length * PREVIEW_MAX_SHARE))
+  const clip = (l: string): string =>
+    l.length > PREVIEW_LINE_CHARS ? `${l.slice(0, PREVIEW_LINE_CHARS)}…` : l
+  const head: string[] = []
+  const tail: string[] = []
+  let used = 0
+  // Alternate head and tail so a long first line cannot crowd out the last ones.
+  for (let h = 0, t = lines.length - 1; h <= t; ) {
+    const takeHead = head.length <= tail.length * 2
+    const line = clip((takeHead ? lines[h] : lines[t]) ?? '')
+    if (used + line.length + 1 > budget) break
+    used += line.length + 1
+    if (takeHead) {
+      head.push(line)
+      h++
+    } else {
+      tail.unshift(line)
+      t--
+    }
+  }
+  const hidden = lines.length - head.length - tail.length
+  const size = `~${tokens} tokens, ${lines.length} line${lines.length === 1 ? '' : 's'}`
+  if (head.length + tail.length === 0) {
+    return `${CLEARED_MARKER_PREFIX} (${size}) to make room — re-run the tool if you need it again.]`
+  }
+  const middle = hidden > 0 ? [`… ${hidden} line${hidden === 1 ? '' : 's'} cleared …`] : []
+  return [
+    `${CLEARED_MARKER_PREFIX} (${size}) to make room. Kept its first and last lines:]`,
+    ...head,
+    ...middle,
+    ...tail,
+    '[Re-run the tool only if you need what was cleared.]',
+  ].join('\n')
 }
 
 const CLEARED_RECALL_MARKER = `${RECALL_PREFIX}\n[cleared to make room]`

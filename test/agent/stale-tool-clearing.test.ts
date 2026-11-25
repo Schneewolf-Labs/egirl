@@ -106,3 +106,49 @@ describe('fitToContextWindow with stale clearing', () => {
     ).toBeGreaterThan(0)
   })
 })
+
+describe('cleared result preview', () => {
+  /** Clear the first of two tool results (the second is the protected tail). */
+  function clearFirst(content: string): string {
+    const messages: ChatMessage[] = [
+      { role: 'user', content: 'go' },
+      callMsg(),
+      toolMsg(content),
+      { role: 'assistant', content: 'noted' },
+      callMsg(),
+      toolMsg(BIG),
+    ]
+    const counts = messages.map(estimateMessageTokens)
+    const { messages: out } = clearStaleToolOutputs(messages, counts, 2000)
+    return out[2]?.content as string
+  }
+
+  const build = [
+    'exit status: 1',
+    'FAILED tests/test_bxgen.py::test_roundtrip',
+    ...Array.from({ length: 300 }, (_, i) => `  progress line ${i} ${'.'.repeat(40)}`),
+    '== 3 failed, 41 passed in 12.3s ==',
+  ].join('\n')
+
+  test('keeps the first and last lines, says how much was cleared, and is far smaller', () => {
+    const cleared = clearFirst(build)
+    expect(cleared.startsWith('[Stale tool result cleared')).toBe(true)
+    expect(cleared).toContain('303 lines')
+    expect(cleared).toContain('exit status: 1')
+    expect(cleared).toContain('FAILED tests/test_bxgen.py::test_roundtrip')
+    expect(cleared).toContain('== 3 failed, 41 passed in 12.3s ==')
+    expect(cleared).toMatch(/… \d+ lines cleared …/)
+    expect(cleared.length).toBeLessThan(build.length / 4)
+  })
+
+  test('a single enormous line is clipped, not kept whole', () => {
+    const cleared = clearFirst('x'.repeat(20_000))
+    expect(cleared.length).toBeLessThan(1000)
+    expect(cleared).toContain('…')
+  })
+
+  test('a cleared preview is not cleared again', () => {
+    const once = clearFirst(build)
+    expect(clearFirst(once)).toBe(once)
+  })
+})
