@@ -75,6 +75,7 @@ import {
   screenshotTool,
   writeTool,
 } from './builtin'
+import { createProcessWaitTool } from './builtin/process-wait'
 import { createRunCodeTool, readyLanguages, sandboxUnavailable } from './builtin/run-code'
 import { createSessionSearchTool } from './builtin/session-search'
 import { createSkillReadTool as buildSkillReadTool } from './builtin/skill'
@@ -197,6 +198,7 @@ export function createDefaultToolExecutor(
       pt.processOutputTool,
       pt.processSendInputTool,
       pt.processStopTool,
+      createProcessWaitTool({ registry: processRegistry }),
     ])
   } else if (t.process) missingDep('process', 'no process registry was created')
 
