@@ -9,7 +9,7 @@
 import { describe, expect, test } from 'bun:test'
 import type { AgentLoop } from '../../src/agent'
 import type { ThinkingConfig } from '../../src/providers/types'
-import { handleCommand, isCommand } from '../../src/session/commands'
+import { CONTINUE_PROMPT, handleCommand, isCommand } from '../../src/session/commands'
 import { SessionController } from '../../src/session/controller'
 import { makeVerbosityStore } from '../../src/session/verbosity'
 
@@ -108,6 +108,20 @@ describe('/status', () => {
     expect(idle.message).toBe('🟢 idle · cli:default · context 43% · thinking medium (config)')
     const busy = await handleCommand('/status', { agent: fakeAgent('medium', true) })
     expect(busy.message).toStartWith('⏳ running')
+  })
+})
+
+describe('/continue', () => {
+  test('is a turn, not a reply: it carries on a capped run on any surface', async () => {
+    const r = await handleCommand('/continue', { agent: fakeAgent() })
+    expect(r.handled).toBe(true)
+    expect(r.message).toBeUndefined()
+    expect(r.turn).toBe(CONTINUE_PROMPT)
+  })
+
+  test('is listed in /help', async () => {
+    const r = await handleCommand('/help', { agent: fakeAgent() })
+    expect(r.message).toContain('/continue')
   })
 })
 

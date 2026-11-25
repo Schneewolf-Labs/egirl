@@ -1,7 +1,7 @@
 import * as readline from 'readline'
 import { buildLearnPrompt } from '../agent/learn-prompt'
 import type { Operator } from '../operator/types'
-import { handleCommand } from '../session/commands'
+import { CONTINUE_PROMPT, handleCommand } from '../session/commands'
 import { SessionController } from '../session/controller'
 import { colors, DIM, RESET } from '../ui/theme'
 import { errorMessage } from '../util/errors'
@@ -14,10 +14,17 @@ import {
   handlePromptCommand,
   handleWipeCommand,
 } from './cli-commands'
-import { createCLIEventHandler, printReply, renderQueuedMessage } from './cli-events'
+import { createCLIEventHandler, printReply, renderQueuedMessage, renderTurnCap } from './cli-events'
 import { captureDuringRun } from './cli-live-input'
 import { contextBar, createStatusLine } from './cli-status'
 import type { Channel } from './types'
+
+export interface CLIChannelOptions {
+  showThinking?: boolean
+  skillsDir?: string
+  /** `[conversation] max_turns`: the session's starting turn cap. */
+  maxTurns?: number
+}
 
 export class CLIChannel implements Channel {
   readonly name = 'cli'
@@ -26,12 +33,16 @@ export class CLIChannel implements Channel {
   private running = false
   private showThinking: boolean
   /** Queue, abort handle and mutable settings -- everything that outlives a single turn. */
-  private session = new SessionController()
+  private session: SessionController
   /** Target directory for /learn-authored skills; undefined disables the command. */
   private skillsDir: string | undefined
 
-  constructor(agent: Operator, options?: { showThinking?: boolean; skillsDir?: string }) {
+  constructor(agent: Operator, options?: CLIChannelOptions) {
     this.agent = agent
+    // The configured cap is the starting point; /maxturns changes it for this session only.
+    this.session = new SessionController(
+      options?.maxTurns !== undefined ? { maxTurns: options.maxTurns } : {},
+    )
     this.showThinking = options?.showThinking ?? true
     this.skillsDir = options?.skillsDir
   }
@@ -80,7 +91,8 @@ export class CLIChannel implements Channel {
     }
   }
 
-  private async handleCommand(input: string): Promise<boolean> {
+  /** True: handled. A string: a command that expands into a turn (/continue). */
+  private async handleCommand(input: string): Promise<boolean | string> {
     if (input === '/clear' || input.toLowerCase() === 'clear') {
       console.clear()
       return true
@@ -118,6 +130,7 @@ export class CLIChannel implements Channel {
         this.rl?.close()
         return true
       }
+      if (shared.turn) return shared.turn
       if (shared.message) console.log(`${colors().accent}${shared.message}${RESET}\n`)
       return true
     }
@@ -150,12 +163,13 @@ export class CLIChannel implements Channel {
         return
       }
 
-      if (await this.handleCommand(trimmed)) {
+      const command = await this.handleCommand(trimmed)
+      if (command === true) {
         this.prompt()
         return
       }
 
-      let pending: string | undefined = trimmed
+      let pending: string | undefined = typeof command === 'string' ? command : trimmed
       // /learn rewrites the input and then runs as an ordinary turn -- the agent does the
       // distillation with its own tools, so interrupt/queue/status behave as in any turn.
       if (trimmed === '/learn' || trimmed.startsWith('/learn ')) {
@@ -179,6 +193,11 @@ export class CLIChannel implements Channel {
           onCommand: (text) => {
             handleCommand(text, { agent: this.agent, session: this.session })
               .then((r) => {
+                // A command that is a turn cannot run inside this one: it waits its turn.
+                if (r.turn) {
+                  this.session.enqueue(r.turn)
+                  console.log(renderQueuedMessage(text))
+                }
                 if (r.message) console.log(`\n${c.accent}${r.message}${RESET}`)
               })
               .catch(() => {})
@@ -191,6 +210,7 @@ export class CLIChannel implements Channel {
         const status = createStatusLine()
         status.set('waiting')
 
+        let hitCap = false
         try {
           console.log()
           const { handler, state } = createCLIEventHandler(this.showThinking, status)
@@ -204,6 +224,7 @@ export class CLIChannel implements Channel {
             console.log(`\n${c.warning}stopped.${RESET}\n`)
           } else {
             printReply(state, response.content)
+            hitCap = response.turnLimitReached === true
           }
 
           log.debug('cli', `[${response.provider}]`)
@@ -231,11 +252,20 @@ export class CLIChannel implements Channel {
         // Anything typed during the turn runs now rather than waiting for another return --
         // a queued message that sits unseen is worse than one that was never accepted.
         pending = this.session.drain()
+        // Something typed meanwhile takes precedence over carrying on: it may be the redirect.
+        if (hitCap && !pending) pending = this.afterCap()
         if (pending) console.log(`${c.primary}✦ you${RESET} ${pending}`)
       }
 
       this.prompt()
     })
+  }
+
+  /** A run stopped at its cap: carry on in `auto`, otherwise say how. */
+  private afterCap(): string | undefined {
+    const { maxTurns } = this.session.get()
+    console.log(renderTurnCap(maxTurns, this.session.shouldContinuePastCap()))
+    return this.session.shouldContinuePastCap() ? CONTINUE_PROMPT : undefined
   }
 
   private askApproval(): Promise<boolean> {
@@ -253,9 +283,6 @@ export class CLIChannel implements Channel {
   }
 }
 
-export function createCLIChannel(
-  agent: Operator,
-  options?: { showThinking?: boolean; skillsDir?: string },
-): CLIChannel {
+export function createCLIChannel(agent: Operator, options?: CLIChannelOptions): CLIChannel {
   return new CLIChannel(agent, options)
 }

@@ -71,7 +71,15 @@ export interface CustomCommand {
   skill: string
 }
 
+/**
+ * What `/continue` sends. The capped run ended on a forced summary of what was done and what
+ * remains, so "left off" has something concrete to point at.
+ */
+export const CONTINUE_PROMPT =
+  'Continue where you left off: pick up the unfinished work from your last summary.'
+
 const BUILTIN = new Set([
+  'continue',
   'think',
   'status',
   'context',
@@ -254,6 +262,7 @@ function helpCommand(scope: CommandScope): CommandResult {
     `🟢 /status — busy or idle, context, thinking${mark}`,
     `📊 /context — how full the window is${mark}`,
     `⚙️ /settings — current settings${mark}`,
+    `▶️ /continue — pick up a run that stopped at its turn cap${mark}`,
   ]
   for (const c of customCommands(scope.skills ?? [])) {
     const who = c.permission === 'everyone' ? '' : ` (${c.permission})`
@@ -317,6 +326,9 @@ export async function handleCommand(input: string, scope: CommandScope): Promise
 
     case 'help':
       return helpCommand(scope)
+
+    case 'continue':
+      return { handled: true, turn: CONTINUE_PROMPT }
 
     case 'auto':
       if (!session) return terminalOnly(cmd)
