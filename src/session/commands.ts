@@ -288,6 +288,7 @@ function helpCommand(scope: CommandScope): CommandResult {
       '🔁 /auto — continue past the turn cap without asking',
       '🔢 /maxturns <1-500> — turn cap for a run',
       '💭 /reasoning — show reasoning inline',
+      '📋 /tasks — background tasks: list, details, run, pause, resume',
       '📥 /queue — messages waiting for the next turn',
       '🧹 /clear — drop queued messages',
       '👋 /quit — exit',
