@@ -144,7 +144,8 @@ function getNamedFragment(
 
   const value = collection[name]
   if (!isRecord(value)) {
-    throw new Error(`Config references unknown ${label} "${name}"`)
+    const known = Object.keys(collection).join(', ')
+    throw new Error(`Config references unknown ${label} "${name}" (known: ${known || 'none'})`)
   }
 
   if (!Value.Check(schema, value)) {
