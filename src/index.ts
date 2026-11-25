@@ -6,6 +6,7 @@ import { runClaudeCode } from './commands/claude-code'
 import { runCLI } from './commands/cli'
 import { runDoctor } from './commands/doctor'
 import { runInit } from './commands/init'
+import { install, parseInstallArgs } from './commands/install'
 import { runNew } from './commands/new'
 import { runServe } from './commands/serve'
 import { showStatus } from './commands/status'
@@ -13,41 +14,11 @@ import { runUpdate } from './commands/update'
 import { findConfigFile, loadConfig, type RuntimeConfig } from './config'
 import { loadInstanceEnv } from './config/env-files'
 import { BOLD, colors, DIM, RESET } from './ui/theme'
+import { parseGlobalArgs } from './util/args'
 import { errorMessage } from './util/errors'
 import { log } from './util/logger'
 import { VERSION } from './version'
 import { bootstrapWorkspace } from './workspace/bootstrap'
-
-interface ParsedArgs {
-  command: string
-  commandArgs: string[]
-  instance?: string
-}
-
-function parseGlobalArgs(args: string[]): ParsedArgs {
-  const remaining: string[] = []
-  let instance: string | undefined
-
-  for (let i = 0; i < args.length; i++) {
-    const arg = args[i]
-    if (!arg) continue
-
-    if (arg === '--instance') {
-      const value = args[++i]
-      if (!value) throw new Error('--instance requires a name')
-      instance = value
-      continue
-    }
-
-    remaining.push(arg)
-  }
-
-  return {
-    command: remaining[0] ?? 'cli',
-    commandArgs: remaining.slice(1),
-    ...(instance && { instance }),
-  }
-}
 
 async function main() {
   const parsed = parseGlobalArgs(process.argv.slice(2))
@@ -82,6 +53,17 @@ async function main() {
 
   if (command === 'help' || command === '--help' || command === '-h') {
     showHelp()
+    return
+  }
+
+  // Before loadConfig too: putting egirl on PATH must not depend on a config that loads.
+  if (command === 'install') {
+    try {
+      for (const line of install(parseInstallArgs(commandArgs))) console.log(line)
+    } catch (error) {
+      console.error(`${colors().error}error${RESET} ${errorMessage(error)}`)
+      process.exit(1)
+    }
     return
   }
 
@@ -175,7 +157,8 @@ ${c.primary}Usage${RESET}
   egirl ${DIM}[command] [options]${RESET}
 
 ${c.primary}Commands${RESET}
-  ${c.accent}cli${RESET}            Start interactive CLI ${DIM}(default)${RESET}
+  ${c.accent}cli${RESET} ${DIM}[instance]${RESET}  Start interactive CLI ${DIM}(default; \`egirl cli juno\` = --instance juno)${RESET}
+  ${c.accent}install${RESET}        Put an \`egirl\` command on PATH that runs this checkout from any directory ${DIM}(--bin-dir, --force)${RESET}
   ${c.accent}init${RESET}           Create starter egirl.toml and .env files
   ${c.accent}new${RESET}            Scaffold a new instance: persona files, config block, free API port
   ${c.accent}doctor${RESET}         Check local model, config, and code-agent setup
