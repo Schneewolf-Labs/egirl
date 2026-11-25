@@ -140,9 +140,9 @@ export function createCLIInput(hooks: CLIInputHooks): CLIInput {
     const columns = process.stdout.columns || 80
     let head = asking ? asking.question : prompt
     if (!asking && status) head = `${status} ${prompt}`
-    // A head wider than half the row would leave nowhere to type; trim it rather than wrap,
-    // because a wrapped live line can no longer be erased with one row's clear.
-    head = truncateVisible(head, Math.floor(columns / 2))
+    // A head that fills the row would leave nowhere to type; trim it to leave 24 columns rather
+    // than wrap, because a wrapped live line can no longer be erased with one row's clear.
+    head = truncateVisible(head, Math.max(16, columns - 24))
     const room = Math.max(8, columns - visibleWidth(head) - 1)
     const { shown, back } = fitLine(editor.line, editor.cursor, room)
     const ghost =

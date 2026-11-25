@@ -111,6 +111,24 @@ describe('/status', () => {
   })
 })
 
+describe('/stats', () => {
+  test('toggles the status-line numbers, and takes on/off', async () => {
+    const session = new SessionController()
+    expect(session.get().showStats).toBe(true)
+    await handleCommand('/stats', { agent: fakeAgent(), session })
+    expect(session.get().showStats).toBe(false)
+    await handleCommand('/stats on', { agent: fakeAgent(), session })
+    expect(session.get().showStats).toBe(true)
+    const off = await handleCommand('/stats off', { agent: fakeAgent(), session })
+    expect(off.message).toContain('showStats: true → false')
+  })
+
+  test('is terminal-only', async () => {
+    const r = await handleCommand('/stats', { agent: fakeAgent() })
+    expect(r.message).not.toContain('showStats')
+  })
+})
+
 describe('/continue', () => {
   test('is a turn, not a reply: it carries on a capped run on any surface', async () => {
     const r = await handleCommand('/continue', { agent: fakeAgent() })
