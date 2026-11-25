@@ -88,35 +88,53 @@ function createConversations(config: RuntimeConfig): ConversationStore | undefin
 }
 
 /**
- * Create memory manager with embeddings if configured.
+ * Create the memory manager: hybrid (keyword + vector) search with embeddings configured,
+ * keyword-only without them.
+ *
+ * No embeddings used to mean no memory at all, while memory_search and memory_get were still
+ * offered as stubs that only ever answered "not initialized" -- an operator spent a whole
+ * deployment hand-editing MEMORY.md because of it. The manager's search was built to run on
+ * keyword (FTS) alone, so it does: the tools, recall and daily-log indexing all work, only
+ * semantic matching is missing. An embedding provider that fails to construct degrades the
+ * same way rather than taking memory down with it.
  */
-function createMemory(config: RuntimeConfig): MemoryManager | undefined {
+export function createMemory(config: RuntimeConfig): MemoryManager | undefined {
+  const workspaceDir = config.workspace.path
   const embeddingsConfig = config.local.embeddings
-  if (!embeddingsConfig) {
-    log.info('main', 'No embeddings configured - memory system disabled')
-    return undefined
+  if (embeddingsConfig) {
+    try {
+      const embeddings = createEmbeddingProvider(embeddingsConfig.provider, {
+        endpoint: embeddingsConfig.endpoint,
+        model: embeddingsConfig.model,
+        dimensions: embeddingsConfig.dimensions,
+        multimodal: embeddingsConfig.multimodal,
+        apiKey: embeddingsConfig.apiKey,
+        baseUrl: embeddingsConfig.baseUrl,
+      })
+      const memory = createMemoryManager({
+        workspaceDir,
+        embeddings,
+        embeddingDimensions: embeddingsConfig.dimensions,
+      })
+      log.info(
+        'main',
+        `Memory system initialized: ${embeddingsConfig.provider}/${embeddingsConfig.model} @ ${embeddingsConfig.endpoint}`,
+      )
+      return memory
+    } catch (error) {
+      log.warn(
+        'main',
+        'Embedding provider failed to start; memory falls back to keyword search:',
+        error,
+      )
+    }
   }
 
   try {
-    const embeddings = createEmbeddingProvider(embeddingsConfig.provider, {
-      endpoint: embeddingsConfig.endpoint,
-      model: embeddingsConfig.model,
-      dimensions: embeddingsConfig.dimensions,
-      multimodal: embeddingsConfig.multimodal,
-      apiKey: embeddingsConfig.apiKey,
-      baseUrl: embeddingsConfig.baseUrl,
-    })
-
-    const memory = createMemoryManager({
-      workspaceDir: config.workspace.path,
-      embeddings,
-      embeddingDimensions: embeddingsConfig.dimensions,
-    })
-
-    log.info(
-      'main',
-      `Memory system initialized: ${embeddingsConfig.provider}/${embeddingsConfig.model} @ ${embeddingsConfig.endpoint}`,
-    )
+    const memory = createMemoryManager({ workspaceDir })
+    if (!embeddingsConfig) {
+      log.info('main', 'Memory system initialized with keyword search (no embeddings configured)')
+    }
     return memory
   } catch (error) {
     log.warn('main', 'Failed to initialize memory system:', error)

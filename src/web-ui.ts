@@ -926,7 +926,7 @@ async function searchMem(){
   $('mres').innerHTML='<p style="color:var(--dim)">searching…</p>';
   try{
     const r=await fetch('memory?limit=25&q='+encodeURIComponent(q),{headers:H()});
-    if(r.status===503){$('mres').innerHTML='<p style="color:var(--dim)">Memory is disabled on this instance — no embeddings configured.</p>';return}
+    if(r.status===503){$('mres').innerHTML='<p style="color:var(--dim)">Memory is unavailable on this instance — it failed to start (see the log).</p>';return}
     const d=await r.json();
     if(!d.results||!d.results.length){$('mres').innerHTML='<p style="color:var(--dim)">nothing found</p>';return}
     $('mres').innerHTML=d.results.map(x=>
