@@ -61,6 +61,11 @@ export interface ChatRequest {
    * model stops deliberating, which on a hard question is minutes of apparent silence.
    */
   onThinkingToken?: (token: string) => void
+  /**
+   * If provided, prefill progress as the server reports it (llama.cpp `return_progress`):
+   * the only sign of life during the minutes a large prompt can take before the first token.
+   */
+  onPromptProgress?: (progress: PromptProgress) => void
   /** Extended thinking / reasoning configuration */
   thinking?: ThinkingConfig
   /** Abort signal — cancels the in-flight HTTP request / generation */
@@ -147,4 +152,14 @@ export class ContextSizeError extends Error {
     this.promptTokens = promptTokens
     this.contextSize = contextSize
   }
+}
+
+/** How far the server has got through the prompt. `processed` includes the cached tokens. */
+export interface PromptProgress {
+  processed: number
+  total: number
+  /** Prompt tokens served from the server's prefix cache, when the server says. */
+  cached?: number
+  /** Time spent on the prompt so far, when the server says. */
+  elapsedMs?: number
 }
