@@ -169,6 +169,7 @@ export async function runCLI(config: RuntimeConfig, args: string[]): Promise<voi
     showThinking: config.thinking.showThinking,
     skillsDir: config.skills.dirs[0],
     maxTurns: config.conversation.maxTurns,
+    ...(taskStore && { taskStore }),
   })
 
   const tasks = createBackgroundTasks(rt, {
@@ -176,6 +177,7 @@ export async function runCLI(config: RuntimeConfig, args: string[]): Promise<voi
     channel: 'cli',
     channelTarget: 'stdout',
   })
+  if (tasks) cli.useTaskRunner(tasks.taskRunner)
 
   onShutdown(async () => {
     tasks?.discovery?.stop()

@@ -3,6 +3,7 @@ import { windowFill } from '../agent/status'
 import type { Operator } from '../operator/types'
 import { CONTINUE_PROMPT, handleCommand, isCommand } from '../session/commands'
 import { SessionController } from '../session/controller'
+import type { TaskRunner, TaskStore } from '../tasks'
 import { colors, DIM, RESET } from '../ui/theme'
 import { errorMessage } from '../util/errors'
 import { log } from '../util/logger'
@@ -16,6 +17,7 @@ import {
 } from './cli-events'
 import { type CLIInput, createCLIInput } from './cli-input'
 import { contextBar, createStatusLine } from './cli-status'
+import { tasksCommand } from './cli-tasks'
 import type { Channel } from './types'
 
 export interface CLIChannelOptions {
@@ -23,6 +25,8 @@ export interface CLIChannelOptions {
   skillsDir?: string
   /** `[conversation] max_turns`: the session's starting turn cap. */
   maxTurns?: number
+  /** The tasks.db this process has open, for /tasks. Absent when tasks are off. */
+  taskStore?: TaskStore
 }
 
 const EXIT_WORDS = new Set(['/exit', '/quit', 'exit', 'quit'])
@@ -40,6 +44,9 @@ export class CLIChannel implements Channel {
   private busy = false
   /** Piped input only: lines read ahead of the turn, each run as its own turn in order. */
   private backlog: string[] = []
+  private taskStore: TaskStore | undefined
+  /** Set once the background runner is up (it is built after the channel it reports to). */
+  private taskRunner: TaskRunner | undefined
 
   constructor(agent: Operator, options?: CLIChannelOptions) {
     this.agent = agent
@@ -49,6 +56,22 @@ export class CLIChannel implements Channel {
     )
     this.showThinking = options?.showThinking ?? true
     this.skillsDir = options?.skillsDir
+    this.taskStore = options?.taskStore
+  }
+
+  useTaskRunner(runner: TaskRunner): void {
+    this.taskRunner = runner
+  }
+
+  /** `/tasks …`, answered the same at the prompt and mid-turn. Undefined: not that command. */
+  private tasks(input: string): string | undefined {
+    if (input !== '/tasks' && !input.startsWith('/tasks ')) return undefined
+    if (!this.taskStore) return `${DIM}tasks are off in this process${RESET}`
+    return tasksCommand(input.slice('/tasks'.length), {
+      store: this.taskStore,
+      ...(this.taskRunner && { runner: this.taskRunner }),
+      notify: (text) => (this.input ? this.input.notice(text) : console.log(text)),
+    })
   }
 
   /** Outbound: print a background task result to stdout */
@@ -63,7 +86,7 @@ export class CLIChannel implements Channel {
       `\n${c.secondary}✦ egirl${RESET} ${DIM}— enter sends · esc interrupts · typing mid-turn queues · /exit quits${RESET}`,
     )
     console.log(
-      `${DIM}  /help /think /plan /learn /context /compact /wipe /prompt /debug /auto /maxturns /continue /reasoning /queue /settings${RESET}\n`,
+      `${DIM}  /help /think /plan /learn /context /compact /wipe /prompt /debug /tasks /auto /maxturns /continue /reasoning /queue /settings${RESET}\n`,
     )
     this.input = createCLIInput({
       onLine: (line) => this.onLine(line),
@@ -112,6 +135,11 @@ export class CLIChannel implements Channel {
   /** A slash command typed mid-turn is answered now; one that is a turn waits its turn. */
   private commandMidTurn(text: string): void {
     const c = colors()
+    const tasks = this.tasks(text)
+    if (tasks !== undefined) {
+      this.input?.notice(tasks)
+      return
+    }
     handleCommand(text, { agent: this.agent, session: this.session })
       .then((r) => {
         if (r.turn) {
@@ -133,6 +161,11 @@ export class CLIChannel implements Channel {
 
   /** True: handled. A string: a command that expands into a turn (/continue). */
   private async handleCommand(input: string): Promise<boolean | string> {
+    const tasks = this.tasks(input)
+    if (tasks !== undefined) {
+      console.log(`${tasks}\n`)
+      return true
+    }
     if (await handleCLICommand(input, this.commandCtx())) return true
     // /learn is a turn, not a command: the caller rewrites it and runs it.
     if (input === '/learn' || input.startsWith('/learn ')) return false
