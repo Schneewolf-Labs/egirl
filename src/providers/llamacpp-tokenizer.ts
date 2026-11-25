@@ -4,6 +4,13 @@ import type { Tokenizer } from './types'
 const TOKENIZE_TIMEOUT_MS = 5_000
 const MAX_CACHED_CONTENT_LENGTH = 100_000
 const MAX_CACHE_ENTRIES = 2048
+/** After a network failure or timeout, estimate for this long before asking the server again. */
+const RETRY_AFTER_MS = 60_000
+/**
+ * Answers that mean /tokenize is not coming: absent (a hosted OpenAI-compatible API), not
+ * allowed, or refused (a keyed server). Asking again would get the same answer.
+ */
+const PERMANENT_STATUSES = new Set([401, 403, 404, 405, 501])
 
 /**
  * Tokenizer backed by llama.cpp's /tokenize endpoint.
@@ -16,12 +23,27 @@ export class LlamaCppTokenizer implements Tokenizer {
   private apiKey: string | undefined
   private cache = new Map<string, number>()
   private warnedFallback = false
+  /**
+   * Set once the server has said it has no /tokenize. Before this, a hosted API was asked for
+   * every count and failed every time: one round trip per message, in sequence, so a context
+   * readout after each turn (and /status, and fitting each request) took as long as the
+   * conversation was long, with nothing on screen.
+   */
+  private unsupported: boolean
+  private retryAt = 0
+  private now: () => number
 
   /** A getter follows an endpoint that moves at runtime (a re-resolved Witchgrid profile). */
-  constructor(endpoint: string | (() => string), apiKey?: string) {
+  constructor(
+    endpoint: string | (() => string),
+    apiKey?: string,
+    opts: { estimateOnly?: boolean; now?: () => number } = {},
+  ) {
     const read = typeof endpoint === 'string' ? () => endpoint : endpoint
     this.endpoint = () => read().replace(/\/$/, '')
     this.apiKey = apiKey
+    this.unsupported = opts.estimateOnly ?? false
+    this.now = opts.now ?? Date.now
   }
 
   /**
@@ -41,6 +63,7 @@ export class LlamaCppTokenizer implements Tokenizer {
   async countTokens(text: string): Promise<number> {
     const cached = this.cache.get(text)
     if (cached !== undefined) return cached
+    if (this.unsupported || this.now() < this.retryAt) return Math.ceil(text.length / 3.5)
 
     try {
       const response = await fetch(`${this.endpoint()}/tokenize`, {
@@ -54,6 +77,8 @@ export class LlamaCppTokenizer implements Tokenizer {
       })
 
       if (!response.ok) {
+        if (PERMANENT_STATUSES.has(response.status)) this.unsupported = true
+        else this.retryAt = this.now() + RETRY_AFTER_MS
         return this.fallback(`tokenize endpoint returned ${response.status}`, text)
       }
 
@@ -71,6 +96,7 @@ export class LlamaCppTokenizer implements Tokenizer {
 
       return count
     } catch (error) {
+      this.retryAt = this.now() + RETRY_AFTER_MS
       return this.fallback(`tokenize request failed (${error})`, text)
     }
   }
@@ -79,6 +105,7 @@ export class LlamaCppTokenizer implements Tokenizer {
 export function createLlamaCppTokenizer(
   endpoint: string | (() => string),
   apiKey?: string,
+  opts: { estimateOnly?: boolean } = {},
 ): Tokenizer {
-  return new LlamaCppTokenizer(endpoint, apiKey)
+  return new LlamaCppTokenizer(endpoint, apiKey, opts)
 }
