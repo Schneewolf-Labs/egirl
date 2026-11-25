@@ -57,6 +57,17 @@ describe('createStatusLine', () => {
   })
 })
 
+describe('status line with a sink', () => {
+  test('draws into the sink instead of stderr, and clears it when stopped', () => {
+    const drawn: string[] = []
+    const status = createStatusLine({ sink: (t) => drawn.push(t) })
+    status.set('compacting')
+    status.stop()
+    expect(strip(drawn[0] ?? '')).toContain('compacting earlier conversation')
+    expect(drawn.at(-1)).toBe('')
+  })
+})
+
 describe('contextBar', () => {
   test('reports the percentage', () => {
     expect(strip(contextBar(0.42, 42000, 100000))).toContain('42%')

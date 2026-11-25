@@ -111,3 +111,27 @@ export function handleWipeCommand(ctx: CommandContext): void {
   console.clear()
   console.log(`${c.muted}Session wiped.${RESET}\n`)
 }
+
+/** The terminal-only commands. True when `input` was one of them and has been answered. */
+export async function handleCLICommand(input: string, ctx: CommandContext): Promise<boolean> {
+  if (input === '/clear' || input.toLowerCase() === 'clear') {
+    console.clear()
+    return true
+  }
+  if (input === '/plan' || input.startsWith('/plan ')) {
+    const message = input.slice(5).trim()
+    if (!message) console.log(`${DIM}Usage: /plan <your request>${RESET}\n`)
+    else await handlePlanCommand(message, ctx)
+    return true
+  }
+  const simple: Record<string, () => void | Promise<void>> = {
+    '/compact': () => handleCompactCommand(ctx),
+    '/wipe': () => handleWipeCommand(ctx),
+    '/prompt': () => handlePromptCommand(ctx),
+    '/debug': () => handleDebugCommand(ctx),
+  }
+  const run = simple[input]
+  if (!run) return false
+  await run()
+  return true
+}

@@ -42,10 +42,15 @@ export interface StatusLine {
  * stderr rather than stdout so that `egirl cli -m … | jq` still gets clean output: a spinner
  * interleaved into a piped stream is worse than no spinner.
  */
-export function createStatusLine(opts: { enabled?: boolean } = {}): StatusLine {
+export function createStatusLine(
+  opts: { enabled?: boolean; sink?: (text: string) => void } = {},
+): StatusLine {
   const stream = process.stderr
-  // Nothing to animate when output is redirected, and control codes in a log file are noise.
-  const enabled = opts.enabled ?? Boolean(stream.isTTY)
+  // With a sink the text goes into the CLI's live input line, which owns that row; otherwise
+  // the line is drawn on stderr itself. Nothing to animate when output is redirected, and
+  // control codes in a log file are noise.
+  const { sink } = opts
+  const enabled = opts.enabled ?? (sink !== undefined || Boolean(stream.isTTY))
 
   let phase: Phase = 'idle'
   let detail = ''
@@ -56,7 +61,8 @@ export function createStatusLine(opts: { enabled?: boolean } = {}): StatusLine {
 
   const erase = (): void => {
     if (!enabled || !painted) return
-    stream.write('\r\x1b[2K')
+    if (sink) sink('')
+    else stream.write('\r\x1b[2K')
     painted = false
   }
 
@@ -68,9 +74,9 @@ export function createStatusLine(opts: { enabled?: boolean } = {}): StatusLine {
     // is visual noise, and the number only means anything once the wait is long enough to notice.
     const elapsed = secs >= 3 ? ` ${DIM}${secs}s${RESET}` : ''
     const tail = detail ? `${DIM} ${detail}${RESET}` : ''
-    stream.write(
-      `\r\x1b[2K${c.accent}${FRAMES[frame % FRAMES.length]}${RESET} ${DIM}${LABELS[phase]}${RESET}${tail}${elapsed}`,
-    )
+    const text = `${c.accent}${FRAMES[frame % FRAMES.length]}${RESET} ${DIM}${LABELS[phase]}${RESET}${tail}${elapsed}`
+    if (sink) sink(text)
+    else stream.write(`\r\x1b[2K${text}`)
     painted = true
   }
 

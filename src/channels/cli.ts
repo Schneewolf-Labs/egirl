@@ -1,20 +1,12 @@
-import * as readline from 'readline'
 import { buildLearnPrompt } from '../agent/learn-prompt'
 import { windowFill } from '../agent/status'
 import type { Operator } from '../operator/types'
-import { CONTINUE_PROMPT, handleCommand } from '../session/commands'
+import { CONTINUE_PROMPT, handleCommand, isCommand } from '../session/commands'
 import { SessionController } from '../session/controller'
 import { colors, DIM, RESET } from '../ui/theme'
 import { errorMessage } from '../util/errors'
 import { log } from '../util/logger'
-import {
-  type CommandContext,
-  handleCompactCommand,
-  handleDebugCommand,
-  handlePlanCommand,
-  handlePromptCommand,
-  handleWipeCommand,
-} from './cli-commands'
+import { type CommandContext, handleCLICommand } from './cli-commands'
 import {
   createCLIEventHandler,
   printReply,
@@ -22,7 +14,7 @@ import {
   renderQueuedMessage,
   renderTurnCap,
 } from './cli-events'
-import { captureDuringRun } from './cli-live-input'
+import { type CLIInput, createCLIInput } from './cli-input'
 import { contextBar, createStatusLine } from './cli-status'
 import type { Channel } from './types'
 
@@ -33,16 +25,21 @@ export interface CLIChannelOptions {
   maxTurns?: number
 }
 
+const EXIT_WORDS = new Set(['/exit', '/quit', 'exit', 'quit'])
+
 export class CLIChannel implements Channel {
   readonly name = 'cli'
-  private rl: readline.Interface | null = null
+  private input: CLIInput | undefined
   private agent: Operator
-  private running = false
   private showThinking: boolean
   /** Queue, abort handle and mutable settings -- everything that outlives a single turn. */
   private session: SessionController
   /** Target directory for /learn-authored skills; undefined disables the command. */
   private skillsDir: string | undefined
+  /** A command or turn is in progress; lines typed now are queued or answered alongside. */
+  private busy = false
+  /** Piped input only: lines read ahead of the turn, each run as its own turn in order. */
+  private backlog: string[] = []
 
   constructor(agent: Operator, options?: CLIChannelOptions) {
     this.agent = agent
@@ -61,33 +58,69 @@ export class CLIChannel implements Channel {
   }
 
   async start(): Promise<void> {
-    this.rl = readline.createInterface({ input: process.stdin, output: process.stdout })
-    this.running = true
-
-    // stdin can end without anyone calling stop() — a piped command, a redirected file, or
-    // Ctrl-D. Without this the reply loop calls question() again on a closed interface and
-    // throws ERR_USE_AFTER_CLOSE, after the answer has already been printed. It makes the CLI
-    // unusable for scripting, which is exactly how you would drive it from an eval harness.
-    this.rl.on('close', () => {
-      this.running = false
-      this.rl = null
-    })
-
     const c = colors()
     console.log(
       `\n${c.secondary}✦ egirl${RESET} ${DIM}— enter sends · esc interrupts · typing mid-turn queues · /exit quits${RESET}`,
     )
     console.log(
-      `${DIM}  /help /think /plan /learn /context /compact /wipe /prompt /debug /auto /maxturns /reasoning /queue /settings${RESET}\n`,
+      `${DIM}  /help /think /plan /learn /context /compact /wipe /prompt /debug /auto /maxturns /continue /reasoning /queue /settings${RESET}\n`,
     )
-
-    this.prompt()
+    this.input = createCLIInput({
+      onLine: (line) => this.onLine(line),
+      onEscape: () => {
+        if (this.session.interrupt()) this.input?.notice(`${c.warning}interrupting…${RESET}`)
+      },
+      // stdin can end without anyone calling stop() — a piped command, a redirected file, or
+      // Ctrl-D. Whatever was already read still runs; nothing new is asked for.
+      onClose: () => {
+        this.input = undefined
+      },
+    })
+    this.idle()
   }
 
   async stop(): Promise<void> {
-    this.running = false
-    this.rl?.close()
-    this.rl = null
+    this.input?.close()
+    this.input = undefined
+  }
+
+  private idle(): void {
+    this.input?.setPrompt(`${colors().primary}✦ you${RESET} `)
+  }
+
+  private onLine(line: string): void {
+    const text = line.trim()
+    if (!text) return
+    if (!this.busy) {
+      // The live line is cleared on enter; this leaves what was sent in the scrollback.
+      if (this.input?.isInteractive) console.log(`${colors().primary}✦ you${RESET} ${text}`)
+      void this.work(text)
+      return
+    }
+    if (!this.input?.isInteractive) {
+      this.backlog.push(text)
+      return
+    }
+    if (isCommand(text) && !EXIT_WORDS.has(text)) {
+      this.commandMidTurn(text)
+      return
+    }
+    this.session.enqueue(text)
+    this.input.notice(renderQueuedMessage(text))
+  }
+
+  /** A slash command typed mid-turn is answered now; one that is a turn waits its turn. */
+  private commandMidTurn(text: string): void {
+    const c = colors()
+    handleCommand(text, { agent: this.agent, session: this.session })
+      .then((r) => {
+        if (r.turn) {
+          this.session.enqueue(r.turn)
+          this.input?.notice(renderQueuedMessage(text))
+        }
+        if (r.message) this.input?.notice(`${c.accent}${r.message}${RESET}`)
+      })
+      .catch((error) => log.warn('cli', `command failed: ${errorMessage(error)}`))
   }
 
   private commandCtx(): CommandContext {
@@ -100,176 +133,134 @@ export class CLIChannel implements Channel {
 
   /** True: handled. A string: a command that expands into a turn (/continue). */
   private async handleCommand(input: string): Promise<boolean | string> {
-    if (input === '/clear' || input.toLowerCase() === 'clear') {
-      console.clear()
-      return true
-    }
-    if (input.startsWith('/plan')) {
-      const message = input.slice(5).trim()
-      if (!message) {
-        console.log(`${DIM}Usage: /plan <your request>${RESET}\n`)
-      } else {
-        await handlePlanCommand(message, this.commandCtx())
-      }
-      return true
-    }
-    if (input === '/compact') {
-      await handleCompactCommand(this.commandCtx())
-      return true
-    }
-    if (input === '/wipe') {
-      handleWipeCommand(this.commandCtx())
-      return true
-    }
-    if (input === '/prompt') {
-      handlePromptCommand(this.commandCtx())
-      return true
-    }
-    if (input === '/debug') {
-      handleDebugCommand(this.commandCtx())
-      return true
-    }
-    // /learn is a turn, not a command: the prompt loop rewrites it and runs it.
+    if (await handleCLICommand(input, this.commandCtx())) return true
+    // /learn is a turn, not a command: the caller rewrites it and runs it.
     if (input === '/learn' || input.startsWith('/learn ')) return false
     const shared = await handleCommand(input, { agent: this.agent, session: this.session })
-    if (shared.handled) {
-      if (shared.quit) {
-        this.rl?.close()
-        return true
-      }
-      if (shared.turn) return shared.turn
-      if (shared.message) console.log(`${colors().accent}${shared.message}${RESET}\n`)
-      return true
-    }
-    return false
+    if (!shared.handled) return false
+    if (shared.quit) await this.quit()
+    if (shared.turn) return shared.turn
+    if (shared.message) console.log(`${colors().accent}${shared.message}${RESET}\n`)
+    return true
   }
 
-  private prompt(): void {
-    if (!this.running || !this.rl) return
+  private async quit(): Promise<never> {
+    console.log('Goodbye!')
+    await this.stop()
+    process.exit(0)
+  }
 
-    const c = colors()
-    this.rl.question(`${c.primary}✦ you${RESET} `, async (input) => {
-      if (!this.running) return
-
-      const trimmed = input.trim()
-
-      if (
-        trimmed === '/exit' ||
-        trimmed === '/quit' ||
-        trimmed.toLowerCase() === 'exit' ||
-        trimmed.toLowerCase() === 'quit'
-      ) {
-        console.log('Goodbye!')
-        await this.stop()
-        process.exit(0)
-        return
-      }
-
-      if (!trimmed) {
-        this.prompt()
-        return
-      }
-
-      const command = await this.handleCommand(trimmed)
-      if (command === true) {
-        this.prompt()
-        return
-      }
-
-      let pending: string | undefined = typeof command === 'string' ? command : trimmed
-      // /learn rewrites the input and then runs as an ordinary turn -- the agent does the
-      // distillation with its own tools, so interrupt/queue/status behave as in any turn.
-      if (trimmed === '/learn' || trimmed.startsWith('/learn ')) {
-        if (!this.skillsDir) {
-          console.log(
-            `${DIM}No skills directory configured — add [skills] dirs to egirl.toml.${RESET}\n`,
-          )
-          this.prompt()
-          return
-        }
-        pending = buildLearnPrompt(trimmed.slice('/learn'.length), this.skillsDir)
-      }
-      while (pending !== undefined) {
-        const signal = this.session.begin()
-        // Escape aborts, and anything typed lands in the queue rather than in a buffer nobody
-        // is reading. Torn down in `finally` so a thrown error cannot leave the terminal in raw
-        // mode -- which makes it unusable until the window is closed.
-        const keys = captureDuringRun(this.session, {
-          onInterrupt: () => console.log(`\n${c.warning}interrupting…${RESET}`),
-          onQueued: (text) => console.log(renderQueuedMessage(text)),
-          onCommand: (text) => {
-            handleCommand(text, { agent: this.agent, session: this.session })
-              .then((r) => {
-                // A command that is a turn cannot run inside this one: it waits its turn.
-                if (r.turn) {
-                  this.session.enqueue(r.turn)
-                  console.log(renderQueuedMessage(text))
-                }
-                if (r.message) console.log(`\n${c.accent}${r.message}${RESET}`)
-              })
-              .catch(() => {})
-          },
-        })
-
-        // 'waiting' rather than 'thinking': nothing has come back yet, so this is prefill,
-        // which on a large context is minutes of genuine silence before the model even starts
-        // reasoning. Calling that "thinking" would be a guess presented as fact.
-        const status = createStatusLine()
-        status.set('waiting')
-
-        let hitCap = false
-        try {
-          console.log()
-          const { handler, state } = createCLIEventHandler(this.showThinking, status)
-          const response = await this.agent.run(pending, {
-            events: handler,
-            maxTurns: this.session.get().maxTurns,
-            signal,
-          })
-
-          if (this.session.wasInterrupted) {
-            console.log(`\n${c.warning}stopped.${RESET}\n`)
-          } else {
-            printReply(state, response.content)
-            hitCap = response.turnLimitReached === true
-          }
-
-          log.debug('cli', `[${response.provider}]`)
-        } catch (error) {
-          const message = errorMessage(error)
-          console.error(`\n${c.error}Error:${RESET} ${message}\n`)
-        } finally {
-          status.stop()
-          keys.stop()
-          this.session.end()
-        }
-
-        // Printed every turn rather than on demand, because the moment context pressure
-        // matters -- the turn before compaction discards the middle of the conversation -- is
-        // exactly the moment nobody thinks to type /context.
-        try {
-          const ctx = await this.agent.contextStatus()
-          const fill = windowFill(ctx)
-          const history = fill.isMeasured ? ctx.totalUsed : undefined
-          console.log(
-            `${DIM}context${RESET} ${contextBar(fill.fraction, fill.used, ctx.contextLength, history)}\n`,
-          )
-        } catch {
-          // A status readout must never break a turn that already succeeded.
-        }
-
-        // Anything typed during the turn runs now rather than waiting for another return --
-        // a queued message that sits unseen is worse than one that was never accepted.
+  /** Run what was typed at the prompt -- a command, a turn, or both -- then whatever queued. */
+  private async work(text: string): Promise<void> {
+    this.busy = true
+    this.input?.setPrompt(`${colors().secondary}♡${RESET} `)
+    try {
+      if (EXIT_WORDS.has(text.toLowerCase())) await this.quit()
+      let pending = await this.toTurn(text)
+      // A command can take a while (/plan, /compact); anything typed meanwhile goes next.
+      if (pending === undefined) {
         const queued = this.session.peek().length
         pending = this.session.drain()
         if (pending) console.log(renderDrained(pending, queued))
-        // Something typed meanwhile takes precedence over carrying on: it may be the redirect.
-        // The cap notice itself says when /auto is continuing, so no echo follows it.
-        else if (hitCap) pending = this.afterCap()
+      }
+      if (pending !== undefined) await this.runTurns(pending)
+    } catch (error) {
+      console.error(`\n${colors().error}Error:${RESET} ${errorMessage(error)}\n`)
+    } finally {
+      this.busy = false
+      this.idle()
+    }
+    const next = this.backlog.shift()
+    if (next !== undefined) void this.work(next)
+  }
+
+  /** What `text` sends to the model, or undefined when it was a command that answered itself. */
+  private async toTurn(text: string): Promise<string | undefined> {
+    const command = await this.handleCommand(text)
+    if (command === true) return undefined
+    if (typeof command === 'string') return command
+    // /learn rewrites the input and then runs as an ordinary turn -- the agent does the
+    // distillation with its own tools, so interrupt/queue/status behave as in any turn.
+    if (text === '/learn' || text.startsWith('/learn ')) {
+      if (!this.skillsDir) {
+        console.log(
+          `${DIM}No skills directory configured — add [skills] dirs to egirl.toml.${RESET}\n`,
+        )
+        return undefined
+      }
+      return buildLearnPrompt(text.slice('/learn'.length), this.skillsDir)
+    }
+    return text
+  }
+
+  private async runTurns(first: string): Promise<void> {
+    const c = colors()
+    let pending: string | undefined = first
+    while (pending !== undefined) {
+      const signal = this.session.begin()
+      // 'waiting' rather than 'thinking': nothing has come back yet, so this is prefill,
+      // which on a large context is minutes of genuine silence before the model even starts
+      // reasoning. Calling that "thinking" would be a guess presented as fact.
+      const input = this.input
+      const status = createStatusLine(
+        input?.isInteractive ? { sink: (t) => input.setStatus(t) } : {},
+      )
+      status.set('waiting')
+
+      let hitCap = false
+      try {
+        console.log()
+        const { handler, state } = createCLIEventHandler(this.showThinking, status)
+        const response = await this.agent.run(pending, {
+          events: handler,
+          maxTurns: this.session.get().maxTurns,
+          signal,
+        })
+
+        if (this.session.wasInterrupted) {
+          console.log(`\n${c.warning}stopped.${RESET}\n`)
+        } else {
+          printReply(state, response.content)
+          hitCap = response.turnLimitReached === true
+        }
+
+        log.debug('cli', `[${response.provider}]`)
+      } catch (error) {
+        console.error(`\n${c.error}Error:${RESET} ${errorMessage(error)}\n`)
+      } finally {
+        status.stop()
+        this.session.end()
       }
 
-      this.prompt()
-    })
+      await this.printContext()
+
+      // Anything typed during the turn runs now rather than waiting for another return --
+      // a queued message that sits unseen is worse than one that was never accepted.
+      const queued = this.session.peek().length
+      pending = this.session.drain()
+      if (pending) console.log(renderDrained(pending, queued))
+      // Something typed meanwhile takes precedence over carrying on: it may be the redirect.
+      // The cap notice itself says when /auto is continuing, so no echo follows it.
+      else if (hitCap) pending = this.afterCap()
+    }
+  }
+
+  /**
+   * Printed every turn rather than on demand, because the moment context pressure matters --
+   * the turn before compaction discards the middle of the conversation -- is exactly the moment
+   * nobody thinks to type /context.
+   */
+  private async printContext(): Promise<void> {
+    try {
+      const ctx = await this.agent.contextStatus()
+      const fill = windowFill(ctx)
+      const history = fill.isMeasured ? ctx.totalUsed : undefined
+      console.log(
+        `${DIM}context${RESET} ${contextBar(fill.fraction, fill.used, ctx.contextLength, history)}\n`,
+      )
+    } catch {
+      // A status readout must never break a turn that already succeeded.
+    }
   }
 
   /** A run stopped at its cap: carry on in `auto`, otherwise say how. */
@@ -279,18 +270,14 @@ export class CLIChannel implements Channel {
     return this.session.shouldContinuePastCap() ? CONTINUE_PROMPT : undefined
   }
 
-  private askApproval(): Promise<boolean> {
-    return new Promise((resolve) => {
-      if (!this.rl) {
-        resolve(false)
-        return
-      }
-      const c = colors()
-      this.rl.question(`${c.warning}Execute this plan?${RESET} ${DIM}(y/n)${RESET} `, (answer) => {
-        const lower = answer.trim().toLowerCase()
-        resolve(lower === 'y' || lower === 'yes')
-      })
-    })
+  private async askApproval(): Promise<boolean> {
+    if (!this.input) return false
+    const c = colors()
+    const answer = await this.input.ask(
+      `${c.warning}Execute this plan?${RESET} ${DIM}(y/n)${RESET} `,
+    )
+    const lower = answer.trim().toLowerCase()
+    return lower === 'y' || lower === 'yes'
   }
 }
 
