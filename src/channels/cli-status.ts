@@ -118,7 +118,12 @@ export function createStatusLine(opts: { enabled?: boolean } = {}): StatusLine {
  * before a compaction throws away the middle of the conversation -- is precisely the moment
  * nobody thinks to type `/context`.
  */
-export function contextBar(utilization: number, used: number, budget: number): string {
+export function contextBar(
+  utilization: number,
+  used: number,
+  budget: number,
+  history?: number,
+): string {
   const c = colors()
   const pct = Math.round(utilization * 100)
   const width = 12
@@ -129,8 +134,19 @@ export function contextBar(utilization: number, used: number, budget: number): s
 
   return (
     `${DIM}[${RESET}${tone}${'█'.repeat(filled)}${RESET}${DIM}${'░'.repeat(width - filled)}]${RESET} ` +
-    `${tone}${pct}%${RESET} ${DIM}${fmt(used)}/${fmt(budget)}${RESET}`
+    `${tone}${pct}%${RESET} ${DIM}${fmt(used)}/${fmt(budget)}${RESET}` +
+    historyNote(used, history)
   )
+}
+
+/**
+ * The stored history, when it is meaningfully bigger than what the model was sent. Stale tool
+ * output stays in history and is cleared only from the sent copy, so without this the two
+ * numbers (this bar and the budget warning) looked like they contradicted each other.
+ */
+function historyNote(used: number, history: number | undefined): string {
+  if (history === undefined || history <= used * 1.1) return ''
+  return ` ${DIM}· history ${fmt(history)}, stale output trimmed when sent${RESET}`
 }
 
 function fmt(n: number): string {

@@ -133,6 +133,21 @@ describe('/context and /settings', () => {
     expect(r.message).toContain('compacted')
   })
 
+  test('/context reports the prompt the model last saw, not the stored history', async () => {
+    const base = fakeAgent()
+    const status = await base.contextStatus()
+    const agent = {
+      ...base,
+      contextStatus: async () => ({ ...status, totalUsed: 45000, lastPromptTokens: 29800 }),
+    } as unknown as AgentLoop
+    const r = await handleCommand('/context', { agent })
+    expect(r.message).toContain('📊 context 91% ▓▓▓▓▓▓▓▓▓░ 29,800 / 32,768')
+    expect(r.message).toContain('stored history ~45,000t')
+    expect(r.message).toContain('available ~2,968t')
+    const s = await handleCommand('/status', { agent })
+    expect(s.message).toContain('context 91%')
+  })
+
   test('/settings shows only what the surface has', async () => {
     const agent = fakeAgent()
     expect((await handleCommand('/settings', { agent })).message).toBe(

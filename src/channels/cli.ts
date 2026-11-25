@@ -1,5 +1,6 @@
 import * as readline from 'readline'
 import { buildLearnPrompt } from '../agent/learn-prompt'
+import { windowFill } from '../agent/status'
 import type { Operator } from '../operator/types'
 import { CONTINUE_PROMPT, handleCommand } from '../session/commands'
 import { SessionController } from '../session/controller'
@@ -242,8 +243,10 @@ export class CLIChannel implements Channel {
         // exactly the moment nobody thinks to type /context.
         try {
           const ctx = await this.agent.contextStatus()
+          const fill = windowFill(ctx)
+          const history = fill.isMeasured ? ctx.totalUsed : undefined
           console.log(
-            `${DIM}context${RESET} ${contextBar(ctx.utilization, ctx.totalUsed, ctx.contextLength)}\n`,
+            `${DIM}context${RESET} ${contextBar(fill.fraction, fill.used, ctx.contextLength, history)}\n`,
           )
         } catch {
           // A status readout must never break a turn that already succeeded.
