@@ -84,7 +84,7 @@ import type { ProcessRegistry } from './process-registry'
 import type { Tool, ToolResult } from './types'
 
 const MEMORY_NOT_INITIALIZED =
-  'Memory system not initialized. Start egirl with embeddings configured.'
+  'Memory system failed to start on this instance (see its startup log); use working_memory or MEMORY.md instead.'
 
 function memoryStub(name: string, description: string, requiredParam: string): Tool {
   return {

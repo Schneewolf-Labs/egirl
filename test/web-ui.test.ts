@@ -168,9 +168,9 @@ describe('console panels', () => {
     expect(html()).toContain('esc(x.value)')
   })
 
-  test('explains a disabled memory store rather than showing an error', () => {
+  test('explains an unavailable memory store rather than showing an error', () => {
     expect(html()).toContain('r.status===503')
-    expect(html()).toContain('Memory is disabled')
+    expect(html()).toContain('Memory is unavailable')
   })
 
   describe('polling', () => {

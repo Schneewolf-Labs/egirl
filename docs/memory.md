@@ -2,6 +2,8 @@
 
 egirl has a hybrid memory system that combines keyword search (SQLite FTS5) with semantic search (vector embeddings). This enables both precise lookups and fuzzy recall.
 
+Without `[local.embeddings]` configured, memory runs on keyword search alone: the `memory_*` tools, recall and daily-log indexing all work, and only semantic matching is missing. Auto-extraction runs as usual; set `[memory] auto_extract = false` to keep that instance from making the extra aux-model call after turns.
+
 ## Overview
 
 ```
