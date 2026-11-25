@@ -168,6 +168,7 @@ export async function runCLI(config: RuntimeConfig, args: string[]): Promise<voi
   const cli = createCLIChannel(agent, {
     showThinking: config.thinking.showThinking,
     skillsDir: config.skills.dirs[0],
+    maxTurns: config.conversation.maxTurns,
   })
 
   const tasks = createBackgroundTasks(rt, {
