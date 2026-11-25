@@ -111,6 +111,17 @@ describe('/status', () => {
   })
 })
 
+describe('/markdown', () => {
+  test('toggles reply rendering for the session, and takes on/off', async () => {
+    const session = new SessionController()
+    expect(session.get().renderMarkdown).toBe(true)
+    await handleCommand('/markdown off', { agent: fakeAgent(), session })
+    expect(session.get().renderMarkdown).toBe(false)
+    await handleCommand('/markdown', { agent: fakeAgent(), session })
+    expect(session.get().renderMarkdown).toBe(true)
+  })
+})
+
 describe('/stats', () => {
   test('toggles the status-line numbers, and takes on/off', async () => {
     const session = new SessionController()

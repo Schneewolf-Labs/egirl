@@ -88,6 +88,7 @@ const BUILTIN = new Set([
   'help',
   'auto',
   'stats',
+  'markdown',
   'maxturns',
   'reasoning',
   'tools',
@@ -255,6 +256,7 @@ function settingsCommand(scope: CommandScope): CommandResult {
       `🔢 maxTurns ${s.maxTurns}`,
       `💭 reasoning ${s.showReasoning ? 'on' : 'off'}`,
       `📈 stats ${s.showStats ? 'on' : 'off'}`,
+      `📝 markdown ${s.renderMarkdown ? 'on' : 'off'}`,
     )
   }
   if (scope.verbosity) {
@@ -289,6 +291,7 @@ function helpCommand(scope: CommandScope): CommandResult {
     lines.push(
       '🔁 /auto — continue past the turn cap without asking',
       '📈 /stats [on|off] — step, tokens, rate and context on the status line',
+      '📝 /markdown [on|off] — render bold, code, headings and tables in replies',
       '🔢 /maxturns <1-500> — turn cap for a run',
       '💭 /reasoning — show reasoning inline',
       '📋 /tasks — background tasks: list, details, run, pause, resume',
@@ -345,6 +348,13 @@ export async function handleCommand(input: string, scope: CommandScope): Promise
     case 'auto':
       if (!session) return terminalOnly(cmd)
       return reply(`🔁 ${session.toggleMode()}`)
+
+    case 'markdown': {
+      if (!session) return terminalOnly(cmd)
+      const next = parseOnOff(arg, session.get().renderMarkdown)
+      if (next === undefined) return reply('📝 usage: /markdown [on|off]')
+      return reply(`📝 ${session.set('renderMarkdown', next)}`)
+    }
 
     case 'stats': {
       if (!session) return terminalOnly(cmd)

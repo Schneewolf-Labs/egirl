@@ -133,6 +133,10 @@ const THEMES: Record<string, Theme> = { egirl, vapor, midnight, neon, mono }
 export const RESET = '\x1b[0m'
 export const DIM = '\x1b[2m'
 export const BOLD = '\x1b[1m'
+/** Text styles for rendered markdown. Not colours: they read the same under every theme. */
+export const ITALIC = '\x1b[3m'
+export const UNDERLINE = '\x1b[4m'
+export const STRIKE = '\x1b[9m'
 
 let activeTheme: Theme = egirl
 

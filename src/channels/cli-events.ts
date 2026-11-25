@@ -2,20 +2,28 @@ import type { AgentEventHandler } from '../agent/events'
 import type { PromptProgress, ToolCall } from '../providers/types'
 import type { ToolResult } from '../tools/types'
 import { colors, DIM, RESET } from '../ui/theme'
+import { visibleWidth } from './cli-line'
+import { renderMarkdown } from './cli-markdown'
+import { createMarkdownStream, type MarkdownStream } from './cli-md-stream'
 import { createPrefillRate, renderPrefill } from './cli-stats'
 import type { StatusLine } from './cli-status'
 
 /** Print the reply unless it already streamed to the terminal. */
 export function printReply(state: CLIEventState, content: string | undefined): void {
   if (state.streamed || !content) return
-  console.log(`\n${colors().secondary}✦ egirl${RESET} ${content}\n`)
+  const body = state.markdown ? renderMarkdown(content, columns()) : content
+  console.log(`\n${colors().secondary}✦ egirl${RESET} ${body}\n`)
 }
+
+const columns = (): number => process.stdout.columns || 80
 
 export interface CLIEventState {
   streamed: boolean
   showThinking: boolean
   /** Reasoning was already printed live, so the block that arrives at the end is a duplicate. */
   streamedThinking: boolean
+  /** Render the reply's markdown (only ever true when stdout is a terminal). */
+  markdown: boolean
 }
 
 /**
@@ -75,11 +83,25 @@ function formatArgs(args: Record<string, unknown>): string {
 export function createCLIEventHandler(
   showThinking: boolean,
   status?: StatusLine,
+  opts: { markdown?: boolean } = {},
 ): {
   handler: AgentEventHandler
   state: CLIEventState
 } {
-  const state: CLIEventState = { streamed: false, showThinking, streamedThinking: false }
+  const state: CLIEventState = {
+    streamed: false,
+    showThinking,
+    streamedThinking: false,
+    // A pipe gets the markdown as written: escape codes in a log or a script's input are noise.
+    markdown: (opts.markdown ?? false) && Boolean(process.stdout.isTTY),
+  }
+  // The reply's text between tool calls, rendered as it streams. Started at the first token
+  // after the header (or after a tool call), ended before anything else is written.
+  let md: MarkdownStream | undefined
+  const endMarkdown = (): void => {
+    md?.end()
+    md = undefined
+  }
 
   // Per-turn tallies for the summary line (hermes-agent's turn_summary): what she actually
   // did, in one dim line, gathered purely from the tool events — no loop coupling.
@@ -97,6 +119,13 @@ export function createCLIEventHandler(
   }
 
   const prefillRate = createPrefillRate()
+  const markdownStream = (startColumn: number): MarkdownStream =>
+    createMarkdownStream({
+      write: (text) => process.stdout.write(text),
+      columns,
+      startColumn,
+      isTerminal: true,
+    })
   const handler: AgentEventHandler = {
     onPhase(phase: 'compacting' | 'waiting') {
       status?.set(phase)
@@ -143,6 +172,7 @@ export function createCLIEventHandler(
     },
 
     onToolCallStart(calls: ToolCall[]) {
+      endMarkdown()
       status?.clear()
       const c = colors()
       for (const call of calls) {
@@ -205,11 +235,16 @@ export function createCLIEventHandler(
         if (state.streamedThinking) process.stdout.write('\n')
         process.stdout.write(`\n${c.secondary}${BULLET} egirl${RESET} `)
         state.streamed = true
+        if (state.markdown) md = markdownStream(visibleWidth(`${BULLET} egirl `))
+      } else if (state.markdown && !md) {
+        md = markdownStream(0)
       }
-      process.stdout.write(token)
+      if (md) md.push(token)
+      else process.stdout.write(token)
     },
 
     onResponseComplete() {
+      endMarkdown()
       if (state.streamed) {
         process.stdout.write('\n\n')
       }

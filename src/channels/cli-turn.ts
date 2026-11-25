@@ -104,7 +104,9 @@ async function runOne(text: string, deps: TurnDeps, window: Window): Promise<boo
   status.set('waiting')
   try {
     console.log()
-    const { handler, state } = createCLIEventHandler(deps.showThinking, status)
+    const { handler, state } = createCLIEventHandler(deps.showThinking, status, {
+      markdown: session.get().renderMarkdown,
+    })
     const response = await deps.agent.run(text, {
       events: withListeners(handler, [wait.events, stats.events]),
       maxTurns,

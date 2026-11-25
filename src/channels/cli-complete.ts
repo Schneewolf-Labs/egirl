@@ -27,6 +27,7 @@ export const CLI_COMMANDS: readonly CommandSpec[] = [
   { name: 'maxturns', args: ['10', '25', '50', '100'] },
   { name: 'auto' },
   { name: 'stats', args: ['on', 'off'] },
+  { name: 'markdown', args: ['on', 'off'] },
   { name: 'reasoning' },
   { name: 'verbose' },
   { name: 'quiet' },
