@@ -202,7 +202,12 @@ export class AgentLoop implements Operator {
     userMessage: string,
     options: AgentLoopOptions,
   ): Promise<AgentResponse> {
-    await this.compactor.drain()
+    // Straight to the caller's handler: the bus-publishing wrapper is built after this wait.
+    if (this.compactor.isPending) {
+      options.events?.onPhase?.('compacting')
+      await this.compactor.drain()
+      options.events?.onPhase?.('waiting')
+    }
 
     const { planningMode } = options
     // Whoever started this run, its narration goes on the session bus too — that is what the

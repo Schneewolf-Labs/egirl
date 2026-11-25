@@ -96,6 +96,10 @@ export function createCLIEventHandler(
   }
 
   const handler: AgentEventHandler = {
+    onPhase(phase: 'compacting' | 'waiting') {
+      status?.set(phase)
+    },
+
     // Reasoning as it happens. On a reasoning model this is most of the turn, so printing it
     // live is the difference between watching the model work and staring at a blank terminal
     // for a minute. Dimmed and unprefixed per token: it is context, not the answer.
@@ -236,6 +240,24 @@ export function createCLIEventHandler(
  * acknowledged where it happened, picked up when the turn ends. The heart is not decoration:
  * it marks the one line in the event stream that came from the user.
  */
+/**
+ * The header for messages typed during the last turn, now being sent as the next one.
+ *
+ * Deliberately not the `✦ you` prompt: echoing it there made a turn that was already running
+ * look like a prompt waiting for input, and whatever was typed next seemed to vanish (it was
+ * queued again). The hint says so outright instead of leaving it to be discovered.
+ */
+export function renderDrained(text: string, count: number): string {
+  const c = colors()
+  const what = count === 1 ? 'queued message' : `${count} queued messages`
+  const lines = text.split('\n').map((line) => `  ${DIM}│${RESET} ${line}`)
+  return [
+    `${c.secondary}${HEART}${RESET} ${c.primary}sending ${what}${RESET}`,
+    ...lines,
+    `${DIM}  typing now queues for after this turn · esc interrupts${RESET}`,
+  ].join('\n')
+}
+
 export function renderQueuedMessage(text: string): string {
   const c = colors()
   const shown = text.length > 60 ? `${text.slice(0, 60)}…` : text

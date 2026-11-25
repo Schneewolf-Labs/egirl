@@ -69,6 +69,11 @@ export class CompactionScheduler {
     )
   }
 
+  /** A summarization is still running, so the next drain() will wait on it. */
+  get isPending(): boolean {
+    return this.pending !== null
+  }
+
   /** Await any in-flight compaction so the next turn reads a settled summary. */
   async drain(): Promise<void> {
     const awaited = this.pending

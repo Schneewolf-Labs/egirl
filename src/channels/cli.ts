@@ -14,7 +14,7 @@ import {
   handlePromptCommand,
   handleWipeCommand,
 } from './cli-commands'
-import { createCLIEventHandler, printReply, renderQueuedMessage } from './cli-events'
+import { createCLIEventHandler, printReply, renderDrained, renderQueuedMessage } from './cli-events'
 import { captureDuringRun } from './cli-live-input'
 import { contextBar, createStatusLine } from './cli-status'
 import type { Channel } from './types'
@@ -230,8 +230,9 @@ export class CLIChannel implements Channel {
 
         // Anything typed during the turn runs now rather than waiting for another return --
         // a queued message that sits unseen is worse than one that was never accepted.
+        const queued = this.session.peek().length
         pending = this.session.drain()
-        if (pending) console.log(`${c.primary}✦ you${RESET} ${pending}`)
+        if (pending) console.log(renderDrained(pending, queued))
       }
 
       this.prompt()

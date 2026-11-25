@@ -14,9 +14,10 @@
 
 import { colors, DIM, RESET } from '../ui/theme'
 
-export type Phase = 'waiting' | 'thinking' | 'writing' | 'tool' | 'idle'
+export type Phase = 'compacting' | 'waiting' | 'thinking' | 'writing' | 'tool' | 'idle'
 
 const LABELS: Record<Phase, string> = {
+  compacting: 'compacting earlier conversation',
   waiting: 'waiting for model',
   thinking: 'thinking',
   writing: 'writing',

@@ -81,6 +81,13 @@ export interface AgentEventHandler {
    * minutes at a stretch and looks hung.
    */
   onThinkingToken?(token: string): void
+  /**
+   * Called when the run is held up before its first model call. `compacting`: the previous
+   * turn's dropped messages are still being summarized, which on a big trim is minutes of
+   * aux-model work that otherwise looks exactly like a model that is not answering. `waiting`
+   * follows when that is over and the model call is next.
+   */
+  onPhase?(phase: 'compacting' | 'waiting'): void
   /** Called when tool calls are about to be executed */
   onToolCallStart?(calls: ToolCall[]): void
   /** Called after each tool finishes executing */
