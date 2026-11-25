@@ -11,6 +11,9 @@
  * before the write and repainted after it. While output is mid-line (a reply streaming token by
  * token) the live line stays hidden; typing still edits it and it reappears at the next newline.
  *
+ * A multi-line paste is held as one message until enter (`cli-paste.ts`), and ↑ history can be
+ * seeded with lines saved by an earlier run (`cli-history.ts`).
+ *
  * Without a TTY there is no live line: lines are read and handed on, nothing is drawn.
  */
 
@@ -18,7 +21,9 @@ import * as readline from 'node:readline'
 import { Writable } from 'node:stream'
 import { format } from 'node:util'
 import { type Completion, ghostFor } from './cli-complete'
+import { HISTORY_SIZE } from './cli-history'
 import { fitLine, truncateVisible, visibleWidth } from './cli-line'
+import { createPasteBuffer, PASTE_OFF, PASTE_ON } from './cli-paste'
 
 export interface CLIInput {
   /** Whether a live line is drawn at all (stdin and stdout are both a terminal). */
@@ -48,6 +53,8 @@ export interface CLIInputHooks {
   onClose(): void
   /** Completes the text before the cursor; drives Tab and the inline suggestion. */
   complete?(line: string): Completion
+  /** Earlier input for ↑, newest first (from `loadHistory`). */
+  history?: string[]
 }
 
 const ERASE = '\r\x1b[2K'
@@ -106,7 +113,8 @@ export function createCLIInput(hooks: CLIInputHooks): CLIInput {
     input: process.stdin,
     output: muted,
     terminal: true,
-    historySize: 1000,
+    historySize: HISTORY_SIZE,
+    history: hooks.history ?? [],
     // Tab. A unique hit gets a trailing space so the next argument can follow; several hits
     // complete their common prefix and are listed by the inline hint, since this output is muted.
     completer: (line: string): [string[], string] => {
@@ -117,7 +125,8 @@ export function createCLIInput(hooks: CLIInputHooks): CLIInput {
       return [c.candidates, c.token]
     },
   })
-  const editor = rl as unknown as { line: string; cursor: number }
+  const editor = rl as unknown as { line: string; cursor: number; history: string[] }
+  const paste = createPasteBuffer()
 
   const out = process.stdout.write.bind(process.stdout)
   const err = process.stderr.write.bind(process.stderr)
@@ -140,6 +149,8 @@ export function createCLIInput(hooks: CLIInputHooks): CLIInput {
     const columns = process.stdout.columns || 80
     let head = asking ? asking.question : prompt
     if (!asking && status) head = `${status} ${prompt}`
+    const held = paste.held()
+    if (held > 0) head += `\x1b[2m‹${held} pasted line${held === 1 ? '' : 's'}›\x1b[0m `
     // A head that fills the row would leave nowhere to type; trim it to leave 24 columns rather
     // than wrap, because a wrapped live line can no longer be erased with one row's clear.
     head = truncateVisible(head, Math.max(16, columns - 24))
@@ -178,7 +189,13 @@ export function createCLIInput(hooks: CLIInputHooks): CLIInput {
   console.warn = (...args: unknown[]) => process.stderr.write(`${format(...args)}\n`)
   console.error = console.warn
 
-  rl.on('line', (line) => {
+  rl.on('line', (typed) => {
+    const line = paste.take(typed)
+    if (line === undefined) {
+      // A line ended inside a paste: held, and kept out of ↑ history.
+      if (editor.history[0] === typed) editor.history.shift()
+      return
+    }
     suggestion = undefined
     if (asking) {
       const { resolve } = asking
@@ -192,7 +209,8 @@ export function createCLIInput(hooks: CLIInputHooks): CLIInput {
   // Ctrl-C clears a half-typed line first, as a shell does; on an empty line it is the real
   // SIGINT, so the shutdown handlers run and the process ends.
   rl.on('SIGINT', () => {
-    if (editor.line.length > 0) {
+    if (editor.line.length > 0 || paste.held() > 0) {
+      paste.clear()
       rl.write(null, { ctrl: true, name: 'u' })
       paint()
       return
@@ -208,18 +226,22 @@ export function createCLIInput(hooks: CLIInputHooks): CLIInput {
   // Registered after readline's own listener, so the line and cursor are already updated.
   const onKeypress = (_s: string | undefined, key: { name?: string } | undefined): void => {
     if (key?.name === 'escape') hooks.onEscape()
+    if (key?.name === 'paste-start') paste.start()
+    if (key?.name === 'paste-end') paste.end()
     // → at the end of the line takes the dim suggestion, as in fish. readline's own → is a
     // no-op there, so nothing is lost; `acceptable` is what the previous paint showed.
     if (key?.name === 'right' && acceptable) rl.write(acceptable)
     paint()
   }
   process.stdin.on('keypress', onKeypress)
+  out(PASTE_ON)
 
   const restore = (): void => {
     if (closed) return
     closed = true
     process.stdin.off('keypress', onKeypress)
     if (painted) out(ERASE)
+    out(PASTE_OFF)
     process.stdout.write = out as typeof process.stdout.write
     process.stderr.write = err as typeof process.stderr.write
     Object.assign(console, consoleOriginals)

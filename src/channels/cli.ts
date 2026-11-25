@@ -10,6 +10,7 @@ import { log } from '../util/logger'
 import { type CommandContext, handleCLICommand } from './cli-commands'
 import { CLI_COMMANDS, complete } from './cli-complete'
 import { renderDrained, renderQueuedMessage } from './cli-events'
+import { appendHistory, loadHistory } from './cli-history'
 import { type CLIInput, createCLIInput } from './cli-input'
 import { tasksCommand } from './cli-tasks'
 import { runTurns } from './cli-turn'
@@ -25,6 +26,8 @@ export interface CLIChannelOptions {
   taskStore?: TaskStore
   /** Loaded skills, for the slash commands they declare (`egirl.command` in SKILL.md). */
   skills?: Skill[]
+  /** Where ↑ history is saved between runs; absent keeps it for this run only. */
+  historyPath?: string
 }
 
 const EXIT_WORDS = new Set(['/exit', '/quit', 'exit', 'quit'])
@@ -46,6 +49,7 @@ export class CLIChannel implements Channel {
   private skills: Skill[]
   /** Set once the background runner is up (it is built after the channel it reports to). */
   private taskRunner: TaskRunner | undefined
+  private historyPath: string | undefined
 
   constructor(agent: Operator, options?: CLIChannelOptions) {
     this.agent = agent
@@ -59,6 +63,7 @@ export class CLIChannel implements Channel {
     this.skillsDir = options?.skillsDir
     this.taskStore = options?.taskStore
     this.skills = options?.skills ?? []
+    this.historyPath = options?.historyPath
   }
 
   useTaskRunner(runner: TaskRunner): void {
@@ -106,6 +111,7 @@ export class CLIChannel implements Channel {
           () => this.taskStore?.list().map((t) => t.name) ?? [],
           () => customCommands(this.skills).map((c) => c.name),
         ),
+      ...(this.historyPath && { history: loadHistory(this.historyPath) }),
     })
     this.idle()
   }
@@ -122,6 +128,7 @@ export class CLIChannel implements Channel {
   private onLine(line: string): void {
     const text = line.trim()
     if (!text) return
+    if (this.historyPath && this.input?.isInteractive) appendHistory(this.historyPath, text)
     if (!this.busy) {
       // The live line is cleared on enter; this leaves what was sent in the scrollback.
       if (this.input?.isInteractive) console.log(`${colors().primary}✦ you${RESET} ${text}`)
