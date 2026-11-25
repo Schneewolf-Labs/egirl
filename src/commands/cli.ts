@@ -1,4 +1,5 @@
 import { appendFileSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import type { AgentEventHandler, ModelTurn } from '../agent/events'
 import { createCLIChannel } from '../channels'
 import type { OutboundChannel } from '../channels/types'
@@ -171,6 +172,7 @@ export async function runCLI(config: RuntimeConfig, args: string[]): Promise<voi
     maxTurns: config.conversation.maxTurns,
     ...(taskStore && { taskStore }),
     skills: rt.skills,
+    historyPath: join(config.workspace.path, 'cli_history'),
   })
 
   const tasks = createBackgroundTasks(rt, {
