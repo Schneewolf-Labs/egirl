@@ -1,4 +1,5 @@
 import { buildLearnPrompt } from '../agent/learn-prompt'
+import type { ConfigDrift } from '../config/drift'
 import type { Operator } from '../operator/types'
 import { type CommandScope, customCommands, handleCommand, isCommand } from '../session/commands'
 import { SessionController } from '../session/controller'
@@ -26,6 +27,8 @@ export interface CLIChannelOptions {
   taskStore?: TaskStore
   /** Loaded skills, for the slash commands they declare (`egirl.command` in SKILL.md). */
   skills?: Skill[]
+  /** The config files as read at startup, so /settings can say when they changed since. */
+  configDrift?: ConfigDrift
   /** Where ↑ history is saved between runs; absent keeps it for this run only. */
   historyPath?: string
 }
@@ -50,6 +53,7 @@ export class CLIChannel implements Channel {
   /** Set once the background runner is up (it is built after the channel it reports to). */
   private taskRunner: TaskRunner | undefined
   private historyPath: string | undefined
+  private configDrift: ConfigDrift | undefined
 
   constructor(agent: Operator, options?: CLIChannelOptions) {
     this.agent = agent
@@ -64,6 +68,7 @@ export class CLIChannel implements Channel {
     this.taskStore = options?.taskStore
     this.skills = options?.skills ?? []
     this.historyPath = options?.historyPath
+    this.configDrift = options?.configDrift
   }
 
   useTaskRunner(runner: TaskRunner): void {
@@ -181,7 +186,12 @@ export class CLIChannel implements Channel {
   }
 
   private commandScope(): CommandScope {
-    return { agent: this.agent, session: this.session, skills: this.skills }
+    return {
+      agent: this.agent,
+      session: this.session,
+      skills: this.skills,
+      ...(this.configDrift && { configDrift: this.configDrift }),
+    }
   }
 
   private commandCtx(): CommandContext {
