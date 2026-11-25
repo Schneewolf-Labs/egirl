@@ -253,6 +253,14 @@ export class ConversationStore {
     return row?.summary ?? undefined
   }
 
+  /** When the session's transcript was last written (ms), or undefined for a new session. */
+  lastActiveAt(sessionId: string): number | undefined {
+    const row = this.db
+      .query('SELECT last_active_at FROM sessions WHERE id = ?')
+      .get(sessionId) as { last_active_at: number } | null
+    return row?.last_active_at ?? undefined
+  }
+
   updateSummary(sessionId: string, summary: string): void {
     this.db.run('UPDATE sessions SET summary = ? WHERE id = ?', [summary, sessionId])
   }

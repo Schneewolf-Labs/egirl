@@ -43,6 +43,7 @@ import {
 } from './nudges'
 import { injectRecalledMemory } from './recall'
 import { attemptRecovery, resolveRecoveryCaps } from './recovery'
+import { buildResumeBriefing } from './resume-briefing'
 import {
   CONTEXT_BREAK_THRESHOLD,
   createRolloverTools,
@@ -82,6 +83,8 @@ export class AgentLoop implements Operator {
   private promptOptions: SystemPromptOptions
   private mutex: SessionMutex | null
   private history: ConversationHistory
+  /** Set when the constructor reloaded a saved transcript; the first run briefs and clears it. */
+  private resumed: { lastActiveAt?: number } | undefined
   private compactor = new CompactionScheduler()
   /** Prompt tokens of the last model call, kept past the run for the context readout. */
   private lastPromptTokens: number | undefined
@@ -127,8 +130,9 @@ export class AgentLoop implements Operator {
       estimateOnly: local.isHosted === true,
     })
     this.history = new ConversationHistory(this.conversationStore, deps.sessionId)
-    this.history.hydrate(this.context)
+    const hydrated = this.history.hydrate(this.context)
     if (deps.seedMessages) this.history.seed(this.context, deps.seedMessages)
+    else if (hydrated) this.resumed = hydrated
   }
 
   /**
@@ -249,6 +253,16 @@ export class AgentLoop implements Operator {
     }
 
     const userContent = planningMode ? planningModePrompt(userMessage) : userMessage
+
+    // The first run on a reloaded transcript: say how it ended and that time has passed.
+    if (this.resumed) {
+      const briefing = buildResumeBriefing(this.context.messages, {
+        ...this.resumed,
+        now: Date.now(),
+      })
+      this.resumed = undefined
+      if (briefing) addMessage(this.context, { role: 'user', content: briefing, ephemeral: true })
+    }
 
     this.context.runImages = undefined
     this.context.runUserText = userMessage
