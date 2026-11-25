@@ -865,6 +865,7 @@ export function startAPIServer(config: APIConfig, deps: APIDeps) {
               has_summary: s.hasSummary,
               summary_tokens: s.summaryTokens,
               available: s.available,
+              last_prompt_tokens: s.lastPromptTokens ?? null,
               thinking: thinkingOverride(agent),
             })
           }

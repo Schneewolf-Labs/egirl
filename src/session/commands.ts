@@ -13,6 +13,7 @@
  * Matrix body and in a Discord message.
  */
 
+import { windowFill } from '../agent/status'
 import type { Operator } from '../operator/types'
 import type { ThinkingConfig } from '../providers/types'
 import type { Skill } from '../skills/types'
@@ -210,13 +211,20 @@ const t = (n: number) => `${n.toLocaleString()}t`
 
 async function contextCommand(agent: Operator): Promise<CommandResult> {
   const s = await agent.contextStatus()
-  const pct = Math.round(s.utilization * 100)
+  const fill = windowFill(s)
+  const pct = Math.round(fill.fraction * 100)
   const lines = [
-    `📊 context ${pct}% ${bar(s.utilization)} ${s.totalUsed.toLocaleString()} / ${s.contextLength.toLocaleString()}`,
-    `system prompt ~${t(s.systemPromptTokens)} · ${s.messageCount} messages ~${t(s.messageTokens)}`,
+    `📊 context ${pct}% ${bar(fill.fraction)} ${fill.used.toLocaleString()} / ${s.contextLength.toLocaleString()}`,
   ]
+  // Measured: the sent prompt, after stale tool output was cleared. The stored history below
+  // can be larger, and past 100%, without the model ever seeing that much.
+  if (fill.isMeasured) lines.push(`last prompt sent · stored history ~${t(s.totalUsed)}`)
+  lines.push(
+    `system prompt ~${t(s.systemPromptTokens)} · ${s.messageCount} messages ~${t(s.messageTokens)}`,
+  )
   if (s.hasSummary) lines.push(`summary ~${t(s.summaryTokens)} (compacted)`)
-  lines.push(`available ~${t(s.available)}`)
+  const available = fill.isMeasured ? Math.max(0, s.contextLength - fill.used) : s.available
+  lines.push(`available ~${t(available)}`)
   return reply(lines.join('\n'))
 }
 
@@ -225,7 +233,7 @@ async function statusCommand(agent: Operator): Promise<CommandResult> {
   const s = await agent.contextStatus()
   const state = agent.isRunning() ? '⏳ running' : '🟢 idle'
   return reply(
-    `${state} · ${s.sessionId} · context ${Math.round(s.utilization * 100)}% · thinking ${describeThinking(agent)}`,
+    `${state} · ${s.sessionId} · context ${Math.round(windowFill(s).fraction * 100)}% · thinking ${describeThinking(agent)}`,
   )
 }
 
