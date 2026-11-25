@@ -319,6 +319,7 @@ export function loadConfig(options: LoadConfigOptions = {}): RuntimeConfig {
       ...((process.env.EGIRL_LOCAL_API_KEY ?? toml.local?.api_key) && {
         apiKey: process.env.EGIRL_LOCAL_API_KEY ?? toml.local?.api_key,
       }),
+      ...(toml.local?.hosted && { isHosted: true }),
       // EGIRL_LOCAL_ENDPOINT still wins outright: a one-off run pointed at a specific server
       // (the bench) must not be redirected to whatever the fleet is serving.
       ...(toml.local?.witchgrid &&

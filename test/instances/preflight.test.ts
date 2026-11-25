@@ -86,6 +86,37 @@ describe('checkServedModel', () => {
     const result = await checkServedModel(configWith({ endpoint: 'http://127.0.0.1:1' }))
     expect(result.level).toBe('fail')
   })
+
+  test('sends the api key to a keyed endpoint', async () => {
+    const server = track(
+      serve((req) =>
+        req.headers.get('Authorization') === 'Bearer k'
+          ? Response.json({ data: [{ id: 'test-model' }] })
+          : new Response('no', { status: 401 }),
+      ),
+    )
+    const result = await checkServedModel(configWith({ endpoint: server.url, apiKey: 'k' }))
+    expect(result.level).toBe('ok')
+  })
+
+  test('a hosted endpoint passes when its catalogue offers the configured model', async () => {
+    // A hosted API lists every model it sells; the first entry says nothing about this one.
+    const server = track(
+      serve(() =>
+        Response.json({ data: [{ id: 'kimi-k3.1-pro' }, { id: 'glm-5.3-abliterated' }] }),
+      ),
+    )
+    const ok = await checkServedModel(
+      configWith({ endpoint: server.url, model: 'glm-5.3-abliterated', isHosted: true }),
+    )
+    expect(ok.level).toBe('ok')
+
+    const missing = await checkServedModel(
+      configWith({ endpoint: server.url, model: 'glm-9', isHosted: true }),
+    )
+    expect(missing.level).toBe('fail')
+    expect(missing.message).toContain('glm-9')
+  })
 })
 
 describe('checkEmbeddings', () => {
