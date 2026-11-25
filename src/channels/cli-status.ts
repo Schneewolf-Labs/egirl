@@ -43,7 +43,12 @@ export interface StatusLine {
  * interleaved into a piped stream is worse than no spinner.
  */
 export function createStatusLine(
-  opts: { enabled?: boolean; sink?: (text: string) => void } = {},
+  opts: {
+    enabled?: boolean
+    sink?: (text: string) => void
+    /** More to show after the label (the run's stats); '' adds nothing. */
+    extra?: () => string
+  } = {},
 ): StatusLine {
   const stream = process.stderr
   // With a sink the text goes into the CLI's live input line, which owns that row; otherwise
@@ -74,7 +79,9 @@ export function createStatusLine(
     // is visual noise, and the number only means anything once the wait is long enough to notice.
     const elapsed = secs >= 3 ? ` ${DIM}${secs}s${RESET}` : ''
     const tail = detail ? `${DIM} ${detail}${RESET}` : ''
-    const text = `${c.accent}${FRAMES[frame % FRAMES.length]}${RESET} ${DIM}${LABELS[phase]}${RESET}${tail}${elapsed}`
+    const more = opts.extra?.() ?? ''
+    const stats = more ? `${DIM} · ${RESET}${more}` : ''
+    const text = `${c.accent}${FRAMES[frame % FRAMES.length]}${RESET} ${DIM}${LABELS[phase]}${RESET}${tail}${elapsed}${stats}`
     if (sink) sink(text)
     else stream.write(`\r\x1b[2K${text}`)
     painted = true

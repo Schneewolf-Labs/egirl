@@ -20,12 +20,15 @@ export interface SessionSettings {
   mode: RunMode
   /** Show the model's reasoning inline with tool calls. */
   showReasoning: boolean
+  /** Quick-glance run numbers (step, tokens, rate, context, queue) on the live line. */
+  showStats: boolean
 }
 
 export const DEFAULT_SETTINGS: SessionSettings = {
   maxTurns: 10,
   mode: 'ask',
   showReasoning: true,
+  showStats: true,
 }
 
 export interface QueuedMessage {
