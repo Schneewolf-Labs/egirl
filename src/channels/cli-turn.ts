@@ -110,6 +110,7 @@ async function runOne(text: string, deps: TurnDeps, window: Window): Promise<boo
     // Read per run, so /reasoning, /verbose and /quiet take effect from the next one.
     const { handler, state } = createCLIEventHandler(session.get().showReasoning, status, {
       markdown: session.get().renderMarkdown,
+      cwd: deps.agent.getContext().workspaceDir,
     })
     const response = await deps.agent.run(text, {
       events: withListeners(handler, [wait.events, stats.events]),

@@ -2,6 +2,7 @@ import type { AgentEventHandler } from '../agent/events'
 import type { PromptProgress, ToolCall } from '../providers/types'
 import type { ToolResult } from '../tools/types'
 import { colors, DIM, RESET } from '../ui/theme'
+import { createEditDiffs } from './cli-edit-diffs'
 import { visibleWidth } from './cli-line'
 import { renderMarkdown } from './cli-markdown'
 import { createMarkdownStream, type MarkdownStream } from './cli-md-stream'
@@ -94,7 +95,7 @@ function formatValue(val: unknown): string {
 export function createCLIEventHandler(
   showThinking: boolean,
   status?: StatusLine,
-  opts: { markdown?: boolean } = {},
+  opts: { markdown?: boolean; cwd?: string } = {},
 ): {
   handler: AgentEventHandler
   state: CLIEventState
@@ -118,6 +119,7 @@ export function createCLIEventHandler(
   // did, in one dim line, gathered purely from the tool events — no loop coupling.
   const runStart = Date.now()
   const startedAt = new Map<string, number>()
+  const diffs = createEditDiffs(opts.cwd)
   const tallies = new Map<string, number>()
   let failures = 0
   const tallyVerb = (name: string): string => {
@@ -188,6 +190,7 @@ export function createCLIEventHandler(
       const c = colors()
       for (const call of calls) {
         startedAt.set(call.id ?? call.name, Date.now())
+        diffs.start(call)
         const args = formatArgs(call.arguments)
         // Bullet in the accent, name carrying its own weight, args dimmed: at a glance the
         // scrollback reads as a list of what she did, not a wall of grey.
@@ -232,6 +235,9 @@ export function createCLIEventHandler(
         }
         if (hidden) process.stdout.write(`    ${c.muted}… +${hidden} lines${RESET}\n`)
       }
+      // A file edit shows what it changed, not just that it happened.
+      const diff = diffs.finish(callId, result.success, process.stdout.columns || 80)
+      if (diff) process.stdout.write(`${diff.map((l) => `    ${l}`).join('\n')}\n`)
       // Control returns to the model, which will deliberate again before its next move.
       status?.set('waiting')
     },
