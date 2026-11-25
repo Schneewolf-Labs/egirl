@@ -17,6 +17,7 @@
 import * as readline from 'node:readline'
 import { Writable } from 'node:stream'
 import { format } from 'node:util'
+import { type Completion, ghostFor } from './cli-complete'
 import { fitLine, truncateVisible, visibleWidth } from './cli-line'
 
 export interface CLIInput {
@@ -31,6 +32,11 @@ export interface CLIInput {
    * streaming mid-line it waits for the next newline instead of splicing into the reply.
    */
   notice(text: string): void
+  /**
+   * A next input to offer on the empty line (`/continue` after a capped run), drawn dim after
+   * the prompt. Tab or → takes it, typing anything else ignores it; it goes at the next enter.
+   */
+  suggest(text: string | undefined): void
   /** Show `question` as the prompt and resolve with the next line typed. */
   ask(question: string): Promise<string>
   close(): void
@@ -40,6 +46,8 @@ export interface CLIInputHooks {
   onLine(line: string): void
   onEscape(): void
   onClose(): void
+  /** Completes the text before the cursor; drives Tab and the inline suggestion. */
+  complete?(line: string): Completion
 }
 
 const ERASE = '\r\x1b[2K'
@@ -70,6 +78,7 @@ export function createCLIInput(hooks: CLIInputHooks): CLIInput {
       isInteractive: false,
       setPrompt() {},
       setStatus() {},
+      suggest() {},
       notice: (text) => console.log(text),
       ask(question) {
         process.stdout.write(`${question}\n`)
@@ -92,11 +101,21 @@ export function createCLIInput(hooks: CLIInputHooks): CLIInput {
   }
   muted.isTTY = true
   Object.defineProperty(muted, 'columns', { get: () => process.stdout.columns || 80 })
+  let suggestion: string | undefined
   const rl = readline.createInterface({
     input: process.stdin,
     output: muted,
     terminal: true,
     historySize: 1000,
+    // Tab. A unique hit gets a trailing space so the next argument can follow; several hits
+    // complete their common prefix and are listed by the inline hint, since this output is muted.
+    completer: (line: string): [string[], string] => {
+      if (line === '' && suggestion) return [[suggestion], '']
+      const c = hooks.complete?.(line)
+      if (!c || c.candidates.length === 0) return [[], line]
+      if (c.candidates.length === 1) return [[`${c.candidates[0]} `], c.token]
+      return [c.candidates, c.token]
+    },
   })
   const editor = rl as unknown as { line: string; cursor: number }
 
@@ -109,6 +128,8 @@ export function createCLIInput(hooks: CLIInputHooks): CLIInput {
     error: console.error,
   }
   let painted = false
+  // What → would accept, as drawn by the last paint: only offered while it is on screen.
+  let acceptable: string | undefined
   // Where the terminal's cursor is: at the start of a fresh row, or mid-way along one that
   // output is still writing. Shared by stdout and stderr because the screen is shared.
   let midLine = false
@@ -124,7 +145,14 @@ export function createCLIInput(hooks: CLIInputHooks): CLIInput {
     head = truncateVisible(head, Math.floor(columns / 2))
     const room = Math.max(8, columns - visibleWidth(head) - 1)
     const { shown, back } = fitLine(editor.line, editor.cursor, room)
-    out(`${ERASE}${head}${shown}${back > 0 ? `\x1b[${back}D` : ''}`)
+    const ghost =
+      back === 0 && !asking ? ghostFor(editor.line, suggestion, hooks.complete) : undefined
+    acceptable = ghost?.accept
+    const spare = room - visibleWidth(shown)
+    const hint = ghost && spare > 1 ? truncateVisible(ghost.text, spare - 1) : ''
+    const left = back + visibleWidth(hint)
+    const tail = hint ? `\x1b[2m${hint}\x1b[0m` : ''
+    out(`${ERASE}${head}${shown}${tail}${left > 0 ? `\x1b[${left}D` : ''}`)
     painted = true
   }
 
@@ -151,6 +179,7 @@ export function createCLIInput(hooks: CLIInputHooks): CLIInput {
   console.error = console.warn
 
   rl.on('line', (line) => {
+    suggestion = undefined
     if (asking) {
       const { resolve } = asking
       asking = undefined
@@ -179,6 +208,9 @@ export function createCLIInput(hooks: CLIInputHooks): CLIInput {
   // Registered after readline's own listener, so the line and cursor are already updated.
   const onKeypress = (_s: string | undefined, key: { name?: string } | undefined): void => {
     if (key?.name === 'escape') hooks.onEscape()
+    // → at the end of the line takes the dim suggestion, as in fish. readline's own → is a
+    // no-op there, so nothing is lost; `acceptable` is what the previous paint showed.
+    if (key?.name === 'right' && acceptable) rl.write(acceptable)
     paint()
   }
   process.stdin.on('keypress', onKeypress)
@@ -201,6 +233,10 @@ export function createCLIInput(hooks: CLIInputHooks): CLIInput {
     },
     setStatus(text) {
       status = text
+      paint()
+    },
+    suggest(text) {
+      suggestion = text
       paint()
     },
     notice(text) {
