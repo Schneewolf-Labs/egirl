@@ -27,6 +27,25 @@ export function checkpointNudge(contextPressed: boolean, rollover = false): stri
   return `[System: Checkpoint. ${urgency} to your durable notes, and save any artifacts to files. Also store anything worth remembering across sessions — a proven fact, a decision and its why, a lesson — with memory_set now, while the context is still in front of you. Assume this run could end at any moment: nothing important should live only in this conversation. Then continue where you left off.]`
 }
 
+/** Steps of notice before the turn cap, and the smallest cap that gets any (a 1–5 step run
+ * is a quick exchange where a warning would eat a real share of it). */
+export const TURN_CAP_WARNING_STEPS = 3
+const TURN_CAP_WARNING_MIN_CAP = 6
+
+/**
+ * The turn-cap sibling of the wall-clock wrap-up, fired once, `TURN_CAP_WARNING_STEPS` before
+ * the cap. Without it the first a run heard of the cap was the forced summary at the end, so
+ * work in flight -- a file half-written across steps -- was left as a placeholder.
+ *
+ * `turn` is the step about to run (1-based). Returns undefined on every other step.
+ */
+export function turnCapNudge(turn: number, maxTurns: number): string | undefined {
+  if (maxTurns < TURN_CAP_WARNING_MIN_CAP) return undefined
+  const left = maxTurns - turn + 1
+  if (left !== TURN_CAP_WARNING_STEPS) return undefined
+  return `[System: ${left} steps left in this run — it stops after step ${maxTurns}. Do not start anything you cannot finish in ${left} steps; above all, do not begin writing a file you cannot complete. Finish or save what is in progress: write files out completely, and record your state and next steps in your notes. If work remains, say so plainly in your reply — the run can be continued.]`
+}
+
 /** One-time wall-clock warning as the run's hard deadline nears: wind down, don't get killed. */
 export function wrapupNudge(
   minutesLeft: number,

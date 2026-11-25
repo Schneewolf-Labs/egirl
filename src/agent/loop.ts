@@ -37,6 +37,7 @@ import {
   interjectionNudge,
   MAX_TURNS_SUMMARY_NUDGE,
   planningModePrompt,
+  turnCapNudge,
   validationFailedNudge,
   wrapupNudge,
 } from './nudges'
@@ -387,6 +388,11 @@ export class AgentLoop implements Operator {
         // consolidation break, keeping the wall-clock limit consistent with the loop's
         // "pause and capture" rhythm rather than killing a turn mid-thought. See
         // docs/autonomy-loop.md.
+        // The same warning for the turn cap. An unbounded run's ceiling is a backstop, not a
+        // budget the agent should plan around, so it is not announced.
+        const capNudge = options.unbounded ? undefined : turnCapNudge(state.turns, maxTurns)
+        if (capNudge) addMessage(this.context, { role: 'user', content: capNudge })
+
         const deadline = deadlineAt()
         if (deadline && state.wrapupWarned && Date.now() < deadline - wrapupMarginMs) {
           // An extension moved the deadline back out of the margin: warn again when it nears.
