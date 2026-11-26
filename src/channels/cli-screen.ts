@@ -54,21 +54,37 @@ export function createScreen(repaint: () => void): Screen {
   }
   // Shared by stdout and stderr because the screen is shared.
   let midLine = false
+  // Whether stdout left the row open: a reply streaming. Then stderr (log lines) waits for the
+  // line to end, like a notice, rather than splice in -- a row the reply did not write also
+  // throws off the markdown redraw, which goes back up over the rows it counted.
+  let isReplyOpen = false
   const deferred: string[] = []
+  const heldErr: string[] = []
+  const flush = (): void => {
+    if (deferred.length > 0) out(`${deferred.splice(0).join('\n')}\n`)
+    if (heldErr.length > 0) err(heldErr.splice(0).join(''))
+  }
 
   const through =
-    (write: typeof out) =>
+    (write: typeof out, isOut: boolean) =>
     (chunk: unknown, ...rest: unknown[]): boolean => {
-      erase()
       const text = typeof chunk === 'string' ? chunk : Buffer.from(chunk as Uint8Array).toString()
+      if (!isOut && isReplyOpen) {
+        heldErr.push(text)
+        return true
+      }
+      erase()
       const ok = (write as (c: unknown, ...r: unknown[]) => boolean)(chunk, ...rest)
-      if (text.length > 0) midLine = !text.endsWith('\n')
-      if (!midLine && deferred.length > 0) out(`${deferred.splice(0).join('\n')}\n`)
+      if (text.length > 0) {
+        midLine = !text.endsWith('\n')
+        if (isOut) isReplyOpen = midLine
+      }
+      if (!midLine) flush()
       repaint()
       return ok
     }
-  process.stdout.write = through(out) as typeof process.stdout.write
-  process.stderr.write = through(err) as typeof process.stderr.write
+  process.stdout.write = through(out, true) as typeof process.stdout.write
+  process.stderr.write = through(err, false) as typeof process.stderr.write
   console.log = (...args: unknown[]) => process.stdout.write(`${format(...args)}\n`)
   console.info = console.log
   console.warn = (...args: unknown[]) => process.stderr.write(`${format(...args)}\n`)
@@ -92,6 +108,9 @@ export function createScreen(repaint: () => void): Screen {
     },
     restore() {
       erase()
+      // Logs still held behind an unfinished reply line: on a row of their own.
+      if (isReplyOpen && (heldErr.length > 0 || deferred.length > 0)) out('\n')
+      flush()
       process.stdout.write = out as typeof process.stdout.write
       process.stderr.write = err as typeof process.stderr.write
       Object.assign(console, consoleOriginals)
