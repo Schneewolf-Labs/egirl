@@ -4,7 +4,7 @@
  */
 
 import { describe, expect, test } from 'bun:test'
-import { complete, ghostFor, uniqueSuffix } from '../../src/channels/cli-complete'
+import { complete, ghostFor, menuItems, uniqueSuffix } from '../../src/channels/cli-complete'
 
 const tasks = () => ['check-ci', 'petz4-re']
 const completer = (line: string) => complete(line, tasks)
@@ -62,5 +62,18 @@ describe('ghostFor', () => {
 
   test('typing replaces the suggestion with completion', () => {
     expect(ghostFor('hello', '/continue', completer)).toBeUndefined()
+  })
+})
+
+describe('menuItems', () => {
+  test('lists the commands that start with the prefix, with what they do', () => {
+    const items = menuItems('st')
+    expect(items.map((i) => i.name)).toEqual(['status', 'stats'])
+    expect(items.every((i) => i.summary.length > 0)).toBe(true)
+  })
+
+  test('includes skill commands after the CLI’s own, with their descriptions', () => {
+    const items = menuItems('', () => [{ name: 'review', description: 'review a PR' }])
+    expect(items.at(-1)).toEqual({ name: 'review', summary: 'review a PR' })
   })
 })
