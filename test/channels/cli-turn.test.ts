@@ -31,6 +31,7 @@ function fakeAgent(capped: (text: string) => boolean, utilization = 0.1) {
       return { content: 'done', provider: 'stub', turnLimitReached: capped(text) }
     },
     contextStatus: async () => ({ contextLength: 100, totalUsed: 10, utilization }),
+    getContext: () => ({ workspaceDir: '/tmp' }),
   } as unknown as Operator
   return { agent, prompts }
 }

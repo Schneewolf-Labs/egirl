@@ -62,6 +62,7 @@ describe('/reasoning reaches the renderer', () => {
       return { content: 'done', provider: 'stub' }
     },
     contextStatus: async () => ({ contextLength: 100, totalUsed: 1, utilization: 0 }),
+    getContext: () => ({ workspaceDir: '/tmp' }),
   } as unknown as Operator
 
   async function reasoningShown(showReasoning: boolean): Promise<boolean> {
