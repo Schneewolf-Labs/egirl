@@ -58,6 +58,10 @@ export const CLI_COMMANDS: readonly CommandSpec[] = [
   { name: 'quiet', summary: 'hide tool calls and reasoning' },
   { name: 'queue', summary: 'messages waiting for the next turn' },
   { name: 'clear', summary: 'drop queued messages' },
+  {
+    name: 'interrupt',
+    summary: 'send queued messages into the running turn now (/interrupt 2: oldest two)',
+  },
   { name: 'settings', summary: 'current settings, and which apply now or at restart' },
   { name: 'wipe', summary: 'start the session over' },
   { name: 'prompt', summary: 'the system prompt' },

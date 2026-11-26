@@ -626,6 +626,16 @@ export class AgentLoop implements Operator {
           }
         }
 
+        // A message injected while this answer was being written has not been seen: inject()
+        // promised delivery, so take another turn for it rather than end the run without it.
+        if (
+          this.activeRun?.pendingInjections.length &&
+          !signal?.aborted &&
+          state.turns < maxTurns
+        ) {
+          state.accumulatedContent = ''
+          continue
+        }
         break
       }
 
