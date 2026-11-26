@@ -10,6 +10,7 @@
 
 import { describe, expect, test } from 'bun:test'
 import { AgentLoop } from '../../src/agent/loop'
+import { DEFAULT_MAX_TURNS } from '../../src/config/schema'
 import type { ChatRequest, ChatResponse, LLMProvider } from '../../src/providers/types'
 import { createToolExecutor } from '../../src/tools/executor'
 import { makeConfig, makeExecutorWithNoop, makeWorkspace, stubResponse } from './helpers'
@@ -24,7 +25,7 @@ function makeAgent(provider: LLMProvider, sessionId: string): AgentLoop {
 }
 
 describe('default turn cap', () => {
-  test('an unspecified maxTurns caps the run at 10 turns', async () => {
+  test('an unspecified maxTurns caps the run at DEFAULT_MAX_TURNS', async () => {
     let toolTurns = 0
     const provider: LLMProvider = {
       name: 'stub',
@@ -43,8 +44,8 @@ describe('default turn cap', () => {
     const agent = makeAgent(provider, 'test:default-cap')
     const result = await agent.run('go')
 
-    expect(toolTurns).toBe(10)
-    expect(result.turns).toBe(10)
+    expect(toolTurns).toBe(DEFAULT_MAX_TURNS)
+    expect(result.turns).toBe(DEFAULT_MAX_TURNS)
     // The forced no-tools wrap-up supplies the final content.
     expect(result.content).toBe('where I got to')
   })

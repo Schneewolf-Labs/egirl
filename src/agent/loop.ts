@@ -1,4 +1,5 @@
 import type { RuntimeConfig } from '../config'
+import { DEFAULT_MAX_TURNS } from '../config/schema'
 import type { ConversationStore } from '../conversation'
 import type { MemoryManager } from '../memory'
 import type { Operator } from '../operator/types'
@@ -242,7 +243,7 @@ export class AgentLoop implements Operator {
     // A run that sets no cap of its own (the chat surfaces) gets `conversation.max_turns`.
     const maxTurns = options.unbounded
       ? UNBOUNDED_SAFETY_CEILING
-      : (options.maxTurns ?? this.config.conversation.maxTurns ?? 10)
+      : (options.maxTurns ?? this.config.conversation.maxTurns ?? DEFAULT_MAX_TURNS)
     const turnStartedAt = Date.now()
 
     // Always explicit, including `off`: an omitted setting leaves the chat template's own

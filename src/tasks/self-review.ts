@@ -23,7 +23,8 @@ import { log } from '../util/logger'
  */
 
 const MAX_DIGEST_CHARS = 9000
-const REVIEW_MAX_TURNS = 8
+// 8 was the length of every review measured (Zero: 8 of 8 at the cap).
+const REVIEW_MAX_TURNS = 15
 
 const REVIEW_PROMPT = `[Post-run self-review. You are reviewing the run you just completed — digest below. You have ONLY skill and memory tools this pass; your job is to make future runs better, then stop.
 

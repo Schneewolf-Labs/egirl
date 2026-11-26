@@ -427,7 +427,7 @@ Optional. Controls conversation persistence, compaction, and the turn cap for ch
 | `compact_on_startup` | bool | `true` | Run compaction when egirl starts |
 | `context_compaction` | bool | `true` | Summarize interior messages when context fills instead of dropping |
 | `context_rollover` | bool | `false` | When context fills, roll over to a fresh window seeded with a mechanical handoff record (operator inputs, pending tool results) instead of summarizing. Adds the `new_context` and `context_remaining` tools. Unbounded task runs use it regardless. |
-| `max_turns` | number | `10` | Turn cap for a run that sets none of its own: `POST /chat` (a request's `max_turns` overrides it), the chat channels (Discord, XMPP, Telegram, Matrix), and `/v1/chat/completions`. Tasks use their own `max_turns`; the interactive CLI uses its session setting. When the cap ends a run, the reply says it ran out of steps and `/chat` returns `turn_limit_reached: true` |
+| `max_turns` | number | `40` | Turn cap for a run that sets none of its own: `POST /chat` (a request's `max_turns` overrides it), the chat channels (Discord, XMPP, Telegram, Matrix), and `/v1/chat/completions`. Tasks use their own `max_turns`; the interactive CLI uses its session setting. When the cap ends a run, the reply says it ran out of steps and `/chat` returns `turn_limit_reached: true` |
 
 ### `[recovery]`
 
@@ -553,12 +553,12 @@ Optional. Configures the [background task framework](background-tasks.md).
 | `tick_interval_ms` | number | `30000` | How often to check for due scheduled tasks (ms) |
 | `max_active_tasks` | number | `20` | Maximum active tasks at once |
 | `max_concurrent_tasks` | number | `1` | Tasks running simultaneously |
-| `task_timeout_ms` | number | `300000` | Maximum duration per task run (5 min default) |
+| `task_timeout_ms` | number | `1800000` | Maximum duration per task run (30 min default, matching `code_agent`'s) |
 | `extensions` | bool | `true` | Offer `request_extension` to bounded task runs; the runner grants it only on evidence of progress (see [background tasks](background-tasks.md#deadlines-resume-extension-clean-stop)) |
 | `max_extensions` | number | `2` | Most extensions one run can be granted |
 | `max_extension_ratio` | number | `1.0` | Total extension per run is capped at `task_timeout_ms` × this |
 | `discovery_enabled` | bool | `true` | Agent looks for useful work during idle time |
-| `discovery_interval_ms` | number | `1800000` | Time between discovery runs (30 min default) |
+| `discovery_interval_ms` | number | `7200000` | Time between discovery runs (2 h default) |
 | `idle_threshold_ms` | number | `600000` | Idle time before discovery kicks in (10 min default) |
 
 #### `[tasks.heartbeat]`

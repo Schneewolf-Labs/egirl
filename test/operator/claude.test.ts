@@ -4,6 +4,7 @@ import { writeFileSync } from 'fs'
 import { join } from 'path'
 import type { AgentEventHandler } from '../../src/agent/events'
 import { resetSessionEvents, subscribe } from '../../src/agent/session-events'
+import { DEFAULT_MAX_TURNS } from '../../src/config/schema'
 import { ClaudeOperator, type QueryFn } from '../../src/operator/claude'
 import type { SessionMap } from '../../src/operator/session-map'
 import type { LLMProvider, ToolCall } from '../../src/providers/types'
@@ -243,7 +244,7 @@ describe('ClaudeOperator', () => {
     await op.run('x', { unbounded: true })
     expect(calls[0]?.options.maxTurns).toBeUndefined()
     await op.run('y')
-    expect(calls[1]?.options.maxTurns).toBe(10)
+    expect(calls[1]?.options.maxTurns).toBe(DEFAULT_MAX_TURNS)
   })
 
   test('an error result after the session ran is the run failing, and the bus hears it', async () => {

@@ -3,6 +3,7 @@ import type { AgentContext } from '../agent/context'
 import type { ContextStatus } from '../agent/status'
 import type { AgentLoopOptions, AgentResponse } from '../agent/types'
 import type { RuntimeConfig } from '../config'
+import { DEFAULT_MAX_TURNS } from '../config/schema'
 import type { ThinkingConfig } from '../providers/types'
 import { log } from '../util/logger'
 import { consumeQuery, thinkingOptions, userTurnWithImages } from './claude-messages'
@@ -154,7 +155,7 @@ export class ClaudeOperator implements Operator {
       cwd: this.session.getContext().workspaceDir,
       // An unbounded run (a task) ends on its own; the harness's guards stand in for the cap.
       ...(!options.unbounded && {
-        maxTurns: options.maxTurns ?? this.config.conversation.maxTurns ?? 10,
+        maxTurns: options.maxTurns ?? this.config.conversation.maxTurns ?? DEFAULT_MAX_TURNS,
       }),
       includePartialMessages: true,
       abortController: turn.controller,

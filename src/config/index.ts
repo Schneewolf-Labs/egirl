@@ -11,6 +11,7 @@ import { loadConfigFragments } from './fragments'
 import {
   type CodeAgentProvider,
   ConfigFragmentSchema,
+  DEFAULT_MAX_TURNS,
   type EgirlConfig,
   InstanceFragmentSchema,
   type RuntimeConfig,
@@ -376,7 +377,7 @@ export function loadConfig(options: LoadConfigOptions = {}): RuntimeConfig {
       contextCompaction: toml.conversation?.context_compaction ?? true,
       contextRollover: toml.conversation?.context_rollover ?? false,
       consolidationInterval: toml.conversation?.consolidation_interval ?? 0,
-      maxTurns: toml.conversation?.max_turns ?? 10,
+      maxTurns: toml.conversation?.max_turns ?? DEFAULT_MAX_TURNS,
     },
     recovery: {
       continuationRetries: toml.recovery?.continuation_retries ?? 3,
@@ -434,13 +435,13 @@ export function loadConfig(options: LoadConfigOptions = {}): RuntimeConfig {
       tickIntervalMs: toml.tasks?.tick_interval_ms ?? 30000,
       maxActiveTasks: toml.tasks?.max_active_tasks ?? 20,
       maxConcurrentTasks: toml.tasks?.max_concurrent_tasks ?? 1,
-      taskTimeoutMs: toml.tasks?.task_timeout_ms ?? 300000,
+      taskTimeoutMs: toml.tasks?.task_timeout_ms ?? 1_800_000,
       selfReview: toml.tasks?.self_review ?? true,
       extensions: toml.tasks?.extensions ?? true,
       maxExtensions: toml.tasks?.max_extensions ?? 2,
       maxExtensionRatio: toml.tasks?.max_extension_ratio ?? 1.0,
       discoveryEnabled: toml.tasks?.discovery_enabled ?? true,
-      discoveryIntervalMs: toml.tasks?.discovery_interval_ms ?? 1800000,
+      discoveryIntervalMs: toml.tasks?.discovery_interval_ms ?? 7_200_000,
       idleThresholdMs: toml.tasks?.idle_threshold_ms ?? 600000,
       heartbeat: {
         enabled: toml.tasks?.heartbeat?.enabled ?? true,
