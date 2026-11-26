@@ -321,6 +321,7 @@ export function loadConfig(options: LoadConfigOptions = {}): RuntimeConfig {
         apiKey: process.env.EGIRL_LOCAL_API_KEY ?? toml.local?.api_key,
       }),
       ...(toml.local?.hosted && { isHosted: true }),
+      ...(toml.local?.provider === 'claude' && { isClaude: true }),
       // EGIRL_LOCAL_ENDPOINT still wins outright: a one-off run pointed at a specific server
       // (the bench) must not be redirected to whatever the fleet is serving.
       ...(toml.local?.witchgrid &&
@@ -682,6 +683,11 @@ export function loadConfig(options: LoadConfigOptions = {}): RuntimeConfig {
       provider,
       ...(toml.operator.model && { model: toml.operator.model }),
     }
+  }
+  if (config.local.isClaude && config.operator?.provider !== 'claude') {
+    throw new Error(
+      '[local] provider = "claude" needs [operator] provider = "claude": Claude does the side work only on an instance that is Claude already',
+    )
   }
 
   if (toml.report?.to) {

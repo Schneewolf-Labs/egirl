@@ -119,6 +119,10 @@ const baseProperties = {
     // fields. The llama.cpp extensions (chat_template_kwargs, id_slot, return_progress) are
     // dropped, so /think cannot switch the model's thinking on such an endpoint.
     hosted: Type.Optional(Type.Boolean()),
+    // "claude": the side work runs on Claude instead of a llama-server -- each call one Claude
+    // Code query on the machine's `claude login`, `model` naming the Claude model ("haiku").
+    // Only with `[operator] provider = "claude"`: the whole instance is then a Claude instance.
+    provider: Type.Optional(Type.Union([Type.Literal('llamacpp'), Type.Literal('claude')])),
     // Find the operator model through a Witchgrid control plane instead of a fixed endpoint:
     // GET {url}/resolve/{profile} at startup, the auto-spawning {url}/v1/llama/{profile} proxy
     // when nothing is running. `endpoint`, if set, is the fallback for an unreachable CP.
@@ -680,6 +684,8 @@ export interface RuntimeConfig {
     apiKey?: string
     /** A hosted OpenAI-compatible API, not a llama-server: name the model, skip llama.cpp fields. */
     isHosted?: boolean
+    /** The side work runs on Claude through the Agent SDK, not a llama-server (`providers/claude`). */
+    isClaude?: boolean
     /** Resolve `endpoint` through a Witchgrid control plane at startup (see providers/witchgrid). */
     witchgrid?: {
       url: string

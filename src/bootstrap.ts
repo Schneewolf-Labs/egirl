@@ -234,7 +234,10 @@ export async function createAppServices(config: RuntimeConfig): Promise<AppServi
   // token estimates run enough below real counts that a config within a few percent of the
   // server window overflows it in practice. Clamp before anything downstream captures the
   // value (providers, budget tracker, fitting all read config.local.contextLength).
-  const serverProps = await probeServerProps(config.local.endpoint, config.local.apiKey)
+  // Side work on Claude has no llama-server to ask.
+  const serverProps = config.local.isClaude
+    ? undefined
+    : await probeServerProps(config.local.endpoint, config.local.apiKey)
   const serverCtx = serverContextLength(serverProps)
   if (serverCtx !== undefined && config.local.contextLength > serverCtx) {
     log.warn(

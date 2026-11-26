@@ -888,6 +888,7 @@ export class TaskRunner {
         config: this.deps.config,
         provider: this.deps.localProvider,
         memory: this.deps.memory,
+        ...(this.deps.buildOperator && { buildOperator: this.deps.buildOperator }),
       }).catch((err) => log.warn('tasks', `Self-review failed for ${task.name}: ${err}`))
     }
 
