@@ -4,6 +4,9 @@
  * loop's implicit state machine; anything that resets between runs belongs here, anything
  * that survives a run (history, context, compaction) does not.
  */
+
+import { RunLedger } from './run-ledger'
+
 export interface RunState {
   /** Turns started so far this run (incremented at the top of each loop iteration). */
   turns: number
@@ -33,6 +36,8 @@ export interface RunState {
   wrapupWarned: boolean
   /** Security events from this run's tools (egress blocks, injected instructions), for the user. */
   securityNotices: string[]
+  /** What this run's tools reported, handed to its wrap-ups. */
+  ledger: RunLedger
 }
 
 export function createRunState(): RunState {
@@ -51,5 +56,6 @@ export function createRunState(): RunState {
     lastContextBreakTurn: -Infinity,
     wrapupWarned: false,
     securityNotices: [],
+    ledger: new RunLedger(),
   }
 }

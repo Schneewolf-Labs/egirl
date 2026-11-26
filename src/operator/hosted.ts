@@ -307,6 +307,7 @@ export class HostedSession {
     const result = extra
       ? await extra.execute(args, cwd, scope.toolCtx)
       : await (this.mutex ? this.mutex.run(call) : call())
+    scope.signals.ledger.record(name, args, result)
     scope.events.onToolCallComplete?.(name, name, result)
     publish(this.context.sessionId, {
       t: 'tool_done',

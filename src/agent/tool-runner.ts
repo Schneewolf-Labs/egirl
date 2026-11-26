@@ -6,6 +6,7 @@ import { type AgentContext, addMessage } from './context'
 import { truncateToolResultSync } from './context-window'
 import type { AgentEventHandler } from './events'
 import { duplicateToolWarning } from './nudges'
+import type { RunLedger } from './run-ledger'
 import { publish } from './session-events'
 
 /** Default max tokens per tool result — matches context-window.ts default */
@@ -72,6 +73,8 @@ export async function runToolCalls(args: {
   seenToolCalls: RepeatDetector
   events?: AgentEventHandler
   signal?: AbortSignal
+  /** The run's record of tool outcomes, for its wrap-up. */
+  ledger?: RunLedger
 }): Promise<{ awaitingInput: boolean; endRun?: { content: string }; security: string[] }> {
   const { response, context, executor, intrinsic, seenToolCalls, events, signal } = args
   const calls = response.tool_calls ?? []
@@ -112,6 +115,7 @@ export async function runToolCalls(args: {
     )
 
     const call = calls.find((c) => c.id === callId)
+    if (call) args.ledger?.record(call.name, call.arguments, result)
     events?.onToolCallComplete?.(callId, call?.name ?? 'unknown', result)
 
     // Full-payload tool record: post-mortems need the actual command and the actual output,
