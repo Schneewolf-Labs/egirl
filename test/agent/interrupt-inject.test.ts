@@ -153,4 +153,27 @@ describe('inject', () => {
     expect(lastRequest[first]?.role).toBe('user')
     expect(lastRequest[second]?.role).toBe('user')
   })
+
+  test('a message injected while the final answer is written gets a turn of its own', async () => {
+    let agent: AgentLoop | undefined
+    const seen: string[][] = []
+    let n = 0
+    const provider: LLMProvider = {
+      name: 'stub',
+      async chat(req: ChatRequest): Promise<ChatResponse> {
+        seen.push(req.messages.map((m) => (typeof m.content === 'string' ? m.content : '')))
+        n++
+        if (n === 1) {
+          agent?.inject(NOTE)
+          return stubResponse({ content: 'all done' })
+        }
+        return stubResponse({ content: 'switched' })
+      },
+    }
+    agent = makeAgent(provider, 'test:inject-final')
+    const result = await agent.run('go', { maxTurns: 8 })
+    expect(n).toBe(2)
+    expect(seen[1]?.some((m) => m.includes(NOTE))).toBe(true)
+    expect(result.content).toBe('switched')
+  })
 })

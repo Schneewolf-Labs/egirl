@@ -318,6 +318,7 @@ function helpCommand(scope: CommandScope): CommandResult {
       '📋 /tasks — background tasks: list, details, run, pause, resume',
       '📥 /queue — messages waiting for the next turn',
       '🧹 /clear — drop queued messages',
+      '↪️ /interrupt [n] — send the queued messages (or the oldest n) into the running turn now',
       '👋 /quit — exit',
     )
   }

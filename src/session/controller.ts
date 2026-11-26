@@ -37,6 +37,8 @@ export const DEFAULT_SETTINGS: SessionSettings = {
 export interface QueuedMessage {
   text: string
   at: number
+  /** Goes as a turn of its own, ahead of the rest (`/interrupt` on an operator that cannot inject). */
+  isAlone?: boolean
 }
 
 /**
@@ -100,9 +102,22 @@ export class SessionController {
    */
   drain(): string | undefined {
     if (this.queue.length === 0) return undefined
+    if (this.queue[0]?.isAlone) return this.queue.shift()?.text
     const text = this.queue.map((q) => q.text).join('\n')
     this.queue = []
     return text
+  }
+
+  /** Take the oldest `n` queued messages (all of them by default), joined as drain() joins. */
+  take(n?: number): { text: string; count: number } | undefined {
+    const taken = this.queue.splice(0, n ?? this.queue.length)
+    if (taken.length === 0) return undefined
+    return { text: taken.map((q) => q.text).join('\n'), count: taken.length }
+  }
+
+  /** Put `text` at the front of the queue, to be sent next as a turn of its own. */
+  sendNext(text: string): void {
+    this.queue.unshift({ text, at: Date.now(), isAlone: true })
   }
 
   peek(): readonly QueuedMessage[] {

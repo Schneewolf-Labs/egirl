@@ -56,8 +56,9 @@ export async function runTurns(first: string, deps: TurnDeps): Promise<void> {
 
     // Anything typed during the turn runs now rather than waiting for another return --
     // a queued message that sits unseen is worse than one that was never accepted.
-    const queued = session.peek().length
+    const before = session.peek().length
     pending = session.drain()
+    const queued = before - session.peek().length
     if (pending) {
       console.log(renderDrained(pending, queued))
       continue

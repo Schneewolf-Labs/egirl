@@ -13,6 +13,7 @@ import { CLI_COMMANDS, complete, menuItems } from './cli-complete'
 import { renderDrained, renderQueuedMessage } from './cli-events'
 import { appendHistory, loadHistory } from './cli-history'
 import { type CLIInput, createCLIInput } from './cli-input'
+import { interruptCommand } from './cli-interrupt'
 import { tasksCommand } from './cli-tasks'
 import { themeCommand } from './cli-theme'
 import { runTurns } from './cli-turn'
@@ -170,6 +171,12 @@ export class CLIChannel implements Channel {
       this.input?.notice(themeCommand(text.slice('/theme'.length)))
       return
     }
+    if (word === '/interrupt') {
+      this.input?.notice(
+        interruptCommand(text.slice(word.length), { agent: this.agent, session: this.session }),
+      )
+      return
+    }
     if (word === '/prompt' || word === '/debug') {
       void handleCLICommand(word, this.commandCtx())
       return
@@ -215,6 +222,12 @@ export class CLIChannel implements Channel {
       console.log(`${tasks}\n`)
       return true
     }
+    if (input === '/interrupt' || input.startsWith('/interrupt ')) {
+      console.log(
+        `${interruptCommand(input.slice('/interrupt'.length), { agent: this.agent, session: this.session })}\n`,
+      )
+      return true
+    }
     if (await handleCLICommand(input, this.commandCtx())) return true
     // /learn is a turn, not a command: the caller rewrites it and runs it.
     if (input === '/learn' || input.startsWith('/learn ')) return false
@@ -241,8 +254,9 @@ export class CLIChannel implements Channel {
       let pending = await this.toTurn(text)
       // A command can take a while (/plan, /compact); anything typed meanwhile goes next.
       if (pending === undefined) {
-        const queued = this.session.peek().length
+        const before = this.session.peek().length
         pending = this.session.drain()
+        const queued = before - this.session.peek().length
         if (pending) console.log(renderDrained(pending, queued))
       }
       if (pending !== undefined) {
