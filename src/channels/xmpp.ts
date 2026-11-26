@@ -1,5 +1,6 @@
 import { client, type Client as XMPPClient, xml } from '@xmpp/client'
 import type { Element } from '@xmpp/xml'
+import type { ConfigDrift } from '../config/drift'
 import type { Operator } from '../operator/types'
 import type { ReplyBroker } from '../report/broker'
 import { log } from '../util/logger'
@@ -33,6 +34,8 @@ export class XMPPChannel implements ChatChannel {
   private config: XMPPConfig
   private broker: ReplyBroker | undefined
 
+  private configDrift: ConfigDrift | undefined
+
   constructor(agent: Operator, config: XMPPConfig, broker?: ReplyBroker) {
     this.agent = agent
     this.config = config
@@ -45,6 +48,11 @@ export class XMPPChannel implements ChatChannel {
       password: config.password,
       resource: config.resource ?? 'egirl',
     })
+  }
+
+  /** The config files as read at startup, so /settings can say when they changed since. */
+  useConfigDrift(drift: ConfigDrift): void {
+    this.configDrift = drift
   }
 
   async start(): Promise<void> {
@@ -136,6 +144,7 @@ export class XMPPChannel implements ChatChannel {
       },
       body,
       this.broker,
+      { configDrift: this.configDrift },
     )
   }
 

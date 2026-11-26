@@ -1,3 +1,4 @@
+import type { ConfigDrift } from '../config/drift'
 import type { Operator } from '../operator/types'
 import type { ReplyBroker } from '../report/broker'
 import { log } from '../util/logger'
@@ -59,11 +60,18 @@ export class MatrixChannel implements ChatChannel {
   /** Where a "self"-targeted notification goes when no allowed_rooms are configured. */
   private lastRoomId: string | undefined
 
+  private configDrift: ConfigDrift | undefined
+
   constructor(agent: Operator, config: MatrixConfig, broker?: ReplyBroker, api?: MatrixApi) {
     this.agent = agent
     this.config = config
     this.broker = broker
     this.api = api ?? createMatrixApi(config.homeserver, config.accessToken)
+  }
+
+  /** The config files as read at startup, so /settings can say when they changed since. */
+  useConfigDrift(drift: ConfigDrift): void {
+    this.configDrift = drift
   }
 
   async start(): Promise<void> {
@@ -189,6 +197,7 @@ export class MatrixChannel implements ChatChannel {
       },
       text,
       this.broker,
+      { configDrift: this.configDrift },
     )
   }
 
