@@ -14,7 +14,7 @@
 
 import { CONTINUE_PROMPT } from '../../src/session/commands'
 import { findRecall, oneLine, operatorRequest, turnTail, wasEmbedded } from './checks'
-import type { CheckResult, Scenario, TurnResult } from './types'
+import { type CheckResult, fail, type InstanceScenario, pass, type TurnResult } from './types'
 
 const CONTROL = 'what does the heartbeat check monitor?'
 // What /continue sends on the principal's behalf; imported so the scenario tracks the real text.
@@ -47,33 +47,31 @@ const SEEDS: Array<{ key: string; value: string; source?: 'auto' | 'conversation
 ]
 
 function noRecall(turn: TurnResult | undefined, name: string): CheckResult {
-  if (!turn) return { name, passed: false, evidence: 'turn never ran' }
-  if (turn.error) return { name, passed: false, evidence: `turn failed: ${turn.error}` }
+  if (!turn) return fail(name, 'turn never ran')
+  if (turn.error) return fail(name, `turn failed: ${turn.error}`)
   const req = operatorRequest(turn)
-  if (!req)
-    return { name, passed: false, evidence: 'no operator request carrying this turn was recorded' }
+  if (!req) return fail(name, 'no operator request carrying this turn was recorded')
   const embedded = wasEmbedded(turn)
     ? 'query was embedded (gate let it through)'
     : 'query not embedded'
   const hit = findRecall(turnTail(req, turn.text))
   return hit
-    ? { name, passed: false, evidence: `request #${req.seq} injected: ${hit} [${embedded}]` }
-    : { name, passed: true, evidence: `request #${req.seq}: no recall block [${embedded}]` }
+    ? fail(name, `request #${req.seq} injected: ${hit} [${embedded}]`)
+    : pass(name, `request #${req.seq}: no recall block [${embedded}]`)
 }
 
 function hasRecall(turn: TurnResult | undefined, name: string): CheckResult {
-  if (!turn) return { name, passed: false, evidence: 'turn never ran' }
-  if (turn.error) return { name, passed: false, evidence: `turn failed: ${turn.error}` }
+  if (!turn) return fail(name, 'turn never ran')
+  if (turn.error) return fail(name, `turn failed: ${turn.error}`)
   const req = operatorRequest(turn)
-  if (!req)
-    return { name, passed: false, evidence: 'no operator request carrying this turn was recorded' }
+  if (!req) return fail(name, 'no operator request carrying this turn was recorded')
   const hit = findRecall(turnTail(req, turn.text))
   return hit
-    ? { name, passed: true, evidence: `request #${req.seq} injected: ${oneLine(hit, 160)}` }
-    : { name, passed: false, evidence: `request #${req.seq}: expected a recall block, found none` }
+    ? pass(name, `request #${req.seq} injected: ${oneLine(hit, 160)}`)
+    : fail(name, `request #${req.seq}: expected a recall block, found none`)
 }
 
-export const recallTrivialGate: Scenario = {
+export const recallTrivialGate: InstanceScenario = {
   name: 'recall-trivial-gate',
   description: 'greetings and /continue get no recalled memories; a real question does',
 

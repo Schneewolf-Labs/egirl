@@ -1,0 +1,99 @@
+{
+ "label": "b6-27b",
+ "operator": "local",
+ "upstream": "http://127.0.0.1:8195",
+ "model": "b6-27b",
+ "reps": 2,
+ "results": [
+  {
+   "scenario": "heartbeat-noop-no-memories",
+   "rep": 1,
+   "operator": "local",
+   "model": "b6-27b",
+   "status": "pass",
+   "checks": [
+    {
+     "name": "heartbeat ran each time",
+     "status": "pass",
+     "evidence": "#1 success (model ran): \"HEAD is still `9311169` — no new commits since the last summary.\" | #2 success (model ran): \"HEAD is still `9311169` — no new commits since the last summary.\""
+    },
+    {
+     "name": "memory count unchanged",
+     "status": "pass",
+     "evidence": "before=0 after=0"
+    },
+    {
+     "name": "no new auto/task/heartbeat rows",
+     "status": "pass",
+     "evidence": "no auto/task/heartbeat* rows added"
+    }
+   ],
+   "turns": [
+    {
+     "text": "snapshot memory store",
+     "kind": "action",
+     "reply": "0 memories",
+     "ms": 0
+    },
+    {
+     "text": "heartbeat run 1",
+     "kind": "action",
+     "reply": "[success] HEAD is still `9311169` — no new commits since the last summary.",
+     "ms": 17144
+    },
+    {
+     "text": "heartbeat run 2",
+     "kind": "action",
+     "reply": "[success] HEAD is still `9311169` — no new commits since the last summary.",
+     "ms": 10645
+    }
+   ],
+   "requests_log": "/home/nbeerbower/Projects/egirl-scenarios/bench/scenarios/results/b6-27b-2026-11-26T18-16-12-715Z/heartbeat-noop-no-memories-rep1.requests.jsonl"
+  },
+  {
+   "scenario": "heartbeat-noop-no-memories",
+   "rep": 2,
+   "operator": "local",
+   "model": "b6-27b",
+   "status": "pass",
+   "checks": [
+    {
+     "name": "heartbeat ran each time",
+     "status": "pass",
+     "evidence": "#1 success (model ran): \"HEAD is still `a71a053` — no new commits since the last summary. Nothing to repo…\" | #2 success (model ran): \"HEAD is still `a71a053` — no new commits since the last summary. Nothing to repo…\""
+    },
+    {
+     "name": "memory count unchanged",
+     "status": "pass",
+     "evidence": "before=0 after=0"
+    },
+    {
+     "name": "no new auto/task/heartbeat rows",
+     "status": "pass",
+     "evidence": "no auto/task/heartbeat* rows added"
+    }
+   ],
+   "turns": [
+    {
+     "text": "snapshot memory store",
+     "kind": "action",
+     "reply": "0 memories",
+     "ms": 0
+    },
+    {
+     "text": "heartbeat run 1",
+     "kind": "action",
+     "reply": "[success] HEAD is still `a71a053` — no new commits since the last summary. Nothing to report.",
+     "ms": 17727
+    },
+    {
+     "text": "heartbeat run 2",
+     "kind": "action",
+     "reply": "[success] HEAD is still `a71a053` — no new commits since the last summary. Nothing to report.",
+     "ms": 11213
+    }
+   ],
+   "requests_log": "/home/nbeerbower/Projects/egirl-scenarios/bench/scenarios/results/b6-27b-2026-11-26T18-16-12-715Z/heartbeat-noop-no-memories-rep2.requests.jsonl"
+  }
+ ]
+}

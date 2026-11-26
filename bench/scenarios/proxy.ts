@@ -42,11 +42,18 @@ export interface RecordedRequest {
   body: unknown
 }
 
-export interface Proxy {
+export interface RecordingProxy {
   url: string
   port: number
   /** Number of requests recorded so far; a turn's requests are the ones between two reads */
   count(): number
+  /**
+   * Resolve once no recorded request is in flight and none has started or finished for
+   * `quietMs`. Post-run work (memory extraction, lesson extraction, the embedding calls their
+   * writes make) is fire-and-forget in egirl, so a check that reads the DB the moment the run's
+   * HTTP call returns would race it. Resolves false if `maxMs` passes first.
+   */
+  settle(quietMs?: number, maxMs?: number): Promise<boolean>
   stop(): void
 }
 
@@ -159,8 +166,39 @@ async function forward(req: Request, base: string, body?: string): Promise<Respo
   return new Response(res.body, { status: res.status, statusText: res.statusText, headers: out })
 }
 
-export function startProxy(opts: ProxyOptions): Proxy {
+export function startProxy(opts: ProxyOptions): RecordingProxy {
   let seq = 0
+  let inflight = 0
+  let lastActivity = Date.now()
+
+  /** Counts a recorded request until its response body has been fully sent (or abandoned). */
+  const tracked = async (pending: Response | Promise<Response>): Promise<Response> => {
+    let finished = false
+    const finish = () => {
+      if (finished) return
+      finished = true
+      inflight--
+      lastActivity = Date.now()
+    }
+    let res: Response
+    try {
+      res = await pending
+    } catch (e) {
+      finish()
+      throw e
+    }
+    if (!res.body) {
+      finish()
+      return res
+    }
+    const pass = new TransformStream({ flush: finish })
+    res.body.pipeTo(pass.writable).catch(finish)
+    return new Response(pass.readable, {
+      status: res.status,
+      statusText: res.statusText,
+      headers: res.headers,
+    })
+  }
   const dims = opts.embedDims ?? STUB_EMBED_DIMS
   const reply = opts.stubReply ?? STUB_REPLY
 
@@ -173,6 +211,8 @@ export function startProxy(opts: ProxyOptions): Proxy {
     }
     const entry: RecordedRequest = { seq: seq++, at: Date.now(), kind, body }
     appendFileSync(opts.logPath, `${JSON.stringify(entry)}\n`)
+    inflight++
+    lastActivity = Date.now()
     return body
   }
 
@@ -186,14 +226,16 @@ export function startProxy(opts: ProxyOptions): Proxy {
       if (req.method === 'POST' && path === '/v1/chat/completions') {
         const text = await req.text()
         const body = record('chat', text)
-        return opts.upstream ? forward(req, opts.upstream, text) : stubChat(body, reply)
+        return tracked(opts.upstream ? forward(req, opts.upstream, text) : stubChat(body, reply))
       }
       if (req.method === 'POST' && (path === '/v1/embeddings' || path === '/embeddings')) {
         const text = await req.text()
         const body = record('embeddings', text)
-        return opts.embeddingsUpstream
-          ? forward(req, opts.embeddingsUpstream, text)
-          : stubEmbeddings(body, dims)
+        return tracked(
+          opts.embeddingsUpstream
+            ? forward(req, opts.embeddingsUpstream, text)
+            : stubEmbeddings(body, dims),
+        )
       }
       if (opts.upstream) {
         const text = req.method === 'GET' || req.method === 'HEAD' ? undefined : await req.text()
@@ -217,6 +259,14 @@ export function startProxy(opts: ProxyOptions): Proxy {
     url: `http://127.0.0.1:${port}`,
     port,
     count: () => seq,
+    settle: async (quietMs = 3000, maxMs = 600_000) => {
+      const deadline = Date.now() + maxMs
+      while (Date.now() < deadline) {
+        if (inflight === 0 && Date.now() - lastActivity >= quietMs) return true
+        await Bun.sleep(100)
+      }
+      return false
+    },
     stop: () => server.stop(true),
   }
 }

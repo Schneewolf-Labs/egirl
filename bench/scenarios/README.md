@@ -25,10 +25,11 @@ bun bench/scenarios/run.ts --only recall-trivial-gate --keep
 | `--label NAME` | operator / model | Prefix of the results file |
 | `--keep` | off | Keep each rep's temp root and print its path in the results |
 
-Output: a line per failing check while running, then one summary line per scenario
-(`passes/reps`, plus per-check pass counts). The full record goes to
-`results/<label>-<timestamp>.json`: per rep, every check's pass/fail and evidence string, and
-each turn's reply text. Each rep's raw proxy log is copied next to it in
+Output: a line per check that didn't pass while running, then one summary line per scenario
+(`passes/judged reps`, plus per-check counts). A scenario with more than eight checks lists
+only the ones that weren't clean passes. The full record goes to
+`results/<label>-<timestamp>.json`: per rep, every check's status and evidence string, and
+each step's reply text. Each rep's raw proxy log is copied next to it in
 `results/<label>-<timestamp>/<scenario>-rep<n>.requests.jsonl`.
 
 ## What one rep does
@@ -40,10 +41,30 @@ each turn's reply text. Each rep's raw proxy log is copied next to it in
 4. `bun --no-env-file src/index.ts api` starts from the temp root, with the proxy as its local
    endpoint. The runner waits for `GET /` to answer; one boot retry covers Bun's occasional
    startup stall.
-5. Turns go to `POST /chat`, in one session (`api:scenario`) unless a turn names its own.
-   Whatever the proxy records while a turn is in flight belongs to that turn.
-6. The scenario's checks run against the recorded requests, DBs and files. Then egirl is
+5. Steps run in order. A chat turn goes to `POST /chat`, in one session (`api:scenario`)
+   unless it names its own. An action step runs scenario code against the live instance
+   (trigger a task, snapshot a DB). Whatever the proxy records while a step is in flight
+   belongs to that step.
+6. The runner waits for the model endpoint to go quiet (`settle`: nothing in flight and
+   nothing new for 3 s). egirl's post-run work (memory and lesson extraction, and the
+   embedding calls their writes make) is fire-and-forget, so a DB read straight after the
+   HTTP call returns would race it.
+7. The scenario's checks run against the recorded requests, DBs and files. Then egirl is
    killed, the proxy stopped, and the temp root deleted (unless `--keep`).
+
+### Check status
+
+Each check is `pass`, `fail` or `not-meaningful`. `not-meaningful` means the check ran but its
+outcome says nothing on this operator. For example, on the stub a memory-write check can't
+fail, because extraction has nothing to extract from `ok.`. A rep is `fail` if any check
+failed or the rep errored, `not-meaningful` if any check couldn't be judged, and `pass` only if
+every check passed. The summary counts passes over judged reps and shows the rest as `n/a`.
+
+### Pure scenarios
+
+A scenario with `kind: 'pure'` calls egirl's code directly: no instance, no proxy, no temp
+dir. `--operator` is ignored, and each rep just re-runs its checks. Use one for anything that's
+a property of a function (a filter, a parser), not of a running agent.
 
 ### Hermeticity
 
@@ -98,18 +119,62 @@ seeding writes. Then five turns run in one session: `hey juno`, `yo yo`, the `/c
 Expected on main today: `hey juno`, `yo yo` and the continue prompt fail, because none of them
 match the anchored `TRIVIAL_RE`. `thanks!` and the control pass.
 
+### `heartbeat-noop-no-memories`
+
+Tasks on (`[tasks] enabled` and `[tools] tasks`), memory on with `auto_extract` and real or
+stub embeddings. Setup bootstraps the workspace and makes it a git repo with one commit, dated
+six hours back and with a clean tree (egirl's runtime files go in `.git/info/exclude`). It
+writes a HEARTBEAT.md with one unchecked recurring item naming that HEAD:
+
+```
+- [ ] Summarize recent git activity if idle for 4+ hours — last summarized through `<sha>`. If HEAD is still `<sha>`, nothing new: reply in one line and stop.
+```
+
+The heartbeat task is seeded into `tasks.db` with the same fields `seedHeartbeatTask` uses.
+The `api` process never seeds it itself, because it runs no schedule. Its next run is parked
+a year out and the runner ticks hourly, so the only runs are the scenario's own. The steps:
+snapshot the memory store (after boot, because boot indexes the daily log into memory), then
+`POST /tasks/<id>/run` twice, settling after each.
+
+- **heartbeat ran each time**: `task_runs` has two `success` rows. The evidence says, per run,
+  whether the model was called or the pre-check skipped it (an item checked off by run 1
+  would make run 2 a skip).
+- **memory count unchanged**: `memories` row count after the runs equals the count before.
+  The evidence lists every new key and value.
+- **no new auto/task/heartbeat rows**: no added key starts with `auto/task/heartbeat`.
+
+Task extraction runs after every task with memory on (`src/tasks/runner.ts`). On the stub it
+parses `ok.` and writes nothing, so the two memory checks report `not-meaningful` there. A
+count that does change on the stub is still reported as a fail.
+
+### `safety-filter-false-positives` (pure)
+
+Each row in `safety-filter-cases.json` (`id`, `command`, `expect: allow|block`) becomes one
+check. The command goes through `checkToolCall('execute_command', …)` with
+`getDefaultSafetyConfig()`, the same gate an `execute_command` call passes before it runs.
+The hard-blocked patterns apply whatever the instance's config says, so the stock config is
+the floor every instance shares. An instance's own `blocked_patterns`, allow mode or
+permission rules can only block more. The evidence is the verdict and the filter's reason. To
+add a case, append a row.
+
 ## Adding a scenario
 
-1. Create `bench/scenarios/<name>.ts` exporting a `Scenario` (see `types.ts`):
+1. Create `bench/scenarios/<name>.ts` exporting an `InstanceScenario` or a `PureScenario` (see
+   `types.ts`). For an instance scenario:
    - `config(ctx)`: TOML as an object, deep-merged over the base. `ctx.embeddings` gives the
      endpoint and width to use if the scenario needs memory with embeddings.
    - `setup(ctx)` (optional): runs before egirl starts. `ctx.memory()` opens the instance's
-     memory store, and `ctx.workspace` is there for seeding files.
-   - `turns`: `{ text, session? }[]`.
-   - `checks(ctx)`: returns `{ name, passed, evidence }[]`. Grade artifacts only:
-     `ctx.turns[i].requests` (what the proxy recorded during that turn), `ctx.allRequests`,
-     and DBs and files under `ctx.workspace`. Make the evidence the offending text, short
-     enough to read in one line.
+     memory store, `ctx.workspace` is there for seeding files, and `ctx.home` is the HOME to
+     run tools like git with. Anything later steps or checks need goes in `ctx.state`.
+   - `turns`: a list of steps. `{ text, session? }` is a chat turn. `{ action, run(ctx) }` runs
+     against the live instance (`ctx.url`), returns its reply text, and can call
+     `ctx.settle()`.
+   - `checks(ctx)`: returns `CheckResult[]`, built with `pass` / `fail` / `notMeaningful`
+     from `types.ts`. Grade artifacts only: `ctx.turns[i].requests` (what the proxy recorded
+     during that step), `ctx.allRequests`, and DBs and files under `ctx.workspace`. Make the
+     evidence the offending text, short enough to read in one line. If the stub can't
+     produce what a check looks for, return `notMeaningful` on `ctx.operator === 'stub'`
+     rather than a pass.
 2. Add it to `SCENARIOS` in `run.ts`.
 3. Include a control check that should pass. A check that never fails on any input proves
    nothing.
