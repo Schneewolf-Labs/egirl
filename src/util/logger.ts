@@ -1,6 +1,6 @@
 import { colors, DIM, RESET } from '../ui/theme'
 
-type LogLevel = 'debug' | 'info' | 'warn' | 'error'
+export type LogLevel = 'debug' | 'info' | 'warn' | 'error'
 
 interface LogEntry {
   level: LogLevel

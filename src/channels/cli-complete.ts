@@ -8,6 +8,7 @@
 
 import { THINKING_LEVELS } from '../session/commands'
 import { listThemes } from '../ui/theme'
+import { LOG_LEVELS } from './cli-log'
 import type { MenuItem } from './cli-menu'
 
 export interface CommandSpec {
@@ -42,6 +43,11 @@ export const CLI_COMMANDS: readonly CommandSpec[] = [
     name: 'stats',
     args: ['on', 'off'],
     summary: 'step, tokens, rate and context on the status line',
+  },
+  {
+    name: 'log',
+    args: [...LOG_LEVELS],
+    summary: 'how much of the log reaches the terminal: debug, info, warn, error',
   },
   {
     name: 'theme',
