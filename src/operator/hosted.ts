@@ -194,7 +194,14 @@ export class HostedSession {
     let persisted = false
 
     try {
-      const toolCtx: ToolCallContext = { sessionId }
+      const onToolProgress = events.onToolProgress
+      const toolCtx: ToolCallContext = {
+        sessionId,
+        // Calls here are named by the tool, as onToolCallComplete names them below.
+        ...(onToolProgress && {
+          onToolProgress: (call, text) => onToolProgress(call.name, call.name, text),
+        }),
+      }
       let text = userMessage
       let imagePaths: string[] | undefined
       if (options.images?.length) {

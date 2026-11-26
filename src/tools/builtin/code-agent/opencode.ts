@@ -2,8 +2,9 @@ import { spawn } from 'child_process'
 import { sanitizedEnv } from '../../../util/env'
 import { errorMessage } from '../../../util/errors'
 import { log } from '../../../util/logger'
-import { DEFAULT_TIMEOUT_MS, withImagePaths } from './shared'
-import { ActionLog, formatTimeoutReport } from './timeout-report'
+import { deadlineLimits, startDeadline, stopReason } from './deadline'
+import { withImagePaths } from './shared'
+import { ActionLog, actionText, formatTimeoutReport } from './timeout-report'
 import type { CodeAgentBackend, CodeAgentConfig } from './types'
 
 interface OpencodeEvent {
@@ -161,18 +162,14 @@ export const runOpencodeCodeAgent: CodeAgentBackend = async (
   runOptions,
 ) => {
   const startTime = Date.now()
-  const actions = new ActionLog()
+  const actions = new ActionLog((action) => runOptions?.onProgress?.(actionText(action)))
   const seenTools = new Set<string>()
   let lastText = ''
   let sessionId: string | undefined
-  const timeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS
+  const limits = deadlineLimits(config)
   const abortController = new AbortController()
-  let timedOut = false
   let escalation: string | undefined
-  const timeoutId = setTimeout(() => {
-    timedOut = true
-    abortController.abort()
-  }, timeoutMs)
+  const deadline = startDeadline(limits, () => abortController.abort())
 
   const proc = spawn('opencode', ['serve', '--port', '0', '--hostname', '127.0.0.1'], {
     cwd: workingDir,
@@ -182,7 +179,7 @@ export const runOpencodeCodeAgent: CodeAgentBackend = async (
   const eventStreamController = new AbortController()
 
   try {
-    const baseUrl = await waitForServer(proc, timeoutMs)
+    const baseUrl = await waitForServer(proc, limits.totalMs)
     log.debug('code-agent', `opencode server: ${baseUrl}`)
 
     let session: { id: string }
@@ -213,6 +210,7 @@ export const runOpencodeCodeAgent: CodeAgentBackend = async (
         // Kept only for the timeout report: what the agent did and last said.
         const part = (event.properties?.part ?? {}) as OpencodePart
         if (part.sessionID !== session.id) return
+        deadline.touch()
         if (part.type === 'text' && part.text && !part.synthetic) lastText = part.text
         const input = part.state?.input
         const hasInput = !!input && (typeof input !== 'object' || Object.keys(input).length > 0)
@@ -275,12 +273,13 @@ export const runOpencodeCodeAgent: CodeAgentBackend = async (
         output: `Code agent needs user approval before continuing.\n\n${escalation}`,
       }
     }
-    if (timedOut) {
+    if (deadline.expired) {
       return {
         success: false,
         output: await formatTimeoutReport({
           provider: 'opencode',
-          timeoutMs,
+          timeoutMs: deadline.elapsedMs,
+          reason: stopReason(deadline, limits),
           workingDir,
           actions,
           lastMessage: lastText,
@@ -292,7 +291,7 @@ export const runOpencodeCodeAgent: CodeAgentBackend = async (
     log.error('code-agent', `opencode task failed: ${msg}`)
     return { success: false, output: `Code agent error: ${msg}` }
   } finally {
-    clearTimeout(timeoutId)
+    deadline.clear()
     eventStreamController.abort()
     proc.kill('SIGTERM')
   }

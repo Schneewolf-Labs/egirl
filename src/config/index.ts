@@ -607,6 +607,8 @@ export function loadConfig(options: LoadConfigOptions = {}): RuntimeConfig {
       workingDir: cc.working_dir ? expandPath(cc.working_dir, workspacePath) : workspacePath,
       maxTurns: cc.max_turns,
       timeoutMs: 'timeout_ms' in cc ? (cc.timeout_ms as number | undefined) : undefined,
+      idleTimeoutMs:
+        'idle_timeout_ms' in cc ? (cc.idle_timeout_ms as number | undefined) : undefined,
       acpCommand: 'acp_command' in cc ? (cc.acp_command as string[] | undefined) : undefined,
     }
   }

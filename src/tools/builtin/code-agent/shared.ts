@@ -8,9 +8,6 @@ export function withImagePaths(task: string, images: string[] | undefined): stri
   return `${task}\n\nImages the user attached (open them to see what they show):\n${list}`
 }
 
-/** Default timeout: 5 minutes */
-export const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000
-
 const ESC = String.fromCharCode(27)
 const ANSI_OSC_RE = new RegExp(`${ESC}\\][^\\x07]*(?:\\x07|${ESC}\\\\)`, 'g')
 const ANSI_CSI_RE = new RegExp(`${ESC}\\[[0-?]*[ -/]*[@-~]`, 'g')

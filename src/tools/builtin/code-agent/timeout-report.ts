@@ -66,15 +66,25 @@ export function summarizeToolInput(input: unknown): string {
   }
 }
 
+/** One action as the person watching sees it: "Bash: bun test". */
+export function actionText(action: AgentAction): string {
+  return action.summary ? `${action.tool}: ${action.summary}` : action.tool
+}
+
 /** Ring of the most recent actions plus a total count. */
 export class ActionLog {
   private readonly items: AgentAction[] = []
   total = 0
 
+  /** `onAdd` hears each action as it happens: the live view of what the agent is doing. */
+  constructor(private readonly onAdd?: (action: AgentAction) => void) {}
+
   add(tool: string, input: unknown): void {
     this.total++
-    this.items.push({ tool, summary: summarizeToolInput(input) })
+    const action = { tool, summary: summarizeToolInput(input) }
+    this.items.push(action)
     if (this.items.length > MAX_ACTIONS) this.items.shift()
+    this.onAdd?.(action)
   }
 
   recent(): AgentAction[] {
@@ -115,7 +125,10 @@ export async function gitSummary(
 
 export interface TimeoutReportInput {
   provider: string
+  /** How long the run went before it was stopped. */
   timeoutMs: number
+  /** Why it was stopped (a stall or the total cap), when the backend knows. */
+  reason?: string
   workingDir: string
   turns?: number
   actions: ActionLog
@@ -151,7 +164,7 @@ export async function formatTimeoutReport(input: TimeoutReportInput): Promise<st
     `${input.actions.total} tool calls`,
   ].filter(Boolean)
   const out: string[] = [
-    `${TIMEOUT_PREFIX} ${secs}s (${stats.join(', ')}). The work is partial: check the state below before retrying.`,
+    `${TIMEOUT_PREFIX} ${secs}s (${stats.join(', ')}).${input.reason ? ` ${input.reason}` : ''} The work is partial: check the state below before retrying.`,
   ]
 
   out.push(...progressSections(input.actions, input.lastMessage))

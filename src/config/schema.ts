@@ -45,9 +45,12 @@ const CodeAgentChannelSchema = Type.Object({
   model: Type.Optional(Type.String()),
   working_dir: Type.Optional(Type.String()),
   max_turns: Type.Optional(Type.Number()),
-  // Wall-clock limit for one delegated task. The 5-minute default fits a focused fix, not a
-  // review that runs two test suites.
+  // Wall-clock limit for one delegated task (default 30 minutes): room for a build and two test
+  // suites. A task that has stalled is stopped sooner by idle_timeout_ms.
   timeout_ms: Type.Optional(Type.Number({ minimum: 1000 })),
+  // Stop a delegated task that has gone quiet: no action or message from the agent for this
+  // long (default 10 minutes; 0 turns it off). A stall, unlike a long run, is not going to finish.
+  idle_timeout_ms: Type.Optional(Type.Number({ minimum: 0 })),
   // The agent the `acp` provider spawns: command and arguments, e.g.
   // ["npx", "@agentclientprotocol/claude-agent-acp"] or ["gemini", "--acp"]. See docs/acp.md.
   acp_command: Type.Optional(Type.Array(Type.String(), { minItems: 1 })),
@@ -741,6 +744,7 @@ export interface RuntimeConfig {
       workingDir: string
       maxTurns?: number
       timeoutMs?: number
+      idleTimeoutMs?: number
       acpCommand?: string[]
     }
     xmpp?: {

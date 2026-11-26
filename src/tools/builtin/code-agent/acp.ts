@@ -4,8 +4,9 @@ import { log } from '../../../util/logger'
 import { VERSION } from '../../../version'
 import type { ToolResult } from '../../types'
 import { type AcpConnect, type AcpTransport, spawnAcpAgent } from './acp-process'
-import { DEFAULT_TIMEOUT_MS, withImagePaths } from './shared'
-import type { CodeAgentBackend, CodeAgentConfig } from './types'
+import { deadlineLimits, type RunDeadline, secs, startDeadline, stopReason } from './deadline'
+import { withImagePaths } from './shared'
+import type { CodeAgentBackend, CodeAgentConfig, CodeAgentRunOptions } from './types'
 
 /**
  * The `acp` provider: any agent that speaks the Agent Client Protocol (Gemini CLI natively,
@@ -97,6 +98,7 @@ export async function runAcpSession(
   workingDir: string,
   images: string[] = [],
   connect: AcpConnect = spawnAcpAgent,
+  options: CodeAgentRunOptions = {},
 ): Promise<ToolResult> {
   const started = Date.now()
   const command = config.acpCommand
@@ -107,7 +109,7 @@ export async function runAcpSession(
         'Code agent error: ACP agent failed to start: set acp_command in [channels.code_agent]',
     }
   }
-  const timeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS
+  const limits = deadlineLimits(config)
 
   let transport: AcpTransport
   try {
@@ -121,6 +123,8 @@ export async function runAcpSession(
   let sessionId: string | undefined
   let escalation: string | undefined
   let timedOut = false
+  // Started once the session is being set up; touched by every update from the agent.
+  let deadline: RunDeadline | undefined
   let completed = false
   let cancelTurn: () => void = () => {}
 
@@ -128,11 +132,13 @@ export async function runAcpSession(
     .client({ name: 'egirl' })
     .onNotification('session/update', ({ params }) => {
       if (params.sessionId !== sessionId) return
+      deadline?.touch()
       const update = params.update
       if (update.sessionUpdate === 'agent_message_chunk' && update.content.type === 'text') {
         text = (text + update.content.text).slice(-100_000)
       } else if (update.sessionUpdate === 'tool_call') {
         toolCalls++
+        options.onProgress?.(update.title)
       }
     })
     .onRequest('session/request_permission', async ({ params }) => {
@@ -172,7 +178,7 @@ export async function runAcpSession(
     stop = () => resolve('stopped')
   })
   let graceTimer: ReturnType<typeof setTimeout> | undefined
-  const deadline = setTimeout(() => {
+  deadline = startDeadline(limits, () => {
     timedOut = true
     cancelTurn()
     graceTimer = setTimeout(
@@ -180,9 +186,9 @@ export async function runAcpSession(
         void transport.close(true)
         stop?.()
       },
-      Math.min(CANCEL_GRACE_MS, timeoutMs),
+      Math.min(CANCEL_GRACE_MS, limits.totalMs),
     )
-  }, timeoutMs)
+  })
 
   let response: acp.PromptResponse | undefined
   let failure: string | undefined
@@ -195,7 +201,7 @@ export async function runAcpSession(
   } catch (error) {
     failure = errorMessage(error)
   } finally {
-    clearTimeout(deadline)
+    deadline.clear()
     clearTimeout(graceTimer)
     turn.catch(() => {}) // a turn that lost the race may still reject; nothing to report
     await transport.close(!completed)
@@ -214,7 +220,7 @@ export async function runAcpSession(
     log.warn('code-agent', `acp agent timed out after ${durationSec}s`)
     return {
       success: false,
-      output: `Code agent timed out after ${(timeoutMs / 1000).toFixed(0)}s; work may be partial. Inspect changes before retrying.${partial}`,
+      output: `Code agent timed out after ${secs(deadline.elapsedMs)}. ${stopReason(deadline, limits)} Work may be partial. Inspect changes before retrying.${partial}`,
     }
   }
   if (failure !== undefined || !response) {
@@ -245,5 +251,5 @@ export async function runAcpSession(
   }
 }
 
-export const runAcpCodeAgent: CodeAgentBackend = (config, task, workingDir, images) =>
-  runAcpSession(config, task, workingDir, images)
+export const runAcpCodeAgent: CodeAgentBackend = (config, task, workingDir, images, options) =>
+  runAcpSession(config, task, workingDir, images, spawnAcpAgent, options)

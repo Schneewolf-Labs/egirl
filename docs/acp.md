@@ -118,7 +118,7 @@ Everything else is rejected. Most agents only ask about writes and commands in t
 
 ### Timeouts
 
-`timeout_ms` (default 5 minutes) is the wall clock for the whole task. At the deadline egirl sends `session/cancel`, gives the agent up to 3 seconds to stop, then kills the process tree. The result is a failure reading "Code agent timed out after Ns" with whatever text had streamed.
+`timeout_ms` (default 30 minutes) is the wall clock for the whole task, and `idle_timeout_ms` (default 10 minutes) stops it sooner when the agent sends no update for that long. At either deadline egirl sends `session/cancel`, gives the agent up to 3 seconds to stop, then kills the process tree. The result is a failure reading "Code agent timed out after Ns" with whatever text had streamed.
 
 ### Windows
 

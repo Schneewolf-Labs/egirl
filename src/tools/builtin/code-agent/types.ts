@@ -14,7 +14,10 @@ export interface CodeAgentConfig {
   model?: string
   workingDir: string
   maxTurns?: number
+  /** Wall-clock cap for one run (default 30 min). */
   timeoutMs?: number
+  /** Stop a run that has done nothing for this long (default 10 min; 0 = off). */
+  idleTimeoutMs?: number
   /** Command and arguments for the `acp` provider's agent process. */
   acpCommand?: string[]
   localProvider?: LLMProvider
@@ -42,4 +45,6 @@ export interface CodeAgentRunOptions {
    * task becomes the next instruction. A backend that cannot resume returns a failure saying so.
    */
   resumeSession?: string
+  /** Hears each thing the agent does ("Bash: bun test"), for the person watching. */
+  onProgress?: (text: string) => void
 }

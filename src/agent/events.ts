@@ -93,6 +93,8 @@ export interface AgentEventHandler {
   onPromptProgress?(progress: PromptProgress): void
   /** Called when tool calls are about to be executed */
   onToolCallStart?(calls: ToolCall[]): void
+  /** A running tool says what it is doing now (code_agent: each action its agent takes). */
+  onToolProgress?(callId: string, name: string, text: string): void
   /** Called after each tool finishes executing */
   onToolCallComplete?(callId: string, name: string, result: ToolResult): void
   /** Called for each streamed token of the response */
