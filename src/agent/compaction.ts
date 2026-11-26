@@ -17,6 +17,13 @@ export class CompactionScheduler {
   private pending: Promise<void> | null = null
   /** Bumped by reset(): a job scheduled before it belongs to a context that no longer exists. */
   private generation = 0
+  /**
+   * The dropped messages of the job at the end of the chain, while it has not started yet.
+   * A trim that comes meanwhile adds its messages to that job instead of chaining another:
+   * every trim used to be its own summarization, so a long run that trimmed on most steps
+   * left dozens queued (Jaeger: 42 in one hour) and the next run waited for all of them.
+   */
+  private waiting: ChatMessage[] | null = null
 
   /**
    * Prune the dropped messages from the live context and chain a
@@ -45,15 +52,23 @@ export class CompactionScheduler {
 
     context.messages = history.prune(context.messages, droppedConversation)
 
+    if (this.waiting) {
+      this.waiting.push(...droppedConversation)
+      return
+    }
+    const batch = [...droppedConversation]
+    this.waiting = batch
     const generation = this.generation
 
     // Chain onto any in-flight compaction instead of overwriting it —
     // overlapping summarizations raced on conversationSummary and lost
     // updates. existingSummary is read when the chained step runs.
     const previous = this.pending ?? Promise.resolve()
-    this.pending = previous.then(() =>
-      triggerCompaction({
-        droppedMessages: droppedConversation,
+    this.pending = previous.then(() => {
+      // Started: from here on a trim needs a job of its own.
+      if (this.waiting === batch) this.waiting = null
+      return triggerCompaction({
+        droppedMessages: batch,
         provider,
         existingSummary: context.conversationSummary,
         memory,
@@ -65,8 +80,8 @@ export class CompactionScheduler {
         onSummary: (summary) => {
           context.conversationSummary = summary
         },
-      }),
-    )
+      })
+    })
   }
 
   /** A summarization is still running, so the next drain() will wait on it. */
@@ -88,6 +103,7 @@ export class CompactionScheduler {
   /** Drop the chain without awaiting it (context was cleared). */
   reset(): void {
     this.pending = null
+    this.waiting = null
     this.generation++
   }
 }

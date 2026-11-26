@@ -2,6 +2,7 @@ import type { Operator } from '../operator/types'
 import { colors, DIM, RESET } from '../ui/theme'
 import { errorMessage } from '../util/errors'
 import { createCLIEventHandler, printReply } from './cli-events'
+import { logCommand } from './cli-log'
 import { themeCommand } from './cli-theme'
 
 export interface CommandContext {
@@ -117,6 +118,10 @@ export function handleWipeCommand(ctx: CommandContext): void {
 export async function handleCLICommand(input: string, ctx: CommandContext): Promise<boolean> {
   if (input === '/clear' || input.toLowerCase() === 'clear') {
     console.clear()
+    return true
+  }
+  if (input === '/log' || input.startsWith('/log ')) {
+    console.log(`${logCommand(input.slice('/log'.length))}\n`)
     return true
   }
   if (input === '/theme' || input.startsWith('/theme ')) {

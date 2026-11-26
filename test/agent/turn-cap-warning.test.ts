@@ -7,7 +7,8 @@
 
 import { describe, expect, test } from 'bun:test'
 import { AgentLoop } from '../../src/agent/loop'
-import { TURN_CAP_WARNING_STEPS, turnCapNudge } from '../../src/agent/nudges'
+import { TURN_CAP_WARNING_STEPS, turnCapNudge, turnCapWarningSteps } from '../../src/agent/nudges'
+import { capNote, createRunSignals } from '../../src/operator/run-signals'
 import type { ChatRequest, ChatResponse, LLMProvider } from '../../src/providers/types'
 import { makeConfig, makeExecutorWithNoop, makeWorkspace, stubResponse } from './helpers'
 
@@ -49,6 +50,23 @@ describe('turnCapNudge', () => {
     expect(fired[10 - TURN_CAP_WARNING_STEPS]).toContain('stops after step 10')
   })
 
+  test('a longer cap gets a tenth of it as notice', () => {
+    expect(turnCapWarningSteps(10)).toBe(3)
+    expect(turnCapWarningSteps(40)).toBe(4)
+    expect(turnCapWarningSteps(64)).toBe(7)
+    const fired = Array.from({ length: 40 }, (_, i) => turnCapNudge(i + 1, 40))
+    expect(fired.filter(Boolean)).toHaveLength(1)
+    expect(fired[36]).toContain('4 steps left')
+  })
+
+  test('the warning is a checklist: finish, commit, notes, an honest reply', () => {
+    const text = turnCapNudge(8, 10) ?? ''
+    expect(text).toContain('never leave one half-written')
+    expect(text).toContain('commit the finished work')
+    expect(text).toContain('in your notes')
+    expect(text).toContain('Not checked:')
+  })
+
   test('a short run gets no warning', () => {
     for (let turn = 1; turn <= 5; turn++) expect(turnCapNudge(turn, 5)).toBeUndefined()
   })
@@ -85,5 +103,27 @@ describe('in the loop', () => {
     await a.run('go', { unbounded: true, signal: controller.signal })
     expect(seen.length).toBeGreaterThanOrEqual(30)
     expect(firstWarned(seen)).toBe(-1)
+  })
+})
+
+describe('on a hosted operator (Claude, Codex)', () => {
+  test('the checklist rides on the first tool result inside the window, once', () => {
+    const signals = createRunSignals()
+    const notes: (string | undefined)[] = []
+    for (let step = 1; step <= 40; step++) {
+      signals.steps = step
+      notes.push(capNote(signals, 40))
+    }
+    expect(notes.filter(Boolean)).toHaveLength(1)
+    // Step 37 is the first with fewer than four steps after it.
+    expect(notes[36]).toContain('3 steps left')
+  })
+
+  test('an unbounded run or a short cap gets none', () => {
+    const signals = createRunSignals()
+    signals.steps = 9_999
+    expect(capNote(signals, undefined)).toBeUndefined()
+    signals.steps = 5
+    expect(capNote(signals, 5)).toBeUndefined()
   })
 })

@@ -190,7 +190,7 @@ export function createBackgroundTasks(
     })
   }
 
-  log.info('main', 'Background task system initialized')
+  log.debug('main', 'Background task system initialized')
   return { taskRunner, discovery }
 }
 
