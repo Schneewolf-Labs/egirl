@@ -12,7 +12,8 @@
  * Everything else written to the terminal goes through `cli-screen.ts`, which erases the live
  * line before each write and has it drawn again after. A multi-line paste is held as one
  * message until enter (`cli-paste.ts`), and ↑ history can be seeded with lines saved by an
- * earlier run (`cli-history.ts`) and searched with Ctrl-R (`cli-search.ts`).
+ * earlier run (`cli-history.ts`) and searched with Ctrl-R (`cli-search.ts`). Typing `/` lists
+ * the matching commands above the line (`cli-menu.ts`).
  *
  * Without a TTY there is no live line (`cli-input-plain.ts`).
  */
@@ -23,6 +24,7 @@ import { type Completion, ghostFor } from './cli-complete'
 import { HISTORY_SIZE } from './cli-history'
 import { createPlainInput } from './cli-input-plain'
 import { fitLine, truncateVisible, visibleWidth } from './cli-line'
+import { createSlashMenu, type MenuItem } from './cli-menu'
 import { createPasteBuffer, PASTE_OFF, PASTE_ON } from './cli-paste'
 import { createScreen } from './cli-screen'
 import { createHistorySearch, createSearchKeys } from './cli-search'
@@ -57,6 +59,8 @@ export interface CLIInputHooks {
   complete?(line: string): Completion
   /** Earlier input for ↑, newest first (from `loadHistory`). */
   history?: string[]
+  /** The commands for the slash menu, by name prefix (without the slash). */
+  menu?(prefix: string): MenuItem[]
 }
 
 export function createCLIInput(hooks: CLIInputHooks): CLIInput {
@@ -95,17 +99,27 @@ export function createCLIInput(hooks: CLIInputHooks): CLIInput {
     },
   })
   const editor = rl as unknown as { line: string; cursor: number; history: string[] }
+  // The whole line, leaving the cursor at its end.
+  const setLine = (text: string): void => {
+    rl.write(null, { ctrl: true, name: 'e' })
+    rl.write(null, { ctrl: true, name: 'u' })
+    if (text) rl.write(text)
+  }
   const paste = createPasteBuffer()
   const search = createHistorySearch(() => editor.history)
   const searchKeys = createSearchKeys(search, {
     text: () => editor.line,
-    // The whole line, leaving the cursor at its end.
-    set(text) {
-      rl.write(null, { ctrl: true, name: 'e' })
-      rl.write(null, { ctrl: true, name: 'u' })
-      if (text) rl.write(text)
-    },
+    set: setLine,
     history: () => editor.history,
+  })
+  const menu = createSlashMenu((prefix) => hooks.menu?.(prefix) ?? [], {
+    text: () => editor.line,
+    cursor: () => editor.cursor,
+    set: setLine,
+    history: () => editor.history,
+    setHistory(history) {
+      editor.history = history
+    },
   })
 
   const paint = (): void => {
@@ -121,24 +135,26 @@ export function createCLIInput(hooks: CLIInputHooks): CLIInput {
     const room = Math.max(8, columns - visibleWidth(head) - 1)
     const { shown, back } = fitLine(editor.line, editor.cursor, room)
     const searching = searchKeys.hint()
-    const ghost =
+    const offered =
       searching !== undefined
         ? { text: searching }
         : back === 0 && !asking
           ? ghostFor(editor.line, suggestion, hooks.complete)
           : undefined
+    // The menu already lists the choices; only a unique completion is worth repeating inline.
+    const ghost = menu.isOpen && !offered?.accept ? undefined : offered
     acceptable = ghost?.accept
     const spare = room - visibleWidth(shown)
     const hint = ghost && spare > 1 ? truncateVisible(ghost.text, spare - 1) : ''
     const left = back + visibleWidth(hint)
     const tail = hint ? `\x1b[2m${hint}\x1b[0m` : ''
-    const above = status ? [truncateVisible(status, columns - 1)] : []
+    const above = [...(status ? [truncateVisible(status, columns - 1)] : []), ...menu.rows(columns)]
     screen.draw(`${head}${shown}${tail}${left > 0 ? `\x1b[${left}D` : ''}`, above)
   }
   const screen = createScreen(paint)
 
   rl.on('line', (typed) => {
-    const chosen = searchKeys.onEnter(typed)
+    const chosen = menu.isOpen ? menu.onEnter(typed) : searchKeys.onEnter(typed)
     if (chosen === undefined) {
       paint()
       return
@@ -186,6 +202,12 @@ export function createCLIInput(hooks: CLIInputHooks): CLIInput {
     key: { name?: string; ctrl?: boolean } | undefined,
   ): void => {
     if (!asking && searchKeys.onKey(key)) {
+      paint()
+      return
+    }
+    const isMenuKey = menu.onKey(key)
+    menu.sync(!asking && !search.isActive && paste.held() === 0)
+    if (isMenuKey) {
       paint()
       return
     }

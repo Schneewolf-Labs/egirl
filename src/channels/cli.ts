@@ -9,7 +9,7 @@ import { colors, DIM, RESET } from '../ui/theme'
 import { errorMessage } from '../util/errors'
 import { log } from '../util/logger'
 import { type CommandContext, handleCLICommand } from './cli-commands'
-import { CLI_COMMANDS, complete } from './cli-complete'
+import { CLI_COMMANDS, complete, menuItems } from './cli-complete'
 import { renderDrained, renderQueuedMessage } from './cli-events'
 import { appendHistory, loadHistory } from './cli-history'
 import { type CLIInput, createCLIInput } from './cli-input'
@@ -116,6 +116,7 @@ export class CLIChannel implements Channel {
           () => this.taskStore?.list().map((t) => t.name) ?? [],
           () => customCommands(this.skills).map((c) => c.name),
         ),
+      menu: (prefix) => menuItems(prefix, () => customCommands(this.skills)),
       ...(this.historyPath && { history: loadHistory(this.historyPath) }),
     })
     this.idle()
