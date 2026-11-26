@@ -1,3 +1,4 @@
+import type { ConfigDrift } from '../config/drift'
 import type { Operator } from '../operator/types'
 import type { ReplyBroker } from '../report/broker'
 import { type Caller, type CommandPermission, handleCommand } from '../session/commands'
@@ -89,6 +90,8 @@ export interface TurnScope {
   builtinPermission?: CommandPermission
   /** Per-conversation display verbosity (tool-call lines, reasoning). Default when absent. */
   verbosity?: VerbosityStore
+  /** Config files changed since startup, for /settings. */
+  configDrift?: ConfigDrift
 }
 
 export async function runTurn(
@@ -104,6 +107,7 @@ export async function runTurn(
     caller: scope.caller,
     builtinPermission: scope.builtinPermission,
     verbosity: scope.verbosity,
+    configDrift: scope.configDrift,
   })
   if (command.handled && !command.turn) {
     await deliver(surface, command.message ?? 'ok').catch(() => {})

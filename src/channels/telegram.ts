@@ -1,3 +1,4 @@
+import type { ConfigDrift } from '../config/drift'
 import type { Operator } from '../operator/types'
 import type { ReplyBroker } from '../report/broker'
 import { log } from '../util/logger'
@@ -84,11 +85,18 @@ export class TelegramChannel implements ChatChannel {
   /** Most recent chat that talked to us -- where "self" notifications go. */
   private lastChatId: string | undefined
 
+  private configDrift: ConfigDrift | undefined
+
   constructor(agent: Operator, config: TelegramConfig, broker?: ReplyBroker, fetchFn?: FetchLike) {
     this.agent = agent
     this.config = config
     this.broker = broker
     this.fetchFn = fetchFn ?? ((input, init) => fetch(input, init))
+  }
+
+  /** The config files as read at startup, so /settings can say when they changed since. */
+  useConfigDrift(drift: ConfigDrift): void {
+    this.configDrift = drift
   }
 
   async start(): Promise<void> {
@@ -201,6 +209,7 @@ export class TelegramChannel implements ChatChannel {
       },
       text,
       this.broker,
+      { configDrift: this.configDrift },
     )
   }
 

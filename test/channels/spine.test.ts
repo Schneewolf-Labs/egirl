@@ -126,6 +126,15 @@ describe('runTurn', () => {
     expect(await reply).toBeUndefined()
   })
 
+  test('/settings on a chat channel names config files changed since startup', async () => {
+    const { agent } = fakeAgent('ok')
+    const { surface, sent } = fakeSurface()
+    await runTurn(agent, surface, '/settings', undefined, {
+      configDrift: { changed: () => ['egirl.toml (edited)'] },
+    })
+    expect(sent.join('')).toContain('restart to apply: egirl.toml (edited)')
+  })
+
   test('a pending report ask consumes the message instead of starting a turn', async () => {
     const broker = new ReplyBroker()
     const reply = broker.awaitReply('test', 'room', 5000)

@@ -8,6 +8,7 @@ import {
 } from '../channels'
 import type { OutboundChannel } from '../channels/types'
 import type { RuntimeConfig } from '../config'
+import { watchConfigFiles } from '../config/drift'
 import { createReplyBroker } from '../report/broker'
 import { registerReportTool } from '../report/register'
 import { applyLogLevel } from '../util/args'
@@ -64,6 +65,8 @@ export async function runServe(
   // and the heartbeat report by default. Discord runs one session per channel/thread/DM;
   // the others are a single long-lived session -- the local model driving one chat stream.
   const chat: Array<{ channel: ChatChannel; defaultTarget: string }> = []
+  // As read at startup: /settings on any channel names config files edited since.
+  const configDrift = watchConfigFiles(config.source)
   let discord: ReturnType<typeof createDiscordChannel> | undefined
   if (discordConf) {
     discord = createDiscordChannel(
@@ -73,23 +76,34 @@ export async function runServe(
       replyBroker,
       rt.skills,
     )
+    discord.useConfigDrift(configDrift)
     chat.push({ channel: discord, defaultTarget: discordConf.allowedChannels[0] ?? 'dm' })
   }
   if (xmppConf) {
+    const xmpp = createXMPPChannel(agentFactory('xmpp:default'), xmppConf, replyBroker)
+    xmpp.useConfigDrift(configDrift)
     chat.push({
-      channel: createXMPPChannel(agentFactory('xmpp:default'), xmppConf, replyBroker),
+      channel: xmpp,
       defaultTarget: xmppConf.allowedJids[0] ?? 'self',
     })
   }
   if (telegramConf) {
+    const telegram = createTelegramChannel(
+      agentFactory('telegram:default'),
+      telegramConf,
+      replyBroker,
+    )
+    telegram.useConfigDrift(configDrift)
     chat.push({
-      channel: createTelegramChannel(agentFactory('telegram:default'), telegramConf, replyBroker),
+      channel: telegram,
       defaultTarget: 'self',
     })
   }
   if (matrixConf) {
+    const matrix = createMatrixChannel(agentFactory('matrix:default'), matrixConf, replyBroker)
+    matrix.useConfigDrift(configDrift)
     chat.push({
-      channel: createMatrixChannel(agentFactory('matrix:default'), matrixConf, replyBroker),
+      channel: matrix,
       defaultTarget: matrixConf.allowedRooms[0] ?? 'self',
     })
   }

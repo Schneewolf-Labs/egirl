@@ -13,6 +13,7 @@ import {
   type User,
 } from 'discord.js'
 import type { AgentFactory } from '../agent'
+import type { ConfigDrift } from '../config/drift'
 import type { Operator } from '../operator/types'
 import type { LLMProvider } from '../providers/types'
 import type { ReplyBroker } from '../report/broker'
@@ -118,6 +119,7 @@ export class DiscordChannel implements ChatChannel {
   private engagement: EngagementTracker | null = null
   private localProvider: LLMProvider | null = null
   private broker: ReplyBroker | undefined
+  private configDrift: ConfigDrift | undefined
 
   constructor(
     agentFactory: AgentFactory,
@@ -180,6 +182,11 @@ export class DiscordChannel implements ChatChannel {
     })
 
     this.setupEventHandlers()
+  }
+
+  /** The config files as read at startup, so /settings can say when they changed since. */
+  useConfigDrift(drift: ConfigDrift): void {
+    this.configDrift = drift
   }
 
   /** Register a handler called when a reaction is added to any message */
@@ -447,6 +454,7 @@ export class DiscordChannel implements ChatChannel {
         caller: this.callerOf(message.author.id),
         builtinPermission: this.config.builtinPermission,
         verbosity: this.verbosityFor(sessionKey),
+        configDrift: this.configDrift,
       },
     )
   }
@@ -534,6 +542,7 @@ export class DiscordChannel implements ChatChannel {
         caller: this.callerOf(interaction.user.id),
         builtinPermission: this.config.builtinPermission,
         verbosity: this.verbosityFor(sessionKey),
+        configDrift: this.configDrift,
       },
     )
   }
