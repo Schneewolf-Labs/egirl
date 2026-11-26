@@ -11,10 +11,12 @@ import { timeoutHint } from '../../src/tools/builtin/exec-shell'
  */
 
 const CWD = tmpdir()
+/** These run the command under a POSIX shell; Windows keeps `shell: true` (cmd.exe). */
+const posix = test.skipIf(process.platform === 'win32')
 const scripts = (): string[] => readdirSync(tmpdir()).filter((n) => n.startsWith('egirl-cmd-'))
 
 describe('execute_command shell', () => {
-  test('pkill -f with a pattern from the command no longer kills the command', async () => {
+  posix('pkill -f with a pattern from the command no longer kills the command', async () => {
     const r = await execTool.execute(
       { command: 'pkill -f "egirl-selfkill-marker-42" ; echo survived' },
       CWD,
@@ -23,7 +25,7 @@ describe('execute_command shell', () => {
     expect(r.success).toBe(true)
   })
 
-  test('bash syntax works', async () => {
+  posix('bash syntax works', async () => {
     if (!existsSync('/bin/bash') && !existsSync('/usr/bin/bash')) return
     const r = await execTool.execute({ command: 'cat <<< hi && [[ 1 == 1 ]] && echo bash' }, CWD)
     expect(r.success).toBe(true)
@@ -38,7 +40,7 @@ describe('execute_command shell', () => {
     expect(Date.now() - started).toBeLessThan(5000)
   })
 
-  test('exit codes, stderr and cwd behave as before', async () => {
+  posix('exit codes, stderr and cwd behave as before', async () => {
     const r = await execTool.execute({ command: 'pwd; echo oops >&2; exit 4' }, CWD)
     expect(r.success).toBe(false)
     expect(r.output).toContain(CWD)
