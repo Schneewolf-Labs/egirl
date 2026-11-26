@@ -192,7 +192,8 @@ export async function checkApiPort(config: RuntimeConfig): Promise<CheckResult |
 }
 
 export async function runPreflight(config: RuntimeConfig): Promise<CheckResult[]> {
-  const results: CheckResult[] = [await checkServedModel(config)]
+  // Side work on Claude has no served model to compare against the config.
+  const results: CheckResult[] = config.local.isClaude ? [] : [await checkServedModel(config)]
 
   for (const check of [checkAuxiliary, checkEmbeddings, checkApiPort]) {
     const result = await check(config)
