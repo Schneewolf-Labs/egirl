@@ -63,7 +63,12 @@ describe('turn cap on the agent loop', () => {
     expect(toolTurns()).toBe(4)
     expect(response.turnLimitReached).toBe(true)
     // The forced reply was asked to open by saying it ran out, not just to summarize.
-    const nudge = agent.getContext().messages.find((m) => m.content === MAX_TURNS_SUMMARY_NUDGE)
+    // It is followed by the run's record of tool outcomes.
+    const nudge = agent
+      .getContext()
+      .messages.find(
+        (m) => typeof m.content === 'string' && m.content.startsWith(MAX_TURNS_SUMMARY_NUDGE),
+      )
     expect(nudge).toBeDefined()
     expect(MAX_TURNS_SUMMARY_NUDGE).toContain('ran out of steps')
   })

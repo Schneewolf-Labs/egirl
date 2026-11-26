@@ -4,6 +4,7 @@ import {
   turnCapWarningSteps,
   wrapupNudge,
 } from '../agent/nudges'
+import { RunLedger, withRecord } from '../agent/run-ledger'
 import type { AgentLoopOptions } from '../agent/types'
 import type { ToolResult } from '../tools/types'
 
@@ -26,10 +27,18 @@ export interface RunSignals {
   steps: number
   /** The turn-cap checklist has gone out. */
   capWarned: boolean
+  /** What the run's tools reported, handed to its wrap-ups. */
+  ledger: RunLedger
 }
 
 export function createRunSignals(): RunSignals {
-  return { awaitingInput: false, wrapupWarned: false, steps: 0, capWarned: false }
+  return {
+    awaitingInput: false,
+    wrapupWarned: false,
+    steps: 0,
+    capWarned: false,
+    ledger: new RunLedger(),
+  }
 }
 
 /**
@@ -44,7 +53,7 @@ export function capNote(signals: RunSignals, maxTurns: number | undefined): stri
   const left = maxTurns - signals.steps
   if (left >= turnCapWarningSteps(maxTurns)) return undefined
   signals.capWarned = true
-  return turnCapChecklist(Math.max(0, left), maxTurns)
+  return withRecord(turnCapChecklist(Math.max(0, left), maxTurns), signals.ledger)
 }
 
 /** Fold one tool result into the run's signals. True when this result ended the run. */
@@ -74,8 +83,9 @@ export function wrapupNote(
   if (signals.wrapupWarned || now < deadline - margin) return undefined
   signals.wrapupWarned = true
   const minutesLeft = Math.max(1, Math.round((deadline - now) / 60_000))
-  return wrapupNudge(minutesLeft, {
+  const nudge = wrapupNudge(minutesLeft, {
     extension: options.extraTools?.has('request_extension') ?? false,
     endTask: options.extraTools?.has('end_task') ?? false,
   })
+  return withRecord(nudge, signals.ledger)
 }

@@ -64,7 +64,7 @@ describe('turnCapNudge', () => {
     expect(text).toContain('never leave one half-written')
     expect(text).toContain('commit the finished work')
     expect(text).toContain('in your notes')
-    expect(text).toContain('done and checked')
+    expect(text).toContain('Not checked:')
   })
 
   test('a short run gets no warning', () => {
