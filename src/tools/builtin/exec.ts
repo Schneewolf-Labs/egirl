@@ -3,6 +3,7 @@ import { sanitizedEnv } from '../../util/env'
 import { log } from '../../util/logger'
 import { resolveUserPath } from '../../util/paths'
 import type { Tool, ToolResult } from '../types'
+import { shellRun, timeoutHint } from './exec-shell'
 
 const DEFAULT_TIMEOUT = 30000
 /** How long a command gets to die politely after SIGTERM before it is SIGKILLed */
@@ -50,7 +51,7 @@ export const execTool: Tool = {
    *     stdout open means it never fires — the tool call would await forever, and with it
    *     whichever agent run is holding the session mutex.
    *
-   * Signals go to the process GROUP, not the pid. Under `shell: true` the pid is the shell,
+   * Signals go to the process GROUP, not the pid. The pid is the shell,
    * and signalling only that leaves `sleep 300 & wait`-shaped children alive still holding
    * the pipes — which is precisely the hang this is meant to end.
    */
@@ -67,13 +68,18 @@ export const execTool: Tool = {
       const timers: ReturnType<typeof setTimeout>[] = []
 
       const groupKill = process.platform !== 'win32'
-      const proc = spawn(command, {
-        shell: true,
+      const script = shellRun(command)
+      const options = {
         cwd: workingDir,
         env: sanitizedEnv(),
+        // Nothing will ever be written to a command's stdin: a program that reads it gets EOF.
+        stdio: ['ignore', 'pipe', 'pipe'] as ['ignore', 'pipe', 'pipe'],
         // Own process group, so one signal reaches the shell AND everything it started.
         detached: groupKill,
-      })
+      }
+      const proc = script
+        ? spawn(script.file, script.args, options)
+        : spawn(command, { ...options, shell: true })
 
       const clearTimers = () => {
         for (const t of timers) clearTimeout(t)
@@ -94,14 +100,17 @@ export const execTool: Tool = {
         if (settled) return
         settled = true
         clearTimers()
+        script?.cleanup()
         resolvePromise(result)
       }
 
+      const hint = timeoutHint(command)
       const timedOut = (note: string): ToolResult => ({
         success: false,
         output:
           `Command timed out after ${timeout}ms${note}\n\n` +
-          `Partial stdout:\n${stdout}\n\nPartial stderr:\n${stderr}`,
+          `Partial stdout:\n${stdout}\n\nPartial stderr:\n${stderr}` +
+          (hint ? `\n\n${hint}` : ''),
       })
 
       timers.push(
