@@ -3,7 +3,8 @@
  * from an argument, and a pipeline from a sequence. It is not a shell parser. It splits on
  * `|`, `|&`, `||`, `&&`, `;`, `&`, newlines and `( )`, removes quotes, separates redirections,
  * skips comments and here-doc bodies, and hands back the text of every `$(...)`, backtick and
- * `<(...)` / `>(...)` it meets so the caller can check those on their own.
+ * `<(...)` / `>(...)` it meets so the caller can check those on their own. A `( ... )` subshell
+ * or `{ ...; }` group stays one segment of its pipeline, so `(curl x) | sh` is still a pipe.
  */
 
 export interface Segment {
@@ -11,6 +12,8 @@ export interface Segment {
   words: string[]
   /** Redirection targets (`> /dev/sda` gives `/dev/sda`). */
   redirects: string[]
+  /** Bodies of `( ... )` subshells and `{ ...; }` groups standing as this segment's command. */
+  groups: string[]
 }
 
 export interface LexedCommand {
@@ -43,6 +46,34 @@ function closeParen(src: string, start: number): number {
   return src.length
 }
 
+const BRACE_END = /[\s;|&)]/
+
+/**
+ * Index just past the `}` that closes a `{` group whose body starts at `start`: a `}` word after
+ * whitespace or a separator. The input's length if there is none.
+ */
+function closeBrace(src: string, start: number): number {
+  let depth = 1
+  let i = start
+  while (i < src.length) {
+    const c = src[i]
+    const prev = src[i - 1] ?? ' '
+    const after = src[i + 1] ?? ' '
+    if (c === '\\') i += 2
+    else if (c === "'" || c === '"') {
+      const end = src.indexOf(c, i + 1)
+      i = end === -1 ? src.length : end + 1
+    } else {
+      if (c === '{' && /[\s;&|(]/.test(prev) && /\s/.test(after)) depth++
+      else if (c === '}' && /[\s;&]/.test(prev) && BRACE_END.test(after) && --depth === 0) {
+        return i + 1
+      }
+      i++
+    }
+  }
+  return src.length
+}
+
 /** Index just past the backtick that closes one opened at `open`. */
 function closeBacktick(src: string, open: number): number {
   const end = src.indexOf('`', open + 1)
@@ -54,7 +85,7 @@ export function lexCommand(src: string): LexedCommand {
   const nested: string[] = []
   let masked = ''
   let pipeline: Segment[] = []
-  let seg: Segment = { words: [], redirects: [] }
+  let seg: Segment = { words: [], redirects: [], groups: [] }
   let word = ''
   let hasWord = false
   let isRedirectTarget = false
@@ -76,8 +107,10 @@ export function lexCommand(src: string): LexedCommand {
   }
   const endSegment = (): void => {
     endWord()
-    if (seg.words.length > 0 || seg.redirects.length > 0) pipeline.push(seg)
-    seg = { words: [], redirects: [] }
+    if (seg.words.length > 0 || seg.redirects.length > 0 || seg.groups.length > 0) {
+      pipeline.push(seg)
+    }
+    seg = { words: [], redirects: [], groups: [] }
   }
   const endPipeline = (): void => {
     endSegment()
@@ -166,6 +199,14 @@ export function lexCommand(src: string): LexedCommand {
     } else if (c === '&' && next !== '>') {
       endPipeline()
       i += next === '&' ? 2 : 1
+    } else if (c === '(' && !hasWord && seg.words.length === 0) {
+      const end = closeParen(src, i + 1)
+      seg.groups.push(src.slice(i + 1, src[end - 1] === ')' ? end - 1 : end))
+      i = end
+    } else if (c === '{' && !hasWord && seg.words.length === 0 && /\s/.test(next ?? '')) {
+      const end = closeBrace(src, i + 1)
+      seg.groups.push(src.slice(i + 1, src[end - 1] === '}' ? end - 1 : end))
+      i = end
     } else if (c === ';' || c === '(' || c === ')') {
       endPipeline()
       i++
