@@ -12,7 +12,8 @@
  * token) the live line stays hidden; typing still edits it and it reappears at the next newline.
  *
  * A multi-line paste is held as one message until enter (`cli-paste.ts`), and ↑ history can be
- * seeded with lines saved by an earlier run (`cli-history.ts`).
+ * seeded with lines saved by an earlier run (`cli-history.ts`) and searched with Ctrl-R
+ * (`cli-search.ts`).
  *
  * Without a TTY there is no live line: lines are read and handed on, nothing is drawn.
  */
@@ -24,6 +25,7 @@ import { type Completion, ghostFor } from './cli-complete'
 import { HISTORY_SIZE } from './cli-history'
 import { fitLine, truncateVisible, visibleWidth } from './cli-line'
 import { createPasteBuffer, PASTE_OFF, PASTE_ON } from './cli-paste'
+import { createHistorySearch } from './cli-search'
 
 export interface CLIInput {
   /** Whether a live line is drawn at all (stdin and stdout are both a terminal). */
@@ -118,6 +120,7 @@ export function createCLIInput(hooks: CLIInputHooks): CLIInput {
     // Tab. A unique hit gets a trailing space so the next argument can follow; several hits
     // complete their common prefix and are listed by the inline hint, since this output is muted.
     completer: (line: string): [string[], string] => {
+      if (search.isActive) return [[], line]
       if (line === '' && suggestion) return [[suggestion], '']
       const c = hooks.complete?.(line)
       if (!c || c.candidates.length === 0) return [[], line]
@@ -127,6 +130,13 @@ export function createCLIInput(hooks: CLIInputHooks): CLIInput {
   })
   const editor = rl as unknown as { line: string; cursor: number; history: string[] }
   const paste = createPasteBuffer()
+  const search = createHistorySearch(() => editor.history)
+  /** Replace the whole line being edited, leaving the cursor at its end. */
+  const setLine = (text: string): void => {
+    rl.write(null, { ctrl: true, name: 'e' })
+    rl.write(null, { ctrl: true, name: 'u' })
+    if (text) rl.write(text)
+  }
 
   const out = process.stdout.write.bind(process.stdout)
   const err = process.stderr.write.bind(process.stderr)
@@ -149,6 +159,7 @@ export function createCLIInput(hooks: CLIInputHooks): CLIInput {
     const columns = process.stdout.columns || 80
     let head = asking ? asking.question : prompt
     if (!asking && status) head = `${status} ${prompt}`
+    if (search.isActive) head = `${status ? `${status} ` : ''}\x1b[2msearch:\x1b[0m `
     const held = paste.held()
     if (held > 0) head += `\x1b[2m‹${held} pasted line${held === 1 ? '' : 's'}›\x1b[0m `
     // A head that fills the row would leave nowhere to type; trim it to leave 24 columns rather
@@ -156,8 +167,11 @@ export function createCLIInput(hooks: CLIInputHooks): CLIInput {
     head = truncateVisible(head, Math.max(16, columns - 24))
     const room = Math.max(8, columns - visibleWidth(head) - 1)
     const { shown, back } = fitLine(editor.line, editor.cursor, room)
-    const ghost =
-      back === 0 && !asking ? ghostFor(editor.line, suggestion, hooks.complete) : undefined
+    const ghost = search.isActive
+      ? { text: searchHint(editor.line, search.match()) }
+      : back === 0 && !asking
+        ? ghostFor(editor.line, suggestion, hooks.complete)
+        : undefined
     acceptable = ghost?.accept
     const spare = room - visibleWidth(shown)
     const hint = ghost && spare > 1 ? truncateVisible(ghost.text, spare - 1) : ''
@@ -190,6 +204,20 @@ export function createCLIInput(hooks: CLIInputHooks): CLIInput {
   console.error = console.warn
 
   rl.on('line', (typed) => {
+    if (search.isActive) {
+      // Enter sends the match, not the query readline saw: put it in history in the query's
+      // place. With no match nothing is sent and the line is given back.
+      const found = search.match()
+      const original = search.stop()
+      if (editor.history[0] === typed) editor.history.shift()
+      if (found === undefined) {
+        setLine(original)
+        paint()
+        return
+      }
+      if (editor.history[0] !== found) editor.history.unshift(found)
+      typed = found
+    }
     const line = paste.take(typed)
     if (line === undefined) {
       // A line ended inside a paste: held, and kept out of ↑ history.
@@ -209,6 +237,11 @@ export function createCLIInput(hooks: CLIInputHooks): CLIInput {
   // Ctrl-C clears a half-typed line first, as a shell does; on an empty line it is the real
   // SIGINT, so the shutdown handlers run and the process ends.
   rl.on('SIGINT', () => {
+    if (search.isActive) {
+      setLine(search.stop())
+      paint()
+      return
+    }
     if (editor.line.length > 0 || paste.held() > 0) {
       paste.clear()
       rl.write(null, { ctrl: true, name: 'u' })
@@ -224,7 +257,24 @@ export function createCLIInput(hooks: CLIInputHooks): CLIInput {
   })
 
   // Registered after readline's own listener, so the line and cursor are already updated.
-  const onKeypress = (_s: string | undefined, key: { name?: string } | undefined): void => {
+  const onKeypress = (
+    _s: string | undefined,
+    key: { name?: string; ctrl?: boolean } | undefined,
+  ): void => {
+    if (key?.ctrl && key.name === 'r' && !asking) {
+      if (search.isActive) search.older()
+      else {
+        search.start(editor.line)
+        setLine('')
+      }
+      paint()
+      return
+    }
+    if (search.isActive) {
+      onSearchKey(key)
+      paint()
+      return
+    }
     if (key?.name === 'escape') hooks.onEscape()
     if (key?.name === 'paste-start') paste.start()
     if (key?.name === 'paste-end') paste.end()
@@ -232,6 +282,20 @@ export function createCLIInput(hooks: CLIInputHooks): CLIInput {
     // no-op there, so nothing is lost; `acceptable` is what the previous paint showed.
     if (key?.name === 'right' && acceptable) rl.write(acceptable)
     paint()
+  }
+  // While searching, the line is the query: editing keys change it, these end the search.
+  const onSearchKey = (key: { name?: string; ctrl?: boolean } | undefined): void => {
+    if (key?.name === 'escape' || (key?.ctrl && key.name === 'g')) {
+      setLine(search.stop())
+      return
+    }
+    if (key?.name === 'tab' || key?.name === 'right') {
+      const found = search.match()
+      const original = search.stop()
+      setLine(found ?? original)
+      return
+    }
+    search.setQuery(editor.line)
   }
   process.stdin.on('keypress', onKeypress)
   out(PASTE_ON)
@@ -276,4 +340,9 @@ export function createCLIInput(hooks: CLIInputHooks): CLIInput {
       rl.close()
     },
   }
+}
+
+function searchHint(query: string, match: string | undefined): string {
+  if (match !== undefined) return `  → ${match}`
+  return query ? '  (no match)' : '  type to search history · enter sends · tab edits · esc cancels'
 }
