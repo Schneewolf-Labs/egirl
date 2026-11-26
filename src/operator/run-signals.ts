@@ -1,4 +1,9 @@
-import { wrapupNudge } from '../agent/nudges'
+import {
+  TURN_CAP_WARNING_MIN_CAP,
+  turnCapChecklist,
+  turnCapWarningSteps,
+  wrapupNudge,
+} from '../agent/nudges'
 import type { AgentLoopOptions } from '../agent/types'
 import type { ToolResult } from '../tools/types'
 
@@ -17,10 +22,29 @@ export interface RunSignals {
   ended?: string
   /** The deadline warning has gone out and the deadline has not moved since. */
   wrapupWarned: boolean
+  /** Steps the harness has taken that called tools: what its turn cap counts. */
+  steps: number
+  /** The turn-cap checklist has gone out. */
+  capWarned: boolean
 }
 
 export function createRunSignals(): RunSignals {
-  return { awaitingInput: false, wrapupWarned: false }
+  return { awaitingInput: false, wrapupWarned: false, steps: 0, capWarned: false }
+}
+
+/**
+ * The turn-cap checklist, once, on the first tool result inside the warning window: the local
+ * loop's warning, carried the only way into a turn the harness is running. `maxTurns`
+ * undefined (an unbounded run) gets none.
+ */
+export function capNote(signals: RunSignals, maxTurns: number | undefined): string | undefined {
+  if (maxTurns === undefined || maxTurns < TURN_CAP_WARNING_MIN_CAP || signals.capWarned) {
+    return undefined
+  }
+  const left = maxTurns - signals.steps
+  if (left >= turnCapWarningSteps(maxTurns)) return undefined
+  signals.capWarned = true
+  return turnCapChecklist(Math.max(0, left), maxTurns)
 }
 
 /** Fold one tool result into the run's signals. True when this result ended the run. */

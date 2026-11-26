@@ -27,13 +27,36 @@ export function checkpointNudge(contextPressed: boolean, rollover = false): stri
   return `[System: Checkpoint. ${urgency} to your durable notes, and save any artifacts to files. Also store anything worth remembering across sessions — a proven fact, a decision and its why, a lesson — with memory_set now, while the context is still in front of you. Assume this run could end at any moment: nothing important should live only in this conversation. Then continue where you left off.]`
 }
 
-/** Steps of notice before the turn cap, and the smallest cap that gets any (a 1–5 step run
- * is a quick exchange where a warning would eat a real share of it). */
+/** Fewest steps of notice before the turn cap, and the smallest cap that gets any (a 1–5 step
+ * run is a quick exchange where a warning would eat a real share of it). */
 export const TURN_CAP_WARNING_STEPS = 3
-const TURN_CAP_WARNING_MIN_CAP = 6
+export const TURN_CAP_WARNING_MIN_CAP = 6
 
 /**
- * The turn-cap sibling of the wall-clock wrap-up, fired once, `TURN_CAP_WARNING_STEPS` before
+ * Steps of notice for a cap: a tenth of it, at least three. Landing work -- finishing a file,
+ * a commit, the notes -- is a few steps whatever the cap, but a run at a 40-step cap is a big
+ * piece of work, and three steps was not enough to put it down cleanly.
+ */
+export function turnCapWarningSteps(maxTurns: number): number {
+  return Math.max(TURN_CAP_WARNING_STEPS, Math.ceil(maxTurns / 10))
+}
+
+/**
+ * The checklist for the last steps before the cap. Jaeger's capped runs ended with work
+ * uncommitted and notes stale, so a continued run started by rediscovering where it was.
+ */
+export function turnCapChecklist(left: number, maxTurns: number): string {
+  return [
+    `[System: ${left} steps left in this run — it stops after step ${maxTurns}. Use them to land what you have; do not start anything new:`,
+    '1. Finish or save what is in progress. Write files out completely; never leave one half-written.',
+    '2. If you changed a git repository, commit the finished work, or say in your reply why it is not committed.',
+    '3. Record where you are and the next steps in your notes, so a continued run starts from there.',
+    '4. In your reply, say what is done and checked, what is done but unchecked, and what is left — and that the run can be continued.]',
+  ].join('\n')
+}
+
+/**
+ * The turn-cap sibling of the wall-clock wrap-up, fired once, `turnCapWarningSteps` before
  * the cap. Without it the first a run heard of the cap was the forced summary at the end, so
  * work in flight -- a file half-written across steps -- was left as a placeholder.
  *
@@ -42,8 +65,8 @@ const TURN_CAP_WARNING_MIN_CAP = 6
 export function turnCapNudge(turn: number, maxTurns: number): string | undefined {
   if (maxTurns < TURN_CAP_WARNING_MIN_CAP) return undefined
   const left = maxTurns - turn + 1
-  if (left !== TURN_CAP_WARNING_STEPS) return undefined
-  return `[System: ${left} steps left in this run — it stops after step ${maxTurns}. Do not start anything you cannot finish in ${left} steps; above all, do not begin writing a file you cannot complete. Finish or save what is in progress: write files out completely, and record your state and next steps in your notes. If work remains, say so plainly in your reply — the run can be continued.]`
+  if (left !== turnCapWarningSteps(maxTurns)) return undefined
+  return turnCapChecklist(left, maxTurns)
 }
 
 /** One-time wall-clock warning as the run's hard deadline nears: wind down, don't get killed. */

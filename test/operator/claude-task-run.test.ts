@@ -209,6 +209,44 @@ describe('ClaudeOperator on a task run', () => {
     expect(seen[1]).toEqual(['ok'])
   })
 
+  test('near the turn cap, a tool result carries the cap checklist once', async () => {
+    const seen: string[][] = []
+    const query = ((params: Call) => {
+      const server = (params.options.mcpServers as Record<string, { instance: McpServer }>).egirl
+        ?.instance
+      return (async function* () {
+        yield msg({ type: 'system', subtype: 'init', session_id: 'sdk-cap' })
+        if (!server) throw new Error('no egirl MCP server')
+        const [clientSide, serverSide] = InMemoryTransport.createLinkedPair()
+        await server.connect(serverSide)
+        const client = new Client({ name: 'fake-claude', version: '1' })
+        await client.connect(clientSide)
+        // Ten steps, each one assistant message calling one tool, as Claude runs them.
+        for (let step = 1; step <= 10; step++) {
+          yield msg({
+            type: 'assistant',
+            parent_tool_use_id: null,
+            message: {
+              role: 'assistant',
+              content: [{ type: 'tool_use', id: `t${step}`, name: 'mcp__egirl__noop', input: {} }],
+            },
+          })
+          const r = (await client.callTool({ name: 'noop', arguments: {} })) as {
+            content: Array<{ text?: string }>
+          }
+          seen.push(r.content.map((c) => c.text ?? ''))
+        }
+        yield done('stopped')
+      })()
+    }) as unknown as QueryFn
+    const { op } = taskOperator(query)
+    await op.run('work', { maxTurns: 10 })
+    const warned = seen.map((r) => r.some((t) => t.includes('steps left in this run')))
+    expect(warned.filter(Boolean)).toHaveLength(1)
+    // Steps 8, 9, 10 are the last three: the checklist arrives with step 8's result.
+    expect(warned.indexOf(true)).toBe(7)
+  })
+
   test('a fresh run drops the stored Claude session; a continuing one resumes it', async () => {
     const { query, calls } = scriptedClaude(async () => [done('ok')])
     const sessions = memorySessions()
