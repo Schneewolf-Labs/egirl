@@ -51,6 +51,7 @@ import {
   performRollover,
   type RolloverRequest,
 } from './rollover'
+import { type RunLedger, withRecord } from './run-ledger'
 import { createRunState } from './run-state'
 import { endRun, publish, startRun } from './session-events'
 import type { SessionMutex } from './session-mutex'
@@ -409,7 +410,9 @@ export class AgentLoop implements Operator {
         // The same warning for the turn cap. An unbounded run's ceiling is a backstop, not a
         // budget the agent should plan around, so it is not announced.
         const capNudge = options.unbounded ? undefined : turnCapNudge(state.turns, maxTurns)
-        if (capNudge) addMessage(this.context, { role: 'user', content: capNudge })
+        if (capNudge) {
+          addMessage(this.context, { role: 'user', content: withRecord(capNudge, state.ledger) })
+        }
 
         const deadline = deadlineAt()
         if (deadline && state.wrapupWarned && Date.now() < deadline - wrapupMarginMs) {
@@ -419,7 +422,8 @@ export class AgentLoop implements Operator {
         if (deadline && !state.wrapupWarned && Date.now() >= deadline - wrapupMarginMs) {
           state.wrapupWarned = true
           const minsLeft = Math.max(1, Math.round((deadline - Date.now()) / 60_000))
-          addMessage(this.context, { role: 'user', content: wrapupNudge(minsLeft, wrapupTools) })
+          const content = withRecord(wrapupNudge(minsLeft, wrapupTools), state.ledger)
+          addMessage(this.context, { role: 'user', content })
         }
 
         const tools = isPlanning ? [] : [...this.toolExecutor.getDefinitions(), ...intrinsicDefs]
@@ -545,6 +549,7 @@ export class AgentLoop implements Operator {
               seenToolCalls,
               events,
               signal,
+              ledger: state.ledger,
             }),
           )
           if (toolOutcome.awaitingInput) state.awaitingInput = true
@@ -653,6 +658,7 @@ export class AgentLoop implements Operator {
         }
         turnLimitReached = true
         finalContent = await this.forceFinalResponse(
+          state.ledger,
           totalUsage,
           thinking,
           events,
@@ -723,13 +729,17 @@ export class AgentLoop implements Operator {
    * got to, instead of returning a stale assistant message from history.
    */
   private async forceFinalResponse(
+    ledger: RunLedger,
     totalUsage: { input_tokens: number; output_tokens: number },
     thinking?: ThinkingConfig,
     events?: AgentEventHandler,
     signal?: AbortSignal,
     sampling?: SamplingParams,
   ): Promise<string> {
-    addMessage(this.context, { role: 'user', content: MAX_TURNS_SUMMARY_NUDGE })
+    addMessage(this.context, {
+      role: 'user',
+      content: withRecord(MAX_TURNS_SUMMARY_NUDGE, ledger),
+    })
 
     try {
       const result = await chatWithContextWindow({

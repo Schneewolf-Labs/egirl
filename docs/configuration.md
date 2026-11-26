@@ -9,7 +9,7 @@ egirl is configured through two files: `egirl.toml` for application settings and
 | `egirl.toml`, `egirl.d/*.toml`, `.env` | once, at startup | restart the instance |
 | Skills | at startup | restart |
 | Workspace files (`SOUL.md`, `AGENTS.md`, `USER.md`, …) | at startup, and again on `/wipe` | restart, or `/wipe` in the terminal |
-| `/think`, `/maxturns`, `/auto`, `/reasoning`, `/stats`, `/markdown`, `/theme`, `/tools`, `/verbose`, `/quiet` | when typed | immediate, for this session only; a restart goes back to the config |
+| `/think`, `/maxturns`, `/auto`, `/reasoning`, `/stats`, `/markdown`, `/theme`, `/log`, `/tools`, `/verbose`, `/quiet` | when typed | immediate, for this session only; a restart goes back to the config |
 
 Nothing watches the config files: an edit to `max_turns` while an instance runs does nothing until it restarts. `/settings` lists what is set now, and in the terminal it names any config file edited, added or removed since startup.
 
@@ -427,7 +427,7 @@ Optional. Controls conversation persistence, compaction, and the turn cap for ch
 | `compact_on_startup` | bool | `true` | Run compaction when egirl starts |
 | `context_compaction` | bool | `true` | Summarize interior messages when context fills instead of dropping |
 | `context_rollover` | bool | `false` | When context fills, roll over to a fresh window seeded with a mechanical handoff record (operator inputs, pending tool results) instead of summarizing. Adds the `new_context` and `context_remaining` tools. Unbounded task runs use it regardless. |
-| `max_turns` | number | `40` | Turn cap for a run that sets none of its own: `POST /chat` (a request's `max_turns` overrides it), the chat channels (Discord, XMPP, Telegram, Matrix), and `/v1/chat/completions`. Tasks use their own `max_turns`; the interactive CLI uses its session setting. When the cap ends a run, the reply says it ran out of steps and `/chat` returns `turn_limit_reached: true` |
+| `max_turns` | number | `40` | Turn cap for a run that sets none of its own: `POST /chat` (a request's `max_turns` overrides it), the chat channels (Discord, XMPP, Telegram, Matrix), and `/v1/chat/completions`. Tasks use their own `max_turns`; the interactive CLI uses its session setting. A tenth of the cap before it (at least 3 steps; none under a cap of 6) the run is handed a checklist: finish what is half-written, commit, update the notes, and say what is checked and what is not. Claude and Codex instances get it on a tool result. When the cap ends a run, the reply says it ran out of steps and `/chat` returns `turn_limit_reached: true` |
 
 ### `[recovery]`
 

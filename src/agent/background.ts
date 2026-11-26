@@ -81,7 +81,7 @@ export function flushDroppedToMemory(args: {
     .then(async (extractions) => {
       if (extractions.length === 0) return
 
-      log.info(
+      log.debug(
         'agent',
         `Pre-compaction flush: persisting ${extractions.length} memories from dropped context`,
       )
@@ -123,7 +123,7 @@ export function runAutoExtraction(args: {
     .then(async (extractions) => {
       if (extractions.length === 0) return
 
-      log.info('agent', `Auto-extracted ${extractions.length} memories from conversation`)
+      log.debug('agent', `Auto-extracted ${extractions.length} memories from conversation`)
 
       for (const extraction of extractions) {
         try {

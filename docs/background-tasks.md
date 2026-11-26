@@ -607,23 +607,23 @@ Print the proposal. User types `approve <taskId>` or `reject <taskId>`.
 
 ### 7. Discovery: Finding Work (`src/tasks/discovery.ts`)
 
-A special scheduled "meta-task" that looks for useful work. Runs at low frequency during idle time (default: every 30 minutes, only when no interactive messages for 10+ minutes).
+A special scheduled "meta-task" that looks for useful work. Runs at low frequency during idle time (default: every 2 hours, only when no interactive messages for 10+ minutes).
 
-**Discovery always uses the local model.** It's speculative work — burning API credits on "is there anything to do?" would be wasteful. The local model is more than capable of scanning git status and recent context to spot opportunities.
+**Discovery runs on the instance's own operator** (the local model, or Claude/Codex on such an instance) with a fresh session each pass.
 
 **How it works:**
 
 1. Gather workspace context via `gatherStandup()` — branch state, uncommitted files, recent commits
 2. Run proactive memory retrieval against a broad query ("recent project context, pending work, open items")
 3. Build context: standup + recalled memories + active tasks list + time of day
-4. Prompt the agent (local model, full tool access):
+4. Prompt the agent, with read-only tools plus `task_propose` only (`DISCOVERY_TOOLS`: files, git, GitHub reads, memory and session search, task list/history). It runs unattended, so it looks and proposes; shell, edits, task cancellation and memory writes are the principal's call:
    > "Based on the workspace and memory context below, is there any useful background work worth proposing?
    > Consider: CI status, open PRs, pending TODOs, files being discussed, anything the user seemed to be waiting on.
    > Use memory_search and memory_recall to check for relevant context.
    > Only propose something if it's genuinely useful — don't make work for the sake of it.
    > Use task_propose for each suggestion."
 5. If the agent produces `task_propose` calls → those go through the normal approval flow
-6. If nothing useful → do nothing, silently
+6. If nothing useful → do nothing. Either way the log says how the pass ended: `Discovery finished in 6 turns: proposed 2`, or `Discovery hit its 10-turn cap: nothing proposed`
 
 **Guard rails:**
 
@@ -631,6 +631,7 @@ A special scheduled "meta-task" that looks for useful work. Runs at low frequenc
 - Cooldown: don't re-propose something that was rejected in the last 24h (checked via `task_proposals` table)
 - Only runs when the user is "present" (had a message in the last 2 hours) — no point proposing tasks if nobody's around to approve them
 - Discovery prompts have `max_turns: 10` to keep them short
+- Skipped while 3 or more proposals are already waiting for review: more would only pile up
 
 ## Config
 
@@ -882,7 +883,7 @@ During idle discovery, the agent notices uncommitted changes on a feature branch
 src/tasks/
 ├── store.ts              # TaskStore — SQLite CRUD, scheduling queries, proposals
 ├── runner.ts             # TaskRunner — timer loop, agent execution, preemption
-├── discovery.ts          # Discovery — idle-time work finding, always local model
+├── discovery.ts          # Discovery — idle-time work finding, read-only tools + task_propose
 ├── types.ts              # Task, TaskRun, EventPayload, etc.
 ├── parse-interval.ts     # "30m" → 1800000, "2h" → 7200000
 ├── events/

@@ -171,7 +171,7 @@ export class ProcessRegistry {
     })
 
     this.processes.set(id, entry)
-    log.info('process-registry', `Started ${id} (pid ${entry.pid}): ${opts.command.slice(0, 60)}`)
+    log.debug('process-registry', `Started ${id} (pid ${entry.pid}): ${opts.command.slice(0, 60)}`)
     return this.snapshot(entry)
   }
 
