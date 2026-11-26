@@ -14,6 +14,7 @@ import type { SessionMutex } from '../agent/session-mutex'
 import type { ContextStatus } from '../agent/status'
 import type { AgentLoopOptions, AgentResponse } from '../agent/types'
 import type { RuntimeConfig } from '../config'
+import { DEFAULT_MAX_TURNS } from '../config/schema'
 import type { ConversationStore } from '../conversation'
 import type { MemoryManager } from '../memory'
 import { retrieveForContext } from '../memory/retrieval'
@@ -24,7 +25,7 @@ import type { ToolExecutor } from '../tools'
 import type { ToolCallContext } from '../tools/types'
 import { errorMessage } from '../util/errors'
 import type { Drive, ServedTool } from './hosted-types'
-import { createRunSignals, noteResult, type RunSignals, wrapupNote } from './run-signals'
+import { capNote, createRunSignals, noteResult, type RunSignals, wrapupNote } from './run-signals'
 import type { Operator } from './types'
 
 /**
@@ -218,7 +219,15 @@ export class HostedSession {
         body: await this.withRecall(userMessage, text),
         ...(options.images?.length && { images: options.images, imagePaths }),
         options,
-        events,
+        // Each harness step that calls tools is what its turn cap counts: the cap checklist
+        // on the tool results needs to know how far in the run is.
+        events: {
+          ...events,
+          onToolCallStart(calls) {
+            signals.steps++
+            events.onToolCallStart?.(calls)
+          },
+        },
         controller,
         thinking: this.getThinking().level,
         tools: [...this.executor.getDefinitions(), ...extra],
@@ -305,7 +314,12 @@ export class HostedSession {
     })
     // No further turns after end_task: stop the harness once this result is on its way back.
     if (noteResult(scope.signals, result)) setTimeout(() => scope.controller.abort('end_task'), 0)
-    return { result, note: wrapupNote(scope.signals, scope.options) }
+    const maxTurns = scope.options.unbounded
+      ? undefined
+      : (scope.options.maxTurns ?? this.config.conversation.maxTurns ?? DEFAULT_MAX_TURNS)
+    const notes = [wrapupNote(scope.signals, scope.options), capNote(scope.signals, maxTurns)]
+    const note = notes.filter(Boolean).join('\n\n')
+    return { result, ...(note && { note }) }
   }
 
   /** The turn's text, prefixed with recalled memory when proactive retrieval is on. */
