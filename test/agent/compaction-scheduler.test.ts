@@ -74,14 +74,14 @@ describe('CompactionScheduler', () => {
     }
 
     schedule(turn('1'))
+    await until(() => s.started() === 1)
     const draining = scheduler.drain()
     schedule(turn('2')) // chained on while drain waits for job 1
-    await until(() => s.started() === 1)
     s.release(0)
     await draining
 
-    schedule(turn('3')) // must chain behind job 2, not start beside it
     await until(() => s.started() === 2)
+    schedule(turn('3')) // must chain behind job 2, not start beside it
     await Bun.sleep(5)
     expect(s.started()).toBe(2) // job 3 is still queued behind job 2
     s.release(1)
@@ -120,5 +120,47 @@ describe('CompactionScheduler', () => {
 
     expect(written).toEqual([])
     expect(context.conversationSummary).toBeUndefined()
+  })
+
+  test('trims that come while a summary waits to start join it instead of queueing their own', async () => {
+    const prompts: string[] = []
+    const releases: Array<() => void> = []
+    const provider: LLMProvider = {
+      name: 'stub',
+      async chat(req: ChatRequest): Promise<ChatResponse> {
+        prompts.push(JSON.stringify(req.messages))
+        await new Promise<void>((resolve) => releases.push(resolve))
+        return stubResponse({ content: `summary ${prompts.length}` })
+      },
+    }
+    const scheduler = new CompactionScheduler()
+    const context = makeContext()
+    const history = new ConversationHistory(null, context.sessionId)
+    const schedule = (dropped: ChatMessage[]) => {
+      context.messages.push(...dropped)
+      scheduler.schedule({
+        droppedMessages: dropped,
+        context,
+        history,
+        provider,
+        memory: null,
+        conversationStore: null,
+      })
+    }
+
+    schedule(turn('1'))
+    await until(() => prompts.length === 1)
+    // Four more trims while the first summary runs: one queued job, not four.
+    for (const n of ['2', '3', '4', '5']) schedule(turn(n))
+    releases[0]?.()
+    await until(() => prompts.length === 2)
+    await Bun.sleep(5)
+    releases[1]?.()
+    await scheduler.drain()
+
+    expect(prompts).toHaveLength(2)
+    for (const n of ['2', '3', '4', '5']) expect(prompts[1]).toContain(`question ${n}`)
+    expect(prompts[1]).not.toContain('question 1')
+    expect(context.conversationSummary).toBe('summary 2')
   })
 })
