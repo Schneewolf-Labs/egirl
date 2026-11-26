@@ -7,9 +7,11 @@
  * - "allow": restrictive. Only commands in the default allowlist + user-defined
  *   extra_allowed are permitted. Hard blocks still apply on top.
  *
- * Hard-blocked patterns (fork bombs, disk wipes, etc.) are always enforced
- * regardless of mode.
+ * Hard blocks (fork bombs, disk wipes, etc.) are always enforced regardless of
+ * mode. See hard-blocks.ts: a guardrail against accidents, not a security boundary.
  */
+
+import { checkHardBlocks } from './hard-blocks'
 
 export type CommandFilterMode = 'block' | 'allow'
 
@@ -148,19 +150,6 @@ const DEFAULT_ALLOWED_COMMANDS: ReadonlySet<string> = new Set([
   'sleep',
 ])
 
-/** Patterns that are always blocked regardless of mode (destructive / dangerous operations) */
-const HARD_BLOCKED_PATTERNS: RegExp[] = [
-  /rm\s+(-\w+\s+)*\//, // rm targeting absolute paths from root
-  /mkfs\./, // format filesystem
-  /dd\s+.*of=\/dev\//, // direct disk write
-  /:\(\)\s*\{/, // fork bomb
-  /chmod\s+(-R\s+)?777\s+\//, // world-writable from root paths
-  />\s*\/dev\/sd/, // overwrite disk device
-  /\b(shutdown|reboot|halt|poweroff)\b/, // power commands
-  /pkill\s+-9\s+(init|systemd)/, // kill init
-  /\b(curl|wget)\b.*\|\s*(sh|bash|zsh|dash)/, // pipe remote script to shell
-]
-
 /**
  * Extract base command names from a shell command string.
  * Handles pipes, &&, ||, ;, and $() subshells.
@@ -216,12 +205,9 @@ export interface CommandFilterConfig {
  * Returns undefined if allowed, or a rejection reason if blocked.
  */
 export function checkCommand(command: string, config: CommandFilterConfig): string | undefined {
-  // Hard-blocked patterns always take priority regardless of mode
-  for (const pattern of HARD_BLOCKED_PATTERNS) {
-    if (pattern.test(command)) {
-      return `Command matches hard-blocked pattern: ${pattern.source}`
-    }
-  }
+  // Hard blocks always take priority regardless of mode
+  const hardBlock = checkHardBlocks(command)
+  if (hardBlock) return `Command matches hard-blocked rule: ${hardBlock}`
 
   if (config.mode === 'block') {
     // Block mode: everything allowed unless it matches a user block pattern
