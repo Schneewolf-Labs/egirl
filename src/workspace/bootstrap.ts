@@ -26,7 +26,7 @@ async function fileExists(path: string): Promise<boolean> {
 }
 
 export async function bootstrapWorkspace(workspaceDir: string): Promise<void> {
-  log.info('workspace', `Bootstrapping workspace at ${workspaceDir}`)
+  log.debug('workspace', `Bootstrapping workspace at ${workspaceDir}`)
 
   // Create workspace directory
   await mkdir(workspaceDir, { recursive: true })
@@ -56,5 +56,5 @@ export async function bootstrapWorkspace(workspaceDir: string): Promise<void> {
     }
   }
 
-  log.info('workspace', 'Workspace bootstrap complete')
+  log.debug('workspace', 'Workspace bootstrap complete')
 }

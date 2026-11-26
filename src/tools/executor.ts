@@ -113,7 +113,7 @@ export class ToolExecutor {
           output: `Unknown tool: ${call.name}${hint}`,
         }
       }
-      log.info('tools', `Fuzzy-matched tool call "${call.name}" -> "${match}"`)
+      log.debug('tools', `Fuzzy-matched tool call "${call.name}" -> "${match}"`)
       call = { ...call, name: match }
     }
 
@@ -132,7 +132,7 @@ export class ToolExecutor {
     {
       const { args, remapped } = remapParamKeys(call.arguments, tool.definition.parameters)
       if (remapped.length > 0) {
-        log.info(
+        log.debug(
           'tools',
           `Remapped params for ${call.name}: ${remapped.map((r) => `${r.from} -> ${r.to}`).join(', ')}`,
         )

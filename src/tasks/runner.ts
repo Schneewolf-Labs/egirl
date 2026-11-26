@@ -175,7 +175,7 @@ export class TaskRunner {
     })
     const { tickIntervalMs } = this.deps.tasksConfig
     this.tickTimer = setInterval(() => this.tick(), tickIntervalMs)
-    log.info('tasks', `Task runner started (tick=${tickIntervalMs}ms)`)
+    log.debug('tasks', `Task runner started (tick=${tickIntervalMs}ms)`)
   }
 
   stop(): void {

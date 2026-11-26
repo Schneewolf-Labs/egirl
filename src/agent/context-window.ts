@@ -542,7 +542,7 @@ export async function fitToContextWindow(
     tokenCounts = await Promise.all(fitted.map((msg) => countMessageTokens(msg, tokenizer)))
     const before = totalTokens
     totalTokens = tokenCounts.reduce((sum, t) => sum + t, 0)
-    log.info(
+    log.debug(
       'context-window',
       `Cleared ${clearedTools.clearedCount} stale tool outputs and ${cleared.clearedCount} stale recalls: ~${before}t -> ~${totalTokens}t`,
     )
@@ -551,7 +551,7 @@ export async function fitToContextWindow(
     }
   }
 
-  log.info(
+  log.debug(
     'context-window',
     `Trimming context: ~${totalTokens + systemTokens + toolDefTokens}t vs ${contextLength}t limit`,
   )
@@ -691,7 +691,7 @@ export async function fitToContextWindow(
 
   const droppedCount = dropped.length
   if (droppedCount > 0) {
-    log.info(
+    log.debug(
       'context-window',
       `Interior compaction: dropped ${droppedCount} middle messages, kept ${headGroupCount > 0 ? 'head + ' : ''}${tailGroups.length} tail groups`,
     )

@@ -102,7 +102,7 @@ export class Discovery {
   start(): void {
     const interval = this.deps.tasksConfig.discoveryIntervalMs
     this.timer = setInterval(() => this.maybeRun(), interval)
-    log.info('tasks', `Discovery started (interval=${formatInterval(interval)})`)
+    log.debug('tasks', `Discovery started (interval=${formatInterval(interval)})`)
   }
 
   stop(): void {
@@ -146,7 +146,7 @@ export class Discovery {
 
   /** Run discovery — always uses local model */
   async run(): Promise<void> {
-    log.info('tasks', 'Running discovery')
+    log.debug('tasks', 'Running discovery')
 
     try {
       const cwd = this.deps.config.workspace.path

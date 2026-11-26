@@ -209,7 +209,7 @@ export function initTraces(path: string, verbosity: TraceVerbosity, retentionDay
   }
   try {
     active = new TraceStore(path, verbosity, retentionDays)
-    log.info('traces', `Trace store open at ${path} (${verbosity}, ${retentionDays}d retention)`)
+    log.debug('traces', `Trace store open at ${path} (${verbosity}, ${retentionDays}d retention)`)
   } catch (err) {
     log.warn('traces', `Trace store unavailable: ${err}`)
     active = null

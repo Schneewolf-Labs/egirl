@@ -76,7 +76,7 @@ function createConversations(config: RuntimeConfig): ConversationStore | undefin
       })
     }
 
-    log.info(
+    log.debug(
       'main',
       `Conversation persistence enabled (${config.conversation.maxAgeDays}d retention, ${config.conversation.maxMessages} max messages)`,
     )
@@ -211,7 +211,7 @@ function createTasks(config: RuntimeConfig): TaskStore | undefined {
   try {
     const dbPath = join(config.workspace.path, 'tasks.db')
     const store = createTaskStore(dbPath)
-    log.info('main', `Task store initialized (max ${config.tasks.maxActiveTasks} active tasks)`)
+    log.debug('main', `Task store initialized (max ${config.tasks.maxActiveTasks} active tasks)`)
     return store
   } catch (error) {
     log.warn('main', 'Failed to initialize task store:', error)
@@ -279,7 +279,7 @@ export async function createAppServices(config: RuntimeConfig): Promise<AppServi
   try {
     const wmDbPath = join(config.workspace.path, 'working-memory.db')
     workingMemory = createWorkingMemory(wmDbPath)
-    log.info('main', 'Working memory initialized')
+    log.debug('main', 'Working memory initialized')
   } catch (error) {
     log.warn('main', 'Failed to initialize working memory:', error)
   }

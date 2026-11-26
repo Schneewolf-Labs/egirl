@@ -129,7 +129,7 @@ export function seedHeartbeatTask(deps: HeartbeatSeedDeps): void {
   })
 
   deps.runner.activateTask(task.id)
-  log.info(
+  log.debug(
     'heartbeat',
     `Seeded heartbeat task (${task.id}, schedule=${deps.heartbeatConfig.schedule})`,
   )
@@ -151,6 +151,6 @@ export async function heartbeatPreCheck(workspacePath: string): Promise<string |
     return undefined
   }
 
-  log.info('heartbeat', `${items.length} unchecked item(s) in HEARTBEAT.md`)
+  log.debug('heartbeat', `${items.length} unchecked item(s) in HEARTBEAT.md`)
   return buildHeartbeatPrompt(items)
 }
