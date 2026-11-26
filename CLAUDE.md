@@ -79,7 +79,7 @@ egirl's visual identity: deep purples, hot pinks, dark neutrals. Anime cat-girl 
 | Gold (warning) | `#ffd75f` | 221 | Warnings |
 | Light Purple (info) | `#af87ff` | 141 | Info-level logs |
 
-Themes live in `src/ui/theme.ts`. Four built-in: `egirl` (default), `midnight`, `neon`, `mono`. Set via `theme = "..."` in `egirl.toml`.
+Themes live in `src/ui/themes.ts` (the active one in `src/ui/theme.ts`). Twenty built in, `egirl` the default. Set via `theme = "..."` in `egirl.toml`, or `/theme <name>` in the terminal for a session.
 
 ### Principles
 

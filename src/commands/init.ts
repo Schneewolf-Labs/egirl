@@ -57,7 +57,8 @@ function parseOptions(args: string[]): InitOptions {
 function renderToml(options: InitOptions): string {
   const model = options.provider === 'codex' ? 'qwen3-vl-32b' : 'qwen2.5-32b-instruct'
 
-  return `# CLI color theme: egirl (purple/pink), midnight (blue/teal), neon (green/cyan), mono (grayscale)
+  return `# CLI color theme: egirl (purple/pink), midnight, neon, mono, dracula, nord, gruvbox, catppuccin,
+# solarized, tokyonight, sakura, synthwave, paper (light backgrounds), ... -- /theme lists them all
 theme = "egirl"
 
 [thinking]

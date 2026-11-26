@@ -14,6 +14,7 @@ import { renderDrained, renderQueuedMessage } from './cli-events'
 import { appendHistory, loadHistory } from './cli-history'
 import { type CLIInput, createCLIInput } from './cli-input'
 import { tasksCommand } from './cli-tasks'
+import { themeCommand } from './cli-theme'
 import { runTurns } from './cli-turn'
 import { createWaitHistory } from './cli-wait'
 import type { Channel } from './types'
@@ -165,6 +166,10 @@ export class CLIChannel implements Channel {
     // Read-only terminal commands answer at once; the ones that change the session or start a
     // run of their own would collide with the turn in flight, so they say so instead of
     // falling through to "unknown command".
+    if (word === '/theme') {
+      this.input?.notice(themeCommand(text.slice('/theme'.length)))
+      return
+    }
     if (word === '/prompt' || word === '/debug') {
       void handleCLICommand(word, this.commandCtx())
       return
