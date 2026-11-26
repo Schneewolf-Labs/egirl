@@ -14,6 +14,8 @@
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { log } from '../../src/util/logger'
+import { codeAgentLieCaught } from './code-agent-lie-caught'
+import { codeAgentTimeoutHonest } from './code-agent-timeout-honest'
 import { heartbeatNoopNoMemories } from './heartbeat-noop-no-memories'
 import { STUB_EMBED_DIMS } from './proxy'
 import { recallTrivialGate } from './recall-trivial-gate'
@@ -26,6 +28,8 @@ const SCENARIOS: Scenario[] = [
   recallTrivialGate,
   heartbeatNoopNoMemories,
   safetyFilterFalsePositives,
+  codeAgentTimeoutHonest,
+  codeAgentLieCaught,
 ]
 
 function arg(name: string, fallback?: string): string | undefined {
