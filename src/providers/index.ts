@@ -1,4 +1,5 @@
 import type { RuntimeConfig } from '../config'
+import { createClaudeProvider } from './claude'
 import { createLlamaCppProvider } from './llamacpp'
 import type { LLMProvider } from './types'
 import { createWitchgridPromoter, createWitchgridReresolver } from './witchgrid'
@@ -38,6 +39,7 @@ export interface ProviderRegistry {
 }
 
 export function createProviderRegistry(config: RuntimeConfig): ProviderRegistry {
+  if (config.local.isClaude) return { local: createClaudeProvider(config.local.model) }
   const local = createLlamaCppProvider(
     config.local.endpoint,
     config.local.model,

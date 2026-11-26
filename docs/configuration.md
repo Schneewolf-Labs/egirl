@@ -54,6 +54,7 @@ Settings for the local llama.cpp server. This is the only LLM provider.
 | `stale_stream_timeout_ms` | number | `90000` | Kill a streaming request that has produced no new tokens for this long |
 | `api_key` | string | — | Bearer token for a llama-server started with `--api-key` (a shared/keyed operator endpoint). Prefer the `EGIRL_LOCAL_API_KEY` env var over putting the secret in the toml |
 | `hosted` | bool | `false` | The endpoint is a hosted OpenAI-compatible API (e.g. `https://uncensuredai.com`), not a llama-server. Names `model` on every request and drops llama.cpp's own request fields (`chat_template_kwargs`, `id_slot`, `return_progress`), so `/think` cannot switch the model's thinking there. Give the bare host; egirl appends `/v1/chat/completions` |
+| `provider` | `"llamacpp"` \| `"claude"` | `"llamacpp"` | `"claude"` runs the side work (memory and lesson extraction, the permission supervisor, task self-review) on Claude instead of a llama-server: each call is one Claude Code query on your `claude login`, with `model` naming the Claude model (e.g. `"haiku"`). `endpoint` is not used. Needs `[operator] provider = "claude"`; with both, the whole instance runs on Claude and no llama-server is needed |
 
 ### `[local.witchgrid]`
 

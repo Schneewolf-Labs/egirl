@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { AgentLoop } from '../agent/loop'
 import type { RuntimeConfig } from '../config'
 import type { MemoryManager } from '../memory'
+import type { OperatorBuilder } from '../operator'
 import type { ChatMessage, LLMProvider } from '../providers/types'
 import { createMemoryTools, createWorkingMemoryTool, globTool, readTool } from '../tools/builtin'
 import { createSkillManageTool } from '../tools/builtin/skill-manage'
@@ -68,6 +69,11 @@ export interface SelfReviewDeps {
   config: RuntimeConfig
   provider: LLMProvider
   memory?: MemoryManager
+  /**
+   * Builds the instance's own operator, as a task run does: on a Claude instance the review runs
+   * on Claude with the restricted tools. Absent = the local loop on `provider`.
+   */
+  buildOperator?: OperatorBuilder
 }
 
 /**
@@ -122,14 +128,15 @@ export async function runSelfReview(
       executor.registerAll([mt.memorySearchTool, mt.memorySetTool])
     }
 
-    const agent = new AgentLoop({
+    const agentDeps = {
       config: deps.config,
       toolExecutor: executor,
       localProvider: deps.provider,
       sessionId: `review:${taskId}`,
       additionalContext:
         'You are in a restricted post-run review pass: skill and memory tools only. Be brief and concrete.',
-    })
+    }
+    const agent = deps.buildOperator?.({ ...agentDeps, isFresh: true }) ?? new AgentLoop(agentDeps)
 
     const response = await agent.run(REVIEW_PROMPT + digest + inventoryBlock, {
       maxTurns: REVIEW_MAX_TURNS,

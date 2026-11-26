@@ -17,6 +17,13 @@ function endpointUsesBindAddress(endpoint: string): boolean {
 }
 
 async function checkLocalEndpoint(config: RuntimeConfig): Promise<CheckResult> {
+  if (config.local.isClaude) {
+    return {
+      label: 'local model',
+      level: 'ok',
+      message: `side work on Claude (${config.local.model})`,
+    }
+  }
   try {
     const url = new URL('/v1/models', config.local.endpoint)
     const response = await fetch(url, {
