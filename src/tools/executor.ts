@@ -201,7 +201,11 @@ export class ToolExecutor {
     log.debug('tools', `Executing tool: ${call.name}`, call.arguments)
 
     try {
-      const result = await tool.execute(call.arguments, cwd, ctx)
+      const onToolProgress = ctx?.onToolProgress
+      const toolCtx = onToolProgress
+        ? { ...ctx, onProgress: (text: string) => onToolProgress(call, text) }
+        : ctx
+      const result = await tool.execute(call.arguments, cwd, toolCtx)
       log.debug('tools', `Tool ${call.name} completed:`, {
         success: result.success,
         outputLength: result.output.length,

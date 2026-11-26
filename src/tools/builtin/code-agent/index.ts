@@ -154,13 +154,10 @@ export function createCodeAgentTool(config: CodeAgentConfig): Tool {
 
       for (const provider of chain) {
         const backend = BACKENDS[provider] ?? runClaudeCodeAgent
-        const result = await backend(
-          { ...config, provider },
-          task,
-          workingDir,
-          images,
-          resume ? { resumeSession: resume.id } : undefined,
-        )
+        const result = await backend({ ...config, provider }, task, workingDir, images, {
+          ...(resume && { resumeSession: resume.id }),
+          ...(ctx?.onProgress && { onProgress: ctx.onProgress }),
+        })
         attempted.push(provider)
         last = result
 

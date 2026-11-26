@@ -6,8 +6,9 @@ import {
 import type { PermissionSupervisor } from '../../../permissions/supervisor'
 import { log } from '../../../util/logger'
 import type { ToolResult } from '../../types'
-import { DEFAULT_TIMEOUT_MS, withImagePaths } from './shared'
-import { ActionLog, formatTimeoutReport } from './timeout-report'
+import { deadlineLimits, secs, startDeadline, stopReason } from './deadline'
+import { withImagePaths } from './shared'
+import { ActionLog, actionText, formatTimeoutReport } from './timeout-report'
 import type { CodeAgentBackend, CodeAgentConfig, CodeAgentRunOptions } from './types'
 
 const ABORTED = Symbol('aborted')
@@ -194,16 +195,14 @@ export async function runClaudeSession(
   let finalResult = ''
   let lastText = ''
   let escalation: string | undefined
-  const actions = new ActionLog()
+  const actions = new ActionLog((action) => runOptions.onProgress?.(actionText(action)))
 
-  const timeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS
+  const limits = deadlineLimits(config)
   const abortController = new AbortController()
-  let timedOut = false
-  const timeoutId = setTimeout(() => {
-    timedOut = true
+  const deadline = startDeadline(limits, () => {
     guardLateSdkAbort()
     abortController.abort()
-  }, timeoutMs)
+  })
 
   const supervised = config.permissionSupervisor?.isActive() ?? false
   const isBypass = config.permissionMode === 'bypassPermissions'
@@ -246,20 +245,22 @@ export async function runClaudeSession(
   const timeoutReport = async (): Promise<ToolResult> => {
     const output = await formatTimeoutReport({
       provider: 'claude',
-      timeoutMs,
+      timeoutMs: deadline.elapsedMs,
+      reason: stopReason(deadline, limits),
       workingDir,
       turns: sdkTurns ?? manualTurns,
       actions,
       lastMessage: finalResult || lastText,
       sessionId: sessionId || undefined,
     })
-    log.error('code-agent', `Task timed out after ${(timeoutMs / 1000).toFixed(0)}s`)
+    log.error('code-agent', `Task stopped after ${secs(deadline.elapsedMs)} (${deadline.expired})`)
     return { success: false, output }
   }
 
   try {
     for await (const message of queryFn({ prompt: withImagePaths(task, images), options })) {
       if (abortController.signal.aborted) break
+      deadline.touch()
       if (!('type' in message)) continue
 
       switch (message.type) {
@@ -291,11 +292,11 @@ export async function runClaudeSession(
       if (text) lastText = text
     }
   } catch (error) {
-    clearTimeout(timeoutId)
+    deadline.clear()
     if (escalation) return userApprovalResult(escalation, finalResult)
     // The SDK surfaces our abort as its own "Claude Code process aborted by user" error, not an
     // AbortError, so the model was told a person had stopped the run. Our signal is the truth.
-    if (timedOut || abortController.signal.aborted) return timeoutReport()
+    if (deadline.expired || abortController.signal.aborted) return timeoutReport()
     const msg = error instanceof Error ? error.message : String(error)
     log.error('code-agent', `Task failed: ${msg}`)
     return {
@@ -303,10 +304,10 @@ export async function runClaudeSession(
       output: `Code agent error: ${msg}`,
     }
   }
-  clearTimeout(timeoutId)
+  deadline.clear()
 
   if (escalation) return userApprovalResult(escalation, finalResult)
-  if (timedOut) return timeoutReport()
+  if (deadline.expired) return timeoutReport()
 
   const turns = sdkTurns ?? manualTurns
   const durationMs = Date.now() - startTime

@@ -11,9 +11,17 @@ import { publish } from './session-events'
 /** Default max tokens per tool result — matches context-window.ts default */
 const MAX_TOOL_RESULT_TOKENS = 8000
 
-function toolContext(context: AgentContext, signal?: AbortSignal): ToolCallContext {
+function toolContext(
+  context: AgentContext,
+  signal?: AbortSignal,
+  events?: AgentEventHandler,
+): ToolCallContext {
+  const onToolProgress = events?.onToolProgress
   return {
     sessionId: context.sessionId,
+    ...(onToolProgress && {
+      onToolProgress: (call, text) => onToolProgress(call.id, call.name, text),
+    }),
     ...(signal && { signal }),
     ...(context.runImages?.length && { images: context.runImages }),
     ...(context.runUserText && { userText: context.runUserText }),
@@ -181,7 +189,11 @@ async function executeToolsWithHooks(args: {
     if (signal?.aborted) {
       return new Map(toolCalls.map((call) => [call.id, skippedResult()]))
     }
-    return executor.executeAll(toolCalls, context.workspaceDir, toolContext(context))
+    return executor.executeAll(
+      toolCalls,
+      context.workspaceDir,
+      toolContext(context, undefined, events),
+    )
   }
 
   const results = new Map<string, ToolResult>()
@@ -205,7 +217,11 @@ async function executeToolsWithHooks(args: {
       }
     }
 
-    const result = await executor.execute(call, context.workspaceDir, toolContext(context, signal))
+    const result = await executor.execute(
+      call,
+      context.workspaceDir,
+      toolContext(context, signal, events),
+    )
     events?.onAfterToolExec?.(call, result)
 
     results.set(call.id, result)

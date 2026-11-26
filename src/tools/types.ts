@@ -41,6 +41,13 @@ export interface ToolCallContext {
   userText?: string
   /** The run's abort signal: a tool that waits (process_wait) stops when the run does. */
   signal?: AbortSignal
+  /**
+   * A long tool's running account of what it is doing (code_agent: each action its agent
+   * takes), for the person watching. The executor fills it in per call from `onToolProgress`.
+   */
+  onProgress?: (text: string) => void
+  /** Where the executor sends each call's progress; set by whoever runs the turn. */
+  onToolProgress?: (call: { id: string; name: string }, text: string) => void
 }
 
 export interface Tool {

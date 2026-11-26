@@ -3,7 +3,7 @@ import type { PromptProgress, ToolCall } from '../providers/types'
 import type { ToolResult } from '../tools/types'
 import { colors, DIM, RESET } from '../ui/theme'
 import { createEditDiffs } from './cli-edit-diffs'
-import { visibleWidth } from './cli-line'
+import { truncateVisible, visibleWidth } from './cli-line'
 import { renderMarkdown } from './cli-markdown'
 import { createMarkdownStream, type MarkdownStream } from './cli-md-stream'
 import { createPrefillRate, renderPrefill } from './cli-stats'
@@ -206,6 +206,17 @@ export function createCLIEventHandler(
       }
       // Now the wait is the tool, not the model — say which one is running.
       status?.set('tool', calls.map((call) => call.name).join(', '))
+    },
+
+    // A long tool's running account (each action the code agent takes) hangs off the call in
+    // the scrollback, and the newest is on the status line: minutes of "running code_agent"
+    // with nothing else looked exactly like a hang.
+    onToolProgress(_callId: string, name: string, text: string) {
+      status?.clear()
+      const width = columns() - 1
+      const flat = text.replace(/\s+/g, ' ').trim()
+      process.stdout.write(`${DIM}${truncateVisible(`    · ${flat}`, width)}${RESET}\n`)
+      status?.set('tool', truncateVisible(`${name} · ${flat}`, Math.max(20, width - 24)))
     },
 
     onToolCallComplete(callId: string, name: string, result: ToolResult) {

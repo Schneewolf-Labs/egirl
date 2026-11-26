@@ -193,7 +193,9 @@ Because egirl runs the command itself, it answers to the same safety rules as `e
 
 ## When the code agent times out
 
-A delegation that runs past `timeout_ms` is aborted, but the work it did stays in the tree: a merge may be committed, conflicts half-resolved, a venv half-built. A bare "timed out" leaves the operator guessing, so the tool result is a compact report instead:
+Two clocks stop a delegation. `timeout_ms` (default 30 minutes) is the total. `idle_timeout_ms` (default 10 minutes) starts over every time the agent does or says something, so it stops an agent that has gone quiet (stuck on a prompt, hung on a command) long before the total; the report then says it stalled rather than that it ran out of time. While a delegation runs, each action the agent takes (`Bash: bun test`, `Edit: src/x.ts`) is shown in the CLI under the call and on the status line.
+
+A delegation that runs past either one is aborted, but the work it did stays in the tree: a merge may be committed, conflicts half-resolved, a venv half-built. A bare "timed out" leaves the operator guessing, so the tool result is a compact report instead:
 
 ```text
 Code agent timed out after 1800s (claude, 58 turns, 41 tool calls). The work is partial: check the state below before retrying.

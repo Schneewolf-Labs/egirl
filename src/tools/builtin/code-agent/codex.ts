@@ -2,8 +2,8 @@ import { VERSION } from '../../../version'
 import type { ToolResult } from '../../types'
 import type { CodexConnection, CodexEvents, RpcObject } from './codex-rpc'
 import { connectCodex, object } from './codex-rpc'
-import { DEFAULT_TIMEOUT_MS } from './shared'
-import { ActionLog, formatTimeoutReport, progressSections } from './timeout-report'
+import { deadlineLimits, startDeadline, stopReason } from './deadline'
+import { ActionLog, actionText, formatTimeoutReport, progressSections } from './timeout-report'
 import type { CodeAgentBackend, CodeAgentConfig, CodeAgentRunOptions } from './types'
 
 /** Only explicit protocol completion can report success. */
@@ -53,8 +53,8 @@ export async function runCodexSession(
   runOptions: CodeAgentRunOptions = {},
 ): Promise<ToolResult> {
   const started = Date.now()
-  const timeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS
-  const actions = new ActionLog()
+  const limits = deadlineLimits(config)
+  const actions = new ActionLog((action) => runOptions.onProgress?.(actionText(action)))
   let lastText = ''
   let connection: CodexConnection | undefined
   let threadId: string | undefined
@@ -76,16 +76,17 @@ export async function runCodexSession(
       success: false,
       output: `Code agent error: ${error.message}\n${output}`,
     })
-  const timer = setTimeout(() => {
+  const deadline = startDeadline(limits, () => {
     void formatTimeoutReport({
       provider: 'codex',
-      timeoutMs,
+      timeoutMs: deadline.elapsedMs,
+      reason: stopReason(deadline, limits),
       workingDir,
       actions,
       lastMessage: output || lastText,
       sessionId: threadId,
     }).then((report) => finish({ success: false, output: report }))
-  }, timeoutMs)
+  })
   const matches = (params: RpcObject): boolean =>
     params.threadId === threadId && (turnId === undefined || params.turnId === turnId)
   try {
@@ -93,6 +94,7 @@ export async function runCodexSession(
       failure: fail,
       notification(method, params) {
         if (settled || params.threadId !== threadId) return
+        deadline.touch()
         if (method === 'turn/started') turnId = String(object(params.turn).id)
         if (method === 'item/started' && matches(params)) recordAction(object(params.item))
         if (method === 'item/completed' && matches(params)) {
@@ -208,7 +210,7 @@ export async function runCodexSession(
     fail(error instanceof Error ? error : new Error(String(error)))
     return await result
   } finally {
-    clearTimeout(timer)
+    deadline.clear()
     await connection?.close(!completed)
     const value = await result
     const thread = threadId ? ` | thread: ${threadId}` : ''
