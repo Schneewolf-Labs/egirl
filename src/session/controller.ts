@@ -11,6 +11,8 @@
  * the source of truth.
  */
 
+import { DEFAULT_MAX_TURNS } from '../config/schema'
+
 export type RunMode = 'ask' | 'auto'
 
 export interface SessionSettings {
@@ -27,7 +29,7 @@ export interface SessionSettings {
 }
 
 export const DEFAULT_SETTINGS: SessionSettings = {
-  maxTurns: 10,
+  maxTurns: DEFAULT_MAX_TURNS,
   mode: 'ask',
   showReasoning: true,
   showStats: true,

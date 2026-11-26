@@ -1,3 +1,4 @@
+import { DEFAULT_MAX_TURNS } from '../src/config/schema'
 /**
  * The turn cap on chat runs.
  *
@@ -67,12 +68,12 @@ describe('turn cap on the agent loop', () => {
     expect(MAX_TURNS_SUMMARY_NUDGE).toContain('ran out of steps')
   })
 
-  test('the default stays 10 when the config does not set it', async () => {
+  test('the default stays DEFAULT_MAX_TURNS when the config does not set it', async () => {
     const { provider, toolTurns } = toolHappyProvider()
     // makeConfig leaves the key unset, like a config built before it existed.
     const agent = realLoop(provider, 'test:cap-default')
     const response = await agent.run('go')
-    expect(toolTurns()).toBe(10)
+    expect(toolTurns()).toBe(DEFAULT_MAX_TURNS)
     expect(response.turnLimitReached).toBe(true)
   })
 

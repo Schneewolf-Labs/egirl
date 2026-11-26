@@ -189,7 +189,7 @@ describe('/context and /settings', () => {
       agent,
       session: new SessionController(),
     })
-    expect(withSession.message).toContain('maxTurns 10')
+    expect(withSession.message).toContain('maxTurns 40')
   })
 })
 
@@ -206,7 +206,7 @@ describe('terminal-only commands', () => {
     for (const bad of ['/maxturns 0', '/maxturns -1', '/maxturns abc', '/maxturns 9999']) {
       await handleCommand(bad, { agent: fakeAgent(), session })
     }
-    expect(session.get().maxTurns).toBe(10)
+    expect(session.get().maxTurns).toBe(40)
   })
 
   test('/auto and /reasoning toggle', async () => {

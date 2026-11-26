@@ -1,5 +1,12 @@
 import { type Static, type TSchema, Type } from '@sinclair/typebox'
 
+/**
+ * Turn cap for a run that sets none of its own. Measured on the working instances: given room,
+ * an open-ended run ends on its own at 15-30 turns, and a cap of 10 cut most of them off
+ * mid-work; chat-facing instances answer in 1-3 turns, so the cap costs them nothing.
+ */
+export const DEFAULT_MAX_TURNS = 40
+
 export type ThinkingLevel = 'off' | 'low' | 'medium' | 'high'
 
 // Single source of truth for code-agent backends. A new literal here flows
@@ -257,7 +264,7 @@ const baseProperties = {
       context_compaction: Type.Boolean({ default: true }),
       context_rollover: Type.Boolean({ default: false }),
       consolidation_interval: Type.Number({ default: 0 }),
-      max_turns: Type.Number({ minimum: 1, default: 10 }),
+      max_turns: Type.Number({ minimum: 1, default: DEFAULT_MAX_TURNS }),
     }),
   ),
 
@@ -489,7 +496,7 @@ const baseProperties = {
       tick_interval_ms: Type.Number({ default: 30000 }),
       max_active_tasks: Type.Number({ default: 20 }),
       max_concurrent_tasks: Type.Number({ default: 1 }),
-      task_timeout_ms: Type.Number({ default: 300000 }),
+      task_timeout_ms: Type.Number({ default: 1_800_000 }),
       // Post-run self-review for unbounded tasks: a restricted fork (skill/memory tools only)
       // reviews the run digest and patches skills / stores lessons autonomously.
       self_review: Type.Boolean({ default: true }),
@@ -499,7 +506,7 @@ const baseProperties = {
       max_extensions: Type.Number({ default: 2 }),
       max_extension_ratio: Type.Number({ default: 1.0 }),
       discovery_enabled: Type.Boolean({ default: true }),
-      discovery_interval_ms: Type.Number({ default: 1800000 }),
+      discovery_interval_ms: Type.Number({ default: 7_200_000 }),
       idle_threshold_ms: Type.Number({ default: 600000 }),
       heartbeat: Type.Optional(
         Type.Object({

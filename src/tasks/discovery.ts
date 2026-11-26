@@ -13,6 +13,9 @@ import type { TaskRunner } from './runner'
 import type { TaskStore } from './store'
 import type { TasksConfig } from './types'
 
+// 5 ran out before the proposal in nearly every pass (Jaeger: 47 of 47 at the cap).
+const DISCOVERY_MAX_TURNS = 10
+
 const DISCOVERY_PROMPT = `Based on the workspace and memory context below, is there any useful background work worth proposing?
 
 Consider:
@@ -133,7 +136,7 @@ export class Discovery {
       // Every pass starts clean: discovery keeps no transcript of its own.
       const agent =
         this.deps.buildOperator?.({ ...agentDeps, isFresh: true }) ?? new AgentLoop(agentDeps)
-      await agent.run(DISCOVERY_PROMPT, { maxTurns: 5 })
+      await agent.run(DISCOVERY_PROMPT, { maxTurns: DISCOVERY_MAX_TURNS })
 
       log.info('tasks', 'Discovery complete')
     } catch (err) {

@@ -45,6 +45,9 @@ If you need context from previous runs, use memory_search.`
  * which by convention sits at the top of the file. */
 const MAX_STATE_BRIEF_CHARS = 16000
 
+/** Turn cap for a task that sets none. Same reasoning as the run cap, with fewer samples. */
+const DEFAULT_TASK_MAX_TURNS = 30
+
 /** How long past its hard timeout a claimed run holds the task before another process may take it. */
 const CLAIM_LEASE_MARGIN_MS = 10 * 60_000
 
@@ -818,7 +821,7 @@ export class TaskRunner {
       log.info('tasks', `Task ${task.name}: resuming the run that hit its time limit`)
     }
     const response = await agent.run(message, {
-      maxTurns: task.maxTurns ?? 10,
+      maxTurns: task.maxTurns ?? DEFAULT_TASK_MAX_TURNS,
       unbounded: task.unbounded,
       // An unbounded run is the autonomy loop proper: its state lives in NOTES/work by
       // contract, so its context is disposable — recycle it from notes rather than summarize.

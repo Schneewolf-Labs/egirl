@@ -364,7 +364,7 @@ interface TaskRunner {
 - **Tick interval**: Checks for due scheduled tasks every 30 seconds (configurable via `tick_interval_ms`)
 - **Concurrency**: One background task at a time. Local inference is single-threaded — running two agent loops simultaneously would thrash the GPU
 - **Preemption**: Interactive user messages take priority. If a user sends a message while a background task is mid-execution, the runner yields after the current tool call completes, lets the interactive request through, then resumes
-- **Timeout**: Each task run has a max duration (configurable via `task_timeout_ms`, default: 5 min). Prevents runaway loops. A bounded run can earn more time and stop itself cleanly — see [Deadlines](#deadlines-resume-extension-clean-stop)
+- **Timeout**: Each task run has a max duration (configurable via `task_timeout_ms`, default: 30 min). Prevents runaway loops. A bounded run can earn more time and stop itself cleanly — see [Deadlines](#deadlines-resume-extension-clean-stop)
 - **Retry**: Failed tasks increment `consecutive_failures`. After 2 consecutive failures, the task is paused and the user is notified. Successful runs reset the counter
 - **Event queue**: When event sources fire while a task is already running, events are queued (bounded, newest wins for same-task events). Prevents pile-up from chatty file watchers
 
@@ -630,7 +630,7 @@ A special scheduled "meta-task" that looks for useful work. Runs at low frequenc
 - Max 3 proposals per discovery run (prevent spam)
 - Cooldown: don't re-propose something that was rejected in the last 24h (checked via `task_proposals` table)
 - Only runs when the user is "present" (had a message in the last 2 hours) — no point proposing tasks if nobody's around to approve them
-- Discovery prompts have `max_turns: 5` to keep them short
+- Discovery prompts have `max_turns: 10` to keep them short
 
 ## Config
 
@@ -641,12 +641,12 @@ New section in `egirl.toml`:
 enabled = true
 tick_interval_ms = 30000        # how often to check for due scheduled tasks
 max_active_tasks = 20           # max number of active tasks at once
-task_timeout_ms = 300000        # 5 min max per task run
+task_timeout_ms = 1800000       # 30 min max per task run
 extensions = true               # bounded runs may request_extension (granted on evidence)
 max_extensions = 2              # grants per run
 max_extension_ratio = 1.0       # total extension ≤ task_timeout_ms × this
 discovery_enabled = true        # agent looks for work during idle time
-discovery_interval_ms = 1800000 # 30 min between discovery runs
+discovery_interval_ms = 7200000 # 2 h between discovery runs
 idle_threshold_ms = 600000      # 10 min idle before discovery kicks in
 ```
 

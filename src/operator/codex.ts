@@ -3,6 +3,7 @@ import { publish } from '../agent/session-events'
 import type { ContextStatus } from '../agent/status'
 import type { AgentLoopOptions, AgentResponse } from '../agent/types'
 import type { RuntimeConfig } from '../config'
+import { DEFAULT_MAX_TURNS } from '../config/schema'
 import type { ThinkingConfig } from '../providers/types'
 import { connectCodex } from '../tools/builtin/code-agent/codex-rpc'
 import { errorMessage } from '../util/errors'
@@ -136,7 +137,7 @@ export class CodexOperator implements Operator {
       // app-server has no turn cap of its own: stop after this many tool calls, as the SDK's
       // maxTurns stops Claude. An unbounded run (a task) ends on its own.
       ...(!options.unbounded && {
-        maxToolCalls: options.maxTurns ?? this.config.conversation.maxTurns ?? 10,
+        maxToolCalls: options.maxTurns ?? this.config.conversation.maxTurns ?? DEFAULT_MAX_TURNS,
       }),
     })
   }
