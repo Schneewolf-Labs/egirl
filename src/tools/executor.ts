@@ -11,6 +11,7 @@ import {
 } from '../safety'
 import { errorMessage } from '../util/errors'
 import { log } from '../util/logger'
+import { startupConfigNote } from './config-note'
 import { matchToolName, remapParamKeys } from './fuzzy-match'
 import type { Tool, ToolCallContext, ToolDefinition, ToolResult } from './types'
 
@@ -49,9 +50,15 @@ const SEQUENTIAL_TOOLS = new Set([
 export class ToolExecutor {
   private tools: Map<string, Tool> = new Map()
   private safety?: SafetyConfig
+  /** The egirl.toml this process read at startup; edits to it (or egirl.d/) get a note. */
+  private configPath?: string
 
   setSafety(config: SafetyConfig): void {
     this.safety = config
+  }
+
+  setConfigPath(path: string | undefined): void {
+    this.configPath = path
   }
 
   register(tool: Tool): void {
@@ -222,6 +229,11 @@ export class ToolExecutor {
           ]
         }
       }
+
+      const note = result.success
+        ? startupConfigNote(call.name, call.arguments, cwd, this.configPath)
+        : undefined
+      if (note) result.output = `${result.output}\n\n${note}`
 
       this.audit(call.name, call.arguments, { success: result.success })
       return result

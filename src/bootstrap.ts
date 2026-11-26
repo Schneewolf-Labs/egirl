@@ -381,6 +381,7 @@ export async function createAppServices(config: RuntimeConfig): Promise<AppServi
   }
 
   toolExecutor.setSafety(buildSafetyConfig(config))
+  toolExecutor.setConfigPath(config.source.path)
 
   return {
     config,
