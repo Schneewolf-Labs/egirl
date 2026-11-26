@@ -307,6 +307,7 @@ function helpCommand(scope: CommandScope): CommandResult {
       '🔁 /auto — continue past the turn cap without asking',
       '📈 /stats [on|off] — step, tokens, rate and context on the status line',
       '📝 /markdown [on|off] — render bold, code, headings and tables in replies',
+      '🎨 /theme [name] — color theme for this session, with swatches',
       '🔢 /maxturns <1-500> — turn cap for a run',
       '💭 /reasoning — show reasoning inline',
       '🗺️ /plan <request> — plan first, run it once approved',

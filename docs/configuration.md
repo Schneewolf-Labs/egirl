@@ -9,7 +9,7 @@ egirl is configured through two files: `egirl.toml` for application settings and
 | `egirl.toml`, `egirl.d/*.toml`, `.env` | once, at startup | restart the instance |
 | Skills | at startup | restart |
 | Workspace files (`SOUL.md`, `AGENTS.md`, `USER.md`, …) | at startup, and again on `/wipe` | restart, or `/wipe` in the terminal |
-| `/think`, `/maxturns`, `/auto`, `/reasoning`, `/stats`, `/markdown`, `/tools`, `/verbose`, `/quiet` | when typed | immediate, for this session only; a restart goes back to the config |
+| `/think`, `/maxturns`, `/auto`, `/reasoning`, `/stats`, `/markdown`, `/theme`, `/tools`, `/verbose`, `/quiet` | when typed | immediate, for this session only; a restart goes back to the config |
 
 Nothing watches the config files: an edit to `max_turns` while an instance runs does nothing until it restarts. `/settings` lists what is set now, and in the terminal it names any config file edited, added or removed since startup.
 
@@ -19,7 +19,7 @@ Nothing watches the config files: an edit to `max_turns` while an instance runs 
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `theme` | string | `"egirl"` | CLI color theme. Options: `"egirl"` (purple/pink), `"midnight"` (blue/teal), `"neon"` (green/cyan), `"mono"` (grayscale) |
+| `theme` | string | `"egirl"` | CLI color theme. Built in: `egirl` (purple/pink, default), `vapor`, `midnight`, `neon`, `mono`, `dracula`, `nord`, `gruvbox`, `catppuccin`, `solarized`, `tokyonight`, `rosepine`, `sakura`, `crescent`, `synthwave`, `matcha`, `ember`, `ocean`, `amber`, `paper` (for light backgrounds). In the terminal, `/theme` lists them with swatches and `/theme <name>` switches for the session |
 
 ### `[thinking]`
 

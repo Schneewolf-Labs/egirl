@@ -7,6 +7,7 @@
  */
 
 import { THINKING_LEVELS } from '../session/commands'
+import { listThemes } from '../ui/theme'
 import type { MenuItem } from './cli-menu'
 
 export interface CommandSpec {
@@ -41,6 +42,11 @@ export const CLI_COMMANDS: readonly CommandSpec[] = [
     name: 'stats',
     args: ['on', 'off'],
     summary: 'step, tokens, rate and context on the status line',
+  },
+  {
+    name: 'theme',
+    args: listThemes().map((t) => t.name),
+    summary: 'color theme for this session, with swatches',
   },
   {
     name: 'markdown',
