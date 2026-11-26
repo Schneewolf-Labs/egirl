@@ -14,6 +14,7 @@
  */
 
 import { windowFill } from '../agent/status'
+import type { ConfigDrift } from '../config/drift'
 import type { Operator } from '../operator/types'
 import type { ThinkingConfig } from '../providers/types'
 import type { Skill } from '../skills/types'
@@ -56,6 +57,8 @@ export interface CommandScope {
   builtinPermission?: CommandPermission
   /** Per-conversation display verbosity, for /tools, /reasoning, /verbose, /quiet. */
   verbosity?: VerbosityStore
+  /** Config files changed since startup, for /settings to warn that a restart is due. */
+  configDrift?: ConfigDrift
 }
 
 export type CommandPermission = NonNullable<
@@ -263,7 +266,19 @@ function settingsCommand(scope: CommandScope): CommandResult {
     const v = scope.verbosity.get()
     parts.push(`🛠️ tools ${v.tools ? 'on' : 'off'}`, `💭 reasoning ${v.thinking ? 'on' : 'off'}`)
   }
-  return reply(parts.join(' · '))
+  // Which settings take effect when: an operator changed max_turns in its config file mid-run
+  // and could not tell that it would only apply after a restart.
+  const lines = [
+    `⚡ now (set by command, back to the config on restart): ${parts.join(' · ')}`,
+    '📄 at startup: egirl.toml and egirl.d/ (model, tools, channels, tasks, the max_turns ' +
+      'default) and skills. Edit, then restart. The workspace files (SOUL.md and the rest) ' +
+      'are read at startup and again on /wipe.',
+  ]
+  const drift = scope.configDrift?.changed() ?? []
+  if (drift.length > 0) {
+    lines.push(`⚠️ changed since startup, restart to apply: ${drift.join(', ')}`)
+  }
+  return reply(lines.join('\n'))
 }
 
 function helpCommand(scope: CommandScope): CommandResult {
@@ -273,7 +288,7 @@ function helpCommand(scope: CommandScope): CommandResult {
     `🧠 /think <on|off|default> — thinking for this session${mark}`,
     `🟢 /status — busy or idle, context, thinking${mark}`,
     `📊 /context — how full the window is${mark}`,
-    `⚙️ /settings — current settings${mark}`,
+    `⚙️ /settings — current settings, and which apply now or at restart${mark}`,
     `▶️ /continue — pick up a run that stopped at its turn cap${mark}`,
   ]
   for (const c of customCommands(scope.skills ?? [])) {

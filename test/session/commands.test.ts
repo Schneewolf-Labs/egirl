@@ -179,9 +179,12 @@ describe('/context and /settings', () => {
 
   test('/settings shows only what the surface has', async () => {
     const agent = fakeAgent()
-    expect((await handleCommand('/settings', { agent })).message).toBe(
-      '🧠 thinking medium (config)',
+    const bare = (await handleCommand('/settings', { agent })).message ?? ''
+    expect(bare).toStartWith(
+      '⚡ now (set by command, back to the config on restart): 🧠 thinking medium (config)\n',
     )
+    expect(bare).toContain('📄 at startup: egirl.toml and egirl.d/')
+    expect(bare).not.toContain('changed since startup')
     const withSession = await handleCommand('/settings', {
       agent,
       session: new SessionController(),
@@ -301,6 +304,16 @@ describe('verbosity commands (/tools, /reasoning, /verbose, /quiet)', () => {
     const r = await handleCommand('/settings', { agent: fakeAgent(), verbosity })
     expect(r.message).toContain('tools on')
     expect(r.message).toContain('reasoning on')
+  })
+
+  test('/settings names config files changed since startup', async () => {
+    const r = await handleCommand('/settings', {
+      agent: fakeAgent(),
+      configDrift: { changed: () => ['egirl.d/jaeger.toml (edited)'] },
+    })
+    expect(r.message).toContain(
+      '⚠️ changed since startup, restart to apply: egirl.d/jaeger.toml (edited)',
+    )
   })
 })
 

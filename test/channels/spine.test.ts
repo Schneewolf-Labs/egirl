@@ -122,7 +122,7 @@ describe('runTurn', () => {
     const { agent } = fakeAgent('ok')
     const { surface, sent } = fakeSurface()
     await runTurn(agent, surface, '/settings', broker)
-    expect(sent).toEqual(['🧠 thinking off (config)'])
+    expect(sent.join('')).toContain('🧠 thinking off (config)')
     expect(await reply).toBeUndefined()
   })
 

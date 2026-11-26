@@ -4,6 +4,7 @@ import type { AgentEventHandler, ModelTurn } from '../agent/events'
 import { createCLIChannel } from '../channels'
 import type { OutboundChannel } from '../channels/types'
 import type { RuntimeConfig } from '../config'
+import { watchConfigFiles } from '../config/drift'
 import type { ToolResult } from '../tools/types'
 import { createShadowTutor } from '../tracking/shadow-tutor'
 import { applyLogLevel } from '../util/args'
@@ -11,6 +12,7 @@ import { errorMessage } from '../util/errors'
 import { createBackgroundTasks, createCommandRuntime, onShutdown } from './runtime'
 
 export async function runCLI(config: RuntimeConfig, args: string[]): Promise<void> {
+  const configDrift = watchConfigFiles(config.source)
   applyLogLevel(args)
 
   // Check for single message mode
@@ -173,6 +175,7 @@ export async function runCLI(config: RuntimeConfig, args: string[]): Promise<voi
     ...(taskStore && { taskStore }),
     skills: rt.skills,
     historyPath: join(config.workspace.path, 'cli_history'),
+    configDrift,
   })
 
   const tasks = createBackgroundTasks(rt, {

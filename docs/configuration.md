@@ -2,6 +2,17 @@
 
 egirl is configured through two files: `egirl.toml` for application settings and `.env` for secrets.
 
+## When a change takes effect
+
+| What | Read | To apply a change |
+|------|------|-------------------|
+| `egirl.toml`, `egirl.d/*.toml`, `.env` | once, at startup | restart the instance |
+| Skills | at startup | restart |
+| Workspace files (`SOUL.md`, `AGENTS.md`, `USER.md`, …) | at startup, and again on `/wipe` | restart, or `/wipe` in the terminal |
+| `/think`, `/maxturns`, `/auto`, `/reasoning`, `/stats`, `/markdown`, `/tools`, `/verbose`, `/quiet` | when typed | immediate, for this session only; a restart goes back to the config |
+
+Nothing watches the config files: an edit to `max_turns` while an instance runs does nothing until it restarts. `/settings` lists what is set now, and in the terminal it names any config file edited, added or removed since startup.
+
 ## egirl.toml
 
 ### Top-level
