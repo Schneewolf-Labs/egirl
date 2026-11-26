@@ -6,6 +6,8 @@
  * -- `helo`, left arrow, `l` showed "hello" and queued "helol" -- and a half-typed line was lost
  * when the turn ended. Now readline does all the editing (history, arrows, Ctrl-U) with its own
  * output muted, and this module draws the input line itself, as the last row of the terminal.
+ * While a turn runs its status (spinner, phase, stats) is pinned on its own row just above, so
+ * the stats get the full width and the prompt keeps its place.
  *
  * Everything else written to the terminal goes through `cli-screen.ts`, which erases the live
  * line before each write and has it drawn again after. A multi-line paste is held as one
@@ -30,7 +32,7 @@ export interface CLIInput {
   readonly isInteractive: boolean
   /** The prompt at the start of the live line. */
   setPrompt(text: string): void
-  /** A status shown before the prompt (the turn's spinner); empty hides it. */
+  /** A status pinned on the row above the input line (the turn's spinner); empty hides it. */
   setStatus(text: string): void
   /**
    * Print a line of our own (queued, interrupting, a command's answer). While a reply is
@@ -110,8 +112,7 @@ export function createCLIInput(hooks: CLIInputHooks): CLIInput {
     if (closed || screen.isMidLine) return
     const columns = process.stdout.columns || 80
     let head = asking ? asking.question : prompt
-    if (!asking && status) head = `${status} ${prompt}`
-    if (search.isActive) head = `${status ? `${status} ` : ''}\x1b[2msearch:\x1b[0m `
+    if (search.isActive) head = '\x1b[2msearch:\x1b[0m '
     const held = paste.held()
     if (held > 0) head += `\x1b[2m‹${held} pasted line${held === 1 ? '' : 's'}›\x1b[0m `
     // A head that fills the row would leave nowhere to type; trim it to leave 24 columns rather
@@ -131,7 +132,8 @@ export function createCLIInput(hooks: CLIInputHooks): CLIInput {
     const hint = ghost && spare > 1 ? truncateVisible(ghost.text, spare - 1) : ''
     const left = back + visibleWidth(hint)
     const tail = hint ? `\x1b[2m${hint}\x1b[0m` : ''
-    screen.draw(`${head}${shown}${tail}${left > 0 ? `\x1b[${left}D` : ''}`)
+    const above = status ? [truncateVisible(status, columns - 1)] : []
+    screen.draw(`${head}${shown}${tail}${left > 0 ? `\x1b[${left}D` : ''}`, above)
   }
   const screen = createScreen(paint)
 

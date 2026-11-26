@@ -6,6 +6,9 @@
  * erased before each write and drawn again after it. While output is mid-line (a reply
  * streaming token by token) the live line stays hidden, and notices wait for the next newline
  * rather than splice into the reply.
+ *
+ * The live area is the input row plus any rows pinned above it (the turn's status). Each row
+ * is kept within the terminal's width, so erasing it is one clear per row.
  */
 
 import { format } from 'node:util'
@@ -15,8 +18,11 @@ export const ERASE = '\r\x1b[2K'
 export interface Screen {
   /** Whether output stopped part-way along a row; the live line is not drawn then. */
   readonly isMidLine: boolean
-  /** Replace the live line with `text` (which may end with cursor moves). */
-  draw(text: string): void
+  /**
+   * Replace the live area: `rows` pinned above, then the input row `text` (which may end with
+   * cursor moves). Every row must fit in the terminal's width.
+   */
+  draw(text: string, rows?: string[]): void
   /** Print a line of our own, after the current output line if one is in progress. */
   notice(text: string): void
   /** Write straight to the terminal, past the live line (mode switches). */
@@ -35,7 +41,17 @@ export function createScreen(repaint: () => void): Screen {
     warn: console.warn,
     error: console.error,
   }
-  let painted = false
+  // Rows of the live area on screen now; 0 when nothing is drawn.
+  let painted = 0
+  // Clears every live row, leaving the cursor at the start of the top one.
+  const erasing = (): string => {
+    const seq = painted > 0 ? `${ERASE}${'\x1b[1A\x1b[2K'.repeat(painted - 1)}` : ''
+    painted = 0
+    return seq
+  }
+  const erase = (): void => {
+    if (painted > 0) out(erasing())
+  }
   // Shared by stdout and stderr because the screen is shared.
   let midLine = false
   const deferred: string[] = []
@@ -43,10 +59,7 @@ export function createScreen(repaint: () => void): Screen {
   const through =
     (write: typeof out) =>
     (chunk: unknown, ...rest: unknown[]): boolean => {
-      if (painted) {
-        out(ERASE)
-        painted = false
-      }
+      erase()
       const text = typeof chunk === 'string' ? chunk : Buffer.from(chunk as Uint8Array).toString()
       const ok = (write as (c: unknown, ...r: unknown[]) => boolean)(chunk, ...rest)
       if (text.length > 0) midLine = !text.endsWith('\n')
@@ -65,9 +78,10 @@ export function createScreen(repaint: () => void): Screen {
     get isMidLine() {
       return midLine
     },
-    draw(text) {
-      out(`${ERASE}${text}`)
-      painted = true
+    draw(text, rows = []) {
+      // One write, so a spinner tick does not flash an empty area between the two.
+      out(`${erasing()}${ERASE}${rows.map((r) => `${r}\n`).join('')}${text}`)
+      painted = rows.length + 1
     },
     notice(text) {
       if (midLine) deferred.push(text)
@@ -77,8 +91,7 @@ export function createScreen(repaint: () => void): Screen {
       out(text)
     },
     restore() {
-      if (painted) out(ERASE)
-      painted = false
+      erase()
       process.stdout.write = out as typeof process.stdout.write
       process.stderr.write = err as typeof process.stderr.write
       Object.assign(console, consoleOriginals)
