@@ -475,6 +475,18 @@ function buildMessageGroups(messages: ChatMessage[], tokenCounts: number[]): Mes
  */
 const SAFETY_MARGIN_FRACTION = 0.08
 
+/**
+ * When a trim has to drop messages, the share of the budget the kept tail is refilled to.
+ *
+ * Refilled to the whole budget, the very next turn is over it again by one group: a long run
+ * near the limit then dropped a few messages on nearly every step (observed: "dropped 5 middle
+ * messages, kept head + 430 tail groups", then the same a step later). Each of those reruns the
+ * summarizer and the pre-compaction memory flush, and rewrites the summary -- which lives in
+ * the system prompt, so a local server's prompt cache is lost and the whole window prefilled
+ * again. Dropping down to 70% leaves room for several turns before the next one.
+ */
+const TRIM_REFILL_FRACTION = 0.7
+
 export async function fitToContextWindow(
   systemPrompt: string,
   messages: ChatMessage[],
@@ -565,15 +577,18 @@ export async function fitToContextWindow(
     headGroupCount = 1
   }
 
-  // Walk backward through remaining groups, fitting what we can into the tail
+  // Walk backward through remaining groups, fitting what we can into the tail: up to the refill
+  // target, except that the most recent group is kept whole whenever it fits the budget at all.
   const tailGroups: MessageGroup[] = []
   let tailTokens = 0
   const tailBudget = availableTokens - headTokens
+  const tailTarget = Math.floor(availableTokens * TRIM_REFILL_FRACTION) - headTokens
 
   for (let g = groups.length - 1; g >= headGroupCount; g--) {
     const group = groups[g]
     if (!group) continue
-    if (tailTokens + group.tokens <= tailBudget) {
+    const limit = tailGroups.length === 0 ? tailBudget : tailTarget
+    if (tailTokens + group.tokens <= limit) {
       tailGroups.unshift(group)
       tailTokens += group.tokens
     } else {
