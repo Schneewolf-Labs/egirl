@@ -77,3 +77,82 @@ export function createHistorySearch(history: () => string[]): HistorySearch {
     },
   }
 }
+
+/** The live line as the search keys need it: its text, a way to replace it, and ↑ history. */
+export interface SearchLine {
+  text(): string
+  set(text: string): void
+  /** readline's own history array (newest first); changed in place. */
+  history(): string[]
+}
+
+type Key = { name?: string; ctrl?: boolean } | undefined
+
+export interface SearchKeys {
+  /** A key after readline has applied it. True: it belonged to the search. */
+  onKey(key: Key): boolean
+  /**
+   * Enter, with the line readline saw. Returns the line to send: the match while searching
+   * (undefined when nothing matched, and the line is given back), otherwise `typed` itself.
+   */
+  onEnter(typed: string): string | undefined
+  /** Ctrl-C. True: it cancelled a search. */
+  onInterrupt(): boolean
+  /** The hint drawn after the query, while searching. */
+  hint(): string | undefined
+}
+
+export function createSearchKeys(search: HistorySearch, line: SearchLine): SearchKeys {
+  return {
+    onKey(key) {
+      if (key?.ctrl && key.name === 'r') {
+        if (search.isActive) search.older()
+        else {
+          search.start(line.text())
+          line.set('')
+        }
+        return true
+      }
+      if (!search.isActive) return false
+      // While searching, the line is the query: editing keys change it, these end the search.
+      if (key?.name === 'escape' || (key?.ctrl && key.name === 'g')) {
+        line.set(search.stop())
+      } else if (key?.name === 'tab' || key?.name === 'right') {
+        const found = search.match()
+        const original = search.stop()
+        line.set(found ?? original)
+      } else {
+        search.setQuery(line.text())
+      }
+      return true
+    },
+    onEnter(typed) {
+      if (!search.isActive) return typed
+      // Enter sends the match, not the query readline saw: put it in history in the query's
+      // place. With no match nothing is sent and the line is given back.
+      const found = search.match()
+      const original = search.stop()
+      const history = line.history()
+      if (history[0] === typed) history.shift()
+      if (found === undefined) {
+        line.set(original)
+        return undefined
+      }
+      if (history[0] !== found) history.unshift(found)
+      return found
+    },
+    onInterrupt() {
+      if (!search.isActive) return false
+      line.set(search.stop())
+      return true
+    },
+    hint() {
+      if (!search.isActive) return undefined
+      const match = search.match()
+      if (match !== undefined) return `  → ${match}`
+      return line.text()
+        ? '  (no match)'
+        : '  type to search history · enter sends · tab edits · esc cancels'
+    },
+  }
+}
