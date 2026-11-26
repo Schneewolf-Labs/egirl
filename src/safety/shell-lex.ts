@@ -20,6 +20,8 @@ export interface LexedCommand {
   nested: string[]
   /** The source with quoted text blanked out, for the few checks that stay regexes. */
   masked: string
+  /** Index of the opening quote if a quote is never closed; the rest of the input is its word. */
+  unterminatedAt?: number
 }
 
 /** Index just past the `)` that closes a `(` whose body starts at `start`. */
@@ -59,6 +61,7 @@ export function lexCommand(src: string): LexedCommand {
   let isHeredocTarget = false
   let heredocs: { delim: string; isTabStripped: boolean }[] = []
   let isTabStripped = false
+  let unterminatedAt: number | undefined
 
   const endWord = (): void => {
     if (hasWord) {
@@ -106,6 +109,7 @@ export function lexCommand(src: string): LexedCommand {
     } else if (c === "'") {
       const end = src.indexOf("'", i + 1)
       const stop = end === -1 ? src.length : end
+      if (end === -1) unterminatedAt ??= i
       word += src.slice(i + 1, stop)
       hasWord = true
       i = stop + 1
@@ -122,6 +126,7 @@ export function lexCommand(src: string): LexedCommand {
         else if (src[i] === '`') i = substitution(i, i + 1, true)
         else word += src[i++]
       }
+      if (i >= src.length) unterminatedAt ??= start
       i++
       masked += ' '.repeat(Math.min(i, src.length) - start)
       continue
@@ -185,5 +190,5 @@ export function lexCommand(src: string): LexedCommand {
   }
   endPipeline()
 
-  return { pipelines, nested, masked }
+  return { pipelines, nested, masked, unterminatedAt }
 }

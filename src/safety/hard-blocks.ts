@@ -13,6 +13,7 @@
  * `$(...)` and backticks, and the remote command of `ssh host ...`, are checked recursively.
  */
 
+import { posix } from 'node:path'
 import { lexCommand, type Segment } from './shell-lex'
 
 /** Options that take a value, per wrapper, so the value isn't mistaken for the command. */
@@ -152,7 +153,7 @@ function isInterpreter(name: string): boolean {
 }
 
 function normalizeRmTarget(target: string): string {
-  let t = target.replace(/\/{2,}/g, '/')
+  let t = posix.normalize(target.replace(/\/{2,}/g, '/'))
   while (true) {
     if (t.endsWith('/*')) t = t.slice(0, -2) || '/'
     else if (t.length > 1 && t.endsWith('/')) t = t.slice(0, -1)
@@ -284,11 +285,17 @@ function checkSegment(seg: Segment, isAfterFetch: boolean, depth: number): strin
  * Returns the name of the rule that fired, or undefined if none did.
  */
 export function checkHardBlocks(command: string, depth = 0): string | undefined {
-  if (depth > MAX_DEPTH) return undefined
+  if (depth > MAX_DEPTH) return 'command nested too deeply to check'
   if (command.includes('--no-preserve-root')) return 'rm --no-preserve-root'
 
   const lexed = lexCommand(command)
   if (FORK_BOMB.test(lexed.masked)) return 'fork bomb'
+  // An unterminated quote: also judge the command as if it stopped before that quote, so the
+  // stray word can't pass for an argument (`curl x | sh "` would otherwise run a script "").
+  if (lexed.unterminatedAt !== undefined) {
+    const rule = checkHardBlocks(command.slice(0, lexed.unterminatedAt), depth)
+    if (rule) return rule
+  }
 
   for (const pipeline of lexed.pipelines) {
     let isAfterFetch = false
