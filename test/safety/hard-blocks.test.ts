@@ -89,6 +89,17 @@ const extraCases: Case[] = [
   { id: 'block-rm-in-function-body', command: 'f() { rm -rf /; }; f', expect: 'block' },
   { id: 'allow-subshell-curl-pipe-jq', command: '(curl -s x) | jq .', expect: 'allow' },
   { id: 'allow-brace-echo-pipe-sh-text', command: '{ echo hi; } | grep "| sh"', expect: 'allow' },
+  // --no-preserve-root is an rm flag, not a word to find anywhere
+  {
+    id: 'block-sudo-rm-no-preserve-root',
+    command: 'sudo rm -r --no-preserve-root /x',
+    expect: 'block',
+  },
+  {
+    id: 'allow-commit-mentioning-no-preserve-root',
+    command: 'git commit -m "never pass --no-preserve-root"',
+    expect: 'allow',
+  },
   { id: 'allow-brace-expansion', command: 'mkdir -p src/{a,b}', expect: 'allow' },
 ]
 
