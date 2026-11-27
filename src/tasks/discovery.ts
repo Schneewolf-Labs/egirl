@@ -18,12 +18,11 @@ import type { TasksConfig } from './types'
 const DISCOVERY_MAX_TURNS = 10
 
 /**
- * What a pass may use: looking, and proposing. It runs unattended while the principal is away,
- * and with the whole toolbelt Jaeger's passes ran 131 shell commands, cancelled four tasks and
- * wrote memory in two days -- decisions that are the principal's, not a background sweep's.
- * Read-only tools plus task_propose; anything else it wants done, it proposes.
+ * The tools that only look: they change no file, repo, task, memory or remote state. A
+ * discovery pass gets these; a task run that called nothing else changed nothing
+ * (src/tasks/noop-run.ts). execute_command is not here: a shell can do anything.
  */
-export const DISCOVERY_TOOLS = [
+export const READ_ONLY_TOOLS: readonly string[] = [
   'read_file',
   'glob_files',
   'git_status',
@@ -45,8 +44,15 @@ export const DISCOVERY_TOOLS = [
   'skill_read',
   'task_list',
   'task_history',
-  'task_propose',
 ]
+
+/**
+ * What a pass may use: looking, and proposing. It runs unattended while the principal is away,
+ * and with the whole toolbelt Jaeger's passes ran 131 shell commands, cancelled four tasks and
+ * wrote memory in two days -- decisions that are the principal's, not a background sweep's.
+ * Read-only tools plus task_propose; anything else it wants done, it proposes.
+ */
+export const DISCOVERY_TOOLS = [...READ_ONLY_TOOLS, 'task_propose']
 
 /** Proposals waiting for review at which a pass is skipped: one pass's worth, still unread. */
 const MAX_WAITING_PROPOSALS = 3

@@ -480,7 +480,7 @@ declared its own outcome). Tasks without `deliverables` are unaffected.
 - **Proactive retrieval**: Before the agent sees the prompt, relevant memories are automatically injected into context (same hybrid search used in interactive sessions, filtered by `memory_category` if set on the task)
 - **Categories**: Task memories can be categorized (`project`, `fact`, `entity`, etc.) for scoped retrieval. A CI task stores findings as `category: 'project'`, a PR watcher as `category: 'entity'`
 - **Temporal queries**: `memory_recall` lets the agent ask "what happened in the last hour" — useful for comparing across runs without explicit state management
-- **Auto-extraction**: After each task run, the auto-extractor scans the conversation for notable facts and stores them with `source: 'auto'`. This is fire-and-forget, uses the local model, zero cost
+- **Auto-extraction**: After each task run, the auto-extractor scans the conversation for notable facts and stores them with `source: 'auto'`. This is fire-and-forget, uses the local model, zero cost. A run that succeeded, called only read-only tools (`READ_ONLY_TOOLS` in `src/tasks/discovery.ts`) and hit no tool errors skips memory and lesson extraction; `[tasks] skip_noop_extraction = false` turns that off
 - **Explicit context**: `memory_context` pre-loads specific keys. `memory_category` scopes proactive retrieval to relevant categories
 
 This means the agent builds up institutional knowledge across runs. A CI watcher doesn't just report "build failed" — it can correlate with previous failures, track flaky tests, and reference decisions stored in memory.

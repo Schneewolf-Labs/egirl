@@ -60,6 +60,7 @@ export function makeConfig(workspacePath: string): RuntimeConfig {
       maxConcurrentTasks: 1,
       taskTimeoutMs: 300000,
       selfReview: false,
+      skipNoopExtraction: true,
       extensions: true,
       maxExtensions: 2,
       maxExtensionRatio: 1.0,

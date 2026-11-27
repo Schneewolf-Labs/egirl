@@ -500,6 +500,9 @@ const baseProperties = {
       // Post-run self-review for unbounded tasks: a restricted fork (skill/memory tools only)
       // reviews the run digest and patches skills / stores lessons autonomously.
       self_review: Type.Boolean({ default: true }),
+      // Skip memory + lesson extraction after a run that succeeded, called only read-only tools
+      // and hit no tool errors: a no-op heartbeat has nothing to learn from.
+      skip_noop_extraction: Type.Boolean({ default: true }),
       // Deadline extensions for bounded task runs: request_extension, granted by the runner
       // only on evidence of progress. Total extension ≤ task_timeout_ms × max_extension_ratio.
       extensions: Type.Boolean({ default: true }),
@@ -943,6 +946,8 @@ export interface RuntimeConfig {
     taskTimeoutMs: number
     /** Post-run self-review pass for unbounded tasks. */
     selfReview: boolean
+    /** Skip memory + lesson extraction after a clean read-only run. */
+    skipNoopExtraction: boolean
     /** Offer request_extension to bounded task runs. */
     extensions: boolean
     maxExtensions: number
