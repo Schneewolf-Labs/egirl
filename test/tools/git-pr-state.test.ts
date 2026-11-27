@@ -41,7 +41,8 @@ describe('git_pr_state', () => {
     await commit('a.txt', 'main\n', 'main edits a')
     await commit('c.txt', 'same\n', 'main lands c')
     git('checkout -q -b merged')
-  })
+    // A dozen git processes: well past bun's 5s default on a slow Windows runner.
+  }, 30_000)
 
   afterAll(async () => {
     await rm(dir, { recursive: true, force: true })
