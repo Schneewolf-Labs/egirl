@@ -103,25 +103,24 @@ Three embedding provider implementations exist in `src/memory/embeddings/`:
 
 ### Qwen3VLEmbeddings (`src/memory/embeddings/qwen3-vl.ts`)
 
-The default provider. Sends requests to a llama.cpp server running a Qwen3-VL-Embedding model.
+The default provider (`provider = "qwen3-vl"`). Calls the Python service in `services/embeddings/`, which runs Qwen3-VL-Embedding-2B.
 
 - Supports text, image, and multimodal inputs
-- Images are sent as base64 with `[img-N]` placeholder format
-- Endpoint: `POST /embeddings` (llama.cpp compatible)
+- Endpoint: `POST /embed`, with the requested `dimensions` (the service truncates to it)
 
 ### LlamaCppEmbeddings (`src/memory/embeddings/llamacpp.ts`)
 
-Generic llama.cpp embedding endpoint. Text-only (no image support).
+A `llama-server --embedding` (`provider = "llamacpp"`).
 
-- Endpoint: `POST /embeddings`
-- Used when the embedding model doesn't support vision
+- Text goes to `POST /v1/embeddings`
+- With `multimodal = true`, image inputs go to `POST /embeddings` (needs `--mmproj`)
 
 ### OpenAIEmbeddings (`src/memory/embeddings/openai.ts`)
 
-Uses the OpenAI Embeddings API. Text-only.
+Any OpenAI-compatible embeddings API (`provider = "openai"`). Text-only.
 
 - Model: configurable (e.g., `text-embedding-3-small`)
-- Endpoint: OpenAI API via the `openai` npm package
+- Endpoint: `POST {base_url}/embeddings`, default `https://api.openai.com/v1`, with `api_key` from the config
 
 ## Additional Components
 
@@ -160,7 +159,7 @@ The memory system is exposed to the agent through six tools:
 | `memory_list` | List all stored memories with previews |
 | `memory_recall` | Temporal recall — finds memories from a specific time period with optional category filtering |
 
-These tools are created via factory function `createMemoryTools(memory)` in `src/tools/builtin/memory.ts`. If the memory system is not initialized (no embeddings configured), stub implementations return an error message.
+These tools are created via factory function `createMemoryTools(memory)` in `src/tools/builtin/memory.ts`. They work without embeddings, on keyword search. Only if the memory database itself fails to open are `memory_search` and `memory_get` replaced by stubs that return an error message.
 
 ## Search Results
 
@@ -176,40 +175,26 @@ interface SearchResult {
 
 ## Configuration
 
-Memory requires the `[local.embeddings]` section in `egirl.toml`:
+Memory needs no configuration: without `[local.embeddings]` it runs on keyword search. Add an embedding service for matching by meaning:
 
 ```toml
 [local.embeddings]
-endpoint = "http://localhost:8082"
-model = "qwen3-vl-embedding-2b"
-dimensions = 2048
-multimodal = true
+provider = "llamacpp"
+endpoint = "http://127.0.0.1:8083"
+model = "nomic-embed-text-v1.5"
+dimensions = 768
+multimodal = false
 ```
 
-If this section is omitted, `createMemory()` returns `undefined` and the memory tools return error messages when invoked.
+If the embedding provider fails to start (for example `provider = "openai"` with no `api_key`), memory falls back to keyword search with a warning.
+
+When the service is down, recall falls back to keyword search and recovers when it returns. Memories saved meanwhile are stored without an embedding and never get one later.
+
+A different embedding model or `dimensions` leaves stored vectors that no longer match. A size mismatch makes vector search fail, so recall drops to keyword search and auto-extracted memories are not stored. Nothing re-embeds old memories.
 
 ## Running the Embedding Service
 
-### Option A: llama.cpp (recommended)
-
-Run a second llama.cpp instance with the `--embedding` flag:
-
-```bash
-llama-server \
-  -m Qwen.Qwen3-VL-Embedding-2B.Q8_0.gguf \
-  --mmproj mmproj-Qwen.Qwen3-VL-Embedding-2B.f16.gguf \
-  -c 8192 --port 8082 --embedding -ngl 99
-```
-
-### Option B: Python service
-
-A standalone Python server is included in `services/embeddings/`:
-
-```bash
-cd services/embeddings && ./run.sh
-```
-
-This starts a FastAPI server on port 8082 with `GET /health` and `POST /embeddings` endpoints.
+Two options, both on the CPU: nomic-embed-text-v1.5 on `llama-server` (146 MB, 768 dimensions), or the Python service in `services/embeddings/` (Qwen3-VL-Embedding-2B, 2048 dimensions, `GET /health`, `POST /embed`, `POST /v1/embeddings`). Commands, config for each, and what to do after a model change: [optional-services.md](optional-services.md#embeddings).
 
 ## Data Persistence
 

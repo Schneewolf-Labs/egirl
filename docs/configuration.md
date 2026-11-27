@@ -43,7 +43,7 @@ The workspace directory is created automatically on first run and populated with
 
 ### `[local]`
 
-Settings for the local llama.cpp server. This is the only LLM provider.
+The operator model's endpoint: a llama.cpp server by default, or a hosted OpenAI-compatible API (`hosted = true`). On a Claude instance, `provider = "claude"` puts the side work on Claude instead. The minimal setup for each is in [getting-started.md](getting-started.md).
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
@@ -51,7 +51,7 @@ Settings for the local llama.cpp server. This is the only LLM provider.
 | `model` | string | `qwen2.5-32b-instruct` | Model name (for display/logging — the server decides which model to load) |
 | `context_length` | number | `32768` | Maximum context window in tokens. Should match your llama.cpp server's `-c` flag |
 | `max_concurrent` | number | `2` | Maximum concurrent requests to the local server |
-| `stale_stream_timeout_ms` | number | `90000` | Kill a streaming request that has produced no new tokens for this long |
+| `stale_stream_timeout_ms` | number | `300000` | Kill a streaming request that has produced no new tokens for this long |
 | `api_key` | string | — | Bearer token for a llama-server started with `--api-key` (a shared/keyed operator endpoint). Prefer the `EGIRL_LOCAL_API_KEY` env var over putting the secret in the toml |
 | `hosted` | bool | `false` | The endpoint is a hosted OpenAI-compatible API (e.g. `https://uncensuredai.com`), not a llama-server. Names `model` on every request and drops llama.cpp's own request fields (`chat_template_kwargs`, `id_slot`, `return_progress`), so `/think` cannot switch the model's thinking there. Give the bare host; egirl appends `/v1/chat/completions` |
 | `provider` | `"llamacpp"` \| `"claude"` | `"llamacpp"` | `"claude"` runs the side work (memory and lesson extraction, the permission supervisor, task self-review) on Claude instead of a llama-server: each call is one Claude Code query on your `claude login`, with `model` naming the Claude model (e.g. `"haiku"`). `endpoint` is not used. Needs `[operator] provider = "claude"`; with both, the whole instance runs on Claude and no llama-server is needed |
@@ -107,15 +107,15 @@ resolved one. `[local.auxiliary]` keeps its own fixed `endpoint`.
 
 ### `[local.embeddings]`
 
-Optional. If omitted, the memory system is disabled entirely.
+Optional. If omitted, memory runs on keyword search (SQLite FTS5): the memory tools, recall and log indexing all work, and only matching by meaning is missing. Setup, both service options, and what happens when the service is down: [optional-services.md](optional-services.md#embeddings).
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `provider` | `"qwen3-vl"` \| `"llamacpp"` \| `"openai"` | `"qwen3-vl"` | Which embedding backend to use |
-| `endpoint` | string | `http://localhost:8082` | URL of the embedding server |
-| `model` | string | `qwen3-vl-embedding-2b` | Embedding model name (for logging) |
-| `dimensions` | number | `2048` | Embedding vector dimensions. Must match the model's output |
-| `multimodal` | boolean | `true` | Whether the embedding model accepts image inputs (Qwen3-VL-Embedding does) |
+| `provider` | `"qwen3-vl"` \| `"llamacpp"` \| `"openai"` | `"qwen3-vl"` | Which embedding backend to use. `qwen3-vl` is the `services/embeddings` Python service (`POST /embed`); `llamacpp` is a `llama-server --embedding` (`POST /v1/embeddings`) |
+| `endpoint` | string | (none; set it) | URL of the embedding server. The schema lists `http://localhost:8082`, but the loader does not apply it: leave it out and doctor's probe fails |
+| `model` | string | (none; set it) | Embedding model name (for logging) |
+| `dimensions` | number | `2048` | Embedding vector size. Sent to the `qwen3-vl` service, which truncates to it; not checked against what a server returns. Changing it (or the model) leaves stored vectors that no longer match; see [optional-services.md](optional-services.md#changing-the-model-or-the-dimensions) |
+| `multimodal` | boolean | `true` | Whether the embedding model accepts image inputs. Set `false` for a text model. Nothing embeds images today |
 | `api_key` | string | — | API key (only used by the `openai` provider) |
 | `base_url` | string | — | Custom base URL (only used by the `openai` provider) |
 
@@ -166,8 +166,9 @@ result inside the wrap-up margin rather than as a turn of its own, so a run that
 in that window meets the hard timeout unwarned. Context rollover and consolidation breaks are
 local-loop features and do not apply.
 
-`[local]` is still required: memory extraction, the permission supervisor and a task's
-self-review run on the local model as before.
+`[local]` is still used: memory extraction, the permission supervisor and a task's
+self-review run on it. On a Claude instance, `[local] provider = "claude"` runs them on Claude,
+and then no llama-server is needed. A Codex instance always needs a `[local]` model.
 So does the OpenAI-compatible endpoint (`POST /v1/chat/completions`): its client owns the
 transcript, and a Claude session cannot yet be seeded with one, so on a Claude instance those
 requests are answered by the local model.
@@ -366,7 +367,7 @@ journalctl --user -u egirl@zero -f
 
 Run `loginctl enable-linger $USER` once if instances should start at boot rather than at first login.
 
-`doctor` checks the whole dependency graph — operator endpoint, what it is actually serving, auxiliary model, embeddings, MCP servers, and API port — so `--instance zero doctor` is worth running before enabling the unit.
+`doctor` checks the whole dependency graph — operator endpoint, what it is actually serving, auxiliary model, embeddings, MCP servers, and API port — so `--instance zero doctor` is worth running before enabling the unit. Before PR #259, the checks after the operator run only when the operator endpoint answers. With PR #259 or later, every dependency is probed regardless.
 
 ### `[channels.xmpp]`
 
@@ -441,7 +442,7 @@ Optional. Retry budgets for the agent loop's recovery rules (see `src/agent/reco
 
 ### `[memory]`
 
-Optional. Tunes the memory system. The memory system itself is enabled by `[local.embeddings]`.
+Optional. Tunes the memory system. Memory is always on; `[local.embeddings]` adds matching by meaning to its keyword search.
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
