@@ -9,6 +9,7 @@ import {
 import type { OutboundChannel } from '../channels/types'
 import type { RuntimeConfig } from '../config'
 import { watchConfigFiles } from '../config/drift'
+import { reportDependencies } from '../instances/startup-probe'
 import { createReplyBroker } from '../report/broker'
 import { registerReportTool } from '../report/register'
 import { applyLogLevel } from '../util/args'
@@ -52,7 +53,9 @@ export async function runServe(
     process.exit(1)
   }
 
+  const dependencies = reportDependencies(config)
   const rt = await createCommandRuntime(config)
+  await dependencies
   const { providers, conversations, taskStore, toolExecutor, processRegistry, agentFactory } = rt
 
   const outbound = new Map<string, OutboundChannel>()

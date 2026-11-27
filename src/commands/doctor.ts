@@ -39,8 +39,11 @@ async function checkLocalEndpoint(config: RuntimeConfig): Promise<CheckResult> {
     }
     return { label: 'local model', level: 'ok', message: `${config.local.endpoint} is reachable` }
   } catch (error) {
-    const message = errorMessage(error)
-    return { label: 'local model', level: 'fail', message }
+    return {
+      label: 'local model',
+      level: 'fail',
+      message: `${config.local.endpoint}: ${errorMessage(error)}`,
+    }
   }
 }
 
@@ -51,7 +54,9 @@ function printResult(result: CheckResult): void {
       ? `${c.success}ok${RESET}`
       : result.level === 'warn'
         ? `${c.warning}warn${RESET}`
-        : `${c.error}fail${RESET}`
+        : result.level === 'skip'
+          ? `${c.muted}skip${RESET}`
+          : `${c.error}fail${RESET}`
   console.log(`  ${status} ${DIM}${result.label}${RESET} ${result.message}`)
 }
 
@@ -84,10 +89,11 @@ export async function runDoctor(config: RuntimeConfig): Promise<void> {
       message: `${config.local.endpoint} uses 0.0.0.0; clients should use localhost or a LAN IP`,
     })
   } else {
+    // Only the URL's shape is checked here; whether anything answers there is the next line.
     results.push({
       label: 'endpoint',
       level: 'ok',
-      message: config.local.endpoint,
+      message: `configured: ${config.local.endpoint}`,
     })
   }
 
@@ -148,14 +154,12 @@ export async function runDoctor(config: RuntimeConfig): Promise<void> {
   }
 
   // The rest of the dependency graph: auxiliary, embeddings, MCP, API port, and what the
-  // operator endpoint is really serving. Skipped when the endpoint is already down, since every
-  // one of these would just restate the same failure.
-  const endpointUp = results.some(
+  // operator endpoint is really serving. Each is its own service and is probed regardless; only
+  // the served-model check depends on the operator endpoint, and it reports itself skipped.
+  const isOperatorUp = results.some(
     (result) => result.label === 'local model' && result.level === 'ok',
   )
-  if (endpointUp) {
-    results.push(...(await runPreflight(config)))
-  }
+  results.push(...(await runPreflight(config, { isOperatorUp })))
 
   for (const result of results) printResult(result)
 

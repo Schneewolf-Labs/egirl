@@ -5,6 +5,7 @@ import { createCLIChannel } from '../channels'
 import type { OutboundChannel } from '../channels/types'
 import type { RuntimeConfig } from '../config'
 import { watchConfigFiles } from '../config/drift'
+import { reportDependencies } from '../instances/startup-probe'
 import type { ToolResult } from '../tools/types'
 import { createShadowTutor } from '../tracking/shadow-tutor'
 import { applyLogLevel } from '../util/args'
@@ -38,7 +39,11 @@ export async function runCLI(config: RuntimeConfig, args: string[]): Promise<voi
   const maxTurnsIndex = args.indexOf('--max-turns')
   const maxTurns = maxTurnsIndex !== -1 ? Number(args[maxTurnsIndex + 1]) : undefined
 
+  // Probed alongside runtime setup, and only for an interactive session: a one-shot run is not
+  // long-running, and its stderr belongs to whoever is scripting it.
+  const dependencies = singleMessage ? undefined : reportDependencies(config)
   const rt = await createCommandRuntime(config)
+  await dependencies
   const { conversations, taskStore, processRegistry, mcpConnections } = rt
 
   // Shadow tutor labels run concurrently with the operator's next turn and land in the
