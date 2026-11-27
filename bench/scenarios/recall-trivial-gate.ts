@@ -1,10 +1,10 @@
 /**
- * recall-trivial-gate: greetings and the harness's own continuation prompt must not drag
- * stored memories into the turn; a real question about those memories must.
+ * recall-trivial-gate: greetings must not drag stored memories into the turn; a real question
+ * about those memories must.
  *
  * Production symptom: an instance with a store full of heartbeat bookkeeping answered "hey
  * juno" with four recalled heartbeat entries injected above it. retrieveForContext gates on
- * an anchored TRIVIAL_RE, which "hey juno", "yo yo" and CONTINUE_PROMPT all miss.
+ * an anchored TRIVIAL_RE, which "hey juno" and "yo yo" missed.
  *
  * All turns run in one session, in order, because that is how the junk shows up live: a
  * greeting into an ongoing conversation. Each check looks only at the messages its own turn
@@ -12,13 +12,10 @@
  * "thanks!" after it. The control turn proves the check can fail and that recall works at all.
  */
 
-import { CONTINUE_PROMPT } from '../../src/session/commands'
 import { findRecall, oneLine, operatorRequest, turnTail, wasEmbedded } from './checks'
 import { type CheckResult, fail, type InstanceScenario, pass, type TurnResult } from './types'
 
 const CONTROL = 'what does the heartbeat check monitor?'
-// What /continue sends on the principal's behalf; imported so the scenario tracks the real text.
-const CONTINUE = CONTINUE_PROMPT
 
 // Shaped like what auto-extraction and heartbeat runs actually leave behind.
 const SEEDS: Array<{ key: string; value: string; source?: 'auto' | 'conversation' }> = [
@@ -73,7 +70,7 @@ function hasRecall(turn: TurnResult | undefined, name: string): CheckResult {
 
 export const recallTrivialGate: InstanceScenario = {
   name: 'recall-trivial-gate',
-  description: 'greetings and /continue get no recalled memories; a real question does',
+  description: 'greetings get no recalled memories; a real question does',
 
   config: ({ embeddings }) => ({
     memory: { proactive_retrieval: true, auto_extract: false },
@@ -95,20 +92,17 @@ export const recallTrivialGate: InstanceScenario = {
     }
   },
 
-  turns: [
-    { text: 'hey juno' },
-    { text: 'yo yo' },
-    { text: CONTINUE },
-    { text: CONTROL },
-    { text: 'thanks!' },
-  ],
+  // /continue is not checked here: the HTTP API doesn't run slash commands (it sends
+  // "/continue" to the model verbatim), and the continuation text typed by a user is meant to
+  // recall. The harness-written /continue turn is covered in-process by
+  // test/memory/retrieval.test.ts and test/agent/recall.test.ts (isHarnessTurn).
+  turns: [{ text: 'hey juno' }, { text: 'yo yo' }, { text: CONTROL }, { text: 'thanks!' }],
 
   checks: ({ turns }) => {
     const byText = (t: string) => turns.find((r) => r.text === t)
     return [
       noRecall(byText('hey juno'), 'no-recall: "hey juno"'),
       noRecall(byText('yo yo'), 'no-recall: "yo yo"'),
-      noRecall(byText(CONTINUE), 'no-recall: continue prompt'),
       noRecall(byText('thanks!'), 'no-recall: "thanks!"'),
       hasRecall(byText(CONTROL), 'control-recall: heartbeat question'),
     ]
