@@ -93,8 +93,15 @@ export async function checkServedModel(config: RuntimeConfig): Promise<CheckResu
   }
 }
 
-/** Loose overlap: any alphanumeric run of 4+ characters the two names have in common. */
+/**
+ * Loose overlap: any alphanumeric run of 4+ characters the two names have in common, or the
+ * configured name, punctuation stripped, appearing inside the served one. Short names made only
+ * of short runs ("b6-27b" against "B6-27B-Q8_0.gguf") have no 4+ run, so containment covers them.
+ */
 function sharesToken(a: string, b: string): boolean {
+  const squash = (value: string): string => value.toLowerCase().replace(/[^a-z0-9]+/g, '')
+  const needle = squash(a)
+  if (needle.length >= 3 && squash(b).includes(needle)) return true
   const tokens = (value: string): Set<string> =>
     new Set(
       value
