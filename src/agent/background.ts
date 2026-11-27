@@ -58,7 +58,11 @@ export function triggerCompaction(args: {
       }
     })
     .catch((error) => {
-      log.warn('agent', 'Context compaction failed:', error)
+      log.error(
+        'agent',
+        `Context compaction failed; ${droppedMessages.length} dropped messages have no summary (full text stays in the transcript):`,
+        error,
+      )
     })
 
   return Promise.all([flushPromise, summaryPromise]).then(() => {})

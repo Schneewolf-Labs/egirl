@@ -1,5 +1,6 @@
 import type { RuntimeConfig } from '../config'
 import { createClaudeProvider } from './claude'
+import { createAuxFallbackProvider } from './fallback'
 import { createLlamaCppProvider } from './llamacpp'
 import type { LLMProvider } from './types'
 import { createWitchgridPromoter, createWitchgridReresolver } from './witchgrid'
@@ -56,16 +57,20 @@ export function createProviderRegistry(config: RuntimeConfig): ProviderRegistry 
     config.local.isHosted,
   )
 
-  const auxiliary = config.local.auxiliary
-    ? createLlamaCppProvider(
-        config.local.auxiliary.endpoint,
-        config.local.auxiliary.model,
-        config.local.staleStreamTimeoutMs,
-        config.local.auxiliary.maxConcurrent ?? 1,
-        // Summaries and extractions want determinism far more than variety.
-        config.local.auxiliary.temperature ?? 0,
-      )
-    : undefined
+  const aux = config.local.auxiliary
+  if (!aux) return { local }
 
-  return auxiliary ? { local, auxiliary } : { local }
+  const auxiliary = createLlamaCppProvider(
+    aux.endpoint,
+    aux.model,
+    config.local.staleStreamTimeoutMs,
+    aux.maxConcurrent ?? 1,
+    // Summaries and extractions want determinism far more than variety.
+    aux.temperature ?? 0,
+  )
+  // A configured auxiliary that is down must not take side work down with it.
+  return {
+    local,
+    auxiliary: createAuxFallbackProvider({ auxiliary, operator: local, endpoint: aux.endpoint }),
+  }
 }

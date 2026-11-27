@@ -158,7 +158,22 @@ export async function summarizeMessages(
     })
     return capSummary(summary)
   } catch (error) {
-    log.warn('context-summarizer', 'Summary generation failed, using fallback:', error)
+    // The messages are already out of the live context, so this is the only summary they get.
+    // The auxiliary has already fallen back to the operator by now: both models are failing.
+    log.error(
+      'context-summarizer',
+      `Summary generation failed; ${messages.length} dropped messages kept only as a crude extraction (full text stays in the transcript):`,
+      error,
+    )
+    trace({
+      kind: 'aux',
+      name: 'compaction',
+      success: false,
+      payload: {
+        error: error instanceof Error ? error.message : String(error),
+        source_messages: messages.length,
+      },
+    })
     return fallbackSummary(messages, existingSummary)
   }
 }
@@ -174,6 +189,11 @@ function fallbackSummary(messages: ChatMessage[], existingSummary?: string): str
     parts.push(existingSummary)
     parts.push('')
   }
+
+  // Said in the summary itself, so the operator knows this stretch is a gap, not a recap.
+  parts.push(
+    `[${messages.length} earlier messages were compacted without a model summary; only their user messages and tool names are kept here.]`,
+  )
 
   const userMessages = messages
     .filter((m) => m.role === 'user')
