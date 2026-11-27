@@ -136,7 +136,7 @@ describe('checkEmbeddings', () => {
     })
     const result = await checkEmbeddings(config)
     expect(result?.level).toBe('fail')
-    expect(result?.message).toContain('memory will not work')
+    expect(result?.message).toContain('falls back to keyword search')
   })
 
   test('passes when the service answers', async () => {

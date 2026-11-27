@@ -137,7 +137,7 @@ export async function checkEmbeddings(
     level: result.ok ? 'ok' : 'fail',
     message: result.ok
       ? `${embeddings.model} @ ${embeddings.endpoint}`
-      : `${result.detail} (memory will not work)`,
+      : `${result.detail} (memory falls back to keyword search; memories saved meanwhile are never embedded)`,
   }
 }
 
