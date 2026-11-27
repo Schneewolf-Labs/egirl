@@ -120,12 +120,20 @@ describe('egirl as an ACP agent', () => {
   })
 
   test('session/cancel aborts the run and the prompt stops as cancelled', async () => {
-    // A model that never answers until its request is aborted.
+    // A model that never answers until its request is aborted. It checks for an abort that came
+    // first, as fetch does, and says when it has been called, so the cancel below goes in while
+    // the request is in flight rather than after a guessed sleep (which raced on slow runners).
+    let called: () => void = () => {}
+    const isCalled = new Promise<void>((resolve) => {
+      called = resolve
+    })
     const provider: LLMProvider = {
       name: 'stub',
       chat: (req: ChatRequest) =>
         new Promise<ChatResponse>((_resolve, reject) => {
+          if (req.signal?.aborted) reject(new Error('aborted'))
           req.signal?.addEventListener('abort', () => reject(new Error('aborted')))
+          called()
         }),
     }
     const stop = await acp.client().connectWith(egirlAgent(provider), async (cx) => {
@@ -138,7 +146,7 @@ describe('egirl as an ACP agent', () => {
         sessionId,
         prompt: [{ type: 'text', text: 'take forever' }],
       })
-      await Bun.sleep(20)
+      await isCalled
       await cx.notify('session/cancel', { sessionId })
       return prompt
     })
