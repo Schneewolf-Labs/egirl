@@ -53,6 +53,17 @@ const RM_WIPE_TARGETS = new Set([
   ...'etc usr var boot bin sbin lib lib64 opt srv sys proc dev'.split(' ').map((d) => `/${d}`),
 ])
 
+/**
+ * A recursive rm of a home directory, or of anything directly in one (`~/Projects`, `~/.ssh`,
+ * `/home/nick/src`): one level up from what an agent's own build directories look like.
+ */
+const HOME_TREE =
+  /^(~[^/]*|\$HOME|\$\{HOME\})(\/[^/]+)?$|^\/(home|Users)\/[^/]+(\/[^/]+)?$|^\/root\/[^/]+$/
+
+function isWipeTarget(target: string): boolean {
+  return RM_WIPE_TARGETS.has(target) || HOME_TREE.test(target)
+}
+
 const FORK_BOMB = /:\(\)\s*\{/
 /** ssh options that take a value, so the value isn't mistaken for the host. */
 const SSH_VALUE_OPTS = '-b -c -D -E -e -F -I -i -J -L -l -m -O -o -p -Q -R -S -W -w'.split(' ')
@@ -165,9 +176,14 @@ function isFetch(name: string | undefined): boolean {
   return name === 'curl' || name === 'wget'
 }
 
+/** Does this segment run curl or wget, itself or inside its `( ... )` / `{ ...; }` group? */
+function segmentFetches(seg: Segment): boolean {
+  return isFetch(resolve(seg.words)?.name) || seg.groups.some(runsFetch)
+}
+
 /** Does any segment of `body` run curl or wget? */
 function runsFetch(body: string): boolean {
-  return lexCommand(body).pipelines.some((p) => p.some((seg) => isFetch(resolve(seg.words)?.name)))
+  return lexCommand(body).pipelines.some((p) => p.some(segmentFetches))
 }
 
 /** The body of `text` if, trimmed, it is one whole `$(...)` or backtick substitution. */
@@ -202,7 +218,7 @@ function checkSsh(args: string[], depth: number): string | undefined {
 function checkFind(args: string[]): string | undefined {
   const end = args.findIndex((a) => /^[-(!]/.test(a))
   const starts = (end === -1 ? args : args.slice(0, end)).map(normalizeRmTarget)
-  const target = starts.find((t) => RM_WIPE_TARGETS.has(t))
+  const target = starts.find(isWipeTarget)
   if (!target) return undefined
   const isDeleting =
     args.includes('-delete') ||
@@ -214,13 +230,17 @@ function checkRm(args: string[]): string | undefined {
   const isRecursive = args.some((a) => a === '--recursive' || /^-[a-zA-Z]*[rR]/.test(a))
   for (const target of positionals(args).map(normalizeRmTarget)) {
     if (target === '/') return 'rm of the filesystem root'
-    if (isRecursive && RM_WIPE_TARGETS.has(target)) return `recursive rm of ${target}`
+    if (isRecursive && isWipeTarget(target)) return `recursive rm of ${target}`
   }
   return undefined
 }
 
 function checkSegment(seg: Segment, isAfterFetch: boolean, depth: number): string | undefined {
   if (seg.redirects.some((t) => DISK_DEVICE.test(t))) return 'overwrite disk device'
+  for (const group of seg.groups) {
+    const rule = checkHardBlocks(group, depth + 1)
+    if (rule) return rule
+  }
 
   const cmd = resolve(seg.words)
   if (!cmd) return undefined
@@ -302,7 +322,7 @@ export function checkHardBlocks(command: string, depth = 0): string | undefined 
     for (const seg of pipeline) {
       const rule = checkSegment(seg, isAfterFetch, depth)
       if (rule) return rule
-      if (isFetch(resolve(seg.words)?.name)) isAfterFetch = true
+      if (segmentFetches(seg)) isAfterFetch = true
     }
   }
   for (const inner of lexed.nested) {
