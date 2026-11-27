@@ -3,6 +3,7 @@ import { startAPIServer } from '../api'
 import { createMatrixOutbound } from '../channels/matrix'
 import type { OutboundChannel } from '../channels/types'
 import type { RuntimeConfig } from '../config'
+import { reportDependencies } from '../instances/startup-probe'
 import type { Operator } from '../operator/types'
 import { createPushNotifier, generateVapidKeys, PushStore } from '../push'
 import { createReplyBroker } from '../report/broker'
@@ -22,7 +23,9 @@ export async function runAPI(config: RuntimeConfig, args: string[]): Promise<voi
     process.exit(1)
   }
 
+  const dependencies = reportDependencies(config)
   const rt = await createCommandRuntime(config)
+  await dependencies
   const {
     memory,
     conversations,

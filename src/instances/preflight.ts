@@ -14,21 +14,27 @@ import { isPortFree } from './scaffold'
 
 export interface CheckResult {
   label: string
-  level: 'ok' | 'warn' | 'fail'
+  /** `skip`: not run because something it depends on is already down; the message says what. */
+  level: 'ok' | 'warn' | 'fail' | 'skip'
   message: string
 }
 
 const TIMEOUT_MS = 5000
 
-async function reachable(url: string, path: string): Promise<{ ok: boolean; detail: string }> {
+export async function reachable(
+  url: string,
+  path: string,
+  timeoutMs = TIMEOUT_MS,
+  headers: Record<string, string> = {},
+): Promise<{ ok: boolean; detail: string }> {
   try {
     const target = new URL(path, url)
-    const response = await fetch(target, { signal: AbortSignal.timeout(TIMEOUT_MS) })
+    const response = await fetch(target, { headers, signal: AbortSignal.timeout(timeoutMs) })
     return response.ok
       ? { ok: true, detail: url }
       : { ok: false, detail: `${url} returned HTTP ${response.status}` }
   } catch (error) {
-    return { ok: false, detail: errorMessage(error) }
+    return { ok: false, detail: `${url}: ${errorMessage(error)}` }
   }
 }
 
@@ -87,8 +93,15 @@ export async function checkServedModel(config: RuntimeConfig): Promise<CheckResu
   }
 }
 
-/** Loose overlap: any alphanumeric run of 4+ characters the two names have in common. */
+/**
+ * Loose overlap: any alphanumeric run of 4+ characters the two names have in common, or the
+ * configured name, punctuation stripped, appearing inside the served one. Short names made only
+ * of short runs ("b6-27b" against "B6-27B-Q8_0.gguf") have no 4+ run, so containment covers them.
+ */
 function sharesToken(a: string, b: string): boolean {
+  const squash = (value: string): string => value.toLowerCase().replace(/[^a-z0-9]+/g, '')
+  const needle = squash(a)
+  if (needle.length >= 3 && squash(b).includes(needle)) return true
   const tokens = (value: string): Set<string> =>
     new Set(
       value
@@ -103,11 +116,14 @@ function sharesToken(a: string, b: string): boolean {
   return false
 }
 
-export async function checkAuxiliary(config: RuntimeConfig): Promise<CheckResult | undefined> {
+export async function checkAuxiliary(
+  config: RuntimeConfig,
+  timeoutMs = TIMEOUT_MS,
+): Promise<CheckResult | undefined> {
   const auxiliary = config.local.auxiliary
   if (!auxiliary) return undefined
 
-  const result = await reachable(auxiliary.endpoint, '/v1/models')
+  const result = await reachable(auxiliary.endpoint, '/v1/models', timeoutMs)
   return {
     label: 'auxiliary model',
     level: result.ok ? 'ok' : 'fail',
@@ -115,17 +131,20 @@ export async function checkAuxiliary(config: RuntimeConfig): Promise<CheckResult
   }
 }
 
-export async function checkEmbeddings(config: RuntimeConfig): Promise<CheckResult | undefined> {
+export async function checkEmbeddings(
+  config: RuntimeConfig,
+  timeoutMs = TIMEOUT_MS,
+): Promise<CheckResult | undefined> {
   const embeddings = config.local.embeddings
   if (!embeddings) return undefined
 
-  const result = await reachable(embeddings.endpoint, '/health')
+  const result = await reachable(embeddings.endpoint, '/health', timeoutMs)
   return {
     label: 'embeddings',
     level: result.ok ? 'ok' : 'fail',
     message: result.ok
       ? `${embeddings.model} @ ${embeddings.endpoint}`
-      : `${result.detail} (memory will not work)`,
+      : `${result.detail} (memory falls back to keyword search; memories saved meanwhile are never embedded)`,
   }
 }
 
@@ -134,42 +153,45 @@ export async function checkEmbeddings(config: RuntimeConfig): Promise<CheckResul
  * session; checking it would mean running it, which is a side effect doctor has no business
  * causing.
  */
-export async function checkMcpServers(config: RuntimeConfig): Promise<CheckResult[]> {
-  const servers = config.mcp?.servers ?? []
+export async function checkMcpServers(
+  config: RuntimeConfig,
+  timeoutMs = TIMEOUT_MS,
+): Promise<CheckResult[]> {
   const results: CheckResult[] = []
-
-  for (const server of servers) {
-    if (!server.url) {
-      results.push({ label: `mcp ${server.name}`, level: 'ok', message: 'stdio (not probed)' })
-      continue
-    }
-    // A bare GET on an MCP endpoint is not a valid session, so most 4xx answers still prove
-    // something is listening and routing. 401/403 are the exception: sent with the configured
-    // headers, they mean the credential is wrong, and the agent will start without the tools.
-    try {
-      const res = await fetch(server.url, {
-        ...(server.headers && { headers: server.headers }),
-        signal: AbortSignal.timeout(TIMEOUT_MS),
-      })
-      if (res.status === 401 || res.status === 403) {
-        results.push({
-          label: `mcp ${server.name}`,
-          level: 'fail',
-          message: `${server.url}: HTTP ${res.status} -- check the Authorization header`,
-        })
-        continue
-      }
-      results.push({ label: `mcp ${server.name}`, level: 'ok', message: server.url })
-    } catch (error) {
-      results.push({
-        label: `mcp ${server.name}`,
-        level: 'fail',
-        message: `${server.url}: ${errorMessage(error)}`,
-      })
-    }
+  for (const server of config.mcp?.servers ?? []) {
+    results.push(await checkMcpServer(server, timeoutMs))
   }
-
   return results
+}
+
+type McpServer = NonNullable<RuntimeConfig['mcp']>['servers'][number]
+
+export async function checkMcpServer(
+  server: McpServer,
+  timeoutMs = TIMEOUT_MS,
+): Promise<CheckResult> {
+  const label = `mcp ${server.name}`
+  if (!server.url) return { label, level: 'ok', message: 'stdio (not probed)' }
+
+  // A bare GET on an MCP endpoint is not a valid session, so most 4xx answers still prove
+  // something is listening and routing. 401/403 are the exception: sent with the configured
+  // headers, they mean the credential is wrong, and the agent will start without the tools.
+  try {
+    const res = await fetch(server.url, {
+      ...(server.headers && { headers: server.headers }),
+      signal: AbortSignal.timeout(timeoutMs),
+    })
+    if (res.status === 401 || res.status === 403) {
+      return {
+        label,
+        level: 'fail',
+        message: `${server.url}: HTTP ${res.status} -- check the Authorization header`,
+      }
+    }
+    return { label, level: 'ok', message: server.url }
+  } catch (error) {
+    return { label, level: 'fail', message: `${server.url}: ${errorMessage(error)}` }
+  }
 }
 
 /**
@@ -191,9 +213,30 @@ export async function checkApiPort(config: RuntimeConfig): Promise<CheckResult |
   }
 }
 
-export async function runPreflight(config: RuntimeConfig): Promise<CheckResult[]> {
+/**
+ * Every dependency check. Each service is probed on its own port whatever the others answer: a
+ * dead operator says nothing about the auxiliary or the embeddings service, and skipping them
+ * hid exactly the second outage. Only the served-model check asks the operator endpoint itself,
+ * so only it is skipped when that endpoint is already known to be down -- and it says so.
+ */
+export async function runPreflight(
+  config: RuntimeConfig,
+  opts: { isOperatorUp?: boolean } = {},
+): Promise<CheckResult[]> {
+  const isOperatorUp = opts.isOperatorUp ?? true
+  const results: CheckResult[] = []
   // Side work on Claude has no served model to compare against the config.
-  const results: CheckResult[] = config.local.isClaude ? [] : [await checkServedModel(config)]
+  if (!config.local.isClaude) {
+    results.push(
+      isOperatorUp
+        ? await checkServedModel(config)
+        : {
+            label: 'served model',
+            level: 'skip',
+            message: `skipped: ${config.local.endpoint} is unreachable`,
+          },
+    )
+  }
 
   for (const check of [checkAuxiliary, checkEmbeddings, checkApiPort]) {
     const result = await check(config)

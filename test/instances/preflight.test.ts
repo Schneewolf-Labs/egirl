@@ -76,6 +76,19 @@ describe('checkServedModel', () => {
     expect(result.level).toBe('ok')
   })
 
+  test('matches a short name made only of short runs', async () => {
+    // "b6-27b" has no 4+ character run, so token overlap alone warned even on the exact file.
+    const server = track(serve(() => Response.json({ data: [{ id: '/mnt/b6/B6-27B-Q8_0.gguf' }] })))
+    const result = await checkServedModel(configWith({ endpoint: server.url, model: 'b6-27b' }))
+    expect(result.level).toBe('ok')
+  })
+
+  test('a short name still warns when the server holds another model', async () => {
+    const server = track(serve(() => Response.json({ data: [{ id: '/gguf/B4-9B-Q8_0.gguf' }] })))
+    const result = await checkServedModel(configWith({ endpoint: server.url, model: 'b6-27b' }))
+    expect(result.level).toBe('warn')
+  })
+
   test('an endpoint naming no model is a warning, not a crash', async () => {
     const server = track(serve(() => Response.json({ data: [] })))
     const result = await checkServedModel(configWith({ endpoint: server.url }))
@@ -136,7 +149,7 @@ describe('checkEmbeddings', () => {
     })
     const result = await checkEmbeddings(config)
     expect(result?.level).toBe('fail')
-    expect(result?.message).toContain('memory will not work')
+    expect(result?.message).toContain('falls back to keyword search')
   })
 
   test('passes when the service answers', async () => {
