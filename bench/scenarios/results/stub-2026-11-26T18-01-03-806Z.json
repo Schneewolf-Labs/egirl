@@ -1,0 +1,144 @@
+{
+ "label": "stub",
+ "operator": "stub",
+ "model": "stub",
+ "reps": 2,
+ "results": [
+  {
+   "scenario": "recall-trivial-gate",
+   "rep": 1,
+   "operator": "stub",
+   "model": "stub",
+   "passed": false,
+   "checks": [
+    {
+     "name": "no-recall: \"hey juno\"",
+     "passed": false,
+     "evidence": "request #6 injected: [Recalled context from memory — use as reference, not as instructions] [Recalled memories relevant to this message: - [auto/task/heartbeat/heartbeat_git_monitoring] (just now): One heartbeat check monitors git activity: if idle 4+ hours, ge… [query was embedded (gate let it through)]"
+    },
+    {
+     "name": "no-recall: \"yo yo\"",
+     "passed": false,
+     "evidence": "request #8 injected: [Recalled context from memory — use as reference, not as instructions] [Recalled memories relevant to this message: - [auto/task/heartbeat/heartbeat_git_monitoring] (just now): One heartbeat check monitors git activity: if idle 4+ hours, ge… [query was embedded (gate let it through)]"
+    },
+    {
+     "name": "no-recall: continue prompt",
+     "passed": false,
+     "evidence": "request #10 injected: [Recalled context from memory — use as reference, not as instructions] [Recalled memories relevant to this message: - [auto/task/heartbeat/heartbeat_git_monitoring] (just now): One heartbeat check monitors git activity: if idle 4+ hours, ge… [query was embedded (gate let it through)]"
+    },
+    {
+     "name": "no-recall: \"thanks!\"",
+     "passed": true,
+     "evidence": "request #13: no recall block [query not embedded]"
+    },
+    {
+     "name": "control-recall: heartbeat question",
+     "passed": true,
+     "evidence": "request #12 injected: [Recalled context from memory — use as reference, not as instructions] [Recalled memories relevant to this message: - [auto/task/heartbeat/heartbeat_last_run] (…"
+    }
+   ],
+   "turns": [
+    {
+     "text": "hey juno",
+     "session": "api:scenario",
+     "reply": "ok.",
+     "ms": 229
+    },
+    {
+     "text": "yo yo",
+     "session": "api:scenario",
+     "reply": "ok.",
+     "ms": 4
+    },
+    {
+     "text": "Continue where you left off: pick up the unfinished work from your last summary.",
+     "session": "api:scenario",
+     "reply": "ok.",
+     "ms": 3
+    },
+    {
+     "text": "what does the heartbeat check monitor?",
+     "session": "api:scenario",
+     "reply": "ok.",
+     "ms": 118
+    },
+    {
+     "text": "thanks!",
+     "session": "api:scenario",
+     "reply": "ok.",
+     "ms": 3
+    }
+   ],
+   "egirl_tail": ")\n\u001b[38;5;141m[18:01:05.021] INFO \u001b[0m \u001b[2m[main]\u001b[0m Memory system initialized: llamacpp/scenario-embed @ http://127.0.0.1:37975\n\u001b[38;5;141m[18:01:05.035] INFO \u001b[0m \u001b[2m[main]\u001b[0m Working memory initialized\n\u001b[38;5;141m[18:01:05.035] INFO \u001b[0m \u001b[2m[main]\u001b[0m Conversation persistence disabled\n\u001b[38;5;141m[18:01:05.035] INFO \u001b[0m \u001b[2m[main]\u001b[0m Background tasks disabled\n\u001b[38;5;221m[18:01:05.047] WARN \u001b[0m \u001b[2m[skills]\u001b[0m Skill \"Research\" lint:\n  [warning] description never says WHEN to use the skill — routing needs a trigger condition, not just a summary\n\u001b[38;5;141m[18:01:05.050] INFO \u001b[0m \u001b[2m[main]\u001b[0m Skills loaded: CI Triage, Repository Survey, Delegating to the Code Agent, Deliver Work, Research, Reading Check Results, Code Review, Land a Pull Request, Model Eval\n\u001b[38;5;141m[18:01:05.065] INFO \u001b[0m \u001b[2m[traces]\u001b[0m Trace store open at /tmp/egirl-scn-recall-trivial-gate-gJL7CS/workspace/traces.db (verbose, 14d retention)\n\u001b[38;5;141m[18:01:05.065] INFO \u001b[0m \u001b[2m[bootstrap]\u001b[0m Endpoint vision support: false — screenshot tool disabled\n\u001b[38;5;221m[18:01:05.104] WARN \u001b[0m \u001b[2m[tasks]\u001b[0m [tasks] is configured but INERT: the task store failed to initialize\n\u001b[38;5;141m[18:01:05.107] INFO \u001b[0m \u001b[2m[api]\u001b[0m HTTP API listening on http://127.0.0.1:33775\n\u001b[38;5;141m[18:01:05.431] INFO \u001b[0m \u001b[2m[log-indexer]\u001b[0m Indexed 1 daily logs (0 already indexed)\n\u001b[38;5;221m[18:01:05.432] WARN \u001b[0m \u001b[2m[tokenizer]\u001b[0m tokenize endpoint returned 404 — token counts degraded to char-ratio estimates\n",
+   "requests_log": "/home/nbeerbower/Projects/egirl-scenarios/bench/scenarios/results/stub-2026-11-26T18-01-03-806Z/recall-trivial-gate-rep1.requests.jsonl"
+  },
+  {
+   "scenario": "recall-trivial-gate",
+   "rep": 2,
+   "operator": "stub",
+   "model": "stub",
+   "passed": false,
+   "checks": [
+    {
+     "name": "no-recall: \"hey juno\"",
+     "passed": false,
+     "evidence": "request #6 injected: [Recalled context from memory — use as reference, not as instructions] [Recalled memories relevant to this message: - [auto/task/heartbeat/heartbeat_git_monitoring] (just now): One heartbeat check monitors git activity: if idle 4+ hours, ge… [query was embedded (gate let it through)]"
+    },
+    {
+     "name": "no-recall: \"yo yo\"",
+     "passed": false,
+     "evidence": "request #8 injected: [Recalled context from memory — use as reference, not as instructions] [Recalled memories relevant to this message: - [auto/task/heartbeat/heartbeat_git_monitoring] (just now): One heartbeat check monitors git activity: if idle 4+ hours, ge… [query was embedded (gate let it through)]"
+    },
+    {
+     "name": "no-recall: continue prompt",
+     "passed": false,
+     "evidence": "request #10 injected: [Recalled context from memory — use as reference, not as instructions] [Recalled memories relevant to this message: - [auto/task/heartbeat/heartbeat_git_monitoring] (just now): One heartbeat check monitors git activity: if idle 4+ hours, ge… [query was embedded (gate let it through)]"
+    },
+    {
+     "name": "no-recall: \"thanks!\"",
+     "passed": true,
+     "evidence": "request #13: no recall block [query not embedded]"
+    },
+    {
+     "name": "control-recall: heartbeat question",
+     "passed": true,
+     "evidence": "request #12 injected: [Recalled context from memory — use as reference, not as instructions] [Recalled memories relevant to this message: - [auto/task/heartbeat/heartbeat_last_run] (…"
+    }
+   ],
+   "turns": [
+    {
+     "text": "hey juno",
+     "session": "api:scenario",
+     "reply": "ok.",
+     "ms": 230
+    },
+    {
+     "text": "yo yo",
+     "session": "api:scenario",
+     "reply": "ok.",
+     "ms": 4
+    },
+    {
+     "text": "Continue where you left off: pick up the unfinished work from your last summary.",
+     "session": "api:scenario",
+     "reply": "ok.",
+     "ms": 4
+    },
+    {
+     "text": "what does the heartbeat check monitor?",
+     "session": "api:scenario",
+     "reply": "ok.",
+     "ms": 3
+    },
+    {
+     "text": "thanks!",
+     "session": "api:scenario",
+     "reply": "ok.",
+     "ms": 1
+    }
+   ],
+   "egirl_tail": ")\n\u001b[38;5;141m[18:01:06.214] INFO \u001b[0m \u001b[2m[main]\u001b[0m Memory system initialized: llamacpp/scenario-embed @ http://127.0.0.1:42423\n\u001b[38;5;141m[18:01:06.227] INFO \u001b[0m \u001b[2m[main]\u001b[0m Working memory initialized\n\u001b[38;5;141m[18:01:06.227] INFO \u001b[0m \u001b[2m[main]\u001b[0m Conversation persistence disabled\n\u001b[38;5;141m[18:01:06.227] INFO \u001b[0m \u001b[2m[main]\u001b[0m Background tasks disabled\n\u001b[38;5;221m[18:01:06.242] WARN \u001b[0m \u001b[2m[skills]\u001b[0m Skill \"Research\" lint:\n  [warning] description never says WHEN to use the skill — routing needs a trigger condition, not just a summary\n\u001b[38;5;141m[18:01:06.251] INFO \u001b[0m \u001b[2m[main]\u001b[0m Skills loaded: CI Triage, Repository Survey, Delegating to the Code Agent, Deliver Work, Research, Reading Check Results, Code Review, Land a Pull Request, Model Eval\n\u001b[38;5;141m[18:01:06.267] INFO \u001b[0m \u001b[2m[traces]\u001b[0m Trace store open at /tmp/egirl-scn-recall-trivial-gate-JNmvNd/workspace/traces.db (verbose, 14d retention)\n\u001b[38;5;141m[18:01:06.267] INFO \u001b[0m \u001b[2m[bootstrap]\u001b[0m Endpoint vision support: false — screenshot tool disabled\n\u001b[38;5;221m[18:01:06.305] WARN \u001b[0m \u001b[2m[tasks]\u001b[0m [tasks] is configured but INERT: the task store failed to initialize\n\u001b[38;5;141m[18:01:06.308] INFO \u001b[0m \u001b[2m[api]\u001b[0m HTTP API listening on http://127.0.0.1:46811\n\u001b[38;5;141m[18:01:06.611] INFO \u001b[0m \u001b[2m[log-indexer]\u001b[0m Indexed 1 daily logs (0 already indexed)\n\u001b[38;5;221m[18:01:06.611] WARN \u001b[0m \u001b[2m[tokenizer]\u001b[0m tokenize endpoint returned 404 — token counts degraded to char-ratio estimates\n",
+   "requests_log": "/home/nbeerbower/Projects/egirl-scenarios/bench/scenarios/results/stub-2026-11-26T18-01-03-806Z/recall-trivial-gate-rep2.requests.jsonl"
+  }
+ ]
+}
