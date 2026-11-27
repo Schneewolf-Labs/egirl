@@ -295,6 +295,7 @@ export class AgentLoop implements Operator {
       context: this.context,
       memory: this.memory,
       config: this.config,
+      isHarnessTurn: options.isHarnessTurn,
     })
 
     // Every counter and flag scoped to this run — the loop's state machine, made explicit.

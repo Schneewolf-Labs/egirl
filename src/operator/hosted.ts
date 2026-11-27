@@ -216,7 +216,7 @@ export class HostedSession {
       const extra = [...(options.extraTools?.values() ?? [])].map((t) => t.definition)
       const scope: ServeScope = { toolCtx, options, events, signals, controller }
       const outcome = await drive({
-        body: await this.withRecall(userMessage, text),
+        body: await this.withRecall(userMessage, text, options.isHarnessTurn),
         ...(options.images?.length && { images: options.images, imagePaths }),
         options,
         // Each harness step that calls tools is what its turn cap counts: the cap checklist
@@ -324,13 +324,22 @@ export class HostedSession {
   }
 
   /** The turn's text, prefixed with recalled memory when proactive retrieval is on. */
-  private async withRecall(userMessage: string, text: string): Promise<string> {
+  private async withRecall(
+    userMessage: string,
+    text: string,
+    isHarnessTurn: boolean | undefined,
+  ): Promise<string> {
     if (!this.memory || !this.config.memory.proactiveRetrieval) return text
-    const recalled = await retrieveForContext(userMessage, this.memory, {
-      scoreThreshold: this.config.memory.scoreThreshold,
-      maxResults: this.config.memory.maxResults,
-      maxTokensBudget: this.config.memory.maxTokensBudget,
-    })
+    const recalled = await retrieveForContext(
+      userMessage,
+      this.memory,
+      {
+        scoreThreshold: this.config.memory.scoreThreshold,
+        maxResults: this.config.memory.maxResults,
+        maxTokensBudget: this.config.memory.maxTokensBudget,
+      },
+      { isHarnessTurn },
+    )
     return recalled ? `${RECALL_PREFIX}\n${sanitizeContent(recalled)}\n\n${text}` : text
   }
 

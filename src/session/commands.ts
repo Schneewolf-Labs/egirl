@@ -32,6 +32,8 @@ export interface CommandResult {
    * user's arguments, so `/draw a fox` is "please draw a fox" with the drawing skill loaded.
    */
   turn?: string
+  /** The harness wrote `turn` (/continue), not the user: run it with no proactive recall. */
+  isHarnessTurn?: boolean
 }
 
 /** Who is asking, as the channel knows them. Absent on the terminal, which is the owner. */
@@ -366,7 +368,7 @@ export async function handleCommand(input: string, scope: CommandScope): Promise
       return helpCommand(scope)
 
     case 'continue':
-      return { handled: true, turn: CONTINUE_PROMPT }
+      return { handled: true, turn: CONTINUE_PROMPT, isHarnessTurn: true }
 
     case 'auto':
       if (!session) return terminalOnly(cmd)

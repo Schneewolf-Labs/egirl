@@ -148,6 +148,11 @@ describe('/continue', () => {
     expect(r.turn).toBe(CONTINUE_PROMPT)
   })
 
+  test('is marked as harness-written, so it runs with no proactive recall', async () => {
+    const r = await handleCommand('/continue', { agent: fakeAgent() })
+    expect(r.isHarnessTurn).toBe(true)
+  })
+
   test('is listed in /help', async () => {
     const r = await handleCommand('/help', { agent: fakeAgent() })
     expect(r.message).toContain('/continue')

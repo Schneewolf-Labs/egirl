@@ -189,7 +189,11 @@ export class Discovery {
       const agent =
         this.deps.buildOperator?.({ ...agentDeps, isFresh: true }) ?? new AgentLoop(agentDeps)
       const before = this.deps.store.list({ status: 'proposed' }).length
-      const result = await agent.run(DISCOVERY_PROMPT, { maxTurns: DISCOVERY_MAX_TURNS })
+      const result = await agent.run(DISCOVERY_PROMPT, {
+        maxTurns: DISCOVERY_MAX_TURNS,
+        // A fixed prompt: the pass already gathered its own recall into additionalContext.
+        isHarnessTurn: true,
+      })
       const proposed = Math.max(0, this.deps.store.list({ status: 'proposed' }).length - before)
       log.info('tasks', discoveryOutcome(proposed, result.turns, result.turnLimitReached))
     } catch (err) {

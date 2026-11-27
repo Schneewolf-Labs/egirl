@@ -122,7 +122,10 @@ export async function runTurn(
   await surface.ack?.working().catch(() => {})
   try {
     const { handler, state } = createNarration({ captureThinking: verbosity.thinking })
-    const response = await agent.run(text, { events: handler })
+    const response = await agent.run(text, {
+      events: handler,
+      ...(command.isHarnessTurn && { isHarnessTurn: true }),
+    })
     const reasoning = verbosity.thinking ? buildThinkingBlock(state.thinking, surface.format) : ''
     const tools = verbosity.tools ? buildToolCallPrefix(state, surface.format) : ''
     await deliver(surface, reasoning + tools + response.content)

@@ -36,15 +36,22 @@ export async function injectRecalledMemory(args: {
   context: AgentContext
   memory: MemoryManager | null
   config: RuntimeConfig
+  /** See AgentLoopOptions.isHarnessTurn. */
+  isHarnessTurn?: boolean
 }): Promise<void> {
   const { userMessage, context, memory, config } = args
   if (!memory || !config.memory.proactiveRetrieval) return
 
-  const recalled = await retrieveForContext(userMessage, memory, {
-    scoreThreshold: config.memory.scoreThreshold,
-    maxResults: config.memory.maxResults,
-    maxTokensBudget: config.memory.maxTokensBudget,
-  })
+  const recalled = await retrieveForContext(
+    userMessage,
+    memory,
+    {
+      scoreThreshold: config.memory.scoreThreshold,
+      maxResults: config.memory.maxResults,
+      maxTokensBudget: config.memory.maxTokensBudget,
+    },
+    { isHarnessTurn: args.isHarnessTurn },
+  )
   if (!recalled) return
 
   const sanitized = sanitizeContent(recalled)

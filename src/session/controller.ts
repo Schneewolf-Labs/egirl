@@ -41,6 +41,14 @@ export interface QueuedMessage {
   at: number
   /** Goes as a turn of its own, ahead of the rest (`/interrupt` on an operator that cannot inject). */
   isAlone?: boolean
+  /** The harness wrote it (a queued /continue): see AgentLoopOptions.isHarnessTurn. */
+  isHarnessTurn?: boolean
+}
+
+/** Text to run as a turn, and whether the harness rather than the user wrote it. */
+export interface PendingTurn {
+  text: string
+  isHarnessTurn?: boolean
 }
 
 /**
@@ -91,9 +99,14 @@ export class SessionController {
    * what to do produces two agents arguing inside one context. Waiting for the turn boundary
    * keeps the conversation a conversation.
    */
-  enqueue(text: string): void {
+  enqueue(text: string, options: { isHarnessTurn?: boolean } = {}): void {
     const trimmed = text.trim()
-    if (trimmed) this.queue.push({ text: trimmed, at: Date.now() })
+    if (!trimmed) return
+    this.queue.push({
+      text: trimmed,
+      at: Date.now(),
+      ...(options.isHarnessTurn && { isHarnessTurn: true }),
+    })
   }
 
   /**
@@ -103,11 +116,15 @@ export class SessionController {
    * them separately would make the agent answer the first and rediscover the rest afterwards.
    */
   drain(): string | undefined {
+    return this.drainTurn()?.text
+  }
+
+  /** drain(), keeping the harness mark: a harness turn joined with anything typed is the user's. */
+  drainTurn(): PendingTurn | undefined {
     if (this.queue.length === 0) return undefined
-    if (this.queue[0]?.isAlone) return this.queue.shift()?.text
-    const text = this.queue.map((q) => q.text).join('\n')
-    this.queue = []
-    return text
+    const taken = this.queue[0]?.isAlone ? this.queue.splice(0, 1) : this.queue.splice(0)
+    const text = taken.map((q) => q.text).join('\n')
+    return taken.every((q) => q.isHarnessTurn) ? { text, isHarnessTurn: true } : { text }
   }
 
   /** Take the oldest `n` queued messages (all of them by default), joined as drain() joins. */
