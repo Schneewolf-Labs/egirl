@@ -40,61 +40,41 @@ No multi-model routing. No per-message cloud escalation. The local model solves 
 
 ## Quick Start
 
+egirl needs [Bun](https://bun.sh) and one operator model: a llama.cpp server, a hosted
+OpenAI-compatible API, or Claude on your Claude login. Everything else (embeddings, a code
+agent, web search, MCP servers, a second model for side work) is optional.
+
 ```bash
-# Install dependencies
 bun install
 
-# Create starter config, then check it
-bun run start init --provider codex
-
 # Start llama.cpp (your local model)
-# --jinja applies the model's chat template — required for tool calling and for
-# reasoning models to stream their thinking out-of-band; -fa on enables flash attention;
+# --jinja applies the model's chat template; -fa on enables flash attention;
 # --cache-reuse lets the KV cache survive egirl's mid-conversation edits (see docs/deployment.md).
 llama-server -m your-model.gguf -c 32768 -fa on --jinja --cache-reuse 256 --port 8080
 
+# Config: the repo's egirl.toml is a shared base; your settings go in egirl.d/
+mkdir -p egirl.d && cp egirl.example.toml egirl.d/local.toml
+
 # Check setup
 bun run start doctor
-
-# Start embedding service (for memory)
-cd services/embeddings && ./run.sh
 
 # Run the CLI
 bun run cli
 ```
 
+The full walkthrough, including the hosted and Claude operators and what `doctor` should say:
+[docs/getting-started.md](docs/getting-started.md). To add memory embeddings, a code agent and
+the rest: [docs/optional-services.md](docs/optional-services.md).
+
 ## Configuration
 
-Run `bun run start init --provider codex` to create a starter `egirl.toml` and `.env`. Use `--provider claude` if you want Claude Code as the `code_agent` backend. See [docs/configuration.md](docs/configuration.md) for the full reference.
-
-### egirl.toml
-
-```toml
-[workspace]
-path = "~/.egirl/workspace"
-
-[local]
-endpoint = "http://localhost:8080"
-model = "qwen3-vl-32b"
-context_length = 32768
-
-[local.embeddings]
-endpoint = "http://localhost:8082"
-model = "qwen3-vl-embedding-2b"
-dimensions = 2048
-multimodal = true
-
-[channels.code_agent]
-provider = "codex"      # or "claude"; Codex runs through the interactive codex CLI
-permission_mode = "default"
-
-[tools]
-code_agent = true     # the primary tool — delegate coding to the configured code agent
-```
+`egirl.example.toml` is a minimal config: the operator block, with every optional service
+commented out. See [docs/configuration.md](docs/configuration.md) for the full reference.
 
 ### .env
 
 ```bash
+EGIRL_LOCAL_API_KEY=... # for a hosted or keyed operator endpoint
 DISCORD_TOKEN=...     # for Discord bot
 XMPP_USERNAME=...     # for XMPP bot
 XMPP_PASSWORD=...
@@ -221,6 +201,8 @@ No OpenAPI spec, no versioned paths, no plugin framework. If you want to build s
 
 | Document | Description |
 |----------|-------------|
+| [Getting Started](docs/getting-started.md) | Bun and one operator model, to a first turn |
+| [Optional Services](docs/optional-services.md) | Embeddings, code agent, web search, MCP, auxiliary model: what each adds and what happens without it |
 | [Architecture](docs/architecture.md) | System overview and module dependencies |
 | [Configuration](docs/configuration.md) | `egirl.toml` and `.env` reference |
 | [Memory](docs/memory.md) | Hybrid search, embeddings, storage |
@@ -240,10 +222,8 @@ No OpenAPI spec, no versioned paths, no plugin framework. If you want to build s
 ## Requirements
 
 - [Bun](https://bun.sh)
-- [llama.cpp](https://github.com/ggerganov/llama.cpp) server
-- Python 3.10+ (optional — embeddings service)
-- Playwright browsers (optional — `bunx playwright install`)
-- GPU with enough VRAM for your model
+- One operator model: a [llama.cpp](https://github.com/ggerganov/llama.cpp) server (GPU with enough VRAM for your model), a hosted OpenAI-compatible API, or a Claude login
+- Optional: an embedding service, a code agent CLI, SearXNG, MCP servers, Playwright browsers (`bunx playwright install chromium`), Python 3 for `services/embeddings`. See [docs/optional-services.md](docs/optional-services.md)
 
 ## License
 

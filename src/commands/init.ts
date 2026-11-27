@@ -57,7 +57,10 @@ function parseOptions(args: string[]): InitOptions {
 function renderToml(options: InitOptions): string {
   const model = options.provider === 'codex' ? 'qwen3-vl-32b' : 'qwen2.5-32b-instruct'
 
-  return `# CLI color theme: egirl (purple/pink), midnight, neon, mono, dracula, nord, gruvbox, catppuccin,
+  return `# egirl needs one operator model ([local] below). Everything commented out is optional:
+# docs/optional-services.md. From zero to a first turn: docs/getting-started.md.
+
+# CLI color theme: egirl (purple/pink), midnight, neon, mono, dracula, nord, gruvbox, catppuccin,
 # solarized, tokyonight, sakura, synthwave, paper (light backgrounds), ... -- /theme lists them all
 theme = "egirl"
 
@@ -74,7 +77,16 @@ model = "${model}"
 context_length = 32768
 max_concurrent = 2
 
-# Optional. Uncomment when you have an embeddings service running to enable memory.
+# Optional: embeddings add recall by meaning. Without them memory uses keyword search.
+# Pick one (docs/optional-services.md#embeddings).
+# A. nomic-embed-text-v1.5 on llama-server, CPU, 768 dimensions:
+# [local.embeddings]
+# provider = "llamacpp"
+# endpoint = "http://127.0.0.1:8083"
+# model = "nomic-embed-text-v1.5"
+# dimensions = 768
+# multimodal = false
+# B. services/embeddings (Qwen3-VL-Embedding-2B, Python), 2048 dimensions:
 # [local.embeddings]
 # provider = "qwen3-vl"
 # endpoint = "http://localhost:8082"
@@ -82,6 +94,7 @@ max_concurrent = 2
 # dimensions = 2048
 # multimodal = true
 
+# The code agent (--provider). Optional; docs/optional-services.md#code-agent.
 [channels.code_agent]
 provider = "${options.provider}"
 permission_mode = "default"

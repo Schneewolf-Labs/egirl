@@ -13,7 +13,9 @@ For the config keys these commands map to, see
 
 ## The Serving Stack
 
-An instance needs three model services. The topology that worked is **operator on
+This deployment ran three model services. Only the operator is required; embeddings
+and the compactor are optional, and egirl runs without them (see
+[optional-services.md](optional-services.md)). The topology that worked is **operator on
 GPU, embeddings and compactor on CPU** — one box, fully self-sufficient. The two
 CPU services stay off the operator's GPU slot so side work never competes with the
 model doing the actual thinking.
@@ -131,7 +133,7 @@ python3 -m venv ~/embed-venv
 Launch (default `--host 0.0.0.0 --port 8083`):
 
 ```bash
-bun run embeddings
+source ~/embed-venv/bin/activate && bun run embeddings   # runs `python` from PATH
 # or directly:
 ~/embed-venv/bin/python embedding-server/serve-embedding.py --host 0.0.0.0 --port 8083
 ```
@@ -149,7 +151,11 @@ dimensions = 2048
 ### 3. Compactor / auxiliary (CPU) — side work off the operator's slot
 
 A small model on CPU (`-ngl 0`) handling compaction summaries and memory
-extraction. These run on every compaction and every few turns; keeping them on a
+extraction. Optional: without it, side work runs on the operator. Check the model on
+memory extraction before relying on it, not just on summaries. In replays of egirl's
+extraction prompt on a task that did nothing, this compactor wrote junk memories in 5
+of 5 runs with thinking off, where the operator wrote none in 11. See
+[optional-services.md](optional-services.md#auxiliary-model). These run on every compaction and every few turns; keeping them on a
 separate CPU endpoint means they never occupy the operator's slot or compete for
 its context. Exact launch:
 
@@ -245,7 +251,9 @@ dynamic state, swap the config, start the instance.
 
 Run `--instance <name> doctor` on the new box before enabling anything — it checks
 the whole dependency graph (operator endpoint and what it's actually serving,
-auxiliary model, embeddings, MCP servers, API port) in one shot.
+auxiliary model, embeddings, MCP servers, API port) in one shot. Before PR #259 it
+skips everything after the operator when the operator is down; with PR #259 or later
+it probes each dependency regardless.
 
 ## Recovering After a Host Reboot
 

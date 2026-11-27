@@ -1,81 +1,105 @@
-# CLI color theme: egirl (purple/pink), midnight (blue/teal), neon (green/cyan), mono (grayscale)
-theme = "egirl"
-
-[thinking]
-level = "off"
-show_thinking = true
+# egirl.example.toml: a minimal starting config.
+#
+# egirl needs bun and one operator model. That is the only uncommented block below.
+# Everything else is an optional service, commented out, and egirl runs without it.
+# Turn one on when you want what it adds: docs/optional-services.md.
+#
+# From zero to a first turn: docs/getting-started.md. Every key: docs/configuration.md.
+#
+# In a checkout of the repo, copy this file to egirl.d/local.toml. egirl.d/ is gitignored, and
+# its files are merged over the tracked egirl.toml.
 
 [workspace]
 path = "~/.egirl/workspace"
 
+# ── The operator ─────────────────────────────────────────────────────────────────────────────
+# The one model that runs every turn. Keep exactly one of the three options.
+
+# 1. llama.cpp's llama-server on this machine or your LAN (start it with --jinja).
 [local]
 endpoint = "http://localhost:8080"
-model = "qwen3-vl-32b"
-context_length = 32768
-max_concurrent = 2                 # in-flight requests against the endpoint; set to 1 for a
-                                   # serial engine, 0 to disable the limit
-# tool_format = "auto"             # auto | qwen3 | qwen35 | laguna — which tool-call syntax to
-                                   # ask for and parse. "auto" asks in Qwen3 form and accepts
-                                   # any of them back; name the model's own dialect when you
-                                   # know it (Qwen3.5 uses <function=>/<parameter=>).
-# cache_slots = 0                  # >0 pins a session to a server KV slot (sabrewing only)
-# stale_stream_timeout_ms = 90000   # raise well above your worst-case prefill time
+model = "qwen3-32b"          # a label; doctor warns if it shares no word with what the server reports
+context_length = 32768       # the window egirl plans for; keep it at or below the server's -c
 
-# [local.witchgrid]
-# Resolve the operator model through a Witchgrid control plane instead of the fixed endpoint
-# above: the live llama-server's direct address, or the auto-spawning proxy when the profile is
-# not running. With the CP unreachable, an explicit `endpoint` is the fallback. See
-# docs/configuration.md.
-# url = "http://witchgrid.lan:8765"
-# profile = "chat-qwen"
-# token comes from WITCHGRID_SHARED_SECRET in .env when the CP sets WITCHGRID_AUTH_PROTECT_READ
+# 2. A hosted OpenAI-compatible API. Put the key in .env as EGIRL_LOCAL_API_KEY.
+# [local]
+# endpoint = "https://api.example.com"   # the bare host; egirl appends /v1/chat/completions
+# model = "<a model id the API lists>"
+# context_length = 32768
+# hosted = true
 
-# [local.auxiliary]
-# A second, smaller model for side work: compaction summaries and memory extraction.
-# These run on every compaction and every few turns. They do not need the operator model's
-# capability, but they do occupy its slot and compete for its context while they run — a summary
-# generated under context pressure is how a long research task loses the thread.
-# endpoint = "http://localhost:8099"   # defaults to the main endpoint
-# model = "qwen3-vl-4b"
-# max_concurrent = 1
-# temperature = 0                      # default; summaries want determinism, not variety
+# 3. Claude, on this machine's `claude login`. No model server at all.
+# [operator]
+# provider = "claude"
+# [local]
+# provider = "claude"     # side work (memory extraction, summaries, the permission supervisor) on Claude too
+# model = "haiku"
 
-# Optional. Uncomment when you have an embeddings service running to enable memory.
+# ── Optional services ────────────────────────────────────────────────────────────────────────
+# Rough order of value. Each section in docs/optional-services.md says what it adds, how to run
+# it, and what happens when it is missing or down.
 
-[local.embeddings]
+# Embeddings: memory recall by meaning, not just keywords. Without it, memory uses keyword
+# search (SQLite FTS5) and every memory tool still works. Pick one option.
+#
+# A. nomic-embed-text-v1.5 on llama-server: a 146 MB download, runs on CPU, 768 dimensions.
+# [local.embeddings]
+# provider = "llamacpp"
+# endpoint = "http://127.0.0.1:8083"
+# model = "nomic-embed-text-v1.5"
+# dimensions = 768
+# multimodal = false
+#
+# B. services/embeddings (Qwen3-VL-Embedding-2B, Python + torch, CPU), 2048 dimensions.
+# [local.embeddings]
 # provider = "qwen3-vl"
 # endpoint = "http://localhost:8082"
 # model = "qwen3-vl-embedding-2b"
 # dimensions = 2048
 # multimodal = true
+#
+# Switching models later leaves old vectors that no longer match: see docs/optional-services.md.
 
-[channels.code_agent]
-provider = "codex"         # "codex", "claude", or "opencode"
-# providers = ["codex", "opencode", "claude"]
-#   Ordered fallback chain, tried left to right. Takes precedence over `provider`.
-#   The next backend is tried only when this one could not run the task at all: binary missing,
-#   expired credentials, exhausted credits, rate limit, or an empty transcript. An agent that ran
-#   and reported it could not solve the problem is NOT retried — that is its answer, and running
-#   another agent over the same tree costs more and risks conflicting edits.
-permission_mode = "default"
-# model = "gpt-5.5"        # Codex example
-# model = "sonnet"         # Claude example
-# model = "anthropic/claude-sonnet-4-5"  # opencode example
-# working_dir = "~/projects/myrepo"
-# max_turns = 30           # Claude backend only
+# Code agent: lets the operator hand coding work to Claude Code, Codex, opencode or an ACP agent.
+# Each uses its own CLI login; egirl needs no API key for it.
+# [tools]
+# code_agent = true
+# [channels.code_agent]
+# provider = "claude"            # "claude", "codex", "opencode" or "acp" (+ acp_command)
+# permission_mode = "default"    # each permission request goes to the permission supervisor
+# # providers = ["codex", "claude"]   # fallback chain, tried when a backend cannot run at all
+# # working_dir = "~/projects/myrepo"
 
-# Direct Claude Code bridge command only: bun run start cc
-# [channels.claude_code]
-# permission_mode = "bypassPermissions"
-# model = "sonnet"
+# Web search: the web_search tool, through a SearXNG instance. Without it, web_search is not
+# registered and startup logs one warning; web_research (fetch a URL) works either way.
+# [searxng]
+# url = "http://localhost:8888"   # SEARXNG_API_KEY in .env if your instance needs one
 
-# Discord bot. Requires DISCORD_TOKEN in .env.
+# MCP servers: their tools join egirl's as <name>_<tool>. See docs/mcp.md.
+# [[mcp.servers]]
+# name = "example"
+# command = "npx"                 # stdio: spawned by egirl
+# args = ["-y", "@modelcontextprotocol/server-everything"]
+# # url = "http://localhost:9000/mcp"   # or streamable HTTP
+
+# Auxiliary model: a second model for side work (compaction summaries, memory extraction,
+# self-review), so it stops taking the operator's slot and context. Without it, side work runs
+# on the operator. Choose one you have checked for extraction quality, not just summarization.
+# When in doubt, leave this out.
+# [local.auxiliary]
+# endpoint = "http://localhost:8215"   # defaults to the operator's endpoint
+# model = "qwen3-4b"
+
+# ── Chat channels and the HTTP API ───────────────────────────────────────────────────────────
+# The terminal (`bun run cli`) needs none of these.
+
+# Discord bot. Needs DISCORD_TOKEN in .env.
 # [channels.discord]
 # allowed_channels = ["dm"]
 # allowed_users = ["<your-discord-id>"]  # who may drive the agent. Empty = DENY everyone
 #                                         # (fail closed); use ["*"] to allow anyone who finds the bot.
 
-# Matrix bot, unencrypted rooms only. Requires MATRIX_ACCESS_TOKEN
+# Matrix bot, unencrypted rooms only. Needs MATRIX_ACCESS_TOKEN
 # (or MATRIX_USERNAME + MATRIX_PASSWORD) in .env.
 # [channels.matrix]
 # homeserver = "https://matrix.example.com"
@@ -87,17 +111,9 @@ permission_mode = "default"
 # [channels.api]
 # host = "127.0.0.1"
 # port = 3000
-# openai_extract = false           # let /v1/chat/completions turns write memories (recall works either way)
-# expose_progress = false          # stream reasoning and tool calls on /v1/chat/completions as reasoning_content
 
-# Cross-egirl agent-to-agent messaging (egirl-peer protocol, see docs/peers.md).
-# Each peer is another egirl instance with its HTTP API running. If the peer
-# sets EGIRL_API_TOKEN, put the same value in EGIRL_PEER_<NAME>_TOKEN in .env.
-# [[peers]]
-# name = "luna"
-# url = "http://192.168.1.20:3000"
-# timeout_ms = 120000
-
+# ── Safety ───────────────────────────────────────────────────────────────────────────────────
+# Guardrails, not a sandbox: docs/safety.md.
 [safety]
 enabled = true
 
@@ -121,54 +137,23 @@ path = "{workspace}/audit.log"
 enabled = true
 # protect = ["you@example.org", "Your Name", "yourhandle"]
 
-[tools]
-code_agent = true
-github = false
-tasks = false
-browser = false
+# ── Advanced ─────────────────────────────────────────────────────────────────────────────────
 
-# Real-profile browsing: browse as YOU, with your existing logins and cookies.
-# When on, egirl snapshots your default Chromium browser's active profile
-# (cookies, logins, preferences — never caches/extensions/history) into
-# {workspace}/browser-profile/ and drives that snapshot with your real browser
-# binary. Your live profile is never opened directly. Auth files re-sync from
-# your real profile on every fresh launch; turning the toggle off deletes the
-# snapshot store on next browser use. This is a consent-gated convenience, not
-# an isolation boundary — pages the agent visits run with your real logins.
-[browser]
-use_real_profile = false
-# executable_path = "/usr/bin/google-chrome"  # override the detected binary
+# Find the operator through a Witchgrid control plane instead of a fixed endpoint.
+# See docs/configuration.md.
+# [local.witchgrid]
+# url = "http://witchgrid.lan:8765"
+# profile = "chat-qwen"
 
-[permission_supervisor]
-mode = "supervised"                # bypass, supervised, rules_only, ask_user
-default_action = "allow"           # allow, deny, ask_user
-think_before_deciding = true
-min_confidence = 0.65
-ask_user_below_confidence = false
-memory_recall = true
-memory_write = false
+# Other egirl instances this one can message (docs/peers.md). If the peer sets EGIRL_API_TOKEN,
+# put the same value in EGIRL_PEER_<NAME>_TOKEN in .env.
+# [[peers]]
+# name = "luna"
+# url = "http://192.168.1.20:3000"
 
-[permission_supervisor.policy]
-allow = [
-  "git status",
-  "bun test",
-]
-deny = [
-  "rm -rf",
-  ".env",
-]
-ask_user = [
-  "git push",
-  "curl",
-]
-
-[skills]
-dirs = ["~/.egirl/skills", "{workspace}/skills"]
-
-# Optional multi-instance layout. Use with: bun run start --instance kira-local cli
-# Top-level config above stays valid and acts as the base. Profiles, personas,
-# and instances use the same nested keys as the config above (no flat syntax);
-# unknown keys are rejected at load time.
+# Multi-instance layout. Use with: bun run start --instance kira-local cli
+# The top-level config above stays the base. Profiles, personas and instances use the same
+# nested keys as the config above; unknown keys are rejected at load time.
 #
 # [defaults]
 # workspace_root = "~/.egirl"
@@ -177,17 +162,9 @@ dirs = ["~/.egirl/skills", "{workspace}/skills"]
 #
 # [profiles.local-codex.local]
 # endpoint = "http://localhost:8080"
-# model = "qwen3-vl-32b"
+# model = "qwen3-32b"
 #
 # [profiles.local-codex.channels.code_agent]
-# provider = "codex"
-# permission_mode = "default"
-#
-# [profiles.big-box.local]
-# endpoint = "http://192.168.8.218:8080"
-# model = "qwen3-72b"
-#
-# [profiles.big-box.channels.code_agent]
 # provider = "codex"
 # permission_mode = "default"
 #
@@ -195,44 +172,9 @@ dirs = ["~/.egirl/skills", "{workspace}/skills"]
 # theme = "egirl"
 # # workspace defaults to ~/.egirl/personas/kira
 #
-# [personas.ops]
-# theme = "midnight"
-#
 # [instances.kira-local]
 # profile = "local-codex"
 # persona = "kira"
 #
-# [instances.ops-big]
-# profile = "big-box"
-# persona = "ops"
-#
-# [instances.ops-big.channels.api]
+# [instances.kira-local.channels.api]
 # port = 3001
-
-# Resolve peers from a Wald agent registry instead of listing them above. Discovery supplies
-# addresses only -- tokens still come from EGIRL_PEER_<NAME>_TOKEN. Config wins on a name
-# collision, and an unreachable registry leaves the static peers untouched.
-# [peer_discovery]
-# enabled = true
-# registry = "wald"                      # name of the [[mcp.servers]] entry
-# self_url = "http://192.168.1.10:3000"  # so other instances can reach this one
-# capabilities = ["coding", "vision"]
-
-# The Wald A2A mailbox: `delegate` hands work to any registered agent without waiting for it
-# to be up, and a seeded `mailbox` task polls for work handed here. Requests are acted on only
-# from the [report] principal (when it is a peer) and [[peers]] pinned above, and only while
-# Wald is seen enforcing auth (WALD_REQUIRE_AUTH=true, checked every poll); anything else is
-# recorded and reported to the principal, never run. Needs conversation persistence and a
-# Wald that names senders (from_agent, Schneewolf-Labs/Wald#8).
-# [mailbox]
-# enabled = true
-# registry = "wald"                      # name of the [[mcp.servers]] entry
-# schedule = "*/5 * * * *"               # how often to poll
-
-# MCP servers: their tools join the builtins as <name>_<tool>. See docs/mcp.md.
-# Witchgrid's control plane lets the operator list the inference fleet and spawn, stop or swap
-# models on it as tool calls. Drop `headers` if the CP runs without WITCHGRID_SHARED_SECRET.
-# [[mcp.servers]]
-# name = "witchgrid"
-# url = "http://witchgrid.lan:8765/mcp"
-# headers = { Authorization = "Bearer $WITCHGRID_SHARED_SECRET" }
