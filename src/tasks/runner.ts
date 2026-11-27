@@ -833,6 +833,8 @@ export class TaskRunner {
       // over-run is unbounded-only (in executeTask's catch). It is a function: an extension
       // moves it.
       deadline: plan.deadline,
+      // The resume note is the runner's words; the task's own prompt is the principal's.
+      ...(plan.resumeAfterMinutes !== undefined && { isHarnessTurn: true }),
       wrapupMarginMs: plan.wrapupMarginMs,
       ...(plan.extraTools && { extraTools: plan.extraTools }),
     })
@@ -939,6 +941,7 @@ export class TaskRunner {
     )
     const fix = await agent.run(deliverableNudge(issues), {
       maxTurns: DELIVERABLE_FIX_TURNS,
+      isHarnessTurn: true,
       signal: plan.signal,
       deadline: plan.deadline,
       wrapupMarginMs: plan.wrapupMarginMs,

@@ -28,6 +28,15 @@ describe('queue', () => {
     expect(s.peek()).toHaveLength(0)
   })
 
+  test('a queued harness turn keeps its mark alone, and loses it joined with typed text', () => {
+    const s = new SessionController()
+    s.enqueue('continue prompt', { isHarnessTurn: true })
+    expect(s.drainTurn()).toEqual({ text: 'continue prompt', isHarnessTurn: true })
+    s.enqueue('continue prompt', { isHarnessTurn: true })
+    s.enqueue('and fix the tests')
+    expect(s.drainTurn()).toEqual({ text: 'continue prompt\nand fix the tests' })
+  })
+
   test('drains to undefined when empty, so callers can tell nothing was waiting', () => {
     expect(new SessionController().drain()).toBeUndefined()
   })

@@ -14,16 +14,40 @@ const DEFAULT_CONFIG: RetrievalConfig = {
   maxTokensBudget: 2000,
 }
 
+/** Acknowledgements and continuations: a reply with nothing to search on. */
+const ACK =
+  '(?:yes|no|ok|okay|k|kk|sure|thanks|thank you|thx|ty|hi|hello|hey|heya|hiya|yo|sup|morning|good morning|evening|good evening|continue|go|go on|go ahead|proceed|lgtm|sounds good|nice|cool|great|good|yep|yeah|nah|nope|done|next|\\+1)'
+
+/** Greetings and thanks: the words a message addresses the agent by name with. */
+const SALUTATION =
+  '(?:hi|hello|hey|heya|hiya|yo|sup|morning|good morning|evening|good evening|thanks|thank you|thx|ty)'
+
+/** A single word that would turn "hey <word>" into a question or an instruction. */
+const NOT_A_NAME =
+  "(?:what|what's|whats|why|how|when|where|who|which|but|and|so|now|then|please|can|could|would|will|is|are|do|does|did)"
+
+const SEP = '[\\s,.!?…]+'
+const END = '[.!?…\\s]*$'
+
 /**
- * Acknowledgements, greetings, and continuations with nothing to search on. Whole-message
- * match only — any trailing content beyond punctuation/emphasis makes the turn non-trivial.
+ * Whole-message matches only. Acks may repeat or combine ("yo yo", "ok cool"); a greeting or
+ * thanks may be followed by one vocative word ("hey juno", "thanks Kira!"). Any further
+ * content makes the turn non-trivial.
  */
-const TRIVIAL_RE =
-  /^(?:yes|no|ok|okay|k|kk|sure|thanks|thank you|thx|ty|hi|hello|hey|yo|continue|go|go on|go ahead|proceed|lgtm|sounds good|nice|cool|great|good|yep|yeah|nah|nope|done|next|\+1)[.!?…\s]*$/i
+const ONLY_ACKS_RE = new RegExp(`^${ACK}(?:${SEP}${ACK})*${END}`, 'i')
+const VOCATIVE_RE = new RegExp(
+  `^(?:${ACK}${SEP})*${SALUTATION}${SEP}(?!${NOT_A_NAME}${END})[\\p{L}][\\p{L}'-]*${END}`,
+  'iu',
+)
+
+/** Longest a greeting with a vocative may run: "ok thanks juno" yes, a sentence no. */
+const MAX_TRIVIAL_WORDS = 4
 
 /** True when a message carries no semantic signal worth a recall round-trip. */
 export function isTrivialPrompt(text: string): boolean {
-  return TRIVIAL_RE.test(text.trim())
+  const trimmed = text.trim()
+  if (ONLY_ACKS_RE.test(trimmed)) return true
+  return trimmed.split(/\s+/).length <= MAX_TRIVIAL_WORDS && VOCATIVE_RE.test(trimmed)
 }
 
 /**
@@ -41,7 +65,13 @@ export async function retrieveForContext(
   query: string,
   memory: MemoryManager,
   config: Partial<RetrievalConfig> = {},
+  options: { isHarnessTurn?: boolean } = {},
 ): Promise<string | undefined> {
+  // The harness wrote this turn (/continue, a resume note, a corrective nudge), not the
+  // principal. Its text is boilerplate that matches whatever is stored, and the run it
+  // continues already carries its own context: recalled junk under it drives the reply.
+  if (options.isHarnessTurn) return undefined
+
   const { scoreThreshold, maxResults, maxTokensBudget } = {
     ...DEFAULT_CONFIG,
     ...config,

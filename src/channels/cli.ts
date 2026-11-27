@@ -2,7 +2,7 @@ import { buildLearnPrompt } from '../agent/learn-prompt'
 import type { ConfigDrift } from '../config/drift'
 import type { Operator } from '../operator/types'
 import { type CommandScope, customCommands, handleCommand, isCommand } from '../session/commands'
-import { SessionController } from '../session/controller'
+import { type PendingTurn, SessionController } from '../session/controller'
 import type { Skill } from '../skills/types'
 import type { TaskRunner, TaskStore } from '../tasks'
 import { colors, DIM, RESET } from '../ui/theme'
@@ -195,7 +195,7 @@ export class CLIChannel implements Channel {
     handleCommand(text, this.commandScope())
       .then((r) => {
         if (r.turn) {
-          this.session.enqueue(r.turn)
+          this.session.enqueue(r.turn, { isHarnessTurn: r.isHarnessTurn })
           this.input?.notice(renderQueuedMessage(text))
         }
         if (r.message) this.input?.notice(`${c.accent}${r.message}${RESET}`)
@@ -220,8 +220,8 @@ export class CLIChannel implements Channel {
     }
   }
 
-  /** True: handled. A string: a command that expands into a turn (/continue). */
-  private async handleCommand(input: string): Promise<boolean | string> {
+  /** True: handled. A turn: a command that expands into one (/continue). */
+  private async handleCommand(input: string): Promise<boolean | PendingTurn> {
     const tasks = this.tasks(input)
     if (tasks !== undefined) {
       console.log(`${tasks}\n`)
@@ -239,7 +239,7 @@ export class CLIChannel implements Channel {
     const shared = await handleCommand(input, this.commandScope())
     if (!shared.handled) return false
     if (shared.quit) await this.quit()
-    if (shared.turn) return shared.turn
+    if (shared.turn) return { text: shared.turn, isHarnessTurn: shared.isHarnessTurn }
     if (shared.message) console.log(`${colors().accent}${shared.message}${RESET}\n`)
     return true
   }
@@ -260,9 +260,9 @@ export class CLIChannel implements Channel {
       // A command can take a while (/plan, /compact); anything typed meanwhile goes next.
       if (pending === undefined) {
         const before = this.session.peek().length
-        pending = this.session.drain()
+        pending = this.session.drainTurn()
         const queued = before - this.session.peek().length
-        if (pending) console.log(renderDrained(pending, queued))
+        if (pending) console.log(renderDrained(pending.text, queued))
       }
       if (pending !== undefined) {
         await runTurns(pending, {
@@ -283,10 +283,10 @@ export class CLIChannel implements Channel {
   }
 
   /** What `text` sends to the model, or undefined when it was a command that answered itself. */
-  private async toTurn(text: string): Promise<string | undefined> {
+  private async toTurn(text: string): Promise<PendingTurn | undefined> {
     const command = await this.handleCommand(text)
     if (command === true) return undefined
-    if (typeof command === 'string') return command
+    if (typeof command === 'object') return command
     // /learn rewrites the input and then runs as an ordinary turn -- the agent does the
     // distillation with its own tools, so interrupt/queue/status behave as in any turn.
     if (text === '/learn' || text.startsWith('/learn ')) {
@@ -296,9 +296,9 @@ export class CLIChannel implements Channel {
         )
         return undefined
       }
-      return buildLearnPrompt(text.slice('/learn'.length), this.skillsDir)
+      return { text: buildLearnPrompt(text.slice('/learn'.length), this.skillsDir) }
     }
-    return text
+    return { text }
   }
 
   private async askApproval(): Promise<boolean> {

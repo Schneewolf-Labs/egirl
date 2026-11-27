@@ -65,6 +65,12 @@ export interface AgentLoopOptions {
    * stitching a truncated answer back together would hand it more than that.
    */
   sampling?: SamplingParams
+  /**
+   * The harness wrote this message (/continue, a task's resume note, a corrective nudge), not
+   * the principal: it gets no proactive memory recall. Set at the source, never inferred from
+   * the text.
+   */
+  isHarnessTurn?: boolean
 }
 
 export interface AgentResponse {

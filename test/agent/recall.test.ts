@@ -3,6 +3,7 @@ import { AgentLoop } from '../../src/agent/loop'
 import { ConversationStore } from '../../src/conversation/store'
 import type { MemoryManager } from '../../src/memory'
 import type { ChatMessage, ChatResponse, LLMProvider } from '../../src/providers/types'
+import { CONTINUE_PROMPT } from '../../src/session/commands'
 import { makeConfig, makeExecutorWithNoop, makeWorkspace, stubResponse } from './helpers'
 
 const RECALL_MARKER = '[Recalled context from memory'
@@ -186,6 +187,27 @@ describe('proactive memory recall', () => {
       'second question',
       'reply 2',
     ])
+  })
+
+  test('a harness-generated continuation turn does not search memory', async () => {
+    const config = makeConfig(makeWorkspace())
+    config.memory.proactiveRetrieval = true
+    const { memory, searchCalls } = makeMemoryStub([
+      { key: 'heartbeat/last', value: 'Last heartbeat run completed with no findings.' },
+    ])
+
+    const agent = new AgentLoop({
+      config,
+      toolExecutor: makeExecutorWithNoop(),
+      localProvider: makeReplyProvider(),
+      sessionId: 'test:recall-harness',
+      memory,
+    })
+
+    await agent.run(CONTINUE_PROMPT, { isHarnessTurn: true })
+
+    expect(searchCalls()).toBe(0)
+    expect(agent.getContext().messages.some(isRecall)).toBe(false)
   })
 
   test('skips recall when proactive retrieval is disabled', async () => {

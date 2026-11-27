@@ -6,7 +6,7 @@
 import { windowFill } from '../agent/status'
 import type { Operator } from '../operator/types'
 import { CONTINUE_PROMPT } from '../session/commands'
-import type { SessionController } from '../session/controller'
+import type { PendingTurn, SessionController } from '../session/controller'
 import { colors, DIM, RESET } from '../ui/theme'
 import { errorMessage } from '../util/errors'
 import { log } from '../util/logger'
@@ -28,7 +28,7 @@ export interface TurnDeps {
 const COMPACT_HINT_FILL = 0.8
 
 /** Run `first`, then everything queued or continued after it, until nothing is pending. */
-export async function runTurns(first: string, deps: TurnDeps): Promise<void> {
+export async function runTurns(first: string | PendingTurn, deps: TurnDeps): Promise<void> {
   const { session, input } = deps
   // The window size for the stats' context figure. Fetched alongside the first run rather
   // than before it: on a large history the count is not free, and the run should not wait.
@@ -40,7 +40,7 @@ export async function runTurns(first: string, deps: TurnDeps): Promise<void> {
       window.lastPrompt ??= s.lastPromptTokens
     })
     .catch(() => {})
-  let pending: string | undefined = first
+  let pending: PendingTurn | undefined = typeof first === 'string' ? { text: first } : first
   while (pending !== undefined) {
     const hitCap = await runOne(pending, deps, window)
     // The reply is on screen but the prompt is not back yet: say what is still happening
@@ -57,10 +57,10 @@ export async function runTurns(first: string, deps: TurnDeps): Promise<void> {
     // Anything typed during the turn runs now rather than waiting for another return --
     // a queued message that sits unseen is worse than one that was never accepted.
     const before = session.peek().length
-    pending = session.drain()
+    pending = session.drainTurn()
     const queued = before - session.peek().length
     if (pending) {
-      console.log(renderDrained(pending, queued))
+      console.log(renderDrained(pending.text, queued))
       continue
     }
     // Something typed meanwhile takes precedence over carrying on: it may be the redirect.
@@ -68,7 +68,7 @@ export async function runTurns(first: string, deps: TurnDeps): Promise<void> {
     if (hitCap) {
       const isContinuing = session.shouldContinuePastCap()
       console.log(renderTurnCap(session.get().maxTurns, isContinuing))
-      if (isContinuing) pending = CONTINUE_PROMPT
+      if (isContinuing) pending = { text: CONTINUE_PROMPT, isHarnessTurn: true }
       else input?.suggest('/continue')
     } else if (fill !== undefined && fill >= COMPACT_HINT_FILL) {
       input?.suggest('/compact')
@@ -83,7 +83,7 @@ interface Window {
   lastPrompt?: number
 }
 
-async function runOne(text: string, deps: TurnDeps, window: Window): Promise<boolean> {
+async function runOne(turn: PendingTurn, deps: TurnDeps, window: Window): Promise<boolean> {
   const c = colors()
   const { session, input } = deps
   const signal = session.begin()
@@ -113,10 +113,11 @@ async function runOne(text: string, deps: TurnDeps, window: Window): Promise<boo
       markdown: session.get().renderMarkdown,
       cwd: deps.agent.getContext().workspaceDir,
     })
-    const response = await deps.agent.run(text, {
+    const response = await deps.agent.run(turn.text, {
       events: withListeners(handler, [wait.events, stats.events]),
       maxTurns,
       signal,
+      ...(turn.isHarnessTurn && { isHarnessTurn: true }),
     })
     log.debug('cli', `[${response.provider}]`)
     if (session.wasInterrupted) {

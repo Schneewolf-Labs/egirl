@@ -63,6 +63,23 @@ describe('after a run', () => {
     expect(prompts).toEqual(['go', CONTINUE_PROMPT])
   })
 
+  test('the automatic continuation is marked as a harness turn; the user turn is not', async () => {
+    const marks: (boolean | undefined)[] = []
+    const agent = {
+      run: async (text: string, options?: { isHarnessTurn?: boolean }) => {
+        marks.push(options?.isHarnessTurn)
+        return { content: 'done', provider: 'stub', turnLimitReached: text === 'go' }
+      },
+      contextStatus: async () => ({ contextLength: 100, totalUsed: 10, utilization: 0.1 }),
+      getContext: () => ({ workspaceDir: '/tmp' }),
+    } as unknown as Operator
+    const session = new SessionController({ mode: 'auto' })
+    await quiet(() =>
+      runTurns('go', { agent, session, input: fakeInput([]), waits: createWaitHistory() }),
+    )
+    expect(marks).toEqual([undefined, true])
+  })
+
   test('a nearly full window offers /compact', async () => {
     const suggested: (string | undefined)[] = []
     const { agent } = fakeAgent(() => false, 0.85)

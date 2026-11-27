@@ -33,6 +33,7 @@ export async function handlePlanCommand(message: string, ctx: CommandContext): P
       const execResponse = await ctx.agent.run('Approved. Execute the plan above step by step.', {
         events: execHandler,
         maxTurns: 20,
+        isHarnessTurn: true,
       })
 
       printReply(execState, execResponse.content)
@@ -41,7 +42,10 @@ export async function handlePlanCommand(message: string, ctx: CommandContext): P
         `\n${c.warning}Plan rejected.${RESET} You can modify your request and try again.\n`,
       )
       ctx.agent
-        .run('[User rejected the plan. Awaiting new instructions.]', { maxTurns: 1 })
+        .run('[User rejected the plan. Awaiting new instructions.]', {
+          maxTurns: 1,
+          isHarnessTurn: true,
+        })
         .catch(() => {})
     }
   } catch (error) {

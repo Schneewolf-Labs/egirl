@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'bun:test'
 import type { MemoryManager } from '../../src/memory'
-import { retrieveForContext } from '../../src/memory/retrieval'
+import { isTrivialPrompt, retrieveForContext } from '../../src/memory/retrieval'
 import type { SearchResult } from '../../src/memory/search'
+import { CONTINUE_PROMPT } from '../../src/session/commands'
 
 /** Create a fake MemoryManager with canned search results */
 function mockMemory(results: SearchResult[]): MemoryManager {
@@ -129,5 +130,89 @@ describe('retrieveForContext', () => {
     expect(result).toContain('...')
     // Value should be capped at 300 chars + "..."
     expect(result?.length).toBeLessThan(500)
+  })
+})
+
+/** A fake MemoryManager that counts searchHybrid calls and always has a relevant hit. */
+function countingMemory(): { memory: MemoryManager; calls: () => number } {
+  let n = 0
+  const memory = {
+    searchHybrid: async () => {
+      n++
+      return [makeResult('heartbeat/last-run', 'Heartbeat completed with no findings.', 0.9)]
+    },
+  } as unknown as MemoryManager
+  return { memory, calls: () => n }
+}
+
+describe('isTrivialPrompt', () => {
+  test.each([
+    'hey juno',
+    'hi Kira!',
+    'yo yo',
+    'hey hey',
+    'morning juno',
+    'thanks juno',
+    'ok cool',
+    'ty!',
+    'thanks!',
+  ])('%p is trivial', (text) => {
+    expect(isTrivialPrompt(text)).toBe(true)
+  })
+
+  test.each([
+    'hey juno, what does the heartbeat check?',
+    'hi, can you check CI',
+    "yo what's the status of PR 252",
+    'thanks, now fix the tests',
+    'ok but why',
+    'ok, but what about the header?',
+  ])('%p is not trivial', (text) => {
+    expect(isTrivialPrompt(text)).toBe(false)
+  })
+})
+
+describe('retrieveForContext trivial gate', () => {
+  test.each([
+    'hey juno',
+    'hi Kira!',
+    'yo yo',
+    'hey hey',
+    'morning juno',
+    'thanks juno',
+    'ok cool',
+    'ty!',
+  ])('%p does not search', async (text) => {
+    const { memory, calls } = countingMemory()
+    expect(await retrieveForContext(text, memory)).toBeUndefined()
+    expect(calls()).toBe(0)
+  })
+
+  test.each([
+    'hey juno, what does the heartbeat check?',
+    'hi, can you check CI',
+    "yo what's the status of PR 252",
+    'thanks, now fix the tests',
+    'ok but why',
+    'ok, but what about the header?',
+  ])('%p searches', async (text) => {
+    const { memory, calls } = countingMemory()
+    expect(await retrieveForContext(text, memory)).toContain('heartbeat/last-run')
+    expect(calls()).toBe(1)
+  })
+})
+
+describe('retrieveForContext on a harness-generated turn', () => {
+  test('the continuation prompt marked as a harness turn does not search', async () => {
+    const { memory, calls } = countingMemory()
+    const result = await retrieveForContext(CONTINUE_PROMPT, memory, {}, { isHarnessTurn: true })
+    expect(result).toBeUndefined()
+    expect(calls()).toBe(0)
+  })
+
+  test('the same text typed by the user still searches: the mark, not the text, gates it', async () => {
+    const { memory, calls } = countingMemory()
+    expect(await retrieveForContext(CONTINUE_PROMPT, memory)).toBeDefined()
+    expect(calls()).toBe(1)
   })
 })
