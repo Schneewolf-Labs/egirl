@@ -134,6 +134,8 @@ export interface TasksConfig {
   idleThresholdMs: number
   /** Post-run self-review pass for unbounded tasks (skill/memory updates via a restricted fork). */
   selfReview: boolean
+  /** Skip memory and lesson extraction after a clean run that only used read-only tools. */
+  skipNoopExtraction: boolean
   /** Offer request_extension to bounded task runs (granted on evidence of progress). */
   extensions: boolean
   /** Most extensions one run can be granted. */

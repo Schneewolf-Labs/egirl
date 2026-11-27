@@ -437,6 +437,7 @@ export function loadConfig(options: LoadConfigOptions = {}): RuntimeConfig {
       maxConcurrentTasks: toml.tasks?.max_concurrent_tasks ?? 1,
       taskTimeoutMs: toml.tasks?.task_timeout_ms ?? 1_800_000,
       selfReview: toml.tasks?.self_review ?? true,
+      skipNoopExtraction: toml.tasks?.skip_noop_extraction ?? true,
       extensions: toml.tasks?.extensions ?? true,
       maxExtensions: toml.tasks?.max_extensions ?? 2,
       maxExtensionRatio: toml.tasks?.max_extension_ratio ?? 1.0,

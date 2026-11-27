@@ -23,6 +23,7 @@ import { checkDeliverables, deliverableNotice, deliverableNudge } from './delive
 import { classifyError, getRetryPolicy } from './error-classify'
 import { HEARTBEAT_TASK_NAME, heartbeatPreCheck } from './heartbeat'
 import { MAILBOX_TASK_NAME } from './mailbox-task'
+import { createRunToolTally, noopRunReason } from './noop-run'
 import { calculateNextRun, isWithinBusinessHours, parseBusinessHours } from './schedule'
 import { runSelfReview } from './self-review'
 import type { TaskStore } from './store'
@@ -820,8 +821,10 @@ export class TaskRunner {
     if (plan.resumeAfterMinutes !== undefined) {
       log.info('tasks', `Task ${task.name}: resuming the run that hit its time limit`)
     }
+    const toolTally = createRunToolTally()
     const response = await agent.run(message, {
       maxTurns: task.maxTurns ?? DEFAULT_TASK_MAX_TURNS,
+      events: toolTally.events,
       unbounded: task.unbounded,
       // An unbounded run is the autonomy loop proper: its state lives in NOTES/work by
       // contract, so its context is disposable — recycle it from notes rather than summarize.
@@ -839,7 +842,12 @@ export class TaskRunner {
       ...(plan.extraTools && { extraTools: plan.extraTools }),
     })
 
-    if (this.deps.memory) {
+    const skipReason = this.deps.tasksConfig.skipNoopExtraction
+      ? noopRunReason(response, toolTally.tally)
+      : undefined
+    if (this.deps.memory && skipReason) {
+      log.debug('tasks', `Task ${task.name}: skipping memory and lesson extraction (${skipReason})`)
+    } else if (this.deps.memory) {
       const storeMemory = this.deps.memory
       const taskId = task.id
       const taskName = task.name
