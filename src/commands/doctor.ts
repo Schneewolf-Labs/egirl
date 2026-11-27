@@ -99,22 +99,27 @@ export async function runDoctor(config: RuntimeConfig): Promise<void> {
 
   results.push(await checkLocalEndpoint(config))
 
+  // The code agent is optional: off is a skip, not a failure. Only a half-done setup warns.
   if (!config.tools.codeAgent) {
     results.push({
       label: 'code agent tool',
-      level: 'fail',
-      message: 'disabled; set [tools] code_agent = true',
+      level: config.channels.codeAgent ? 'warn' : 'skip',
+      message: config.channels.codeAgent
+        ? '[channels.code_agent] is configured but [tools] code_agent is off'
+        : 'off (optional: docs/optional-services.md#code-agent)',
     })
   } else {
     results.push({ label: 'code agent tool', level: 'ok', message: 'enabled' })
   }
 
   if (!config.channels.codeAgent) {
-    results.push({
-      label: 'code agent config',
-      level: 'fail',
-      message: 'missing [channels.code_agent]',
-    })
+    if (config.tools.codeAgent) {
+      results.push({
+        label: 'code agent config',
+        level: 'warn',
+        message: 'missing [channels.code_agent]; the tool is not registered until one is set',
+      })
+    }
   } else {
     const provider = config.channels.codeAgent.provider ?? 'claude'
     const binary =

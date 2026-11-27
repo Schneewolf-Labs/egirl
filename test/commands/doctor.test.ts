@@ -80,6 +80,22 @@ describe('doctor with the operator down', () => {
     expect(lines.some((l) => l.includes(`${fails} issue(s) found`))).toBe(true)
   })
 
+  test('an optional code agent that is off is a skip, not a failure', async () => {
+    const off = { ...config(), tools: { codeAgent: false } } as unknown as RuntimeConfig
+    await runDoctor(off)
+
+    expect(line('code agent tool')).toContain('skip')
+    expect(line('code agent config')).toBeUndefined()
+    expect(lines.some((l) => l.trim().startsWith('fail code agent'))).toBe(false)
+  })
+
+  test('an enabled code agent with no channel warns instead of failing', async () => {
+    await runDoctor(config())
+
+    expect(line('code agent config')).toContain('warn')
+    expect(line('code agent config')).toContain('missing [channels.code_agent]')
+  })
+
   test('the endpoint line claims only that it is configured', async () => {
     await runDoctor(config())
 
