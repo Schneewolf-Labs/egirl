@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, test } from 'bun:test'
+import { afterEach, beforeEach, expect, setDefaultTimeout, test } from 'bun:test'
 import { mkdtempSync, rmSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
@@ -34,6 +34,10 @@ async function release(tag: string): Promise<void> {
 }
 
 const noInstall = { install: async () => true }
+
+// Each test builds three real repos and runs a dozen or more git processes: well past bun's 5s
+// default on a slow Windows runner (7.7s seen in CI).
+setDefaultTimeout(30_000)
 
 beforeEach(async () => {
   root = mkdtempSync(join(tmpdir(), 'egirl-update-'))
