@@ -38,6 +38,15 @@ is better, or whether a reported benchmark number holds.
 7. **No best-of.** Report every run you did, or the mean and spread, never the best one.
 8. **Benchmark claims:** find the n, the split, the settings and the baseline. A claim missing
    any of them is unverified; rerun it on held-out data before you repeat it.
+9. **Agent benchmarks: say who did the work.** If the model can delegate (a code agent, a tool that
+   calls another model), report how many passes it solved itself versus by handing the task off. A
+   10/10 where every task was delegated measures the helper, not the model.
+10. **Temperature 0 repeats aren't samples.** Identical settings at T=0 give near-identical outputs,
+    so 3/3 means "consistent", not three independent results. Sample at the target temperature
+    if spread matters.
+11. **Check that the setup took effect.** Before trusting a pass, confirm the task actually started
+    broken: the function really was blanked, the test really failed at baseline. Read the fixture's
+    starting state or the baseline run's output.
 
 ## Output Format
 

@@ -11,7 +11,7 @@ egirl:
 
 # Research
 
-Investigate topics, gather information from the web, and produce structured summaries.
+Use when asked to research a topic, look something up or compare options: gather information from the web and produce a structured summary.
 
 ## When to Use
 
